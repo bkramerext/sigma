@@ -130,7 +130,9 @@ with sync_playwright() as playwright:
     page.set_viewport_size({"width": 1440, "height": 1000})
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
-    add_button = dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New")
+    add_button = dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="New"
+    )
     expect(add_button).to_be_enabled()
     add_button.focus()
     page.keyboard.press("Tab")
@@ -146,10 +148,14 @@ with sync_playwright() as playwright:
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
-    parent = dialog.locator(".project-types-body > section").first.locator(".project-type-card[open]")
+    parent = dialog.locator(".project-types-body > section").first.locator(
+        ".project-type-card[open]"
+    )
     save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
     expect(parent.get_by_role("button", name="Remove project type")).to_have_count(0)
-    expect(dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save")).to_have_count(0)
+    expect(
+        dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save")
+    ).to_have_count(0)
     expect(save).to_be_disabled()
     parent.get_by_label("Name").fill("Browser Parent")
     expect(save).to_be_disabled()  # New type still needs a scope.
@@ -203,12 +209,19 @@ with sync_playwright() as playwright:
     )
     assert 0 <= reference_layout["gap"] <= 20 and reference_layout["sameLine"], reference_layout
     # A new draft uses local Cancel, not Remove or a second Save.
-    expect(dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")).to_be_visible()
+    expect(
+        dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")
+    ).to_be_visible()
     # An API validation error belongs to this dialog, not a hidden global toast.
     toast_count = page.locator(".request-toast-stack .request-toast").count()
+
     def reject_save(route):
-        route.fulfill(status=400, content_type="application/json",
-                      body='{"detail":"Server-side reference validation failed"}')
+        route.fulfill(
+            status=400,
+            content_type="application/json",
+            body='{"detail":"Server-side reference validation failed"}',
+        )
+
     page.route("**/api/project-types", reject_save)
     save.click()
     expect(dialog.get_by_text("Server-side reference validation failed")).to_be_visible()
@@ -264,14 +277,18 @@ with sync_playwright() as playwright:
     assert title_order == ["span", "strong", "button", "small"], title_order
     parent_card.locator(".project-type-remove").click()
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
-    pending = dialog.locator(".project-types-body > section").first.locator(".project-type-card[open]")
+    pending = dialog.locator(".project-types-body > section").first.locator(
+        ".project-type-card[open]"
+    )
     pending.get_by_label("Name").fill("Discarded addition")
     pending = dialog.locator(
         '.project-type-card:has(> summary strong:text-is("Discarded addition"))'
     )
     pending.get_by_label("Scope").fill("Discarded scope")
     expect(pending.locator(".project-type-remove")).to_have_count(0)
-    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel").click()
+    dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="Cancel"
+    ).click()
     expect(pending).to_have_count(0)
     # Canceling the new type leaves other unsaved edits in the dialog.
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
@@ -449,9 +466,12 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About")
-    assert header.locator(".header-controls").evaluate(
-        "node => getComputedStyle(node).gridTemplateAreas"
-    ) == '"difficulty model identity" "about thinking identity"'
+    assert (
+        header.locator(".header-controls").evaluate(
+            "node => getComputedStyle(node).gridTemplateAreas"
+        )
+        == '"difficulty model identity" "about thinking identity"'
+    )
     assert header.get_by_role("button", name="Project Types").count() == 0
 
     with page.expect_download() as legacy_download:
