@@ -1021,9 +1021,7 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
     assert "actually executed computation" not in old_instructions
     assert "discriminating next_question" not in old_instructions
     assert research_sessions._role_instructions("skeptic", {}) == (
-        research_sessions._role_instructions(
-            "skeptic", {"research_method_version": "phase2-i2-v2"}
-        )
+        research_sessions._role_instructions("skeptic", {"research_method_version": "phase2-i2-v2"})
     )
 
     for mode in ResearchMode:
