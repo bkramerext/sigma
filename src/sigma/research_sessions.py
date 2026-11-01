@@ -10401,9 +10401,9 @@ def _shared_provider_slot() -> int | None:
     global _portfolio_slot_cursor
     # All local processes share the same projects directory; hosted workers
     # share cloud workspace storage. Use the OS lock in BOTH modes.
-    from sigma.projects import projects_root
+    from sigma.projects import local_projects_root
 
-    base = cloud_workspaces.storage_root() if cloud_workspaces.enabled() else projects_root()
+    base = cloud_workspaces.storage_root() if cloud_workspaces.enabled() else local_projects_root()
     root = base / "provider-slots"
     root.mkdir(mode=0o700, exist_ok=True)
     info = root.lstat()

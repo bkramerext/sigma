@@ -76,7 +76,7 @@ from unittest.mock import patch
 from sigma import research_sessions
 async def main():
     with (
-        patch('sigma.projects.projects_root', return_value=Path(sys.argv[1])),
+        patch('sigma.projects.local_projects_root', return_value=Path(sys.argv[1])),
         patch.object(research_sessions.cloud_workspaces, 'enabled', return_value=False),
     ):
         try:
@@ -91,7 +91,7 @@ asyncio.run(main())
         root = Path(directory)
         os.chmod(root, 0o700)
         with (
-            patch("sigma.projects.projects_root", return_value=root),
+            patch("sigma.projects.local_projects_root", return_value=root),
             patch.object(research_sessions.cloud_workspaces, "enabled", return_value=False),
             patch.dict(os.environ, {"SIGMA_RESEARCH_GLOBAL_INFLIGHT": "32"}),
         ):
