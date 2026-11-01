@@ -7421,10 +7421,6 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
 
     assert finished["status"] == "ended"
     assert len(finished["artifacts"]) == 1
-    assert finished["artifacts"][0]["strategy_id"] != next(
-        event["strategy_id"] for event in finished["events"]
-        if event["kind"] == "call.preflight_failed"
-    )
     assert finished["calls_used"] == 2
     failed_events = [
         event for event in finished["events"] if event["kind"] == "call.preflight_failed"
@@ -7433,6 +7429,7 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
     failure = failed_events[0]
     expected_titles = {first.id: first.title, second.id: second.title}
     assert failure["strategy_id"] in expected_titles
+    assert finished["artifacts"][0]["strategy_id"] != failure["strategy_id"]
     assert failure["strategy_title"] == expected_titles[failure["strategy_id"]]
     assert failure["role"] == "investigator"
     assert failure["failure_stage"] == "project_snapshot"
