@@ -113,6 +113,30 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             f"Started: {_value(session.get('started_at') or session.get('created_at'))}",
             "",
         ]
+        # Source Material is pre-turn methodology guidance, not external
+        # evidence that agents independently retrieved domain research.
+        methods = outcome.get("source_material")
+        if not isinstance(methods, dict):
+            methods = session.get("research_method_sources")
+        lines += ["Source Material (research methodology)", "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"]
+        if isinstance(methods, dict) and isinstance(methods.get("sources"), list):
+            lines += [
+                f"Selection: {_value(methods.get('status'))}",
+                f"Project type / branch: {_value(methods.get('mode'))} / {_value(methods.get('branch'))}",
+                f"Method source set SHA-256: {_value(methods.get('sha256'))}",
+                "References are selected methodology, not independent scientific evidence.",
+            ]
+            for reference in methods["sources"]:
+                if isinstance(reference, dict):
+                    lines += [
+                        f"{_value(reference.get('tier'))}: {_value(reference.get('title'))}",
+                        f"URL: {_value(reference.get('url'))}",
+                        f"Usable method: {_value(reference.get('notes'))}",
+                    ]
+        else:
+            lines.append("No methodology source selection recorded in this session.")
+        lines.append("")
+
         # Show independently persisted execution facts before any authored narrative.
         # A model's conclusion may claim measurements that never ran.
         provenance = execution_provenance(session)
