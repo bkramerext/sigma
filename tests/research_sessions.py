@@ -4036,6 +4036,42 @@ def test_contradictory_skeptic_counterexample_does_not_cancel_continuation():
     ) == ("stop_decisive_counterexample", "")
 
 
+def test_coordinator_obligations_do_not_multiply_across_rounds():
+    artifacts = []
+    for cycle in range(1, 10):
+        old = [f"Obligation {index}" for index in range(1, cycle)]
+        current = f"Obligation {cycle}"
+        artifacts.append(
+            {
+                "id": f"artifact-{cycle}",
+                "project_id": "project",
+                "strategy_id": "strategy",
+                "assumptions": [f"Assumption {cycle}"],
+                "investigator_output": {"open_obligations": [current]},
+                "skeptic_output": {
+                    "remaining_obligations": old + [current],
+                    "model_remaining_obligations": [current],
+                    "coordinator_added_obligations": old,
+                },
+                "open_obligations": old + [current],
+            }
+        )
+        ledger, omitted, _ = research_sessions._obligation_ledger(
+            artifacts,
+            project_id="project",
+            strategy_id="strategy",
+        )
+        assert len(ledger) == cycle, (cycle, len(ledger))
+        assert omitted == 0
+        assert {item["text"] for item in ledger} == set(old + [current])
+    legacy, _, _ = research_sessions._obligation_ledger(
+        [{"id": "legacy", "open_obligations": ["Legacy obligation"]}],
+        project_id="project",
+        strategy_id="strategy",
+    )
+    assert [item["text"] for item in legacy] == ["Legacy obligation"]
+
+
 def test_shared_turn_schedule_accepts_strategy_count_changes():
     """A saved shared turn ceiling schedules whole pairs without strategy-count coupling."""
     for count in (1, 3, 5):
@@ -5778,14 +5814,7 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
         finished = await wait_for(path, started["id"])
 
     branches = finished["strategy_runs"]
-    assert requests == 55, (
-        requests,
-        finished["message"],
-        [(branch["strategy_title"], branch["status"], branch.get("current_action"),
-          branch.get("reason"), branch.get("cycle")) for branch in branches],
-        [(step.get("status"), step.get("failure_kind"), step.get("error"),
-          step.get("message")) for step in finished.get("steps", [])[-12:]],
-    )
+    assert requests == 55, (requests, finished["message"])
     assert finished["calls_used"] == 55
     assert finished["status"] == "ended", (finished["status"], finished["message"])
     assert len(finished["artifacts"]) == 27
@@ -9628,6 +9657,7 @@ def main():
         )
         test_limits_validation(root / "invalid-limits.sigma")
         test_contradictory_skeptic_counterexample_does_not_cancel_continuation()
+        test_coordinator_obligations_do_not_multiply_across_rounds()
         test_shared_turn_schedule_accepts_strategy_count_changes()
         asyncio.run(
             test_pending_skeptic_uses_final_turn_and_deferred_outcome_is_specific(
