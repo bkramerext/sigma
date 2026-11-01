@@ -265,7 +265,11 @@ def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any], dict[s
                 for name, contents in members.items()
                 if name.startswith("research-sessions/")
                 and name.endswith(".json")
-                and name not in {"research-sessions/limits.json", "research-sessions/sequence.json"}
+                and name not in {
+                    "research-sessions/limits.json",
+                    "research-sessions/sequence.json",
+                    "research-sessions/obligation-ids.json",
+                }
             ]
             runs = [
                 json.loads(contents)

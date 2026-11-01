@@ -494,7 +494,11 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
     for member, raw in list(members.items()):
         if not (member.startswith("research-sessions/") and member.endswith(".json")):
             continue
-        if member in {"research-sessions/limits.json", "research-sessions/sequence.json"}:
+        if member in {
+            "research-sessions/limits.json",
+            "research-sessions/sequence.json",
+            "research-sessions/obligation-ids.json",
+        }:
             continue
         try:
             session = json.loads(raw)
