@@ -916,7 +916,7 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
             )
             assert "Across disciplines, specify the question" in guidance
             assert "source pointer is not an inspected source" in guidance
-            assert "No external sources are available" in guidance
+            assert "No live external-source retrieval tool is available" in guidance
             assert research_sessions.RESEARCH_MODE_METHOD_GUIDANCE[mode.value] in guidance
             assert "one- or two-sentence status" in guidance
 
