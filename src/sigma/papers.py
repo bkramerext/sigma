@@ -1736,6 +1736,10 @@ def _evidence_based_long_plan(
             f"The principal remaining evidence boundary is: "
             f"{limitation_claim.statement}"
         )
+    if questions:
+        conclusions.append(
+            "The next unresolved question is: " + questions[0]
+        )
     conclusions.append(
         "A stronger conclusion requires resolving the identified objections, "
         "checking the exact archived evidence and conducting any proposed "
