@@ -79,6 +79,25 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             * 12
         )
     )
+    # Exact AI Agents proof excerpt reproducing fused commands and bad fractions.
+    session["outcome"]["conclusion"] += (
+        "\\n\\n"
+        "Let X_hi=(1/r_h)Σ_j(S_Ahij−S_Bhij), so X_hi∈[−1,1], and D=Σ_h(w_h/n_h)Σ_i "
+        "X_hi. Under independent clusters, E[D]=d. A centered variable supported on an "
+        "interval of length 2 has moment-generating function at most exp(λ²/2). "
+        "Applying this bound to the weighted independent X_hi gives "
+        "E[exp(λ(D−d))]≤exp(λ²V/2), where V=Σ_h w_h²/n_h. Markov's inequality and "
+        "minimization at λ=t/V give Pr(D−d≥t)≤exp(−t²/(2V)). Taking t=sqrt(2V log(1/α)) "
+        "shows d≥D−t with probability at least 1−α. Repetition count r_h does not enter "
+        "the worst-case radius: perfectly correlated repeats cannot create additional "
+        "independent tasks."
+        "\\n\\n"
+        "**Skeptic review:** accepted — Each cluster average has range length two. The "
+        "centered bounded-variable inequality therefore contributes exp(λ²a_hi²/2) for "
+        "weight a_hi=w_h/n_h. Independence across complete clusters gives Σ_hi "
+        "a_hi²=Σ_h w_h²/n_h and the stated one-sided tail radius. No independence among "
+        "repeated runs is required."
+    )
     session["outcome"]["solution_review"] = {
         "status": "achieved",
         "claim": "Conditional on general position, R(n) = 1 + n(n+1)/2.",
@@ -397,6 +416,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(source_toggle).to_be_visible()
                 expect(source_toggle).to_have_attribute("aria-pressed", "false")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
+                # Inline Unicode comparisons must not fuse TeX control words,
+                # and quotients must not replace only the subscript's operand.
+                assert not any(
+                    fragment in annotation
+                    for annotation in annotations
+                    for fragment in ("\\\\leexp", "\\\\get", "w_\\\\frac")
+                ), annotations
+                assert any("\\\\le exp" in value for value in annotations), annotations
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
                 finding = conclusion.locator(".outcome-markdown h3").first
                 expect(finding).to_be_visible()
