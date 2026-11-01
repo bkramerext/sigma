@@ -11,6 +11,7 @@ import math
 import os
 import re
 import threading
+import weakref
 import zlib
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
@@ -114,6 +115,13 @@ _session_state_locks: dict[str, asyncio.Lock] = {}
 _manager_lock = asyncio.Lock()
 _gate = threading.Lock()
 _python_gate = threading.Lock()
+# Per-event-loop admission gates, shared by every research session in this
+# server process. Cross-process admission is tracked separately under #419.
+_portfolio_global_gates: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, asyncio.Semaphore
+] = weakref.WeakKeyDictionary()
+_portfolio_global_gates_lock = threading.Lock()
+
 
 
 class ResearchContextLimitError(ProjectError):
@@ -8222,7 +8230,9 @@ async def _portfolio_role_call(
 ) -> bool | Literal["retry"]:
     if role == "skeptic":
         await _complete_pending_python(session_id, path, strategy_id, cycle, state_lock)
-    async with semaphore:
+    # Acquire session capacity first, then a process-wide provider slot.
+    # Budget reservations are created only after both slots are available.
+    async with semaphore, _portfolio_global_gate():
         tools = await asyncio.to_thread(execution_capabilities)
         async with state_lock:
             record = _read(path, session_id)
@@ -9968,55 +9978,16 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             record["current_action"] = f"{len(selected)} strategies active · shared budget"
             _save(path, record)
 
-        needs_review = [branch for branch in selected if branch.get("pending_investigation")]
-        needs_investigation = [
-            branch for branch in selected if not branch.get("pending_investigation")
-        ]
+        # Independent branch pipelines: a fast Investigator can dispatch its
+        # Skeptic without waiting for an unrelated slow Investigator. Each
+        # branch remains strictly sequential; the coordinator still applies
+        # cross-branch decisions at a completed wave boundary.
         await run_wave(
             [
-                _portfolio_role_call_with_recovery(
-                    session_id,
-                    path,
-                    branch["strategy_id"],
-                    "skeptic",
-                    branch["cycle"],
-                    semaphore,
-                    state_lock,
+                _portfolio_strategy_pipeline(
+                    session_id, path, branch, semaphore, state_lock
                 )
-                for branch in needs_review
-            ]
-        )
-        investigators = await run_wave(
-            [
-                _portfolio_role_call_with_recovery(
-                    session_id,
-                    path,
-                    branch["strategy_id"],
-                    "investigator",
-                    branch["cycle"] + 1,
-                    semaphore,
-                    state_lock,
-                )
-                for branch in needs_investigation
-            ]
-        )
-        investigator_success = [
-            branch
-            for branch, result in zip(needs_investigation, investigators, strict=True)
-            if result is True
-        ]
-        await run_wave(
-            [
-                _portfolio_role_call_with_recovery(
-                    session_id,
-                    path,
-                    branch["strategy_id"],
-                    "skeptic",
-                    branch["cycle"] + 1,
-                    semaphore,
-                    state_lock,
-                )
-                for branch in investigator_success
+                for branch in selected
             ]
         )
         async with state_lock:
@@ -10073,8 +10044,57 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             _save(path, record)
 
 
+async def _portfolio_strategy_pipeline(
+    session_id: str,
+    path: str,
+    branch: dict[str, Any],
+    semaphore: asyncio.Semaphore,
+    state_lock: asyncio.Lock,
+) -> bool:
+    """Complete one branch's next dependency-ordered turn or turn pair."""
+    strategy_id = branch["strategy_id"]
+    cycle = branch["cycle"]
+    if branch.get("pending_investigation") is not None:
+        return await _portfolio_role_call_with_recovery(
+            session_id, path, strategy_id, "skeptic", cycle, semaphore, state_lock
+        )
+    if not await _portfolio_role_call_with_recovery(
+        session_id, path, strategy_id, "investigator", cycle + 1, semaphore, state_lock
+    ):
+        return False
+    return await _portfolio_role_call_with_recovery(
+        session_id, path, strategy_id, "skeptic", cycle + 1, semaphore, state_lock
+    )
+
+
+def _bounded_concurrency_env(name: str, default: int, maximum: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    # Invalid values fail closed rather than removing any capacity bound.
+    if not raw.isdecimal():
+        return 1
+    return min(maximum, max(1, int(raw)))
+
+
 def _portfolio_call_concurrency() -> int:
-    return 1 if cloud_research.billing_enabled() else 3
+    # Sponsored provider reservations are conservative. A dedicated funding
+    # policy is required before allowing two overlapping hosted calls.
+    if cloud_research.billing_enabled():
+        return 1
+    return _bounded_concurrency_env("SIGMA_RESEARCH_SESSION_INFLIGHT", 3, 12)
+
+
+def _portfolio_global_gate() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    with _portfolio_global_gates_lock:
+        gate = _portfolio_global_gates.get(loop)
+        if gate is None:
+            gate = asyncio.Semaphore(
+                _bounded_concurrency_env("SIGMA_RESEARCH_GLOBAL_INFLIGHT", 6, 32)
+            )
+            _portfolio_global_gates[loop] = gate
+        return gate
 
 
 def _bounded_note(value: Any, limit: int) -> str:
