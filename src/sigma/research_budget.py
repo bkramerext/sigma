@@ -12,6 +12,17 @@ class BudgetExceeded(ValueError):
     """A provider request would exceed a research arm's frozen budget."""
 
 
+def increase_call_limit(ledger: dict[str, Any], new_limit: int) -> tuple[int, int]:
+    """Audibly extend only the call ceiling; token and cost ceilings stay fixed."""
+    if ledger.get("version") != LEDGER_VERSION:
+        raise BudgetExceeded("Research budget ledger version is invalid")
+    if type(new_limit) is not int or new_limit < int(ledger.get("call_limit", 0)):
+        raise BudgetExceeded("Research call limit can only be increased by an integer")
+    old_limit = int(ledger["call_limit"])
+    ledger["call_limit"] = new_limit
+    return old_limit, new_limit
+
+
 def new_ledger(
     *,
     call_limit: int,

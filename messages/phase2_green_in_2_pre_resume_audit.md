@@ -49,3 +49,27 @@ Provider mode in the archive is ChatGPT-plan inference (`gpt-6.1-sol`, high reas
 ## Commit/check status
 
 This report and focused regression fix are intended for PR #433. The full local test command and the audited-HEAD GitHub SIGMA verification passed. The new commit's GitHub Actions must be checked at its exact SHA before any live provider dispatch.
+
+## Coordinator correction: target is 12/12 per existing session
+
+The owner clarified that the goal remains 12/12 accepted Investigator/Skeptic turns for each project unless completion is impossible; for investigations already near 90%, continue the same saved session rather than restart it. The earlier per-project dispositions above were made before that clarification and are superseded for recovery planning. Existing history, methodology versions, invalid outputs, attempt counts, and uncertain calls remain unchanged.
+
+The sessions were not resuming because no `resume` control request had been issued: I had stopped before dispatch while quota was unverified. In addition, the existing service did not allow incomplete `ended`/`failed` records to re-enter the configured protocol, and some sessions had exhausted their original attempt ceiling. Thus, resumption was not automatic and several records were not recoverable through the existing control path. This was an engineering limitation, not evidence that provider calls were currently failing.
+
+This revision adds explicit same-session protocol completion. It counts missing strategy/round/role slots, rejects unknown or unsafe unfinished attempts, preserves invalid and uncertain records, creates new request identities for missing roles (including independent Skeptic reviews for the two unknown Agent calls), and only extends the attempt ceiling by the exact shortfall with an audit event. Cost and input-token ceilings are unchanged; no accepted-turn or attempt counter is reset. Mock sessions cannot use call-limit extensions. Focused regressions verify planning, unknown-call handling, final serialized recovery instructions, exact extension, and old-step preservation.
+
+| Project | Accepted turns before recovery | New role turns needed | Extra attempts beyond saved ceiling | Recovery path |
+|---|---:|---:|---:|---|
+| AI Agent Reliability and Evaluation | 10/12 | 2 final Skeptic reviews | 2 | New independent Skeptic requests; the two prior dispatches stay unknown and are never replayed |
+| Sovereign AI Federation | 6/12 | 6 | 0 | Same-session targeted continuation; both invalid Skeptic responses remain invalid |
+| Xenopus Tadpoles | 5/12 | 7 | 2 | Same-session continuation with a narrowly recorded +2 attempt ceiling |
+| Nonconsecutive Subset Sums Modulo 3 | 10/12 | 2 | 0 | Continue the stopped strategy through its missing final-round roles |
+| Warp Drive | 9/12 | 3 | 0 | Same-session continuation; the invalid response remains invalid |
+
+These are protocol-slot calculations from the immutable I2 records, not new research results. The proposed total attempt ceilings after exact extensions are Agent 20/20, Sovereign 17/18, Xenopus 14/14, Math 15/18, and Warp 16/18 if all newly requested roles complete successfully. No live calls have been issued, so current accepted-turn counts are unchanged.
+
+## Current blocker and verification
+
+At 2026-11-01 23:25 UTC, the supported local connection/model catalog reports ChatGPT-plan mode connected and `gpt-6.1-sol` available. It explicitly does not expose remaining plan quota. The previously supplied Usage.htm snapshot is not present in this checkout and no supported current usage snapshot is available here. This is the sole external blocker to live dispatch; I will not infer quota from model availability or use an API key/undocumented usage endpoint. No session is currently queued or running as a result of this work.
+
+The first post-fix `./sigma test` run found one Pyright error in a new regression assertion (`str | None` narrowing); I fixed the assertion. The rerun completed successfully, including all test steps, Ruff check/format, Pyright (`0 errors`), frontend typecheck, and production build. The focused `tests/research_sessions.py` run also passed. A Vite bundle-size advisory appeared; it did not fail the build. These are local results; CI for the resulting commit must be checked separately.
