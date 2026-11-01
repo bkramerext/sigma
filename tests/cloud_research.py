@@ -2367,6 +2367,26 @@ def test_maximum_liability_enforced_across_calls() -> None:
                     maximum_liability_usd=0.30,
                 )
                 assert cloud_research.snapshot()["global_remaining_usd"] == 0.68
+
+                # Parallel admission must remain serializable: each new call
+                # estimates one cent, but claims thirty cents of global risk.
+                def concurrent_reserve(index: int) -> bool:
+                    thread_binding = cloud_workspaces._CURRENT.set(member)
+                    try:
+                        cloud_research.reserve_call(
+                            first["id"], f"liability-parallel-{index}", 0.01, 10,
+                            maximum_liability_usd=0.30,
+                        )
+                        return True
+                    except cloud_research.CloudResearchUnavailable:
+                        return False
+                    finally:
+                        cloud_workspaces._CURRENT.reset(thread_binding)
+
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    admitted = list(pool.map(concurrent_reserve, range(8)))
+                assert sum(admitted) == 2, admitted
+                assert cloud_research.snapshot()["global_remaining_usd"] == 0.08
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
 
