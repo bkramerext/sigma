@@ -68,8 +68,6 @@
   width: min(640px, calc(100vw - 64px));
   max-width: 100%;
 }
-.workspace-page .project-types-title-action { align-self: flex-start; width: fit-content; min-height: 0; padding: 1px 0; border: 0; border-radius: 0; color: #edc38d; background: transparent; box-shadow: none; font: 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.workspace-page .project-types-title-action:hover { color: #ffe5a6; background: transparent; box-shadow: none; }
 .workspace-page .project-title-line { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; min-width: 0; max-width: min(54vw, 760px); padding-top: 7px; }
 .workspace-page .project-art-back-row { position: absolute; z-index: 2; top: -6px; left: clamp(140px, calc(min(34vw, 390px) - 172px), 218px); }
 .workspace-page .current-project { min-width: 0; margin: 0; color: var(--workspace-copper); font: 400 clamp(17px, 1.5vw, 22px)/1.35 Georgia, serif; overflow-wrap: anywhere; }
