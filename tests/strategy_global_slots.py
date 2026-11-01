@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
+from contextlib import AsyncExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -64,5 +66,58 @@ with patch.object(research_sessions.cloud_workspaces, 'storage_root', return_val
     print("PASS: 32 slots shared across two independent backend processes.")
 
 
+async def test_real_local_admission_gate() -> None:
+    """Verify the public admission context, not just its lock-file helper."""
+    child = """
+import asyncio, sys
+from pathlib import Path
+from unittest.mock import patch
+from sigma import research_sessions
+async def main():
+    with patch('sigma.projects.projects_root', return_value=Path(sys.argv[1])), \\
+         patch.object(research_sessions.cloud_workspaces, 'enabled', return_value=False):
+        try:
+            async with asyncio.timeout(0.25):
+                async with research_sessions._portfolio_global_gate('other-process'):
+                    print('admitted', flush=True)
+        except TimeoutError:
+            print('blocked', flush=True)
+asyncio.run(main())
+"""
+    with TemporaryDirectory(prefix="sigma-local-gate-") as directory:
+        root = Path(directory)
+        os.chmod(root, 0o700)
+        with (
+            patch("sigma.projects.projects_root", return_value=root),
+            patch.object(research_sessions.cloud_workspaces, "enabled", return_value=False),
+            patch.dict(os.environ, {"SIGMA_RESEARCH_GLOBAL_INFLIGHT": "32"}),
+        ):
+            async with AsyncExitStack() as held:
+                for index in range(32):
+                    await held.enter_async_context(
+                        research_sessions._portfolio_global_gate(f"owner-{index}")
+                    )
+                blocked = await asyncio.to_thread(
+                    subprocess.run,
+                    [sys.executable, "-c", child, str(root)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
+                )
+                assert blocked.stdout.strip() == "blocked", blocked.stdout
+            admitted = await asyncio.to_thread(
+                subprocess.run,
+                [sys.executable, "-c", child, str(root)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=8,
+            )
+            assert admitted.stdout.strip() == "admitted", admitted.stdout
+    print("PASS: local real gate never exceeds 32 across backend processes.")
+
+
 if __name__ == "__main__":
     main()
+    asyncio.run(test_real_local_admission_gate())
