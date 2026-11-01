@@ -29,6 +29,6 @@ Review-correction source: `e08a1841c502ff08ccddd43975d162626dadbb51`
 - `./sigma test` — passed after the mobile-collision correction: Python suites, Ruff check/format (337 Python files formatted), Pyright (0 errors, warnings or information), frontend typecheck and production build. The graph-present sandbox subcase skipped because its local image is unavailable; the existing large JavaScript chunk advisory remains.
 - `git diff --check` — passed.
 - GitHub README preview — passed in real Chrome at HTTP 200; the embedded Mermaid frame rendered the expected six nodes/five connectors. Screenshot preserved above. The viewer's control toolbar overlaps a small part of the final box border, but its `Review/export` label remains fully legible; the independent renderer screenshot is free of viewer controls.
-- GitHub Actions for review-correction head `e08a1841c502ff08ccddd43975d162626dadbb51` — pending; await green before R4R.
+- GitHub Actions on PR head `69a960c591bc79485b8007e703af6019c073f719` — all six workflows passed, including SIGMA verification. The commit only updates report and handoff evidence; focused tests and `./sigma test` passed on the correction source `e08a1841c502ff08ccddd43975d162626dadbb51`.
 
 No provider calls or deployment occurred. No research, paper-generation, About pill/navigation or Project Types behavior changed.
