@@ -23,7 +23,7 @@ Integrated base: `main` at `5aaa459d57d20436a2b3dfb8c696fd4a2a154f42` (#439/#444
 | Running session context stays frozen after type deletion | **MET** | Session snapshot persistence tests; deletion does not mutate existing sessions. |
 | Research/publication references are stored without changing methodology or paper-authoring behavior | **MET** | Catalog persistence/API tests. The later #440/#443 integrations remain outside this implementation. |
 | Research Process/About disclosure workflow and Project subtitle alignment survive main integration | **MET** | Integrated `main` at `5aaa459d`; `browser_checks/issue441_research_process.py` verifies Research Process, architecture diagram, and persistent disclosure state; `browser_checks/project_types_436.py` verifies the Project subtitle on an affected project page. |
-| GitHub CI for the final integrated implementation head | **UNVERIFIED** | Awaiting all PR workflows on the final pushed head. |
+| GitHub CI for the integrated implementation | **MET** | All six PR workflows passed on implementation SHA `1b066a4e15d48a5400a04421d5117542c698e479`: SIGMA verification, T201 obligation recovery, T249 integrated verification, T92 Recent Projects, T200 model availability and Research Outcome. The unrelated scheduled #421 workflow was skipped. |
 
 ## Verification run
 
@@ -35,6 +35,7 @@ Integrated base: `main` at `5aaa459d57d20436a2b3dfb8c696fd4a2a154f42` (#439/#444
 - `browser_checks/issue441_research_process.py` — **PASS** in real Google Chrome: merged Research Process workflow, preserved architecture diagram, responsive layout and persistent disclosure state.
 - `browser_checks/project_about.py` — **PASS** in real Google Chrome at 1440px and 390px, including focus return.
 - `git diff --check`, Ruff, Ruff format check, Pyright and frontend typecheck — **PASS**.
+- GitHub Actions on `1b066a4e15d48a5400a04421d5117542c698e479` — **PASS**, all six PR workflows; unrelated scheduled #421 parity workflow skipped.
 - No paid provider calls were made. Live provider/icon generation verification is **DEFERRED** by the owner addendum.
 
 Chrome screenshots in `evidence/` record the desktop/mobile catalog, deleted-project mobile view, and pre-dispatch warning. The browser harness also exports the affected project and asserts that its saved type snapshot survives catalog deletion.
