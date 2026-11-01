@@ -177,8 +177,12 @@ function sessionEstimatedCostLabel(session: ResearchSession): string {
   if (session.cost_status !== 'available' || typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) {
     return `${label} unavailable`;
   }
-  // Four decimal places keep small API-rate equivalents visible without implying a paid charge.
-  return cost > 0 && cost < 0.0001 ? `${label} <$0.0001` : `${label} ${cost.toFixed(4)}`;
+  // This is the accumulated session estimate, not an API charge. Render in USD
+  // with three decimal places; avoid rounding tiny positive amounts to $0.000.
+  const amount = cost.toLocaleString('en-US', {
+    style: 'currency', currency: 'USD', minimumFractionDigits: 3, maximumFractionDigits: 3,
+  });
+  return cost > 0 && cost < 0.001 ? `${label} <$0.001` : `${label} ${amount}`;
 }
 
 function liveResearchSummary(session: ResearchSession): string | null {
