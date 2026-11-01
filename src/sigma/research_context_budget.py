@@ -350,3 +350,61 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
                 group["representation"] = "bounded_extract_or_pointer_only"
 
     return _bytes(context) <= limit
+
+
+def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -> None:
+    """Keep dispatch-only obligation references inside the actual evidence allowlist.
+
+    The authoritative session ledger and original artifacts are untouched.
+    An obligation may remember dozens of historical source IDs, including
+    pointer-only extracts that were not included in this model request. Showing
+    those IDs as ordinary evidence invites a Skeptic to cite them, after which
+    the strict output validator correctly rejects the entire (paid) response.
+    Retain counts of withheld provenance, but offer only IDs that this exact
+    request can legitimately cite. Do not make pointer-only evidence citable.
+    """
+    allowed_artifacts = {
+        value
+        for field in ("context_artifact_ids", "prior_session_artifact_ids")
+        for value in context.get(field, [])
+        if isinstance(value, str)
+    }
+    current_step = context.get("investigator_step_id")
+    allowed_steps = {current_step} if isinstance(current_step, str) else set()
+    ledger = context.get("obligation_ledger")
+    if not isinstance(ledger, list):
+        return
+    for obligation in ledger:
+        if not isinstance(obligation, dict):
+            continue
+        for field in ("source_artifact_ids", "basis_artifact_ids", "supplied_source_artifact_ids",
+                      "pointer_source_artifact_ids"):
+            refs = obligation.get(field)
+            if not isinstance(refs, list):
+                continue
+            kept = [ref for ref in refs if isinstance(ref, str) and ref in allowed_artifacts]
+            if field == "source_artifact_ids":
+                original_total = max(
+                    len(refs),
+                    int(obligation.get("source_artifact_count", 0) or 0),
+                )
+                obligation["source_artifact_count"] = original_total
+                obligation["unsupplied_source_artifact_count"] = max(0, original_total - len(kept))
+            elif field == "pointer_source_artifact_ids":
+                # Pointer IDs describe unavailable evidence; never expose them
+                # in the same namespace as reviewable source references.
+                obligation["withheld_pointer_source_count"] = len(refs)
+                kept = []
+            obligation[field] = kept
+        for field in ("source_step_ids", "basis_step_ids"):
+            refs = obligation.get(field)
+            if isinstance(refs, list):
+                kept = [ref for ref in refs if isinstance(ref, str) and ref in allowed_steps]
+                obligation[f"withheld_{field}_count"] = len(refs) - len(kept)
+                obligation[field] = kept
+        if obligation.get("unsupplied_source_artifact_count", 0) or obligation.get(
+            "withheld_pointer_source_count", 0
+        ):
+            obligation["source_artifact_availability"] = (
+                "incomplete_extract_original_not_supplied"
+            )
