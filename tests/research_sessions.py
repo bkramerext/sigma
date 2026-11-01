@@ -763,12 +763,12 @@ async def setup(path: Path):
     return view, strategy, credential, config
 
 
-def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_if_needed():
+def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_if_needed(monkeypatch):
     from sigma import research_method_sources
 
     scenarios = (
         ("computer_science", "Agent Reliability Evaluation", "Fault injection with retries and acknowledgments", "ai-reliability"),
-        ("engineering", "Sovereign AI Federation", "Campus gateway revocation routing", "federation"),
+        ("computer_science", "Sovereign AI Federation", "Campus gateway revocation routing", "federation"),
         ("biology", "Xenopus Tadpoles", "Tail regeneration and wound timing", "animal-regeneration"),
         ("mathematical", "Nonconsecutive Subset Sums", "Count subsets modulo three", "combinatorics"),
         ("physics", "Warp Drive Design", "Spacetime metric and stress energy", "relativity"),
@@ -799,6 +799,23 @@ def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_
         assert later["status"] == "reused"
         assert later["source_session_id"] == "prior-session-id"
         assert later["sources"] == frozen["sources"]
+
+    # Reuse exact source content, even if later catalog editorial notes change.
+    earlier = research_method_sources.select_method_sources(
+        "physics", "Warp", "spacetime metric", (), ()
+    )
+    original_note = earlier["sources"][-1]["notes"]
+    with monkeypatch.context() as patch:
+        updated = dict(research_method_sources.BY_ID["tong-einstein-equations"])
+        updated["notes"] = "REVISED: " + original_note
+        patch.setattr(research_method_sources, "BY_ID",
+                      {**research_method_sources.BY_ID, updated["id"]: updated})
+        stable = research_method_sources.select_method_sources(
+            "physics", "Warp", "spacetime metric", (),
+            ({"id": "saved", "research_method_sources": earlier},)
+        )
+    assert stable["status"] == "reused"
+    assert stable["sources"][-1]["notes"] == original_note
 
     # Specialty changed within the *same* project type: previous source is no
     # longer comprehensive; do not blindly persist a combinatorics reference.
