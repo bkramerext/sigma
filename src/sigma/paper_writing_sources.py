@@ -106,3 +106,130 @@ async def _fetch(url: str) -> str | None:
     _CACHE[url] = value
     return value
 
+
+
+def branch_for(project: Mapping[str, Any]) -> str:
+    """Conservative branch detection; this classifies writing style, not truth."""
+    kind = str(project.get("investigation_type") or "default")
+    topic = " ".join(str(project.get(k) or "") for k in ("title", "problem")).lower()
+    markers = {
+        "mathematical": (
+            ("combinatorics", ("subset", "counting", "combinatoric", "generating function", "recurrence")),
+        ),
+        "physics": (
+            ("relativity", ("warp drive", "spacetime", "gravity", "metric", "relativity")),
+        ),
+        "biology": (
+            ("developmental", ("tadpole", "xenopus", "regeneration", "developmental")),
+        ),
+    }
+    for branch, terms in markers.get(kind, ()):
+        if any(term in topic for term in terms):
+            return branch
+    return "general"
+
+
+def _reusable(items: list[dict[str, Any]], kind: str, branch: str) -> bool:
+    if len(items) not in (2, 3):
+        return False
+    if not all(
+        item.get("type") == kind
+        and item.get("branch") == branch
+        and isinstance(item.get("excerpt"), str)
+        and len(item["excerpt"]) >= 450
+        and hashlib.sha256(item["excerpt"].encode()).hexdigest() == item.get("sha256")
+        for item in items
+    ):
+        return False
+    tiers = {item.get("tier") for item in items}
+    has_branch_catalog = any(
+        tier == "branch" and category == kind and topic == branch
+        for tier, category, topic, _, _ in CATALOG
+    )
+    return "general" in tiers and (
+        "branch" in tiers if has_branch_catalog else "discipline" in tiers
+    )
+
+
+async def select(
+    project: Mapping[str, Any],
+    previous: list[dict[str, Any]] | None = None,
+    *,
+    fetch: Callable[[str], Awaitable[str | None]] = _fetch,
+) -> tuple[list[dict[str, Any]], str]:
+    """Pick readable general / discipline / branch guidance, reusing prior text."""
+    kind = str(project.get("investigation_type") or "default")
+    branch = branch_for(project)
+    if previous and _reusable(previous, kind, branch):
+        return previous, "reused"
+    items: list[dict[str, Any]] = []
+    urls: set[str] = set()
+    for tier in ("general", "discipline", "branch"):
+        candidates = [
+            candidate for candidate in CATALOG
+            if candidate[0] == tier
+            and (tier == "general" or candidate[1] == kind)
+            and (tier != "branch" or candidate[2] == branch)
+            and candidate[4] not in urls
+        ]
+        for _, _, _, title, url in candidates[:2]:
+            try:
+                # Source selection is not permitted to stall paper planning.
+                import asyncio
+
+                body = await asyncio.wait_for(fetch(url), timeout=3.0)
+            except (Exception, asyncio.CancelledError):
+                body = None
+            if not isinstance(body, str):
+                continue
+            excerpt = readable(body)
+            if excerpt is None:
+                continue
+            items.append({
+                "title": title,
+                "url": url,
+                "tier": tier,
+                "type": kind,
+                "branch": branch,
+                "excerpt": excerpt,
+                "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
+            })
+            urls.add(url)
+            break
+    # A field without a specific source still receives a second general guide.
+    if len(items) < 2:
+        for tier, _, _, title, url in CATALOG:
+            if tier != "general" or url in urls:
+                continue
+            try:
+                import asyncio
+
+                body = await asyncio.wait_for(fetch(url), timeout=3.0)
+            except (Exception, asyncio.CancelledError):
+                continue
+            excerpt = readable(body) if isinstance(body, str) else None
+            if excerpt:
+                items.append({
+                    "title": title,
+                    "url": url,
+                    "tier": "general",
+                    "type": kind,
+                    "branch": branch,
+                    "excerpt": excerpt,
+                    "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
+                })
+                break
+    return items[:3], "selected" if items else "unavailable"
+
+
+def prompt_material(items: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Untrusted source prose; usable as writing guidance, not research evidence."""
+    return [
+        {
+            "title": str(item["title"]),
+            "url": str(item["url"]),
+            "scope": str(item["tier"]),
+            "writing_guidance_excerpt": str(item["excerpt"]),
+        }
+        for item in items[:3]
+    ]
