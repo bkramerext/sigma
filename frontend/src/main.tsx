@@ -3005,6 +3005,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
+    {projectArtwork && (!cloud?.enabled || cloud.user?.role !== 'guest') && <button type="button" className="about-action project-types-screen-pill" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button>}
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{researchRunning
@@ -4663,7 +4664,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton}/>
   </div>;
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView} projectActions={projectActionBar}>
-    {!guest && <div className="project-types-pane-control"><button type="button" className="about-action project-types-action" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button></div>}
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading">
         <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
