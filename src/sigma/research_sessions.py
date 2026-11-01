@@ -8478,8 +8478,10 @@ async def _portfolio_role_call(
             # Funding is estimated from the user's configured per-turn output
             # target; the actual model response remains unrestricted by this
             # estimate and its measured usage is reconciled on completion.
-            estimated_output_tokens = min(
-                output_bound, max(1, int(record.get("output_token_limit") or 4000))
+            estimated_output_tokens = (
+                output_bound
+                if isinstance(hard_ledger, dict)
+                else min(output_bound, max(1, int(record.get("output_token_limit") or 4000)))
             )
             token_reserve = request_token_bound + estimated_output_tokens
             if isinstance(hard_ledger, dict):
@@ -8701,7 +8703,18 @@ async def _portfolio_role_call(
                         raise cloud_research.CloudResearchUnavailable(
                             "Cloud inference cannot be bounded for this model."
                         )
-                    cloud_research.reserve_call(session_id, step_id, reserve, token_reserve)
+                    # The user's sponsored allowance uses a practical cost
+                    # estimate, while the shared global cap holds the full
+                    # provider-output exposure until actual usage settles.
+                    cloud_research.reserve_call(
+                        session_id,
+                        step_id,
+                        reserve,
+                        token_reserve,
+                        maximum_liability_usd=_reserve_cost(
+                            record, context, role, estimate=False
+                        ),
+                    )
                 except cloud_research.CloudResearchUnavailable as exc:
                     record["calls_used"] = max(0, record["calls_used"] - 1)
                     branch["calls_used"] = max(0, branch["calls_used"] - 1)
