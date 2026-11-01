@@ -47,6 +47,7 @@ from sigma.research_epistemics import (
     verification_label,
 )
 from sigma.research_feedback import ComputationFeedback, validate_feedback
+from sigma.research_context_budget import compact_dispatch_context
 from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
@@ -6188,6 +6189,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
                 "qualification": "researcher-selected, unverified; delivery is not use or proof",
             }
         )
+    compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -7417,6 +7419,7 @@ def _portfolio_context(
         )
         if handoff_group is not None:
             context["context_manifest"]["sources"].append(handoff_group)
+    compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -8256,6 +8259,7 @@ async def _portfolio_role_call(
                 )
                 if guidance_group is not None:
                     context["context_manifest"]["sources"].append(guidance_group)
+                compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
                 context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
                 _bound_context_manifest(context["context_manifest"])
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -10698,6 +10702,7 @@ async def _worker(session_id: str, path: str) -> None:
             )
             if guidance_group is not None:
                 context["context_manifest"]["sources"].append(guidance_group)
+            compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
             context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
             _bound_context_manifest(context["context_manifest"])
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
