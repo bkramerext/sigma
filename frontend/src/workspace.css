@@ -278,7 +278,7 @@
 .workspace-page .project-control-pill { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 12px; border: 1px solid #73583e; border-radius: 999px; background: #091824ed; color: #e0d0c8; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
 .workspace-page .project-model-pill { grid-area: model; justify-content: center; align-items: center; text-align: center; }
 .workspace-page .project-model-pill > span { margin: 0; }
-.workspace-page .project-thinking-pill { grid-area: thinking; justify-content: flex-start; }
+.workspace-page .project-thinking-pill { grid-area: thinking; justify-content: center; align-items: center; text-align: center; }
 .workspace-page .cloud-home-controls.compact { grid-area: google; }
 .workspace-page .project-google-signin { grid-area: google; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; margin-left: 0; padding: var(--identity-pill-pad-block) var(--identity-pill-pad-inline); border: 1px solid #a9654875; border-radius: 999px; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 400 10px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; white-space: nowrap; transition: background-color .15s, border-color .15s, box-shadow .15s; }
 .workspace-page .project-google-signin:hover, .workspace-page .project-google-signin[aria-expanded="true"] { border-color: #cd9270; background: #172536fa; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
@@ -331,7 +331,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px;
   margin-right: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 6px;
 }
-.workspace-page .project-pane-actions .text-view-icon.project-qa-button { box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px; padding: 0; font: 700 17px/1 Inter, sans-serif; letter-spacing: .02em; }
+.workspace-page .project-pane-actions .text-view-icon.project-qa-button { box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px; padding: 0; font: 500 17px/1 Inter, sans-serif; letter-spacing: .02em; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { margin-right: 5px; }
 .workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; }
 .workspace-page .project-primary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 1px 0 10px 32px; }

@@ -425,16 +425,16 @@
 /* Revised A17.1 section, row and inline-edit conventions. */
 .workspace-page .project-pane-heading { padding: 10px 0 5px; }
 .workspace-page .project-pane-heading h2 { text-transform: uppercase; letter-spacing: .14em; font-size: 17px; }
-.workspace-page .project-overview-card { min-width: 0; min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; padding: 8px 14px 10px; }
+.workspace-page .project-overview-card { min-width: 0; min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; padding: 8px 8px 10px; }
 .workspace-page .project-pane-title-line { display: flex; align-items: center; flex-wrap: nowrap; column-gap: 6px; min-width: 0; margin: 0; }
-.workspace-page .project-pane-title-line .current-project { min-width: 0; max-width: calc(100% - 102px); flex: 0 1 auto; overflow: hidden; margin: 0; color: #e3e9ef; font: 500 19px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-page .project-pane-title-line .current-project { min-width: 0; max-width: 100%; flex: 0 1 auto; overflow: hidden; margin: 0; color: #e3e9ef; font: 500 19px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-page .project-pane-title-line .project-title-pencil { flex: 0 0 28px; }
 .workspace-page :is(.project-copy-slot, .strategy-copy-slot) { display: inline-flex; flex: 0 0 28px; width: 28px; height: 28px; align-items: center; justify-content: center; }
 .workspace-page .text-copy-button { display: inline-flex; align-items: center; justify-content: center; vertical-align: -2px; flex: 0 0 28px; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; overflow: visible; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #c7a16d; }
 .workspace-page .text-copy-button svg { display: block; width: 18px; height: 18px; flex: 0 0 18px; overflow: visible; }
 .workspace-page .text-copy-button:hover:not(:disabled) { background: var(--copper-gradient); color: #fff2e9; border-color: #ac7054; }
 .workspace-page .text-copy-button:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
-.workspace-page .project-pane-title-line .project-markdown-slot { display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; margin-left: 20px; }
+.workspace-page .project-pane-title-line .project-markdown-slot { display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; margin-left: 0; }
 .workspace-page .text-view-format-control { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; }
 .workspace-page .text-view-format-status { color: #cbb08b; font: 11px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
 .workspace-page .project-pane-title-line .project-markdown-slot,
@@ -491,7 +491,8 @@
 .research-running-indicator { display: inline-block; flex: 0 0 9px; margin-left: 7px; vertical-align: middle; }
 @keyframes research-running-heartbeat { 0%, 42%, 100% { transform: scale(1); box-shadow: 0 0 0 0 #55bd7040; } 12% { transform: scale(1.32); box-shadow: 0 0 0 3px #55bd7030; } 23% { transform: scale(1); box-shadow: 0 0 0 0 #55bd7040; } 32% { transform: scale(1.2); box-shadow: 0 0 0 2px #55bd7030; } }
 @media (prefers-reduced-motion: reduce) { .workspace-page .session-running i, .research-running-indicator { animation: none; } }
-.workspace-page .session-summary > .stopped-session-guidance { grid-column: 1 / -1; max-width: 72ch; margin: 8px 0 0; padding: 10px 12px; border-left: 3px solid #d5a847; border-radius: 0 8px 8px 0; background: #242a30; color: #e3e8ec; font-size: 13px; }
+.workspace-page .session-summary > .session-notice-exit-slot { grid-column: 1 / -1; }
+.workspace-page .session-summary .stopped-session-guidance { max-width: 72ch; margin: 8px 0 0; padding: 10px 12px; border-left: 3px solid #d5a847; border-radius: 0 8px 8px 0; background: #242a30; color: #e3e8ec; font-size: 13px; }
 .workspace-page .stopped-session-guidance p { margin: 0; }
 .workspace-page .stopped-session-guidance p + p { margin-top: 5px; }
 .saved-paper-library { display: grid; gap: 10px; margin-top: 18px; }
@@ -634,6 +635,10 @@
 .workspace-page .session-outcome .outcome-markdown { overflow-wrap: anywhere; }
 .workspace-page .session-outcome .outcome-markdown > :first-child { margin-top: 5px; }
 .workspace-page .session-outcome .outcome-markdown > :last-child { margin-bottom: 2px; }
+/* Research markdown is embedded inside an already-titled disclosure.
+   Keep generated h1/h2 headings compact, not document-cover sized. */
+.workspace-page .session-outcome .outcome-markdown h1 { margin: 10px 0 6px; color: #ead0ae; font: 500 19px/1.35 Georgia, serif; }
+.workspace-page .session-outcome .outcome-markdown h2 { margin: 12px 0 5px; color: #d5dfe7; font: 500 16px/1.4 Georgia, serif; }
 .workspace-page .session-outcome .outcome-markdown h3 { margin: 12px 0 5px; color: #ead0ae; font-size: 14px; }
 .workspace-page .session-outcome .outcome-markdown p { margin: 5px 0; }
 .workspace-page .session-outcome .outcome-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
@@ -653,8 +658,8 @@
 .workspace-page .strategy-assessments td:last-child { color: #b8c7d3; }
 .workspace-page .session-outcome.outcome-positive { border-left-color: #75b18c; }
 .workspace-page .session-outcome.outcome-positive > p:first-child span { color: #a5d1b3; }
-.workspace-page .session-outcome.outcome-negative { border-left-color: #d38578; }
-.workspace-page .session-outcome.outcome-negative > p:first-child span { color: #e6a69a; }
+.workspace-page .session-outcome.outcome-negative { border-left-color: #e2be91; }
+.workspace-page .session-outcome.outcome-negative > p:first-child span { color: #e2be91; }
 .workspace-page .session-outcome.outcome-pending > p:first-child span,
 .workspace-page .session-outcome.outcome-mixed > p:first-child span { color: #e2be91; }
 
@@ -683,7 +688,7 @@
 .workspace-page .outcome-conclusion-actions .markdown-logo path { fill: currentColor; }
 .workspace-page .outcome-label { color: #e2be91; font-size: 13px; overflow-wrap: anywhere; }
 .workspace-page .outcome-label.outcome-positive { color: #a5d1b3; }
-.workspace-page .outcome-label.outcome-negative { color: #e6a69a; }
+.workspace-page .outcome-label.outcome-negative { color: #e2be91; }
 .workspace-page .outcome-general { margin: 7px 0 12px; }
 .workspace-page .outcome-simple { margin: 10px 0 2px; }
 .workspace-page .advanced-outcome-hint { margin: 10px 0 0; color: #aebdc8; font-size: 12px; line-height: 1.5; }
@@ -929,7 +934,7 @@
 
 /* Session subtitle uses the same assessment palette as the detailed outcome. */
 .workspace-page .session-outcome-inline.outcome-positive span { color: #a5d1b3; }
-.workspace-page .session-outcome-inline.outcome-negative span { color: #e6a69a; }
+.workspace-page .session-outcome-inline.outcome-negative span { color: #e2be91; }
 .workspace-page .session-outcome-inline.outcome-pending span,
 .workspace-page .session-outcome-inline.outcome-mixed span { color: #e2be91; }
 
@@ -1150,13 +1155,41 @@
 }
 
 
+/* Toast-like dismissal anchored to each notice's own bottom edge.
+   The slot collapses in document flow; nothing flies toward the viewport footer. */
+.workspace-page .session-notice-exit-slot {
+  display: grid; grid-template-rows: 1fr;
+  min-width: 0;
+  transition: grid-template-rows 520ms ease;
+}
+.workspace-page .session-notice-exit-inner { min-height: 0; overflow: hidden; }
+.workspace-page .session-notice-exit-inner > :is(.stopped-session-guidance, .research-pause-guidance) {
+  opacity: 1; transform: translateY(0);
+  transition: transform 520ms ease, opacity 520ms ease;
+}
+.workspace-page .session-notice-exit-slot.is-exiting { grid-template-rows: 0fr; }
+.workspace-page .session-notice-exit-slot.is-exiting .session-notice-exit-inner > :is(.stopped-session-guidance, .research-pause-guidance) {
+  opacity: 0; transform: translateY(100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-page .session-notice-exit-slot,
+  .workspace-page .session-notice-exit-inner > :is(.stopped-session-guidance, .research-pause-guidance) { transition-duration: .01ms; }
+}
+
 /* Session guidance is dismissible, like the request-error toasts.
    This controls visibility only; the research state and history are unchanged. */
 .workspace-page .stopped-session-guidance,
-.workspace-page .research-pause-guidance { position: relative; padding-right: 84px; }
+.workspace-page .research-pause-guidance {
+  display: grid; grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start; padding-right: 12px;
+}
+.workspace-page .stopped-session-guidance > :not(.session-notice-dismiss),
+.workspace-page .research-pause-guidance > :not(.session-notice-dismiss) {
+  grid-column: 1 / -1; min-width: 0;
+}
 .workspace-page .session-notice-dismiss {
-  position: absolute; top: 7px; right: 12px; z-index: 1;
-  width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
+  position: static; grid-column: 2; grid-row: 1; justify-self: end;
+  width: auto; min-width: 0; min-height: 0; margin: 0 0 3px; padding: 2px 0;
   border: 0; border-radius: 0; background: transparent; box-shadow: none;
   color: #f1c58d; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
