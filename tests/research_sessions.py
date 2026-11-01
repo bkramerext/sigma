@@ -7420,20 +7420,11 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
         finished = await wait_for(path, started["id"])
 
     assert finished["status"] == "ended"
-    assert len(finished["artifacts"]) == 1, {
-        "status": finished["status"],
-        "calls_used": finished["calls_used"],
-        "branches": [
-            (item["strategy_id"], item["status"], item.get("current_action"), item.get("reason"))
-            for item in finished["strategy_runs"]
-        ],
-        "steps": [
-            (step.get("strategy_id"), step.get("role"), step.get("status"), step.get("failure_kind"))
-            for step in finished["steps"]
-        ],
-        "events": [event["kind"] for event in finished["events"][-15:]],
-    }
-    assert finished["calls_used"] == 2
+    # The objective-review policy may continue a promising sibling beyond
+    # its first I/S pair. Every completed pair must have a committed artifact.
+    artifacts = finished["artifacts"]
+    assert artifacts, finished["message"]
+    assert finished["calls_used"] == 2 * len(artifacts)
     failed_events = [
         event for event in finished["events"] if event["kind"] == "call.preflight_failed"
     ]
@@ -7449,11 +7440,22 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
     assert failure["dispatched"] is False
     assert "temporary project snapshot service failure" not in failure["message"]
     completed_steps = [step for step in finished["steps"] if step["status"] == "completed"]
-    assert len(completed_steps) == 2
-    assert completed_steps[0]["strategy_id"] in expected_titles
-    assert completed_steps[0]["strategy_id"] != failure["strategy_id"]
+    assert len(completed_steps) == finished["calls_used"]
+    assert all(step["strategy_id"] != failure["strategy_id"] for step in completed_steps)
     assert {step["role"] for step in completed_steps} == {"investigator", "skeptic"}
     assert completed_steps[0]["output"]["claim"].startswith("Claim 1:")
+    successful_strategy = next(
+        strategy_id for strategy_id in expected_titles if strategy_id != failure["strategy_id"]
+    )
+    assert all(artifact["strategy_id"] == successful_strategy for artifact in artifacts)
+    reviewed_cycles = {artifact["strategy_cycle"] for artifact in artifacts}
+    assert len(reviewed_cycles) == len(artifacts)
+    for cycle in reviewed_cycles:
+        assert {
+            step["role"]
+            for step in completed_steps
+            if step["strategy_id"] == successful_strategy and step["cycle"] == cycle
+        } == {"investigator", "skeptic"}
     assert all(step.get("strategy_id") != failure["strategy_id"] for step in finished["steps"])
 
 
