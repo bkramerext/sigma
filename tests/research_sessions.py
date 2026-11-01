@@ -9797,6 +9797,22 @@ def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
     assert "Cloud inference cannot be bounded" in message
 
 
+def test_parallel_funding_uses_estimates_without_changing_provider_request() -> None:
+    record = {
+        "mode": "api_key",
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "output_token_limit": 4000,
+    }
+    context = {"problem": "Shared research objective", "strategy": "Independent approach"}
+    provider_request = research_sessions._role_request_payload(
+        record, "investigator", context
+    )
+    assert provider_request["max_output_tokens"] == research_sessions.MODEL_OUTPUT_LIMITS[MODEL]
+    cost_estimate = research_sessions._reserve_cost(record, context, "investigator")
+    assert cost_estimate is not None and 0 < cost_estimate < 0.10
+
+
 def test_portfolio_capacity_tracks_strategies_not_billing_mode() -> None:
     for sponsored in (True, False):
         with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=sponsored):
@@ -9843,6 +9859,7 @@ def main():
     test_sponsorship_does_not_shorten_project_duration()
     test_context_manifest_compaction_preserves_omission_accounting()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
+    test_parallel_funding_uses_estimates_without_changing_provider_request()
     test_portfolio_capacity_tracks_strategies_not_billing_mode()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_source_readiness_distinguishes_content_from_verification()
