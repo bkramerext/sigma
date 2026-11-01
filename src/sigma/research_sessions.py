@@ -57,8 +57,12 @@ CALL_LIMIT = 6
 MAX_CLIPPED_AUTO_RETRIES = 1
 MAX_TRANSIENT_AUTO_RETRIES = 1
 MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60
-MAX_RECORD = 2_000_000
-MAX_TOTAL = 16_000_000
+# A 54-turn portfolio stores full audited prompts, provider attempts and
+# source-linked evidence. The old 2 MB per-session limit was nearly exhausted
+# by a real 14-turn session; keep hard, bounded storage limits sized for
+# configured multi-strategy research rather than silently truncating records.
+MAX_RECORD = 32_000_000
+MAX_TOTAL = 128_000_000
 MAX_PRIOR_CONTEXT_BYTES = 32_000
 MAX_PRIOR_FAILURES = 12
 MAX_PRIOR_FAILURE_CONTEXT_BYTES = 8_000
@@ -81,7 +85,7 @@ MAX_REJECTED_INTERVENTIONS = 8
 # Internal experiment only. Literal frozen sources remain the shipped dispatch
 # format until an unscripted comparison establishes that aliasing is understood.
 EXPERIMENTAL_EXACT_TEXT_POOL = False
-CALL_TIMEOUT = 15 * 60
+CALL_TIMEOUT = 60 * 60
 # Verified against the OpenAI API model catalog on 2026-10-31:
 # https://developers.openai.com/api/docs/models/compare?model=gpt-6-astra
 # Every listed API model advertises 128,000 max output tokens and reasoning
@@ -809,7 +813,7 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
         raise ProjectError("Maximum concurrent sessions must be between 1 and 4")
     result["max_concurrent_sessions"] = concurrency
     bounds = {
-        "research_rounds": (1, 5),
+        "research_rounds": (1, 60),
         "model_calls": (2, 120),
         "output_tokens_per_call": (256, 20000),
     }
@@ -862,9 +866,13 @@ def coordinate_decision(
     question = next_question.strip() or next(
         (item.strip() for item in obligations if item.strip()), ""
     )
-    if stop_reason == "decisive_counterexample":
+    # A Skeptic that explicitly requests continuation cannot terminate its
+    # strategy just because it used a contradictory stop-reason label.
+    # Preserve the next question, especially for counterexamples to *earlier*
+    # candidate arguments that do not refute the current strategy.
+    if assessment == "stop" and stop_reason == "decisive_counterexample":
         return "stop_decisive_counterexample", ""
-    if stop_reason == "productive_conclusion":
+    if assessment == "stop" and stop_reason == "productive_conclusion":
         return "stop_productive_conclusion", ""
     if cycle >= cycle_limit or calls_used >= call_limit:
         return "stop_budget_exhausted", ""
@@ -6459,13 +6467,38 @@ def _obligation_ledger(
         source_project_id, source_strategy_id, assumptions = note_scope(
             artifact, objective_review, skeptic
         )
+        # The coordinator copies older unresolved notes into each new artifact.
+        # Their origins are already recorded in previous artifacts; treating a
+        # copied note as new under later assumptions creates a growing set of
+        # false identities. Preserve actual model notes and legacy artifact-only
+        # obligations, while skipping only explicitly coordinator-added copies.
+        propagated = skeptic.get("coordinator_added_obligations")
+        propagated_texts: set[str] = set()
+        if isinstance(propagated, list):
+            propagated_texts = {
+                _normalized_obligation_text(note) for note in propagated if isinstance(note, str)
+            }
+        artifact_notes = artifact.get("open_obligations")
+        if isinstance(artifact_notes, list) and propagated_texts:
+            artifact_notes = [
+                note
+                for note in artifact_notes
+                if not isinstance(note, str)
+                or _normalized_obligation_text(note) not in propagated_texts
+            ]
+        model_remaining = skeptic.get("model_remaining_obligations")
+        remaining_notes = (
+            model_remaining
+            if isinstance(model_remaining, list)
+            else skeptic.get("remaining_obligations")
+        )
         note_fields = (
             investigator.get("open_obligations"),
-            artifact.get("open_obligations"),
+            artifact_notes,
             artifact.get("objections"),
             objective_review.get("unresolved_objections"),
             skeptic.get("unresolved_objections"),
-            skeptic.get("remaining_obligations"),
+            remaining_notes,
         )
         for notes in note_fields:
             for note in notes if isinstance(notes, list) else []:
@@ -9824,12 +9857,19 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
         or branch.get("current_action") == "Budget exhausted"
     ]
     if budget_stopped:
-        limit_kind = "turn" if calls >= call_limit else "round"
+        deferred_pair = any(
+            branch.get("current_action") == "Budget exhausted"
+            and str(branch.get("reason") or "").startswith("Deferred:")
+            for branch in runs
+        )
+        limit_kind = "turn" if calls >= call_limit or deferred_pair else "round"
         saved = sum(len(item.get("artifacts", [])) for item in runs)
         why = (
             "the shared turn limit was reached"
             if calls >= call_limit
             else "the remaining shared turns could not fund another complete Investigator/Skeptic pair"
+            if deferred_pair
+            else "the per-strategy round ceiling was reached"
         )
         return (
             f"{limit_kind}_limit_reached",

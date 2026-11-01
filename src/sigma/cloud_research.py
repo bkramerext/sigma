@@ -584,8 +584,13 @@ def prepare_job(record: dict[str, Any]) -> None:
     if (
         type(call_limit) is not int
         or not 2 <= call_limit <= call_ceiling
-        or type(duration_limit) is not int
-        or not 1 <= duration_limit <= MAX_PROJECT_SESSION_DURATION_MINUTES
+        or (
+            duration_limit is not None
+            and (
+                type(duration_limit) is not int
+                or not 1 <= duration_limit <= MAX_PROJECT_SESSION_DURATION_MINUTES
+            )
+        )
         or (
             maximum_cost is not None
             and (
