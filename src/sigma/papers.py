@@ -1555,49 +1555,43 @@ def _evidence_based_long_plan(
                     covered_candidate_fields.add(candidate_field)
                 if len(matching) >= 3:
                     break
-            statement = " ".join(ranked_candidates[id(note)][1] for note in matching) or (
-                "The saved research contains indexed evidence requiring further analysis."
-            )
-            claim_id = f"C{len(claims) + 1}"
-            claims.append(
-                PaperClaim(
-                    id=claim_id,
-                    statement=statement[:1600],
-                    status=(
-                        "limitation"
-                        if matching and all(note.kind == "limitation" for note in matching)
-                        else "unresolved"
-                    ),
-                    evidence_refs=list(
-                        dict.fromkeys(
-                            ref
-                            for note in matching
-                            for ref in ranked_candidates[id(note)][3]
-                            if ref in source_ids
-                        )
-                    )[:20]
-                    or list(chunk[:1]),
-                    reasoning=(
-                        "Recorded at "
-                        + "; ".join(ranked_candidates[id(note)][2] for note in matching)
-                        + ". "
-                        if matching
-                        else ""
+            section_claim_ids: list[str] = []
+            # The section may discuss several ideas, but a claim remains one
+            # proposition tied to its *own* source span. Never concatenate
+            # unrelated research fields into a single claim.
+            for note in matching or [None]:
+                if note is None:
+                    statement = "The selected evidence needs further independent assessment."
+                    refs_for_claim = chunk[:1]
+                    field_path = ""
+                    kind = "question"
+                else:
+                    _score, statement, field_path, valid_refs = ranked_candidates[id(note)]
+                    refs_for_claim = list(valid_refs)[:20]
+                    kind = note.kind
+                claim_id = f"C{len(claims) + 1}"
+                claims.append(
+                    PaperClaim(
+                        id=claim_id,
+                        statement=statement,
+                        status="limitation" if kind == "limitation" else "unresolved",
+                        evidence_refs=refs_for_claim,
+                        reasoning=(
+                            (f"Recorded at {field_path}. " if field_path else "")
+                            + "The saved research contains this proposition, but "
+                            "its proof, empirical status, and interpretation "
+                            "require independent verification."
+                        ),
                     )
-                    + (
-                        "This is a recorded research item, not an independently "
-                        "verified conclusion; the cited saved evidence requires assessment."
-                    ),
                 )
-            )
-            if matching:
-                claim_kinds[claim_id] = matching[0].kind
+                claim_kinds[claim_id] = kind
+                section_claim_ids.append(claim_id)
             sections.append(
                 LongSectionPlan(
                     heading=heading if offset == 0 else f"{heading}: additional evidence",
                     purpose=purpose,
                     evidence_refs=chunk,
-                    claim_ids=[claim_id],
+                    claim_ids=section_claim_ids,
                 )
             )
             covered.update(chunk)
