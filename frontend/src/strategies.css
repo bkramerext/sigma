@@ -28,7 +28,7 @@
 .workspace-page .strategies-table { min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; }
 .workspace-page :is(.strategy-columns, .project-description-columns) { text-transform: uppercase; letter-spacing: .16em; color: #e5b270; font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
 .workspace-page .strategy-columns { display: grid; grid-template-columns: minmax(0, 1fr) 266px; padding: 14px 24px; }
-.workspace-page .project-description-columns { margin: -8px -8px 8px; padding: 14px 24px; overflow-wrap: anywhere; }
+.workspace-page .project-description-columns { margin: -8px -8px 8px; padding: 14px 8px; overflow-wrap: anywhere; }
 .workspace-page .strategy-list { background: transparent; padding: 0; margin: 0; border: 0; border-radius: 5px; }
 .workspace-page .strategy-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 190px 44px; column-gap: 16px; align-items: start; padding: 15px 36px 15px 24px; min-height: 78px; border-top: 1px solid var(--workspace-line); transition: background-color .15s; }
 .workspace-page .strategy-detail { min-width: 0; }
