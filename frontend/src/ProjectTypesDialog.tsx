@@ -16,6 +16,25 @@ export type ProjectTypeRecord = {
 
 type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode };
 const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
+const handledErrorHeaders = { 'X-Sigma-Error-Handled': 'true' };
+// Keep validation aligned with server-side _validate_references. Empty edit rows
+// are deliberately ignored on Save. Nonempty malformed URLs are not.
+function referenceUrlError(value: string): string | null {
+  const candidate = value.trim();
+  if (!candidate) return null;
+  if (value.length > 2048) return 'URL must be at most 2,048 characters.';
+  if (!/^https?:\/\//i.test(candidate)) return 'Use an HTTP or HTTPS URL with a host.';
+  try {
+    const parsed = new URL(candidate);
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) {
+      return 'Use an HTTP or HTTPS URL with a host, without sign-in credentials.';
+    }
+  } catch {
+    return 'Enter a valid HTTP or HTTPS URL with a host.';
+  }
+  return null;
+}
+
 
 function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   value: string | null | undefined;
@@ -85,7 +104,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     first.current?.focus();
   }, []);
   async function load() {
-    const response = await fetch('/api/project-types', { cache: 'no-store' });
+    const response = await fetch('/api/project-types', { cache: 'no-store', headers: handledErrorHeaders });
     if (!response.ok) throw new Error('Project types could not be loaded.');
     const data = await response.json() as { project_types: ProjectTypeRecord[]; icons: { placeholder: ProjectTypeRecord['icon'] }; revision: string };
     setBuiltins(data.project_types.filter(item => !item.user_defined));
@@ -101,6 +120,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const sortedBuiltins = useMemo(() => [...builtins].sort((a, b) => a.name.localeCompare(b.name)), [builtins]);
   const sortedDrafts = useMemo(() => [...drafts].sort((a, b) => a.name.localeCompare(b.name)), [drafts]);
   function edit(id: string, patch: Partial<ProjectTypeRecord>) {
+    setError('');
     setDrafts(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
   }
   const isDuplicateName = (item: ProjectTypeRecord) => {
@@ -109,6 +129,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   };
   function add() {
     if (!placeholderIcon) return;
+    setError('');
     const item = blank(placeholderIcon);
     setDrafts(previous => [...previous, item]);
     setOpen(item.id);
@@ -158,6 +179,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const renderEffectiveIcon = (item: ProjectTypeRecord): ReactNode =>
     renderIcon({ ...item, icon: effectiveIcon(item) });
   function removeDraft(id: string) {
+    setError('');
     setDrafts(previous => previous.filter(candidate => candidate.id !== id));
     setAddingId(previous => previous === id ? null : previous);
     setOpen(previous => previous === id ? null : previous);
@@ -169,13 +191,13 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       const removed = initialCustomIds.current.filter(id => !drafts.some(draft => draft.id === id));
       const confirmedRemovals: Record<string, number> = {};
       for (const id of removed) {
-        const usageResponse = await fetch(`/api/project-types/${encodeURIComponent(id)}/usage`, { cache: 'no-store' });
+        const usageResponse = await fetch(`/api/project-types/${encodeURIComponent(id)}/usage`, { cache: 'no-store', headers: handledErrorHeaders });
         const usage = await usageResponse.json() as { project_count: number };
         if (!usageResponse.ok) throw new Error('Could not check which projects use a removed type.');
         confirmedRemovals[id] = usage.project_count;
         if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return;
       }
-      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_types: drafts, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
+      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved. Reload and review any changed types or project usage.');
       await load();
@@ -191,12 +213,21 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     const setAt = (index: number, value: string) => edit(item.id, { [field]: urls.map((url, i) => i === index ? value : url) });
     if (readonly && urls.length === 0) return null;
     return <table className="pt-reference-table"><tbody>
-      {urls.map((url, index) => <tr key={index}><td>
-        {readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <div className="pt-reference-entry">
-          <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={url} onChange={event => setAt(index, event.target.value)}/>
-          <button type="button" disabled={busy} onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>
-        </div>}
-      </td></tr>)}
+      {urls.map((url, index) => {
+        const urlError = !readonly && referenceUrlError(url);
+        const errorId = `pt-reference-error-${item.id}-${field}-${index}`;
+        return <tr key={index}><td>
+          {readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <div className="pt-reference-entry">
+            <div className="pt-reference-field">
+              <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={url}
+                aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
+                onChange={event => setAt(index, event.target.value)}/>
+              {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
+            </div>
+            <button type="button" disabled={busy} onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>
+          </div>}
+        </td></tr>;
+      })}
       {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || urls.some(url => !url.trim())} onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td></tr>}
     </tbody></table>;
   };
@@ -215,7 +246,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     </div>
   </details>;
   const hasChanges = savedDrafts !== null && JSON.stringify(drafts) !== JSON.stringify(savedDrafts);
-  const invalidDraft = drafts.some(item => isDuplicateName(item) || !item.name.trim() || !item.scope.trim() || item.icon.kind !== 'data' && item.icon.kind !== 'builtin');
+  const invalidDraft = drafts.some(item =>
+    isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
+    (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
+    item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
+    [...item.research_standards_references, ...item.publication_standards_references].some(url => !!referenceUrlError(url))
+  );
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); if (!busy) close(); }} onClick={event => { if (event.target === dialog.current && !busy) close(); }} onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
     const element = dialog.current;
@@ -230,10 +266,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     focusable[nextIndex].focus();
   }}>
     <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy} onClick={close}>Cancel</button></div></header>
+    {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
-      {error && <p role="alert">{error}</p>}
     </div>
   </dialog>;
 }
