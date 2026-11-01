@@ -3094,12 +3094,33 @@ async def test_t37_mandatory_context_blocks_before_provider(path: Path):
             "method": "Saved complete source remains in the original artifact.",
         }
     ]
-    try:
-        research_sessions._agent_context(record, "investigator", 1)
-    except research_sessions.ResearchContextLimitError as exc:
-        assert "obligation exceeds the safe extract bound" in str(exc)
-    else:
-        raise AssertionError("A partially extracted unresolved obligation must be flagged")
+    truncated = research_sessions._agent_context(record, "investigator", 1)
+    open_item = truncated["obligation_ledger"][0]
+    assert open_item["status"] == "unresolved"
+    assert open_item["text_complete"] is False
+    assert truncated["incomplete_unresolved_obligation_count"] == 1
+    assert truncated["context_manifest"]["incomplete_unresolved_obligations"]["count"] == 1
+
+    # Older unresolved items may be excluded from one bounded provider packet,
+    # but their IDs and unresolved status are not erased from saved artifacts.
+    original_obligations = [
+        f"Open problem {index}" for index in range(research_sessions.MAX_CONTEXT_OBLIGATIONS + 3)
+    ]
+    record["artifacts"] = [
+        {
+            "id": "many-open-obligations",
+            "sequence": 1,
+            "strategy_id": strategy.id,
+            "open_obligations": original_obligations,
+        }
+    ]
+    bounded = research_sessions._agent_context(record, "investigator", 1)
+    assert len(bounded["obligation_ledger"]) == research_sessions.MAX_CONTEXT_OBLIGATIONS
+    assert bounded["obligation_ledger_omitted_count"] == 3
+    assert len(bounded["obligation_ledger_omitted_ids"]) == 3
+    assert all(item["status"] == "unresolved" for item in bounded["obligation_ledger"])
+    assert original_obligations[0] not in [item["text"] for item in bounded["obligation_ledger"]]
+    assert original_obligations[-1] in [item["text"] for item in bounded["obligation_ledger"]]
 
 
 async def test_clipped_investigator_automatically_recovers(path: Path):
