@@ -1636,10 +1636,11 @@ def _evidence_based_long_plan(
                         status="limitation" if kind == "limitation" else "unresolved",
                         evidence_refs=refs_for_claim,
                         reasoning=(
-                            (f"Recorded at {field_path}. " if field_path else "")
-                            + "The saved research contains this proposition, but "
-                            "its proof, empirical status, and interpretation "
-                            "require independent verification."
+                            f"Source-index classification: {kind}. "
+                            + (f"Recorded at {field_path}. " if field_path else "")
+                            + "This classification describes the original source, "
+                            "not an independent verification. Verify the exact "
+                            "argument, applicability and evidence status."
                         ),
                     )
                 )
@@ -3694,6 +3695,11 @@ def _tex(
             if math_style
             else r"\section{" + esc(findings_heading) + "}"
         )
+        # Dense source-linked statements and source paths can otherwise create
+        # severe overfull boxes despite valid, readable scientific content.
+        # Scope relaxed line breaking to the register, not the main article.
+        parts.append(r"\begin{sloppypar}")
+        parts.append(r"\small")
         for claim in draft.claims:
             parts.extend(
                 [
@@ -3704,6 +3710,7 @@ def _tex(
             )
             if claim.evidence_refs:
                 parts.append(r"\textit{Evidence: }" + esc(readable_refs(claim.evidence_refs)))
+        parts.append(r"\end{sloppypar}")
 
     if include_claim_details and not math_style:
         claim_register()
