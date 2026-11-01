@@ -6223,6 +6223,24 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     return context
 
 
+def _context_obligation_count(context: dict[str, Any]) -> int:
+    """Count the unresolved obligations actually supplied to an agent turn.
+
+    Dispatch compaction can remove the redundant outstanding_obligations list.
+    The obligation ledger is authoritative and survives that compaction. Keep
+    compatibility with earlier contexts that only supplied the legacy list.
+    """
+    ledger = context.get("obligation_ledger")
+    if isinstance(ledger, list):
+        return sum(
+            1
+            for item in ledger
+            if isinstance(item, dict) and item.get("status") == "unresolved"
+        )
+    outstanding = context.get("outstanding_obligations")
+    return len(outstanding) if isinstance(outstanding, list) else 0
+
+
 def _json_bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
 
@@ -8589,7 +8607,7 @@ async def _portfolio_role_call(
                 "peer_handoff_ids": [
                     item["handoff_id"] for item in context.get("peer_handoffs", [])
                 ],
-                "context_obligation_count": len(context["outstanding_obligations"]),
+                "context_obligation_count": _context_obligation_count(context),
                 "human_intervention_ids": [item["intervention_id"] for item in human_guidance],
                 "computation_inspections": _context_computation_inspections(context),
                 "cost_reserve": reserve,
@@ -10852,7 +10870,7 @@ async def _worker(session_id: str, path: str) -> None:
                     "context_artifact_ids": context["context_artifact_ids"],
                     "prior_session_artifact_ids": context.get("prior_session_artifact_ids", []),
                     "context_manifest": context["context_manifest"],
-                    "context_obligation_count": len(context["outstanding_obligations"]),
+                    "context_obligation_count": _context_obligation_count(context),
                     "human_intervention_ids": [item["intervention_id"] for item in guidance],
                 }
                 step["provider_input_audit"] = request_audit
