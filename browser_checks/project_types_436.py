@@ -129,8 +129,28 @@ with sync_playwright() as playwright:
     parent = dialog.locator(".project-types-body > section").first.locator(".project-type-card[open]")
     parent.get_by_label("Name").fill("Browser Parent")
     parent.get_by_label("Scope").fill("Original copied research scope")
+    # A built-in or custom name collision must block saving without rewriting it.
+    parent.get_by_label("Name").fill("  physics  ")
+    expect(parent.get_by_text("A project type with this name already exists.")).to_be_visible()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
+    parent.get_by_label("Name").fill("Browser Parent")
+    expect(parent.get_by_text("A project type with this name already exists.")).to_have_count(0)
     expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
     expect(parent.get_by_role("button", name="Generate icon")).to_be_visible()
+    # Mock a rejected AI request: error persists inline, prior icon remains,
+    # editor must stay open, and a retry action remains available.
+    page.route("**/api/project-types/icon", lambda route: route.fulfill(
+        status=400, content_type="application/json",
+        body='{"detail":"Mock image provider unavailable"}',
+    ))
+    parent.get_by_role("button", name="Generate icon").click()
+    expect(parent.get_by_text("Icon not generated:", exact=False)).to_contain_text(
+        "Mock image provider unavailable"
+    )
+    expect(parent).to_have_attribute("open", "")
+    expect(parent.get_by_role("button", name="Generate icon")).to_be_enabled()
+    expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
+    page.unroute("**/api/project-types/icon")
     parent.get_by_role("button", name="New", exact=True).first.click()
     url_input = parent.get_by_label("Research reference URL 1")
     url_input.fill("https://example.org/research-standard")
@@ -170,7 +190,7 @@ with sync_playwright() as playwright:
     assert child_type["based_on"] == parent_type["id"]
     assert child_type["scope"] == "Independent copied scope"
     assert child_type["research_standards_references"] == ["https://example.org/research-standard"]
-    assert not any(url.endswith("/project-types/icon") for url, _ in api_requests)
+    assert len([url for url, _ in api_requests if url.endswith("/project-types/icon")]) == 1
 
     # Edit/add/remove are all drafts. Cancel discards all three, and Remove
     # makes no write until Save.
