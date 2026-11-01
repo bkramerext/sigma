@@ -116,10 +116,33 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     setOpen(item.id);
     setAddingId(item.id);
   }
+  function inheritedMetadata(parentId: string) {
+    const byId = new Map([...builtins, ...drafts].map(item => [item.id, item]));
+    const visited = new Set<string>();
+    const chain: ProjectTypeRecord[] = [];
+    let current: string | null | undefined = parentId;
+    while (current && !visited.has(current) && byId.has(current)) {
+      visited.add(current);
+      const item = byId.get(current)!;
+      chain.push(item);
+      current = item.based_on;
+    }
+    const icon = chain.find(item => item.icon.kind === 'data' || item.icon.key !== 'placeholder')?.icon;
+    const research = chain.find(item => item.research_standards_references.length)?.research_standards_references ?? [];
+    const publication = chain.find(item => item.publication_standards_references.length)?.publication_standards_references ?? [];
+    return { icon: structuredClone(icon ?? placeholderIcon!), research_standards_references: [...research], publication_standards_references: [...publication] };
+  }
   function basedOn(id: string, parentId: string) {
     const parent = [...builtins, ...drafts].find(item => item.id === parentId);
     if (!parent) return;
-    edit(id, { based_on: parent.id, scope: parent.scope, icon: structuredClone(parent.icon), research_standards_references: [...parent.research_standards_references], publication_standards_references: [...parent.publication_standards_references], origin: parent.id });
+    const seen = new Set([id]);
+    let next: string | null | undefined = parentId;
+    while (next) {
+      if (seen.has(next)) { setError('Project type ancestry cannot contain a cycle.'); return; }
+      seen.add(next);
+      next = [...builtins, ...drafts].find(item => item.id === next)?.based_on;
+    }
+    edit(id, { based_on: parent.id, scope: parent.scope, ...inheritedMetadata(parentId), origin: parent.id });
   }
   async function generateIcon(item: ProjectTypeRecord) {
     if (generatingId || busy || !item.name.trim() || !item.scope.trim()) return;
