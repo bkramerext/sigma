@@ -42,7 +42,10 @@ def main() -> None:
                         ).to_be_visible()
                     else:
                         expect(
-                            page.get_by_text("No terms except to discover something interesting, wonderous, or pioneering.", exact=True)
+                            page.get_by_text(
+                                "No terms except to discover something interesting, wonderous, or pioneering.",
+                                exact=True,
+                            )
                         ).to_be_visible()
                     assert not [url for url in api_requests if "/api/cloud-auth/" in url], (
                         api_requests
@@ -56,9 +59,7 @@ def main() -> None:
                 "nodes => nodes.map(node => parseFloat(getComputedStyle(node).fontSize))"
             )
             assert sizes[0] == sizes[1] and sizes[0] >= 19, sizes
-            assert copy.nth(1).evaluate(
-                "node => getComputedStyle(node).fontStyle"
-            ) == "italic"
+            assert copy.nth(1).evaluate("node => getComputedStyle(node).fontStyle") == "italic"
             # Clicking within the card keeps it open. Clicking its backdrop
             # returns home just like the explicit Close action.
             copy.first.click()
@@ -98,9 +99,7 @@ def main() -> None:
         finally:
             browser.close()
 
-    print(
-        "PASS public legal pages, Welcome-sized Terms text, backdrop close and About links"
-    )
+    print("PASS public legal pages, Welcome-sized Terms text, backdrop close and About links")
 
 
 if __name__ == "__main__":
