@@ -289,8 +289,7 @@ def select_method_sources(
         if not isinstance(source_rows, list):
             continue
         if not all(
-            isinstance(row, Mapping) and isinstance(row.get("id"), str)
-            for row in source_rows
+            isinstance(row, Mapping) and isinstance(row.get("id"), str) for row in source_rows
         ):
             continue
         ids: list[str] = [str(row["id"]) for row in source_rows]
