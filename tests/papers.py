@@ -522,7 +522,6 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
             assert compiled.startswith(b"%PDF-")
 
 
-
 def test_tex_proofreader_three_passes_with_early_convergence() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "three-pass.sigma"
