@@ -26,6 +26,12 @@
 
 **Math strategy choice:** roots-of-unity weighted Fibonacci polynomials `00469f7f-ba53-4a12-944d-2d3295e48d1f` plus gap removal/Gaussian-binomial sums `9ad51640-ff9a-4d22-a928-518f032003bf`; periodic transfer-matrix strategy remains unselected. Record actual selected strategy IDs in release.
 
+## Pre-investigation Source Material required in every frozen project
+
+Before the Investigator/Skeptic loop starts, SIGMA chooses **2–3 readable research-method sources** from a coordinator-verified source catalog: shared scientific standards, the persisted `investigation_type` and an appropriate specialty inferred from the exact problem/strategies. The entire selected method set, digest, source notes, source URLs, tier, branch and whether prior selections were reused are durably saved as `research_method_sources`. Source content must reach **both** roles in their exact provider request bodies. Selecting methods does **not** consume a research role turn, use inference quota or constitute independent verification of scientific evidence. A missing source never blocks research; the status must accurately show the fallback. This version selects from a vetted readable corpus, **not** ad-hoc Internet search at session time.
+
+PR #434 release validation must verify per-session method source counts, selection before dispatch, stable reuse from previous session when comprehensive, matching the actual project type (notably Sovereign AI's computer-science mode), method digest and source note preservation. The exported Outcome and report must contain a distinct **Source Material** section, separating methods furnished to researchers from domain research/literature actually inspected. Preserve those fields in all five bundles for Phase 1 to read; no in-place edits to research sources.
+
 ## Required versioned payload (when I2 is complete)
 
 Publish a new immutable directory `releases/phase2-i2-v1/` with:
