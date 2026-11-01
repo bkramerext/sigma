@@ -61,3 +61,6 @@
   .pt-reference-table col:first-child { width: 76%; }
   .pt-reference-table col:last-child { width: 24%; }
 }
+
+.project-types-pane-control { display: flex; justify-content: flex-start; padding: 4px 0 18px; }
+.project-types-pane-control .project-types-action { margin: 0; }
