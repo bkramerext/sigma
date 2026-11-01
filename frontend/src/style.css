@@ -479,5 +479,13 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .session-log-page .session-log-secondary-action:hover { min-height: 0; padding: 1px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #f1c58d; font: 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
 .session-log-page .session-log-secondary-action:hover { color: #ffe1ad; }
 
-/* Terms uses the same unboxed italic closing thought as Welcome. */
-.terms-welcome-phrase { margin: 0 0 14px; padding: 0; border: 0; background: transparent; color: #bcc5cc; font: inherit; font-style: italic; }
+/* Welcome's 16px copy is scaled 1.25x in its dialog. Match the visible
+   20px typography here without scaling the entire Terms card. */
+.terms-of-service-card { width: min(100%, 780px); }
+.terms-of-service-copy { display: grid; gap: 24px; max-width: 690px; margin: 24px 0 6px; }
+.terms-of-service-card .terms-of-service-copy > p { margin: 0; color: #bcc5cc; font: 400 20px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
+.terms-of-service-card .terms-of-service-copy > .terms-welcome-phrase { font-style: italic; }
+@media (max-width: 700px) {
+  .terms-of-service-card .terms-of-service-copy > p { font-size: clamp(16px, 3.5vw, 20px); }
+  .terms-of-service-copy { gap: 18px; margin-top: 18px; }
+}
