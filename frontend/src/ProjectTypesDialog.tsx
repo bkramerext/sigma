@@ -123,6 +123,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   }
   async function generateIcon(item: ProjectTypeRecord) {
     if (generatingId || busy || !item.name.trim() || !item.scope.trim()) return;
+    setOpen(item.id);
     setGeneratingId(item.id);
     setIconErrors(previous => ({ ...previous, [item.id]: '' }));
     try {
@@ -132,7 +133,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
         body: JSON.stringify({ name: item.name, scope: item.scope }),
       });
       const data = await response.json() as { icon?: ProjectTypeRecord['icon']; detail?: string };
-      if (!response.ok || !data.icon) throw new Error(typeof data.detail === 'string' ? data.detail : 'Icon generation failed.');
+      if (!response.ok || !data.icon) throw new Error(typeof data.detail === 'string' ? data.detail : 'Icon generation failed. Check the selected AI connection and server configuration.');
       edit(item.id, { icon: data.icon });
       setIconErrors(previous => ({ ...previous, [item.id]: '' }));
     } catch (cause) {
@@ -167,12 +168,20 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   }
   const listEditor = (item: ProjectTypeRecord, field: 'research_standards_references' | 'publication_standards_references', readonly: boolean) => {
     const urls = item[field];
+    const label = field === 'research_standards_references' ? 'Research' : 'Publication';
     const setAt = (index: number, value: string) => edit(item.id, { [field]: urls.map((url, i) => i === index ? value : url) });
-    return <table className="pt-reference-table"><colgroup><col/><col/></colgroup><thead><tr><th scope="col">URL</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>
-      {readonly && urls.length === 0 && <tr><td className="pt-reference-example">http://temp.com/style.html <small>(example only)</small></td><td/></tr>}
-      {urls.map((url, index) => <tr key={index}><td>{readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <input aria-label={`${field === 'research_standards_references' ? 'Research' : 'Publication'} reference URL ${index + 1}`} type="url" placeholder="http://temp.com/style.html" value={url} onChange={event => setAt(index, event.target.value)}/>}</td><td>{!readonly && <button type="button" onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>}</td></tr>)}
-      {!readonly && <tr><td><button type="button" onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td><td/></tr>}
-    </tbody></table>;
+    return <table className="pt-reference-table">
+      <colgroup>{readonly ? <col/> : <><col/><col/></>}</colgroup>
+      <thead><tr><th scope="col">URL</th>{!readonly && <th scope="col"><span className="sr-only">Reference actions</span></th>}</tr></thead>
+      <tbody>
+        {urls.length === 0 && <tr><td className="pt-reference-example" colSpan={readonly ? 1 : 2}>http://temp.com/style.html <small>(example only)</small></td></tr>}
+        {urls.map((url, index) => <tr key={index}>
+          <td>{readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <input aria-label={`${label} reference URL ${index + 1}`} type="url" placeholder="http://temp.com/style.html" value={url} onChange={event => setAt(index, event.target.value)}/>}</td>
+          {!readonly && <td><button type="button" onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button></td>}
+        </tr>)}
+        {!readonly && <tr><td><button type="button" onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td><td/></tr>}
+      </tbody>
+    </table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" key={item.id} open={open === item.id} onToggle={event => { if (event.currentTarget.open) setOpen(item.id); }}>
     <summary><span className="project-type-card-icon">{renderIcon(item)}</span><strong>{item.name || 'New project type'}</strong><small>{readonly ? 'Built-in' : 'Custom'}</small></summary>
