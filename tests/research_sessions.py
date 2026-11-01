@@ -9371,6 +9371,80 @@ def test_project_cost_denial_reports_affordable_first_call() -> None:
     assert ledger["calls"] == []
 
 
+
+def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
+    """Long runs preserve provenance while dropping redundant prompt bytes."""
+    from copy import deepcopy
+
+    original_evidence = [
+        {
+            "id": f"saved-{index}",
+            "strategy_id": "strategy-a",
+            "method": f"Older saved argument {index}. " + ("x" * 18000),
+            "evidence_status": "Unverified",
+        }
+        for index in range(18)
+    ]
+    context = {
+        "problem": "Investigate whether this agent architecture is reliable.",
+        "strategy": {"id": "strategy-a", "approach": "Test competing hypotheses."},
+        "question": "Continue the next research turn.",
+        "prior_artifacts": deepcopy(original_evidence),
+        "obligation_ledger": [
+            {
+                "obligation_id": "open-one",
+                "text": "Check the counterexample before claiming a result.",
+                "status": "unresolved",
+                "source_artifact_ids": ["saved-0"],
+                "supplied_source_artifact_ids": ["saved-0"],
+                "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
+            }
+        ],
+        "outstanding_obligations": ["Check the counterexample before claiming a result."],
+        "context_manifest": {
+            "sources": [
+                {
+                    "category": "current_session_material_evidence",
+                    "source_ids": ["saved-0", "saved-17"],
+                    "status": "selected",
+                    "representation": "deterministic_extract",
+                }
+            ]
+        },
+    }
+    assert research_sessions._json_bytes(context) > research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert research_sessions.compact_dispatch_context(
+        context, limit=research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    assert research_sessions._json_bytes(context) <= research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert context["problem"] == "Investigate whether this agent architecture is reliable."
+    assert context["question"] == "Continue the next research turn."
+    assert context["obligation_ledger"][0]["status"] == "unresolved"
+    assert context["obligation_ledger"][0]["text"] == (
+        "Check the counterexample before claiming a result."
+    )
+    assert context["obligation_ledger"][0]["source_artifact_availability"] == (
+        "incomplete_extract_original_not_supplied"
+    )
+    assert context["prior_artifacts"][0]["id"] == "saved-0"
+    assert context["prior_artifacts"][0]["evidence_availability"] == (
+        "pointer_only_original_not_supplied"
+    )
+    assert original_evidence[0]["method"].endswith("x" * 18000)
+    assert context["context_manifest"]["dispatch_budget_compaction"]["counts"]["prior_artifacts"] > 0
+
+    # Do not truncate the active problem and pretend a request can continue.
+    huge_question = {
+        "problem": "p" * (research_sessions.MAX_AGENT_CONTEXT_BYTES + 1),
+        "context_manifest": {"sources": []},
+        "prior_artifacts": [],
+    }
+    assert not research_sessions.compact_dispatch_context(
+        huge_question, limit=research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    assert len(huge_question["problem"]) == research_sessions.MAX_AGENT_CONTEXT_BYTES + 1
+
+
 def main():
     test_backend_build_is_pinned_at_backend_start()
     test_project_cost_denial_reports_affordable_first_call()
@@ -9382,6 +9456,7 @@ def main():
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
     test_sponsorship_does_not_shorten_project_duration()
     test_context_manifest_compaction_preserves_omission_accounting()
+    test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
