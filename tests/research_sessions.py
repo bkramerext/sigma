@@ -9437,11 +9437,15 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
         "investigator_step_id": "saved-investigator-step",
         "context_manifest": {"sources": []},
     }
-    assert research_sessions._json_bytes(skeptic_context) > research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert (
+        research_sessions._json_bytes(skeptic_context) > research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
     assert research_sessions.compact_dispatch_context(
         skeptic_context, limit=research_sessions.MAX_AGENT_CONTEXT_BYTES
     )
-    assert research_sessions._json_bytes(skeptic_context) <= research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert (
+        research_sessions._json_bytes(skeptic_context) <= research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
     assert skeptic_context["investigator_output_extract_complete"] is False
     excerpt = skeptic_context["investigator_output"]
     assert excerpt["extract_complete"] is False
@@ -9449,9 +9453,9 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
     assert excerpt["reasoning_steps_total"] == 24
     assert excerpt["reasoning_steps_omitted"] == 20
     assert "reasoning_steps" in excerpt["extract_truncated_fields"]
-    assert skeptic_context["context_manifest"]["inflight_investigator_extract"]["source_step_id"] == (
-        "saved-investigator-step"
-    )
+    assert skeptic_context["context_manifest"]["inflight_investigator_extract"][
+        "source_step_id"
+    ] == ("saved-investigator-step")
     assert oversized_investigator == saved_investigator
 
 
