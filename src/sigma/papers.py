@@ -3887,21 +3887,21 @@ def _tex(
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.conclusion_claim_ids)))
     if math_style and include_claim_details:
         claim_register()
-    parts.append(r"\\section*{Paper writing source material used}")
+    parts.append(r"\section*{Paper writing source material used}")
     if writing_sources:
         parts.append(prose_text(
             "These sources informed manuscript organization and writing methods, "
             "not the scientific evidence or findings."
         ))
-        parts.append(r"\\begin{itemize}")
+        parts.append(r"\begin{itemize}")
         for source in writing_sources[:3]:
             if not isinstance(source, dict):
                 continue
             title = str(source.get("title") or "Writing guide")
             tier = str(source.get("tier") or "guidance")
             url = str(source.get("url") or "")
-            parts.append(r"\\item " + prose_text(f"{title} ({tier}): {url}"))
-        parts.append(r"\\end{itemize}")
+            parts.append(r"\item " + prose_text(f"{title} ({tier}): {url}"))
+        parts.append(r"\end{itemize}")
     else:
         parts.append(prose_text("No external writing-guidance sources were recorded."))
     if include_research_excerpts and integrity_records:
