@@ -1,0 +1,61 @@
+# SIGMA research-methodology selection: cross-disciplinary core, discipline lens, problem-specific method
+
+**Phase 2 I2 method version:** `phase2-i2-v2`. Owned by scientific coordinator (Chat 2), used by Green for actual Investigator/Skeptic research. This is an engineering/research contract; it does **not** independently prove that any research session has become scientifically better. Preserve architecture, strategy execution, scheduling and UI.
+
+## Three-tier method selection
+
+1. **Shared scientific core (every `investigation_type`):** precise question, definitions/scope; source provenance and independent inspection; exact premises; one serious alternative/counterexample; real discrimination rather than an unfalsifiable proposed study; test/reproducibility when tools exist; meaningful uncertainty reduction; preserved retractions and valuable negative results; epistemic status (proof/conditional theorem/computed finite instance/empirical observation/conjecture/proposed intervention) with no false certification. Investigator must **do** at least one feasible test/derivation/check where possible. Skeptic must challenge the actual hinge premise and identify what result would change a conclusion. If no primary source, do not invent it.
+2. **Discipline-specific lens (selected by the immutable persisted project `investigation_type`):** choose ONE general mode-specific standard from `RESEARCH_MODE_METHOD_GUIDANCE` for the subject, shared by both Investigator and Skeptic. This is determined from `project.investigation_type` saved on session creation, threaded through `_agent_context` / `_portfolio_context`, and composed into `_role_instructions`, auditable through the exact provider-request payload. No heuristic keyword guessing (e.g., seeing the word "proof" must not turn a physics project into mathematics). All declared ResearchMode enum values must have coverage; unknown/legacy types get a conservative research-method fallback.
+3. **Problem/method choice:** use the actual project question and selected strategy to choose techniques needed for this problem, without imposing them on the whole discipline. For example, Nonconsecutive Subset Sums benefits from generating functions/root-of-unity filters/transfer matrices; **not every math project does**. Warp Drive benefits from spacetime geometry, stress-energy and causal structure; **not every physics project does**. These techniques belong in the selected strategy/actual reasoning, not global mandatory requirements.
+
+**Key distinction:** Math is not "run small-n code and guess recurrence" and physics is not "always calculate an Einstein tensor". Respect each field's notion of a valid claim, appropriate evidence, and feasibility. A mathematical theorem is settled by complete proof/counterexample (assuming formal consistency), while an assertion about actual physical systems must additionally confront observed nature and its uncertainty. Computational confirmation is bounded support, never a general proof or real-world experiment.
+
+## Directly inspected, usable, broad methodology sources
+
+The following publicly readable primary guidance has substantive text, not only a bibliography entry. We inspected the linked articles/chapters **selectively**, not complete books.
+
+**Shared foundation**
+- NASEM, *Reproducibility and Replicability in Science*: https://www.nationalacademies.org/read/25303 — reproducibility vs replication, uncertainty, limits of observation, research integrity; applies across disciplines with domain-sensitive interpretations.
+- NASEM, *Assessing the Reliability of Complex Models*, chapter 1 and 7 (HTML): https://www.nationalacademies.org/read/13395/chapter/2 ; https://www.nationalacademies.org/read/13395/chapter/9 — specify quantities of interest; distinction between computer/code solution *verification*, physical model *validation* and uncertainty quantification. Use for computational scientific models; **do not mandate physical validation for a pure theorem**.
+- SEP, *Abduction*: https://plato.stanford.edu/entries/abduction/ — best among candidate explanations does not logically entail truth; consider serious rivals and discriminating evidence.
+- Cochrane Handbook ch. 4: https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-04 — systematic evidence discovery, inspect documents actually retrieved and record missing materials; adapt search discipline selectively, not clinical trial reporting to pure maths.
+
+**All-branch mathematical research practice**
+- Terence Tao, *Solving mathematical problems* (full HTML): https://terrytao.wordpress.com/career-advice/solving-mathematical-problems/ — problem formulation, useful special cases, removing assumptions, partial progress and learning the problem's structure. Author notes solving problems is not all of mathematical research.
+- Terence Tao, *Be sceptical of your own work* (full HTML): https://terrytao.wordpress.com/career-advice/be-sceptical-of-your-own-work/ — try to prove a known-false stronger claim and seek counterexamples to reveal flawed general arguments.
+- Terence Tao, *245A problem solving strategies* (full HTML): https://terrytao.wordpress.com/2010/10/21/245a-problem-solving-strategies/ — toy models, simplifying assumptions while retaining the core obstacle. Its examples are in measure theory, but the author explicitly identifies the strategy as more general; **do not export measure-theory-specific requirements to all mathematics**.
+- AMS *Striking the Balance Between Examples and Proof* (full HTML): https://blogs.ams.org/matheducation/2014/06/10/striking-the-balance-between-examples-and-proof/ — research on mathematicians' exploratory use of examples, counterexamples and proof repair across different branches; numerical checks develop hypotheses but cannot certify universal theorems.
+- Stanford CS103 Proofwriting Checklist (full HTML): https://web.stanford.edu/class/archive/cs/cs103/cs103.1262/proofwriting_checklist — precise hypotheses, variables and quantifiers, justified inferences. Undergraduate pedagogy; useful foundation, not sufficient on its own for advanced mathematics.
+- **Specialized optional only:** Flajolet & Sedgewick *Analytic Combinatorics*: https://ac.cs.princeton.edu/home/ — generating functions and asymptotics for Nonconsecutive, not the global mathematics method. For topology, PDE, algebra, optimization, probability, geometry or logic, choose domain literature appropriate to the actual theorem instead.
+
+**All-branch physical research practice**
+- Feynman, Leighton & Sands, *Feynman Lectures on Physics*, I.1 (full HTML): https://www.feynmanlectures.caltech.edu/I_01.html — interplay of imagined theoretical laws and testing against physical observations; distinguish hypotheses and approximations from experimentally tested facts. Not a detailed experimental protocol but an important unifying epistemic standard.
+- NASEM, *Assessing the Reliability of Complex Models*, ch. 1 and ch. 7 (full HTML, above) — separate equations/models, numerical implementation, quantities of interest, data-based validity, uncertainty; designed for many physics/engineering model families.
+- NIST Technical Note 1297 (complete online HTML table of contents and sections): https://www.nist.gov/pml/nist-technical-note-1297 — measurement uncertainty classification, combination, propagation and reporting. Apply **when measurement/instrument uncertainty is relevant**, not to a purely theoretical derivation.
+- NASA-STD-7009B models and simulations: https://standards.nasa.gov/node/263 — supplemental modeling credibility standard; access/sections may depend on PDF retrieval, do not claim full standard read from a listing.
+- **Specialized optional only:** David Tong GR notes https://davidtong.org/teaching/general-relativity/grhtml/grhtml, and primary warp-metric/quantum-inequality literature. Useful for Warp Drive's geometry and matter questions, **not general physics methods**. For quantum information, statistical mechanics, spectroscopy, condensed matter or particle phenomenology, choose relevant mathematical models and measurement/validation practices instead.
+
+### Practical research behavior by type
+
+| Mode | Research goal and method selection | Skeptic checks |
+|---|---|---|
+| mathematical | Exact hypotheses, meaningful examples, countermodels, lemmas, suitable proof technique, complete dependency chain; optional exact computation as finite exploration | Weakest inference, counterexample, quantifier/boundary mismatch, unjustified theorem generalization |
+| physics | Explicit observables, physical regime/units/approximations/conservation, appropriate theory/experiment/computational VVUQ path | Coordinate/measurement artifact, model applicability, uncertainty, limiting case, conservation/symmetry, countermodel and true physical evidence |
+| biology | Specimen and unit-of-analysis, causal hypotheses, controls, batch/confound, paired measurements, actual source access | Alternative mechanism, identifiability, timing and sampling confound, measurement proxy |
+| computer_science | Precise system contract and failure model, finite histories, evaluator truth vs acceptance, runnable counterexample | Different truth with same observed history, omitted outcome, unsupported generalization |
+| economics/engineering | Comparable alternatives, exact decision unit, assumptions/cost, sensitivity, explicit policy or liability constraints | Counterexample to promised benefit, bad denominator, feasibility, omitted subgroup |
+| chemistry | Appropriate species/reactions, stoichiometry, charge/mass and reaction constraints, conditions, measured vs computed | Invalid mechanism, unverified yield, missing mass balance or experimental control |
+| law/philosophy/other | Select authority/valid inference standard of actual field; apply shared source challenge and honest conditionality | Adverse authority, ambiguous premise, equivocation, alternative model |
+
+## Green acceptance for I2 (all five sessions)
+
+Green must document per subject in the handoff: stored `investigation_type`, exact `RESEARCH_METHOD_VERSION`, one actual Investigator and one Skeptic provider-input audit showing shared core + correct mode lens **and no other mode's inappropriate lens**, technique chosen because of that project's **question/strategy**, one performed meaningful check or explicit feasibility blocker, one serious Skeptic challenge, retained counterexample/negative result, and any unresolved proof/evidence status. Do **not** self-certify scientific validity from prompt presence alone. All five original project IDs/hashes and full 12-turn/three-round sessions are required to publish READY on PR #434. Preserve research execution mechanics.
+
+## Regression criteria
+
+- Every enumerated `ResearchMode` receives shared guidance + exactly its own research lens; unknown/legacy mode receives safe generic. Both roles use it, but only Skeptic gets role-specific adversarial direction.
+- Proof path in mathematical projects **does not** require experiments, physical units, general relativity, asymptotic methods or recurrences universally. Physics **does not** get mathematical proof as sole standard of real-world physical truth, and GR/stress-energy requirements apply only if the actual project needs them.
+- Evidence source pointers and computational attempts must be honest; missing middle derivations are not regarded as reviewed. No change to turn scheduling, tool access, budget or UI.
+- Test methodology dispatch without paid inference using `test_phase2_methodology_routes_common_and_domain_methods_without_overfit` and request-body audit. Run `./sigma test` and GitHub CI. If unavailable, record NOT RUN rather than claim success.
+
+**Scientific outcome is measured only on actual saved agent work**, not the presence of this text in a provider prompt. Iteration 2 is a complete fresh test, not a matched causal study unless explicitly controlled.
