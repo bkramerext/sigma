@@ -142,7 +142,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page label { color: #dce9f5; letter-spacing: .03em; }
 .home-page input { background: #0c1a2bdb; color: #eff8ff; border: 1px solid #54718c; box-shadow: inset 0 1px 12px #0003; }
 .home-page input:focus { border-color: #a2d6fa; }
-.home-page button { background: linear-gradient(120deg, #cda66e, #e7cf9b); color: #111e2b; box-shadow: 0 5px 28px #d5ac6333; }
+.home-page button { background: linear-gradient(120deg, #cda66e, #e7cf9b); color: #111e2b; box-shadow: none; }
 .home-page button:hover:not(:disabled) { background: #f5ddb1; }
 .home-page button:disabled { background: #485463; color: #d3d9e1; }
 .home-page .hint { color: #94acc0; }
