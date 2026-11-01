@@ -10110,9 +10110,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         # Skeptic without waiting for an unrelated slow Investigator. Each
         # branch remains strictly sequential; the coordinator still applies
         # cross-branch decisions at a completed wave boundary.
-        await _portfolio_run_selected(
-            session_id, path, selected, semaphore, state_lock, run_wave
-        )
+        await _portfolio_run_selected(session_id, path, selected, semaphore, state_lock, run_wave)
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
