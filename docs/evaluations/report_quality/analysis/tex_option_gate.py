@@ -31,13 +31,17 @@ def audit_tex(tex: str, metadata: dict) -> dict:
             continue
         line_no = int(match.group(1))
         context = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+        # TeX overfull diagnostics often name the end of a paragraph, not
+        # the exact token. Inspect a narrow neighborhood, without asserting
+        # that a nearby URL, schema or identifier caused the overflow.
+        nearby = "\n".join(lines[max(0, line_no - 3):min(len(lines), line_no + 2)])
         signals = []
-        if "https://" in context or "http://" in context:
-            signals.append("raw_url")
-        if "provider\\_input\\_audit" in context or "schema" in context and "\\{" in context:
-            signals.append("provider_schema_or_serialized_json")
-        if re.search(r"[0-9a-f]{35,}", context):
-            signals.append("long_hex_identifier")
+        if "https://" in nearby or "http://" in nearby:
+            signals.append("nearby_raw_url")
+        if "provider\\_input\\_audit" in nearby or ("schema" in nearby and "\\{" in nearby):
+            signals.append("nearby_provider_schema_or_serialized_json")
+        if re.search(r"[0-9a-f]{35,}", nearby):
+            signals.append("nearby_long_hex_identifier")
         overflow.append({"line": line_no, "warning": warning,
                          "line_preview": context[:200], "candidate_signals": signals})
     flags = []
