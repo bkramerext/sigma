@@ -763,6 +763,24 @@ async def setup(path: Path):
     return view, strategy, credential, config
 
 
+def test_phase2_methodology_is_specific_and_versioned_without_new_agents():
+    """Research methods target real deductions, not a longer generic debate."""
+    common = {"execution_tools": [], "research_method_version": research_sessions.RESEARCH_METHOD_VERSION}
+    math_context = {**common, "investigation_type": "mathematical"}
+    general_context = {**common, "investigation_type": "engineering"}
+    investigator = research_sessions._role_instructions("investigator", math_context)
+    skeptic = research_sessions._role_instructions("skeptic", math_context)
+    general = research_sessions._role_instructions("investigator", general_context)
+    assert "strongest material open assumption or obligation" in investigator
+    assert "complete, concise one- or two-sentence status" in investigator
+    assert "For mathematics, check quantified domain" in investigator
+    assert "prove any asymptotic rate separately" in skeptic
+    assert "observational equivalence" in skeptic
+    assert "For mathematics" not in general
+    assert "No external sources are available" in general
+    assert "Never invent execution results" in general
+
+
 def test_request_audit_truncation_tokens_and_reconciliation():
     context = {"problem": "Answer-free objective", "strategy": "Incremental reasoning"}
     record = {
@@ -10640,6 +10658,13 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
     assert excerpt["evidence_availability"] == "incomplete_extract_original_not_supplied"
     assert excerpt["reasoning_steps_total"] == 24
     assert excerpt["reasoning_steps_omitted"] == 20
+    assert excerpt["reasoning_step_original_positions_supplied"] == [1, 8, 16, 24]
+    assert excerpt["reasoning_step_original_positions_omitted"] == [
+        index for index in range(1, 25) if index not in {1, 8, 16, 24}
+    ]
+    assert [item["title"] for item in excerpt["reasoning_steps"]] == [
+        "Step 0", "Step 7", "Step 15", "Step 23"
+    ]
     assert "reasoning_steps" in excerpt["extract_truncated_fields"]
     assert skeptic_context["context_manifest"]["inflight_investigator_extract"][
         "source_step_id"
