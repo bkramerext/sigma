@@ -100,6 +100,18 @@ def check_xenopus_model() -> None:
     assert covariance_positive / variance == 1
     assert covariance_negative / variance == -1
 
+    # I2 uses a different, equally valid binary counterexample. The quality
+    # gate tests the scientific inference, not literal reuse of I1's formula.
+    # E has P(-1)=P(+1)=1/2; L=E or L=-E have identical marginals.
+    for sign in (-1, 1):
+        paired = [(-1, sign * -1), (1, sign * 1)]
+        mean_e = sum(F(e, 2) for e, _ in paired)
+        mean_l = sum(F(l, 2) for _, l in paired)
+        variance_e = sum(F((e - mean_e) ** 2, 2) for e, _ in paired)
+        covariance_el = sum(F((e - mean_e) * (l - mean_l), 2) for e, l in paired)
+        assert (mean_e, mean_l, variance_e) == (0, 0, 1)
+        assert covariance_el / variance_e == sign
+
     # With E=e0+(e1-e0)S and binary S, SE=e1*S for both S=0,1.
     for e0, e1 in [(F(1, 3), F(4, 5)), (F(-2), F(3))]:
         for stage in (0, 1):
