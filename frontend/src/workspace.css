@@ -213,7 +213,7 @@
   .workspace-page .project-header-art { width: min(100%, 281px); margin-left: -20px; }
   .workspace-page .project-art-back-row { left: auto; right: auto; }
   .workspace-page .current-project { padding-top: 0; }
-.workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 44px auto auto auto auto; grid-template-areas: "difficulty model" "about thinking" "identity identity"; justify-content: stretch; gap: var(--identity-pill-gap); column-gap: calc(var(--identity-pill-gap) * 1.2); margin-left: 0; }
+.workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: "difficulty model" "about thinking" "identity identity"; justify-content: stretch; gap: var(--identity-pill-gap); column-gap: calc(var(--identity-pill-gap) * 1.2); margin-left: 0; }
   .workspace-page .project-art-header .about-action { position: relative; top: auto; right: auto; grid-area: about; justify-self: start; }
   .workspace-page .project-art-header .project-difficulty-badge { width: auto; justify-self: start; align-self: center; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
