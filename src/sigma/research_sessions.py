@@ -2409,6 +2409,7 @@ def _research_mode_guidance(context: dict[str, Any]) -> str:
         return RESEARCH_MODE_METHOD_GUIDANCE.get(kind, RESEARCH_OTHER_METHOD_GUIDANCE)
     return RESEARCH_OTHER_METHOD_GUIDANCE
 
+
 INVESTIGATOR_GUIDANCE = (
     "Examine the exact project objective and the selected strategy as a proposed approach. "
     "Advance the current question with a specific claim and enough public reasoning for a reviewer "
