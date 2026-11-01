@@ -1782,8 +1782,11 @@ def _evidence_based_long_plan(
         contrasting = [
             claim
             for claim in other_results
-            if re.search(r"\b(?:no|not|cannot|failed|contrary|opposite|disagree)\b",
-                         claim.statement, re.IGNORECASE)
+            if re.search(
+                r"\b(?:no|not|cannot|failed|contrary|opposite|disagree)\b",
+                claim.statement,
+                re.IGNORECASE,
+            )
         ]
         qualifying = list(dict.fromkeys(claim.id for claim in [*contrasting, *other_results]))
         by_id = {claim.id: claim for claim in other_results}
