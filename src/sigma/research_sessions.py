@@ -5996,7 +5996,10 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         if not supplied:
             obligation["source_artifact_availability"] = "pointer_only_original_not_supplied"
         elif any(
-            artifact_availability.get(item) == "incomplete_extract_original_not_supplied"
+            artifact_availability.get(item) in {
+                "incomplete_extract_original_not_supplied",
+                "pointer_only_original_not_supplied",
+            }
             or prior_finding_by_id.get(item, {}).get("extract_truncated_fields")
             for item in supplied
         ):
