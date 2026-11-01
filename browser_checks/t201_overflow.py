@@ -37,7 +37,7 @@ with sync_playwright() as playwright:
     expect(page.locator(".session-start-limits")).to_have_text("1 round · 2 total turns")
     page.set_viewport_size({"width": 390, "height": 844})
     for button in (
-        page.get_by_role("button", name="Start new Session 2"),
+        page.get_by_role("button", name="Start Session #2"),
         page.locator('button[title="Cancel starting a research session"]'),
     ):
         box = button.bounding_box()
@@ -46,7 +46,7 @@ with sync_playwright() as playwright:
             f"Research start action overflows narrow viewport: {box}"
         )
     page.set_viewport_size({"width": 1440, "height": 900})
-    page.locator('button[title="Confirm start new Session 2"]').click()
+    page.locator('button[title="Start Session #2"]').click()
     row = page.locator(".session-row").filter(has_text="Session #2")
     expect(row).to_be_visible(timeout=15000)
     expect(row.locator(".session-status")).to_have_text(
@@ -81,7 +81,7 @@ with sync_playwright() as playwright:
 
     # The same eligible strategy remains usable, with its durable history intact.
     page.get_by_role("button", name="Start a new research session").click()
-    page.locator('button[title="Confirm start new Session 3"]').click()
+    page.locator('button[title="Start Session #3"]').click()
     second_row = page.locator(".session-row").filter(has_text="Session #3")
     expect(second_row).to_be_visible(timeout=15000)
     expect(second_row.locator(".session-status")).to_have_text(

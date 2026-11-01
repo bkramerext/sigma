@@ -3649,7 +3649,7 @@ async def test_chatgpt_stream(path: Path):
 
 async def test_session_deadline_bounds_generous_call_timeout(path: Path):
     _, _, credential, _ = await setup(path)
-    assert research_sessions.CALL_TIMEOUT == 900
+    assert research_sessions.CALL_TIMEOUT == 3600
     cancelled = asyncio.Event()
 
     async def handler(request):
@@ -3975,7 +3975,7 @@ def test_limits_validation(path: Path):
     invalid = [
         {**before, "model_calls": 1},
         {**before, "model_calls": 121},
-        {**before, "research_rounds": 6, "model_calls": 30},
+        {**before, "research_rounds": 61, "model_calls": 30},
         {**before, "session_duration_minutes": 7 * 24 * 60 + 1},
         {**before, "output_tokens_per_call": 20001},
         {**before, "maximum_estimated_cost_usd": 0.001},
@@ -3992,7 +3992,7 @@ def test_limits_validation(path: Path):
             raise AssertionError(f"invalid research limits were accepted: {candidate}")
     valid_upper = {
         **before,
-        "research_rounds": 5,
+        "research_rounds": 60,
         "model_calls": 120,
         "session_duration_minutes": 7 * 24 * 60,
         "output_tokens_per_call": 20000,
@@ -4001,7 +4001,7 @@ def test_limits_validation(path: Path):
     assert research_sessions.save_limits(str(path), valid_upper) == valid_upper
     research_sessions.save_limits(str(path), before)
     assert research_sessions.get_limits(str(path)) == before
-    older_saved = {**before, "research_rounds": 6, "model_calls": 20}
+    older_saved = {**before, "research_rounds": 3, "model_calls": 1}
     limits_file = path / "research-sessions" / "limits.json"
     limits_file.write_text(json.dumps(older_saved), encoding="utf-8")
     assert research_sessions.get_limits(str(path)) == older_saved
@@ -4011,6 +4011,65 @@ def test_limits_validation(path: Path):
         pass
     else:
         raise AssertionError("new settings validation accepted a saved value above its bound")
+
+
+def test_contradictory_skeptic_counterexample_does_not_cancel_continuation():
+    assert research_sessions.coordinate_decision(
+        "continue",
+        "decisive_counterexample",
+        "Proceed with a bounded next test",
+        ["One gap remains"],
+        1,
+        9,
+        2,
+        54,
+    ) == ("continue", "Proceed with a bounded next test")
+    assert research_sessions.coordinate_decision(
+        "stop",
+        "decisive_counterexample",
+        "",
+        [],
+        1,
+        9,
+        2,
+        54,
+    ) == ("stop_decisive_counterexample", "")
+
+
+def test_coordinator_obligations_do_not_multiply_across_rounds():
+    artifacts = []
+    for cycle in range(1, 10):
+        old = [f"Obligation {index}" for index in range(1, cycle)]
+        current = f"Obligation {cycle}"
+        artifacts.append(
+            {
+                "id": f"artifact-{cycle}",
+                "project_id": "project",
+                "strategy_id": "strategy",
+                "assumptions": [f"Assumption {cycle}"],
+                "investigator_output": {"open_obligations": [current]},
+                "skeptic_output": {
+                    "remaining_obligations": old + [current],
+                    "model_remaining_obligations": [current],
+                    "coordinator_added_obligations": old,
+                },
+                "open_obligations": old + [current],
+            }
+        )
+        ledger, omitted, _ = research_sessions._obligation_ledger(
+            artifacts,
+            project_id="project",
+            strategy_id="strategy",
+        )
+        assert len(ledger) == cycle, (cycle, len(ledger))
+        assert omitted == 0
+        assert {item["text"] for item in ledger} == set(old + [current])
+    legacy, _, _ = research_sessions._obligation_ledger(
+        [{"id": "legacy", "open_obligations": ["Legacy obligation"]}],
+        project_id="project",
+        strategy_id="strategy",
+    )
+    assert [item["text"] for item in legacy] == ["Legacy obligation"]
 
 
 def test_shared_turn_schedule_accepts_strategy_count_changes():
@@ -5681,6 +5740,101 @@ async def test_concurrent_strategy_portfolio(path: Path):
     assert finished["portfolio_decision"]["status"] == "model_reported_unverified"
 
 
+async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
+    path: Path,
+):
+    """54 completed agent turns survive a transient failure at dispatch fourteen.
+
+    Provider attempts remain separately budgeted, while a technical failure
+    never masquerades as research completion. No paid provider is contacted.
+    """
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Reliability propagation", "Investigate how tool failures propagate."
+    ).project.strategies[-1]
+    third = create_strategy(
+        path, "Architectural mitigations", "Test controls against faulty observations."
+    ).project.strategies[-1]
+    limits = research_sessions.save_limits(
+        str(path),
+        {
+            **research_sessions.get_limits(str(path)),
+            "research_rounds": 9,
+            # One failed, separately accounted attempt must not consume the
+            # final successful Investigator/Skeptic turn.
+            "model_calls": 56,
+            "session_duration_minutes": None,
+        },
+    )
+    requests = 0
+
+    async def handler(request):
+        nonlocal requests
+        requests += 1
+        if requests == 14:
+            raise httpx.ReadError("Synthetic transport interruption at turn fourteen")
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        cycle = context["cycle"]
+        response = (
+            investigation(cycle)
+            if payload["text"]["format"]["name"] == "research_investigator"
+            else skeptic(cycle)
+        )
+        if (
+            context["strategy"]["id"] == first.id
+            and cycle == 1
+            and payload["text"]["format"]["name"] == "research_skeptic"
+        ):
+            # Reproduce the actual session #6 contradiction: Skeptic requests
+            # continuation but labels an earlier result decisive counterexample.
+            response["stop_reason"] = "decisive_counterexample"
+            response["assessment"] = "continue"
+        return httpx.Response(200, json=provider_response(response))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    branches = finished["strategy_runs"]
+    assert requests == 55, (requests, finished["message"])
+    assert finished["calls_used"] == 55
+    assert finished["status"] == "ended", (finished["status"], finished["message"])
+    assert len(finished["artifacts"]) == 27
+    assert len([s for s in finished["steps"] if s["status"] == "completed"]) == 54
+    assert len([s for s in finished["steps"] if s["status"] == "failed"]) == 1
+    assert all(branch["cycle"] == 9 for branch in branches), branches
+    assert all(len(branch["artifacts"]) == 9 for branch in branches), branches
+    assert all(branch["status"] == "ended" for branch in branches), branches
+    assert (
+        next(
+            artifact
+            for artifact in finished["artifacts"]
+            if artifact["strategy_id"] == first.id and artifact["strategy_cycle"] == 1
+        )["coordinator_decision"]
+        == "continue"
+    )
+    assert finished.get("termination_reason_code") != "research_completed_early"
+    assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 55
+
+
 async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(
@@ -5788,7 +5942,19 @@ async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidenc
     from sigma.session_log import log_path as session_log_path
 
     trace, _ = read_session_log_frames(session_log_path(str(path), view.project.id, finished["id"]))
-    assert any(event["type"] == "cross_strategy_artifact_availability" for event in trace)
+    # A cross-strategy handoff is queued only while its recipient is active.
+    # Both strategies stop in cycle 2, so a terminal batch need not enqueue
+    # a future handoff. Verify any emitted events have real saved provenance;
+    # the required peer evidence is checked in the provider requests below.
+    available_handoffs = [
+        event for event in trace if event["type"] == "cross_strategy_artifact_availability"
+    ]
+    saved_artifact_ids = {item["id"] for item in finished["artifacts"]}
+    assert all(
+        event["source_artifact_id"] in saved_artifact_ids
+        and event["target_artifact_id"] in saved_artifact_ids
+        for event in available_handoffs
+    )
     peer_requests = [
         event
         for event in trace
@@ -9502,6 +9668,8 @@ def main():
             )
         )
         test_limits_validation(root / "invalid-limits.sigma")
+        test_contradictory_skeptic_counterexample_does_not_cancel_continuation()
+        test_coordinator_obligations_do_not_multiply_across_rounds()
         test_shared_turn_schedule_accepts_strategy_count_changes()
         asyncio.run(
             test_pending_skeptic_uses_final_turn_and_deferred_outcome_is_specific(
@@ -9549,6 +9717,11 @@ def main():
             )
         )
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
+        asyncio.run(
+            test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
+                root / "portfolio-54-turns.sigma"
+            )
+        )
         asyncio.run(
             test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(
                 root / "portfolio-cross-review.sigma"
