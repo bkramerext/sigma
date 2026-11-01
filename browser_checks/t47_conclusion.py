@@ -681,6 +681,50 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 path=str(SCREENSHOT_DIR / "sigma-increment13-timeout-mobile.png"),
                 full_page=True,
             )
+            # Closed historical sessions must not construct full hidden
+            # provider-input/provenance DOM trees. The real project snapshot
+            # can accumulate many megabytes of saved agent input.
+            disclosure.click()
+            expect(disclosure).to_have_attribute("aria-expanded", "false")
+            expect(saved_row.locator(".outcome-provenance-list")).to_have_count(0)
+            disclosure.click()
+            expect(saved_row.get_by_role("region", name="Research outcome")).to_be_visible()
+
+            # One malformed historical Outcome must leave the project shell
+            # and saved session controls accessible, not blank the app.
+            diagnostic = browser.new_page(viewport={"width": 1280, "height": 880})
+
+            def malformed_saved_outcome(route):
+                original = route.fetch()
+                response = original.json()
+                if response.get("sessions"):
+                    item = response["sessions"][0]
+                    item["outcome"]["solution_review"]["strategy_findings"] = [
+                        {
+                            "strategy_title": "Malformed saved review",
+                            "reasoning_steps": None,
+                        }
+                    ]
+                route.fulfill(
+                    status=original.status,
+                    content_type="application/json",
+                    body=json.dumps(response),
+                )
+
+            diagnostic.route("**/api/projects/research-sessions?*", malformed_saved_outcome)
+            diagnostic.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
+            expect(diagnostic.get_by_role("heading", name="Strategies")).to_be_visible()
+            diagnostic_row = diagnostic.locator(f'li[data-session-id="{session["id"]}"]')
+            expect(diagnostic_row).to_be_visible()
+            diagnostic_row.get_by_role("button", name="Expand Session", exact=False).click()
+            expect(
+                diagnostic.get_by_role("alert").filter(
+                    has_text="Session #"
+                )
+            ).to_contain_text("could not be displayed")
+            expect(diagnostic.get_by_role("heading", name="Strategies")).to_be_visible()
+            diagnostic.close()
+
             assert not starts, "Fixtures must not start provider sessions"
             assert not errors, errors
             browser.close()
