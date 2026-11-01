@@ -582,7 +582,7 @@ def test_tex_proofreader_three_passes_with_early_convergence() -> None:
         assert checkpoint["pass_number"] == 3
         assert checkpoint["provider_calls_attempted"] == 3
         assert checkpoint["status"] == "complete"
-        assert r"$\\alpha+\\beta=3$" in result
+        assert r"$\alpha+\beta=3$" in result
         assert calls == 3
         again, _ = asyncio.run(run())
         assert again == result
