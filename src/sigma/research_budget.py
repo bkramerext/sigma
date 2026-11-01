@@ -43,7 +43,7 @@ def _call_bounds(ledger: dict[str, Any]) -> tuple[int, int, float, int]:
     cost_bound = 0.0
     for item in ledger["calls"]:
         calls += 1
-        if item["status"] == "settled":
+        if item["status"] in {"settled", "rejected"}:
             input_bound += item["input_tokens"]
             output_bound += item["output_tokens"]
         else:
