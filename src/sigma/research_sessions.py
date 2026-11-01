@@ -6457,9 +6457,7 @@ def _obligation_ledger(
         propagated_texts: set[str] = set()
         if isinstance(propagated, list):
             propagated_texts = {
-                _normalized_obligation_text(note)
-                for note in propagated
-                if isinstance(note, str)
+                _normalized_obligation_text(note) for note in propagated if isinstance(note, str)
             }
         artifact_notes = artifact.get("open_obligations")
         if isinstance(artifact_notes, list) and propagated_texts:
