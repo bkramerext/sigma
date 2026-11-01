@@ -311,6 +311,22 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   justify-content: flex-end;
   gap: 12px;
 }
+/* The two home account columns align as About/Google above Admin/ChatGPT. */
+.home-page .home-account-grid {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "about google" "admin chatgpt";
+  align-items: start;
+  justify-content: end;
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  row-gap: var(--identity-pill-gap);
+}
+.home-page .home-account-grid > .home-about-button { grid-area: about; justify-self: end; }
+.home-page .home-account-grid > .project-google-signin { grid-area: google; justify-self: start; }
+.home-page .home-account-grid > .administrator-settings-link { grid-area: admin; justify-self: end; }
+.home-page .home-account-grid > .api-connection { grid-area: chatgpt; justify-self: start; margin-left: 0; }
+.home-page .home-account-grid > .google-invitation-dialog { display: none; }
+.home-page .home-account-grid > .google-invitation-dialog[open] { display: block; }
 @media (max-width: 700px) {
   .home-page {
     --home-corner-gap: 18px;
