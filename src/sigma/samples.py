@@ -98,7 +98,7 @@ def _load(identifier: str) -> tuple[dict[str, Any], SampleProject]:
             identifier,
             project.title,
             project.problem,
-            project.investigation_type.value,
+            project.investigation_type,
             project.difficulty.value if project.difficulty is not None else None,
             len(project.active_order),
         ),

@@ -3127,7 +3127,9 @@ class CloudAuthTests(TestCase):
 
     def test_local_mode_keeps_project_and_provider_apis_unauthenticated(self):
         local_project = self.root / "local-project.sigma"
-        initialize_project(local_project, "Local test", "Test local API access")
+        initialize_project(
+            local_project, "Local test", "Test local API access", research_mode="mathematical"
+        )
         with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}):
             self.assertEqual(self.client.get("/api/cloud-auth/status").json()["enabled"], False)
             self.assertNotEqual(
@@ -4593,7 +4595,11 @@ class CloudAuthTests(TestCase):
                 ):
                     created = member.post(
                         "/api/projects/create",
-                        json={"title": "Local sponsor Play", "problem": "Check a recurrence bound"},
+                        json={
+                            "title": "Local sponsor Play",
+                            "problem": "Check a recurrence bound",
+                            "investigation_type": "mathematical",
+                        },
                     )
                     self.assertEqual(created.status_code, 201, created.text)
                     path = created.json()["path"]

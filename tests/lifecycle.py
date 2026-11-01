@@ -51,7 +51,9 @@ def main() -> None:
         # removing the project directory.
         project_root = root / "projects"
         project_root.mkdir()
-        project = initialize_project(project_root / "delete-me.sigma", "Delete me", "Fixture")
+        project = initialize_project(
+            project_root / "delete-me.sigma", "Delete me", "Fixture", research_mode="mathematical"
+        )
         strategy = create_strategy(project.path, "Bounded", "Inspect one case.").project.strategies[
             0
         ]
@@ -85,17 +87,33 @@ def main() -> None:
         assert [e.sequence for e in first.project.events] == [1]
         print("PASS seed initialization, close/reopen, identity, ordered immutable reads")
 
-        created = initialize_project(root / "new.sigma", "New question", "Investigate it")
+        created = initialize_project(
+            root / "new.sigma", "New question", "Investigate it", research_mode="mathematical"
+        )
         assert inspect_project(created.path) == created
-        rejects(lambda: initialize_project(seed, "Overwrite", "No"), "overwrote seed")
+        rejects(
+            lambda: initialize_project(seed, "Overwrite", "No", research_mode="mathematical"),
+            "overwrote seed",
+        )
         assert (seed / STATE).read_bytes() == before
         occupied = root / "research.sigma"
         occupied.mkdir()
         (occupied / "notes.txt").write_text("irreplaceable research")
-        rejects(lambda: initialize_project(occupied, "X", "Y"), "accepted nonempty directory")
+        rejects(
+            lambda: initialize_project(occupied, "X", "Y", research_mode="mathematical"),
+            "accepted nonempty directory",
+        )
         assert (occupied / "notes.txt").read_text() == "irreplaceable research"
-        rejects(lambda: initialize_project(root / "bad", "X", "Y"), "accepted wrong suffix")
-        rejects(lambda: initialize_project(root / "blank.sigma", " ", "Y"), "accepted blank")
+        rejects(
+            lambda: initialize_project(root / "bad", "X", "Y", research_mode="mathematical"),
+            "accepted wrong suffix",
+        )
+        rejects(
+            lambda: initialize_project(
+                root / "blank.sigma", " ", "Y", research_mode="mathematical"
+            ),
+            "accepted blank",
+        )
         assert not (root / "blank.sigma").exists()
         rejects(lambda: open_project("\0.sigma"), "accepted null path")
         rejects(lambda: open_project(root / "missing.sigma"), "created missing project")
@@ -104,10 +122,18 @@ def main() -> None:
 
         failed = root / "failed.sigma"
         with patch("sigma.projects.os.link", side_effect=OSError("simulated publication failure")):
-            rejects(lambda: initialize_project(failed, "X", "Y"), "accepted publication failure")
+            rejects(
+                lambda: initialize_project(failed, "X", "Y", research_mode="mathematical"),
+                "accepted publication failure",
+            )
         assert not failed.exists()
         with patch("sigma.projects.os.link", side_effect=FileExistsError("concurrent winner")):
-            rejects(lambda: initialize_project(root / "race.sigma", "X", "Y"), "overwrote winner")
+            rejects(
+                lambda: initialize_project(
+                    root / "race.sigma", "X", "Y", research_mode="mathematical"
+                ),
+                "overwrote winner",
+            )
         assert not (root / "race.sigma").exists()
         print("PASS failed publication cleanup and no-replace collision handling")
 

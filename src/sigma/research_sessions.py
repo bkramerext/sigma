@@ -3666,7 +3666,11 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def mock_session(
-    path: str, strategy_id: str, idempotency_key: str, scenario: str
+    path: str,
+    strategy_id: str,
+    idempotency_key: str,
+    scenario: str,
+    continue_using_saved_type_settings: bool = False,
 ) -> dict[str, Any]:
     """Persist a queued UI fixture through the normal session storage layer.
 
@@ -3676,6 +3680,17 @@ def mock_session(
     if scenario not in {"completed", "failed", "provider-error", "exhausted"}:
         raise ProjectError("Unknown mock research scenario")
     view, _guard = _snapshot(path)
+    from sigma import project_types
+
+    if project_types.get_type(view.project.investigation_type) is None:
+        if not continue_using_saved_type_settings:
+            raise ProjectError(
+                "Project type is unavailable. Choose a replacement or explicitly continue using saved type settings."
+            )
+        if not project_types.safe_project_snapshot(view.project.project_type_snapshot):
+            raise ProjectError(
+                "Project type has no safe saved settings. Choose a currently available replacement before starting."
+            )
     strategy = next(
         (
             item
@@ -3732,6 +3747,11 @@ def mock_session(
             ],
             "problem": view.project.problem,
             "investigation_type": view.project.investigation_type,
+            "project_type_snapshot": view.project.project_type_snapshot,
+            "use_saved_project_type_settings": project_types.get_type(
+                view.project.investigation_type
+            )
+            is None,
             "model": "mock-deterministic",
             "reasoning_effort": "none",
             "mode": "mock",
@@ -4347,7 +4367,8 @@ def _project_guard_state(project: Any) -> str:
         "id": project.id,
         "title": project.title,
         "problem": project.problem,
-        "investigation_type": project.investigation_type.value,
+        "investigation_type": project.investigation_type,
+        "project_type_snapshot": project.project_type_snapshot,
         "ai_model": project.ai_model,
         "reasoning_effort": project.reasoning_effort,
         "difficulty": project.difficulty.value if project.difficulty else None,
@@ -4380,6 +4401,23 @@ def _project_guard_state(project: Any) -> str:
     return _digest(json.dumps(state, sort_keys=True, separators=(",", ":")))
 
 
+def _saved_project_type_context(record: dict[str, Any]) -> dict[str, Any] | None:
+    if not record.get("use_saved_project_type_settings"):
+        return None
+    snapshot = record.get("project_type_snapshot")
+    from sigma import project_types
+
+    if not project_types.safe_project_snapshot(snapshot):
+        raise ProjectError("Frozen project type settings are unavailable or invalid")
+    assert isinstance(snapshot, dict)
+    return {
+        "name": snapshot["name"],
+        "scope": snapshot["scope"],
+        "description": snapshot.get("description", ""),
+        "behavior": snapshot.get("behavior", {}),
+    }
+
+
 def _legacy_resume_state_matches(record: dict[str, Any], project: Any) -> bool:
     """Conservatively recognize pre-semantic-guard sessions after safe migrations.
 
@@ -4400,7 +4438,7 @@ def _legacy_resume_state_matches(record: dict[str, Any], project: Any) -> bool:
     if project.id != record.get("project_id") or project.problem != record.get("problem"):
         return False
     recorded_type = record.get("investigation_type")
-    if recorded_type is not None and recorded_type != project.investigation_type.value:
+    if recorded_type is not None and recorded_type != project.investigation_type:
         return False
 
     snapshot = record.get("strategy_snapshot")
@@ -4688,6 +4726,7 @@ async def start_session(
     expected_binding: str,
     expected_limits: dict[str, Any] | None = None,
     strategy_ids: list[str] | None = None,
+    continue_using_saved_type_settings: bool = False,
 ) -> dict[str, Any]:
     try:
         UUID(idempotency_key)
@@ -4697,6 +4736,29 @@ async def start_session(
     if view.project.id != expected_project_id:
         raise ProjectError("Project changed; reopen it before starting research")
     selected_ids = list(dict.fromkeys(strategy_ids or [strategy_id]))
+    existing = next(
+        (record for record in _all(view.path) if record.get("idempotency_key") == idempotency_key),
+        None,
+    )
+    if existing is not None:
+        if (
+            existing.get("project_id") != expected_project_id
+            or existing.get("strategy_id") != strategy_id
+            or existing.get("strategy_ids", [existing.get("strategy_id")]) != selected_ids
+        ):
+            raise ProjectError("Idempotency key is already bound to a different research request")
+        return _public(_recover(existing))
+    from sigma import project_types
+
+    if project_types.get_type(view.project.investigation_type) is None:
+        if not continue_using_saved_type_settings:
+            raise ProjectError(
+                "Project type is unavailable. Choose a replacement or explicitly continue using saved type settings."
+            )
+        if not project_types.safe_project_snapshot(view.project.project_type_snapshot):
+            raise ProjectError(
+                "Project type has no safe saved settings. Choose a currently available replacement before starting."
+            )
     if not selected_ids or len(selected_ids) > 12 or strategy_id not in selected_ids:
         raise ProjectError("Select between one and twelve distinct saved strategies")
     selected_strategies = [
@@ -4856,6 +4918,11 @@ async def start_session(
                 "problem": view.project.problem,
                 "project_title": view.project.title,
                 "investigation_type": view.project.investigation_type,
+                "project_type_snapshot": view.project.project_type_snapshot,
+                "use_saved_project_type_settings": project_types.get_type(
+                    view.project.investigation_type
+                )
+                is None,
                 "model": config["model"],
                 "reasoning_effort": config["reasoning_effort"],
                 "mode": credential["mode"],
@@ -6097,6 +6164,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
+    saved_type_context = _saved_project_type_context(record)
+    if saved_type_context is not None:
+        context["project_type_settings"] = saved_type_context
     compacted_prior_obligation_references = [
         {
             "obligation_id": item.get("obligation_id"),

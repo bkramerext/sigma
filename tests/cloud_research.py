@@ -123,7 +123,10 @@ def test_orphaned_job_reconciliation(
         binding = cloud_workspaces._CURRENT.set(workspace_a)
         try:
             project = initialize_project(
-                workspace_a.path / "reconcile.sigma", "Reconciliation", "Check queue recovery"
+                workspace_a.path / "reconcile.sigma",
+                "Reconciliation",
+                "Check queue recovery",
+                research_mode="mathematical",
             )
             strategy = create_strategy(
                 project.path, "Direct", "Check a saved finite recurrence."
@@ -446,7 +449,10 @@ def test_orphaned_job_reconciliation(
         binding = cloud_workspaces._CURRENT.set(workspace_b)
         try:
             project_b = initialize_project(
-                workspace_b.path / "other.sigma", "Other workspace", "Owner B question"
+                workspace_b.path / "other.sigma",
+                "Other workspace",
+                "Owner B question",
+                research_mode="mathematical",
             )
             foreign = job(workspace_b.workspace_id)
             foreign.update({"project_id": project_b.project.id, "project_path": project_b.path})
@@ -482,8 +488,12 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
     """Spend is atomic across projects and remains attributed after reopening SQLite."""
     owner = workspace(root, "e" * 32)
     other = workspace(root, "f" * 32)
-    first_project = initialize_project(owner.path / "budget-one.sigma", "Budget one", "Question")
-    second_project = initialize_project(owner.path / "budget-two.sigma", "Budget two", "Question")
+    first_project = initialize_project(
+        owner.path / "budget-one.sigma", "Budget one", "Question", research_mode="mathematical"
+    )
+    second_project = initialize_project(
+        owner.path / "budget-two.sigma", "Budget two", "Question", research_mode="mathematical"
+    )
     env = {
         "SIGMA_CLOUD_AUTH_ENABLED": "true",
         "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
@@ -637,7 +647,12 @@ def test_configured_session_and_account_budget_above_legacy_cap(
 ) -> None:
     """A project and real account ledger may both safely exceed the old $0.25 cap."""
     owner = workspace(root, "a" * 32)
-    project = initialize_project(owner.path / "above-legacy-cap.sigma", "Larger budget", "Question")
+    project = initialize_project(
+        owner.path / "above-legacy-cap.sigma",
+        "Larger budget",
+        "Question",
+        research_mode="mathematical",
+    )
     env = {
         "SIGMA_CLOUD_AUTH_ENABLED": "true",
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
@@ -692,7 +707,10 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
         for user_number in range(10):
             member = workspace(root, f"{user_number:032x}")
             project = initialize_project(
-                member.path / "pilot.sigma", f"Pilot {user_number}", "Investigate a question"
+                member.path / "pilot.sigma",
+                f"Pilot {user_number}",
+                "Investigate a question",
+                research_mode="mathematical",
             )
             binding = cloud_workspaces._CURRENT.set(member)
             try:
@@ -733,7 +751,10 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
         for extra_number, amount in enumerate((2.00, 2.00, 0.01), start=10):
             member = workspace(root, f"{extra_number:032x}")
             project = initialize_project(
-                member.path / "pilot.sigma", f"Pilot {extra_number}", "Question"
+                member.path / "pilot.sigma",
+                f"Pilot {extra_number}",
+                "Question",
+                research_mode="mathematical",
             )
             binding = cloud_workspaces._CURRENT.set(member)
             try:
@@ -810,7 +831,12 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
 def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root: Path) -> None:
     """A reload starts a new user allowance period but never erases global spend."""
     owner = workspace(root, "9" * 32)
-    project = initialize_project(owner.path / "reload.sigma", "Reload", "Check allowance reload")
+    project = initialize_project(
+        owner.path / "reload.sigma",
+        "Reload",
+        "Check allowance reload",
+        research_mode="mathematical",
+    )
     env = {
         "SIGMA_CLOUD_AUTH_ENABLED": "true",
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
@@ -901,7 +927,12 @@ def test_explicit_account_allowance_does_not_require_default(root: Path, ledger_
 
     member_email = "sponsored-member@example.test"
     member = workspace(root, "9" * 32, member_email)
-    project = initialize_project(member.path / "explicit-allowance.sigma", "Explicit", "Question")
+    project = initialize_project(
+        member.path / "explicit-allowance.sigma",
+        "Explicit",
+        "Question",
+        research_mode="mathematical",
+    )
     auth_root = root / "auth-explicit-allowance"
     auth_root.mkdir(mode=0o700)
     env = {
@@ -1178,7 +1209,9 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         assert sponsored["maximum_estimated_cost_usd"] == user_cost_limit
         assert sponsored["model_calls"] == 30 and sponsored["research_rounds"] == 1
         assert sponsored["session_duration_minutes"] == 30
-    project = initialize_project(root / "local-unlimited.sigma", "Local", "Question")
+    project = initialize_project(
+        root / "local-unlimited.sigma", "Local", "Question", research_mode="mathematical"
+    )
     limits = {
         **research_sessions.DEFAULT_LIMITS,
         "research_rounds": 5,
@@ -1365,7 +1398,10 @@ def test_admin_unlimited_allowance_survives_monthly_global_renewal(
         binding = cloud_workspaces._CURRENT.set(owner)
         try:
             project = initialize_project(
-                owner.path / "admin-monthly.sigma", "Admin renewal", "Check the global ceiling"
+                owner.path / "admin-monthly.sigma",
+                "Admin renewal",
+                "Check the global ceiling",
+                research_mode="mathematical",
             )
             with cloud_research._connect() as db:
                 db.execute(
@@ -1469,7 +1505,10 @@ def test_json_project_orphan_recovery(
         binding = cloud_workspaces._CURRENT.set(member)
         try:
             project = initialize_project(
-                member.path / "portable.json", "Portable research", "Check persistence"
+                member.path / "portable.json",
+                "Portable research",
+                "Check persistence",
+                research_mode="mathematical",
             )
 
             def bundle_job() -> dict[str, Any]:
@@ -1551,7 +1590,10 @@ def test_json_project_session_playback(
         binding = cloud_workspaces._CURRENT.set(member)
         try:
             project = initialize_project(
-                member.path / "playback.json", "Portable playback", "Check a bound"
+                member.path / "playback.json",
+                "Portable playback",
+                "Check a bound",
+                research_mode="mathematical",
             )
             strategy = create_strategy(
                 project.path, "Investigation", "Derive the bound, then challenge it."
@@ -1661,7 +1703,10 @@ def test_failed_session_releases_project_slot(
         binding = cloud_workspaces._CURRENT.set(member)
         try:
             project = initialize_project(
-                member.path / "disconnect.sigma", "Disconnect recovery", "Check slot release"
+                member.path / "disconnect.sigma",
+                "Disconnect recovery",
+                "Check slot release",
+                research_mode="mathematical",
             )
             strategy = create_strategy(
                 project.path, "Bounded", "Inspect one finite case."
@@ -1849,7 +1894,9 @@ def test_issue289_global_funding_pause_can_resume(
             expected = {
                 "title": settings.title,
                 "problem": settings.problem,
-                "investigation_type": settings.investigation_type.value,
+                "investigation_type": getattr(
+                    settings.investigation_type, "value", settings.investigation_type
+                ),
                 "ai_model": settings.ai_model,
                 "reasoning_effort": settings.reasoning_effort,
                 "difficulty": settings.difficulty.value if settings.difficulty else None,
@@ -1859,7 +1906,7 @@ def test_issue289_global_funding_pause_can_resume(
                 project.path,
                 "Operation Narrow Passage v2",
                 settings.problem,
-                settings.investigation_type.value,
+                getattr(settings.investigation_type, "value", settings.investigation_type),
                 "gpt-6.1-sol",
                 "high",
                 expected,
@@ -2116,7 +2163,10 @@ def test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(
         binding = cloud_workspaces._CURRENT.set(owner)
         try:
             view = initialize_project(
-                owner.path / "auxiliary.sigma", "Auxiliary inference", "Check capacity isolation"
+                owner.path / "auxiliary.sigma",
+                "Auxiliary inference",
+                "Check capacity isolation",
+                research_mode="mathematical",
             )
             research = job(owner.workspace_id)
             cloud_research.prepare_job(research)
@@ -2165,7 +2215,10 @@ def test_cross_user_crash_reclaims_only_dead_worker(root: Path, ledger_root: Pat
         token = cloud_workspaces._CURRENT.set(b)
         try:
             project = initialize_project(
-                b.path / "foreign-running.sigma", "Foreign session", "Check recovery"
+                b.path / "foreign-running.sigma",
+                "Foreign session",
+                "Check recovery",
+                research_mode="mathematical",
             )
             active = job(b.workspace_id)
             active.update({"project_id": project.project.id, "project_path": project.path})
@@ -2572,6 +2625,7 @@ def main() -> None:
                     a.path / "integrated-session.sigma",
                     "Integrated cloud session",
                     "Check a recurrence bound",
+                    "mathematical",
                 )
                 live_strategy = create_strategy(
                     live_view.path, "Induction", "Derive a recurrence bound and check bases."
@@ -3168,7 +3222,10 @@ def main() -> None:
                     asyncio.run(run_cancelled_call())
 
                 view = initialize_project(
-                    a.path / "restart-proof.sigma", "Restart proof", "A bounded question"
+                    a.path / "restart-proof.sigma",
+                    "Restart proof",
+                    "A bounded question",
+                    research_mode="mathematical",
                 )
                 interrupted = job(a.workspace_id)
                 interrupted["project_id"] = view.project.id
@@ -3247,7 +3304,10 @@ def main() -> None:
                     # record is "queued", and no worker owns the advisory lock.
                     # Reading it must preserve playback and release the stale slot.
                     stale_project = initialize_project(
-                        a.path / "queued-after-claim.sigma", "Stale queue", "Recover a queue"
+                        a.path / "queued-after-claim.sigma",
+                        "Stale queue",
+                        "Recover a queue",
+                        research_mode="mathematical",
                     )
                     stale = job(a.workspace_id)
                     stale.update(
@@ -3280,7 +3340,10 @@ def main() -> None:
                     # saved session. It must not repeatedly wait on a stale
                     # running ledger slot, or execute a duplicate provider call.
                     stale_worker_project = initialize_project(
-                        a.path / "queued-worker.sigma", "Stale worker", "Recover a worker"
+                        a.path / "queued-worker.sigma",
+                        "Stale worker",
+                        "Recover a worker",
+                        research_mode="mathematical",
                     )
                     stale_worker = job(a.workspace_id)
                     stale_worker.update(
@@ -3321,7 +3384,10 @@ def main() -> None:
                     # This is recovery behavior; new capacity-full requests
                     # are refused before a session is created.
                     expiry_project = initialize_project(
-                        a.path / "queue-expiry.sigma", "Queue expiry", "Check expiry"
+                        a.path / "queue-expiry.sigma",
+                        "Queue expiry",
+                        "Check expiry",
+                        research_mode="mathematical",
                     )
                     expired = job(a.workspace_id)
                     expired.update(

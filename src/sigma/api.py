@@ -26,6 +26,7 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     papers,
+    project_types,
     proposals,
     python_sandbox,
     research_qa,
@@ -119,6 +120,88 @@ def _cleanup_research_qa_task(key: tuple[str, str], task: asyncio.Task[dict[str,
 # middleware has attached its verified principal. Cloud-auth's own public and
 # admin endpoints do not access workspace data.
 app.router.dependencies.append(Depends(cloud_workspace_scope))
+
+
+class ProjectTypeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str | None = Field(default=None, max_length=100)
+    name: str = Field(min_length=1, max_length=80)
+    scope: str = Field(min_length=1, max_length=500)
+    description: str = Field(default="", max_length=2000)
+    based_on: str | None = Field(default=None, max_length=100)
+    user_defined: bool = True
+    icon: dict[str, Any]
+    research_standards_references: list[str] = Field(default_factory=list, max_length=100)
+    publication_standards_references: list[str] = Field(default_factory=list, max_length=100)
+    origin: str | None = None
+    behavior: dict[str, bool] = Field(default_factory=dict)
+
+
+class ProjectTypeCatalogBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_types: list[ProjectTypeBody] = Field(max_length=500)
+    expected_revision: str = Field(min_length=64, max_length=64)
+
+
+class ProjectTypeDeleteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: bool
+    expected_project_count: int = Field(ge=0)
+    expected_revision: str = Field(min_length=64, max_length=64)
+
+
+class ProjectTypeIconRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=80)
+    scope: str = Field(min_length=1, max_length=500)
+    description: str = Field(default="", max_length=2000)
+
+
+@app.get("/api/project-types")
+def list_project_types_view():
+    return {
+        "project_types": [item.record() for item in project_types.all_types()],
+        "revision": project_types.catalog_revision(),
+    }
+
+
+@app.put("/api/project-types")
+def replace_project_types_view(body: ProjectTypeCatalogBody):
+    saved = project_types.replace_custom_types(
+        [item.model_dump() for item in body.project_types], expected_revision=body.expected_revision
+    )
+    return {
+        "project_types": [item.record() for item in saved],
+        "revision": project_types.catalog_revision(),
+    }
+
+
+@app.get("/api/project-types/{identifier}/usage")
+def project_type_usage_view(identifier: str):
+    if project_types.get_type(identifier) is None:
+        return {"project_count": project_types.project_usage(identifier)}
+    return {"project_count": project_types.project_usage(identifier)}
+
+
+@app.delete("/api/project-types/{identifier}")
+def remove_project_type_view(identifier: str, body: ProjectTypeDeleteBody):
+    if not body.confirm:
+        raise ProjectError("Confirm removal to continue")
+    count = project_types.project_usage(identifier)
+    if count != body.expected_project_count:
+        raise ProjectError("Project references changed; review the removal warning again")
+    project_types.remove_type(identifier, expected_revision=body.expected_revision)
+    return {"deleted": True, "project_count": count}
+
+
+@app.post("/api/project-types/icon")
+async def generate_project_type_icon_view(body: ProjectTypeIconRequest):
+    from sigma.project_type_icons import generate
+
+    icon = await generate(body.name, body.scope, body.description)
+    return {"icon": icon}
+
+
 _cloud_config = cloud_auth.config()
 _trusted_hosts = ["127.0.0.1", "localhost", "testserver"]
 if _cloud_config.origin:
@@ -415,6 +498,7 @@ class ResearchStartRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_limits: dict[str, Any] | None = None
+    continue_using_saved_type_settings: bool = False
 
 
 class ResearchControlRequest(OpenRequest):
@@ -851,6 +935,7 @@ class MockResearchStartRequest(OpenRequest):
     strategy_id: str
     idempotency_key: str
     expected_project_id: str
+    continue_using_saved_type_settings: bool = False
 
 
 @app.post("/api/projects/research-sessions/mock")
@@ -875,7 +960,11 @@ def mock_research_start_view(
     if inspect_project(body.path).project.id != body.expected_project_id:
         raise HTTPException(409, "Project changed; reopen it before starting research")
     return research_sessions.mock_session(
-        body.path, body.strategy_id, body.idempotency_key, scenario
+        body.path,
+        body.strategy_id,
+        body.idempotency_key,
+        scenario,
+        body.continue_using_saved_type_settings,
     )
 
 
@@ -889,6 +978,7 @@ async def research_start_view(body: ResearchStartRequest):
         body.expected_binding,
         body.expected_limits,
         body.strategy_ids,
+        body.continue_using_saved_type_settings,
     )
 
 
@@ -990,6 +1080,11 @@ def open_view(body: OpenRequest):
 
 @app.post("/api/projects/init", status_code=201)
 def init_view(body: InitRequest):
+    if (
+        body.investigation_type != "default"
+        and project_types.get_type(body.investigation_type) is None
+    ):
+        raise ProjectError("Choose a currently available project type")
     view = initialize_project(
         body.path,
         body.title,
@@ -1212,6 +1307,11 @@ def destination_view(title: str = ""):
 
 @app.post("/api/projects/create", status_code=201)
 def create_project_view(body: CreateProjectRequest):
+    if (
+        body.investigation_type != "default"
+        and project_types.get_type(body.investigation_type) is None
+    ):
+        raise ProjectError("Choose a currently available project type")
     return asdict(
         create_project(
             body.title,
@@ -1625,6 +1725,13 @@ async def delete_project_view(body: DeleteProjectRequest):
 
 @app.post("/api/projects/update")
 def update_project_view(body: UpdateProjectRequest):
+    current = inspect_project(body.path).project
+    if (
+        body.investigation_type != current.investigation_type
+        and body.investigation_type != "default"
+        and project_types.get_type(body.investigation_type) is None
+    ):
+        raise ProjectError("Choose a currently available project type")
     return asdict(
         update_project(
             body.path,

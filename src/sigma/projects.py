@@ -61,13 +61,17 @@ def _difficulty(value: str | None) -> Difficulty | None:
         raise ProjectError("Difficulty must be Easy, Medium, or Hard") from exc
 
 
-def _research_mode(value: str) -> ResearchMode:
+def _research_mode(value: str) -> ResearchMode | str:
+    """Catalog driven identities; retired IDs remain readable for old projects."""
+    if not isinstance(value, str) or not value.strip() or len(value) > 100:
+        raise ProjectError("Project type identity must be nonempty text")
+    if any(ord(char) < 32 for char in value):
+        raise ProjectError("Project type identity contains a control character")
+    cleaned = value.strip()
     try:
-        return ResearchMode(value)
-    except (ValueError, TypeError) as exc:
-        raise ProjectError(
-            "Research category must be Biology, Chemistry, Computer Science, Economics, Engineering, Law, Mathematics, Military, Philosophy, Physics, Religion, or Other"
-        ) from exc
+        return ResearchMode(cleaned)
+    except ValueError:
+        return cleaned
 
 
 @dataclass(frozen=True)
@@ -109,14 +113,14 @@ class StrategyEnabledChange:
 class ProjectSettings:
     title: str
     problem: str
-    investigation_type: ResearchMode
+    investigation_type: str
     ai_model: str
     reasoning_effort: str
     difficulty: Difficulty | None = None
     show_advanced_outcome_details: bool = False
 
     @property
-    def research_mode(self) -> ResearchMode:
+    def research_mode(self) -> str:
         """Compatibility alias for existing integrations."""
         return self.investigation_type
 
@@ -197,16 +201,17 @@ class Project:
     problem: str
     events: tuple[Event, ...]
     strategies: tuple[Strategy, ...] = ()
-    investigation_type: ResearchMode = ResearchMode.DEFAULT
+    investigation_type: str = ResearchMode.DEFAULT.value
     active_order: tuple[str, ...] = ()
     ai_model: str = "gpt-6.1-sol"
     reasoning_effort: str = "high"
     difficulty: Difficulty | None = None
     show_advanced_outcome_details: bool = False
     backend_build_commit: str | None = None
+    project_type_snapshot: dict[str, Any] | None = None
 
     @property
-    def research_mode(self) -> ResearchMode:
+    def research_mode(self) -> str:
         """Compatibility alias for existing integrations."""
         return self.investigation_type
 
@@ -291,13 +296,26 @@ def _text(value: Any, name: str, limit: int) -> str:
     return value.strip()
 
 
+def _type_snapshot(identifier: str) -> dict[str, Any] | None:
+    if isinstance(identifier, ResearchMode):
+        identifier = identifier.value
+    if identifier == "default":
+        return None
+    from sigma.project_types import get_type
+
+    item = get_type(identifier)
+    if item is None:
+        raise ProjectError("Choose an available project type")
+    return item.record()
+
+
 def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 10)")
+        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 11)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
@@ -312,6 +330,8 @@ def _decode(raw: Any) -> Project:
         fields.add("difficulty")
     if version >= 9:
         fields.add("show_advanced_outcome_details")
+    if "project_type_snapshot" in raw:
+        fields.add("project_type_snapshot")
     # Optional in all schema versions: existing exported projects must remain readable.
     if "backend_build_commit" in raw:
         commit = raw["backend_build_commit"]
@@ -331,6 +351,23 @@ def _decode(raw: Any) -> Project:
             raise ProjectError(f"Project {key} must be a nonempty string")
     UUID(raw["id"])
     mode = _research_mode(raw.get("investigation_type", raw.get("research_mode", "default")))
+    snapshot = raw.get("project_type_snapshot")
+    if snapshot is not None and not isinstance(snapshot, dict):
+        raise ProjectError("Project type snapshot must be an object or null")
+    if snapshot is None and mode != "default":
+        try:
+            from sigma.project_types import get_type
+
+            type_record = get_type(mode)
+            snapshot = type_record.record() if type_record else None
+        except ProjectError:
+            snapshot = None
+    if snapshot is not None:
+        from sigma.project_types import normalize_project_snapshot
+
+        snapshot = normalize_project_snapshot(
+            snapshot, mode.value if isinstance(mode, ResearchMode) else mode
+        )
     settings = (
         _settings(
             {
@@ -618,6 +655,7 @@ def _decode(raw: Any) -> Project:
         settings.difficulty,
         settings.show_advanced_outcome_details,
         raw.get("backend_build_commit"),
+        snapshot,
     )
 
 
@@ -633,6 +671,8 @@ def _document(project: Project) -> bytes:
         for strategy in raw["strategies"]:
             if strategy["provenance"] is not None:
                 strategy["provenance"].pop("inference_request_id", None)
+    if project.schema_version >= 11:
+        raw["project_type_snapshot"] = project.project_type_snapshot
     if project.schema_version < 7:
         for strategy in raw["strategies"]:
             del strategy["enabled"]
@@ -727,7 +767,7 @@ def initialize_project(
         if not path.parent.is_dir() or path.parent.is_symlink():
             raise ProjectError("Project destination parent is unavailable")
         project = Project(
-            9,
+            11,
             str(uuid4()),
             title.strip(),
             problem.strip(),
@@ -738,6 +778,7 @@ def initialize_project(
             difficulty=selected_difficulty,
             show_advanced_outcome_details=show_advanced_outcome_details,
             backend_build_commit=_current_build_commit(),
+            project_type_snapshot=_type_snapshot(mode),
         )
         import base64
 
@@ -775,7 +816,7 @@ def initialize_project(
         if any(p.name != ".gitkeep" for p in path.iterdir()):
             raise ProjectError("Initialization requires an empty directory (or .gitkeep only)")
         project = Project(
-            9,
+            11,
             str(uuid4()),
             title.strip(),
             problem.strip(),
@@ -786,6 +827,7 @@ def initialize_project(
             difficulty=selected_difficulty,
             show_advanced_outcome_details=show_advanced_outcome_details,
             backend_build_commit=_current_build_commit(),
+            project_type_snapshot=_type_snapshot(mode),
         )
         # Stage and fsync before atomic, no-replace publication. Concurrent initializers
         # cannot overwrite one another; the final link fails if project.json exists.
@@ -1384,19 +1426,22 @@ def update_project(
                 validate_pair(wanted.ai_model, wanted.reasoning_effort)
             except ValueError as exc:
                 raise ProjectError(str(exc)) from exc
+        wanted_type_id = str(getattr(wanted.investigation_type, "value", wanted.investigation_type))
+        current_type_id = str(
+            getattr(current.investigation_type, "value", current.investigation_type)
+        )
+        snapshot = (
+            _type_snapshot(wanted_type_id)
+            if wanted_type_id != current_type_id
+            else project.project_type_snapshot
+        )
         return replace(
             project,
-            schema_version=max(
-                9
-                if wanted.show_advanced_outcome_details
-                else 8
-                if wanted.difficulty is not None
-                else 7,
-                project.schema_version,
-            ),
+            schema_version=max(11, project.schema_version),
             title=wanted.title,
             problem=wanted.problem,
-            investigation_type=wanted.investigation_type,
+            investigation_type=wanted_type_id,
+            project_type_snapshot=snapshot,
             ai_model=wanted.ai_model,
             reasoning_effort=wanted.reasoning_effort,
             difficulty=wanted.difficulty,

@@ -73,6 +73,7 @@ def run_tooling(command: str) -> int:
         steps = [
             [*python, "python", "tests/lifecycle.py"],
             [*python, "python", "tests/project_creation.py"],
+            [*python, "python", "tests/project_types.py"],
             [*python, "python", "tests/recents.py"],
             [*python, "python", "tests/test_sample_copies.py"],
             [*python, "python", "tests/make_sample.py"],

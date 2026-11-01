@@ -340,7 +340,7 @@ def save_source(
             value,
             settings.title,
             body,
-            settings.research_mode.value,
+            getattr(settings.research_mode, "value", settings.research_mode),
             settings.ai_model,
             settings.reasoning_effort,
             asdict(settings),

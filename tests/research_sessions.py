@@ -749,7 +749,9 @@ async def wait_for(path, session_id, terminal=True):
 
 
 async def setup(path: Path):
-    view = initialize_project(path, "Session project", "A bounded mathematical question")
+    view = initialize_project(
+        path, "Session project", "A bounded mathematical question", research_mode="mathematical"
+    )
     strategy = create_strategy(
         path, "Saved approach", "Derive a recurrence and check its boundary cases."
     ).project.strategies[0]
@@ -1018,7 +1020,10 @@ async def test_disabled_strategy_never_starts_a_run(path: Path):
 
 def test_project_concurrency_max_four_and_legacy_read(root: Path) -> None:
     view = initialize_project(
-        root / "project-concurrency-bounds.sigma", "Bounded project", "Check project limits"
+        root / "project-concurrency-bounds.sigma",
+        "Bounded project",
+        "Check project limits",
+        research_mode="mathematical",
     )
     path = view.path
     original = dict(research_sessions.DEFAULT_LIMITS)
@@ -2330,7 +2335,9 @@ async def test_failed_attempt_guides_next_session_with_provenance(path: Path):
 
 
 def test_prior_session_failure_history_prioritizes_newest_attempts(path: Path):
-    view = initialize_project(path, "Failure history", "A bounded research question.")
+    view = initialize_project(
+        path, "Failure history", "A bounded research question.", research_mode="mathematical"
+    )
     old_session_id, new_session_id = str(uuid4()), str(uuid4())
 
     def save_failed_session(
@@ -2389,7 +2396,9 @@ def test_prior_session_failure_history_prioritizes_newest_attempts(path: Path):
 
 
 def test_continuation_context_is_bounded(path: Path):
-    view = initialize_project(path, "Long-history project", "A bounded research question.")
+    view = initialize_project(
+        path, "Long-history project", "A bounded research question.", research_mode="mathematical"
+    )
     source_id = str(uuid4())
     source = {
         "id": source_id,
@@ -2440,7 +2449,12 @@ def test_continuation_context_is_bounded(path: Path):
 
 
 def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
-    view = initialize_project(path, "Evidence selection", "Keep the active question bounded.")
+    view = initialize_project(
+        path,
+        "Evidence selection",
+        "Keep the active question bounded.",
+        research_mode="mathematical",
+    )
     strategy_id = str(uuid4())
     session_id = str(uuid4())
     counterexample_id = str(uuid4())
@@ -2679,7 +2693,9 @@ def test_project_compact_obligation_ids_preserve_legacy_references(path: Path):
     """Project aliases survive recomputation and never rewrite historical IDs."""
     from sigma.project_obligation_ids import assign_project_obligation_ids
 
-    view = initialize_project(path, "Project obligation aliases", "Prove the claim.")
+    view = initialize_project(
+        path, "Project obligation aliases", "Prove the claim.", research_mode="mathematical"
+    )
     project_id = view.project.id
     strategy_id = str(uuid4())
     a = "Check a counterexample under assumption A."
@@ -2745,7 +2761,9 @@ def test_project_compact_obligation_ids_preserve_legacy_references(path: Path):
 
 
 def test_t37_obligation_identity_lifecycle_and_history(path: Path):
-    view = initialize_project(path, "Scoped obligation history", "Check an exact claim.")
+    view = initialize_project(
+        path, "Scoped obligation history", "Check an exact claim.", research_mode="mathematical"
+    )
     strategy = str(uuid4())
     text = "Prove the boundary case under the stated domain."
     a1, a2, reopen = str(uuid4()), str(uuid4()), str(uuid4())
@@ -4031,7 +4049,7 @@ async def test_prior_obligation_overflow_allows_repeatable_bounded_research(path
 
 
 def test_limits_validation(path: Path):
-    initialize_project(path, "Limits project", "A question")
+    initialize_project(path, "Limits project", "A question", research_mode="mathematical")
     before = research_sessions.get_limits(str(path))
     invalid = [
         {**before, "model_calls": 1},
@@ -4547,7 +4565,9 @@ def test_outcome_classification():
 
 
 def test_session_listing_ignores_sequence_metadata(path: Path):
-    view = initialize_project(path, "Sequence metadata", "Keep session numbering separate.")
+    view = initialize_project(
+        path, "Sequence metadata", "Keep session numbering separate.", research_mode="mathematical"
+    )
     directory = Path(view.path) / "research-sessions"
     directory.mkdir()
     (directory / "sequence.json").write_text(
@@ -4568,6 +4588,7 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
         path,
         "Conclusion cases",
         "Determine whether the stated formula holds for all n, and justify it.",
+        research_mode="mathematical",
     )
     conclusion_step = {
         "number": 1,
@@ -8633,7 +8654,9 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
         "formula or recurrence for the count, including the necessary initial values. "
         "Check the result on small n. Do not assume a particular proof method."
     )
-    view = initialize_project(path, "Counting Constrained Binary Strings", problem)
+    view = initialize_project(
+        path, "Counting Constrained Binary Strings", problem, research_mode="computer_science"
+    )
     strategy = create_strategy(
         path,
         "Partition by final symbol",
@@ -9075,13 +9098,15 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
             str(path),
             current.title,
             current.problem + " (edited after session started)",
-            current.investigation_type.value,
+            getattr(current.investigation_type, "value", current.investigation_type),
             current.ai_model,
             "medium",
             {
                 "title": current.title,
                 "problem": current.problem,
-                "investigation_type": current.investigation_type.value,
+                "investigation_type": getattr(
+                    current.investigation_type, "value", current.investigation_type
+                ),
                 "ai_model": current.ai_model,
                 "reasoning_effort": current.reasoning_effort,
                 "difficulty": current.difficulty.value if current.difficulty else None,
@@ -9238,7 +9263,12 @@ async def test_storage_limit_pauses_without_artifact(path: Path):
 
 
 def test_outcome_metrics_from_persisted_evidence(path: Path):
-    view = initialize_project(path, "Metrics fixture", "A persisted evidence accounting test")
+    view = initialize_project(
+        path,
+        "Metrics fixture",
+        "A persisted evidence accounting test",
+        research_mode="mathematical",
+    )
     session_id = str(uuid4())
     execution_id = str(uuid4())
     shared_python = {
@@ -10201,7 +10231,7 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
             "Compare within-batch replicate growth estimates before any causal claim.",
         ),
         (
-            "default",
+            "philosophy",
             "Which of two conflicting archive accounts has stronger provenance?",
             "Source criticism and competing archive accounts",
             "The two documents refer to the same recorded event.",
@@ -10746,13 +10776,15 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
             str(path),
             current.title,
             current.problem + " (edited while playing)",
-            current.investigation_type.value,
+            getattr(current.investigation_type, "value", current.investigation_type),
             current.ai_model,
             current.reasoning_effort,
             {
                 "title": current.title,
                 "problem": current.problem,
-                "investigation_type": current.investigation_type.value,
+                "investigation_type": getattr(
+                    current.investigation_type, "value", current.investigation_type
+                ),
                 "ai_model": current.ai_model,
                 "reasoning_effort": current.reasoning_effort,
                 "difficulty": current.difficulty.value if current.difficulty else None,

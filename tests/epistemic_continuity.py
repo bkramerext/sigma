@@ -126,6 +126,7 @@ async def parity_project(path: Path, capture: list[dict]) -> dict:
         path,
         "Parity continuation control",
         "Which bounded claims about n(n+1)+k follow from a saved parity lemma? State the supported scope and remaining cases.",
+        research_mode="mathematical",
     )
     strategy = create_strategy(
         path,
@@ -386,6 +387,7 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
         path,
         "DAG insertion control",
         "Does checking only for the immediate reverse edge keep a DAG acyclic after insertion? Find a bounded counterexample or report what remains unresolved.",
+        research_mode="mathematical",
     )
     strategy = create_strategy(
         path,

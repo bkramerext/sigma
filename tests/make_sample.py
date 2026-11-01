@@ -60,6 +60,7 @@ async def create_source_project(root: Path) -> tuple[Path, str, str, str]:
         source,
         "Exported research project",
         "Investigate a testable question. Private note: synthetic internal fixture text.",
+        research_mode="mathematical",
     )
     first = create_strategy(
         source,
