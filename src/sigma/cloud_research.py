@@ -404,11 +404,9 @@ def _connect() -> sqlite3.Connection:
             try:
                 columns = {row["name"] for row in db.execute("PRAGMA table_info(calls)")}
                 if "maximum_liability_usd" not in columns:
-                    db.execute(
-                        "ALTER TABLE calls ADD COLUMN maximum_liability_usd REAL NOT NULL DEFAULT 0"
-                    )
+                    db.execute("ALTER TABLE calls ADD COLUMN maximum_liability_usd REAL NOT NULL DEFAULT 0")
                 db.commit()
-            except Exception:
+            except sqlite3.Error:
                 db.rollback()
                 raise
         os.chmod(path, 0o600)
