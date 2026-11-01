@@ -217,8 +217,55 @@ def custom_types() -> list[ProjectType]:
     return sorted(result, key=lambda item: item.name.casefold())
 
 
+def resolve_type_metadata(
+    identifier: str, definitions: dict[str, ProjectType] | None = None
+) -> ProjectType | None:
+    """Resolve based_on transitively, preserving explicit child metadata.
+
+    A child keeps its own name, scope, identity and saved icon/references. An
+    uncustomized placeholder or empty reference list falls back recursively to
+    the closest available ancestor. Missing parents use the child's snapshot;
+    cycles are bounded and never followed indefinitely.
+    """
+    from dataclasses import replace
+
+    if definitions is None:
+        definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
+    item = definitions.get(identifier)
+    if item is None:
+        return None
+    ancestry: set[str] = {identifier}
+    icon = item.icon
+    research = item.research_standards_references
+    publication = item.publication_standards_references
+    parent_id = item.based_on
+    while parent_id and parent_id not in ancestry:
+        ancestry.add(parent_id)
+        parent = definitions.get(parent_id)
+        if parent is None:
+            break
+        if icon.get("key") == "placeholder" and parent.icon.get("key") != "placeholder":
+            icon = parent.icon
+        if not research:
+            research = parent.research_standards_references
+        if not publication:
+            publication = parent.publication_standards_references
+        parent_id = parent.based_on
+    return replace(
+        item,
+        icon=icon,
+        research_standards_references=research,
+        publication_standards_references=publication,
+    )
+
+
 def all_types() -> list[ProjectType]:
-    return [*builtin_types(), *custom_types()]
+    definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
+    return [
+        resolved
+        for identifier in definitions
+        if (resolved := resolve_type_metadata(identifier, definitions)) is not None
+    ]
 
 
 def catalog_revision() -> str:
