@@ -942,6 +942,35 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
         assert "For any branch of physics" not in fallback
 
 
+def test_method_source_notes_reach_real_role_request_audit():
+    """The pre-turn source decision reaches both roles without a provider call."""
+    from sigma import research_method_sources
+
+    selected = research_method_sources.select_method_sources(
+        "physics", "Warp Drive Design", "spacetime metric and curvature", (), ()
+    )
+    context = {
+        "problem": "Investigate a spacetime model without assuming feasibility.",
+        "investigation_type": "physics",
+        "research_method_version": research_sessions.RESEARCH_METHOD_VERSION,
+        "methodology_source_material": selected["sources"],
+        "methodology_source_status": selected["status"],
+        "execution_tools": [],
+    }
+    record = {
+        "mode": "chatgpt", "model": MODEL, "reasoning_effort": "high",
+        "output_token_limit": 4000,
+    }
+    for role in ("investigator", "skeptic"):
+        request = research_sessions._role_request_payload(record, role, context)
+        assert "methodology_source_material" in request["input"][0]["content"]
+        assert research_method_sources.CATALOG[0]["notes"] in request["input"][0]["content"]
+        assert "NASEM" in request["input"][0]["content"]
+        assert "Use the session's methodology_source_material" in request["instructions"]
+        assert "No live external-source retrieval tool" in request["instructions"]
+        assert "For any branch of physics" in request["instructions"]
+
+
 def test_request_audit_truncation_tokens_and_reconciliation():
     context = {"problem": "Answer-free objective", "strategy": "Incremental reasoning"}
     record = {
