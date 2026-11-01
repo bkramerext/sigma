@@ -9968,12 +9968,8 @@ def test_parallel_funding_uses_estimates_without_changing_provider_request() -> 
     context = {"problem": "Shared research objective", "strategy": "Independent approach"}
     provider_request = research_sessions._role_request_payload(record, "investigator", context)
     assert provider_request["max_output_tokens"] == research_sessions.MODEL_OUTPUT_LIMITS[MODEL]
-    cost_estimate = research_sessions._reserve_cost(
-        record, context, "investigator", estimate=True
-    )
-    legacy_worst_case = research_sessions._reserve_cost(
-        record, context, "investigator"
-    )
+    cost_estimate = research_sessions._reserve_cost(record, context, "investigator", estimate=True)
+    legacy_worst_case = research_sessions._reserve_cost(record, context, "investigator")
     assert cost_estimate is not None and legacy_worst_case is not None
     assert 0 < cost_estimate < legacy_worst_case
 
