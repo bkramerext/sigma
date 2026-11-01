@@ -174,7 +174,14 @@ with sync_playwright() as playwright:
     # The next New remains unavailable until the just-created row contains a URL.
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_disabled()
     url_input = parent.get_by_label("Research reference URL 1")
+    url_input.fill("not-a-url")
+    expect(url_input).to_have_attribute("aria-invalid", "true")
+    expect(parent.get_by_text("Use an HTTP or HTTPS URL with a host.")).to_be_visible()
+    expect(save).to_be_disabled()
     url_input.fill("https://example.org/research-standard")
+    expect(url_input).to_have_attribute("aria-invalid", "false")
+    expect(parent.get_by_text("Use an HTTP or HTTPS URL with a host.")).to_have_count(0)
+    expect(save).to_be_enabled()
     expect(url_input).to_have_value("https://example.org/research-standard")
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_enabled()
     assert url_input.evaluate("element => document.activeElement === element"), (
@@ -197,6 +204,16 @@ with sync_playwright() as playwright:
     assert 0 <= reference_layout["gap"] <= 20 and reference_layout["sameLine"], reference_layout
     # A new draft uses local Cancel, not Remove or a second Save.
     expect(dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")).to_be_visible()
+    # An API validation error belongs to this dialog, not a hidden global toast.
+    toast_count = page.locator(".request-toast-stack .request-toast").count()
+    def reject_save(route):
+        route.fulfill(status=400, content_type="application/json",
+                      body='{"detail":"Server-side reference validation failed"}')
+    page.route("**/api/project-types", reject_save)
+    save.click()
+    expect(dialog.get_by_text("Server-side reference validation failed")).to_be_visible()
+    expect(page.locator(".request-toast-stack .request-toast")).to_have_count(toast_count)
+    page.unroute("**/api/project-types", reject_save)
     save.click()
     expect(dialog).not_to_be_visible()
 
@@ -435,7 +452,7 @@ with sync_playwright() as playwright:
     assert header.locator(".header-controls").evaluate(
         "node => getComputedStyle(node).gridTemplateAreas"
     ) == '"difficulty model identity" "about thinking identity"'
-    assert header.locator(".project-types-title-action").count() == 1
+    assert header.get_by_role("button", name="Project Types").count() == 0
 
     with page.expect_download() as legacy_download:
         page.get_by_role("button", name="Export project").click()
