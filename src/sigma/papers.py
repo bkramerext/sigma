@@ -3767,7 +3767,7 @@ def _tex(
         if warnings:
             parts += (
                 [r"\section*{Validation warnings}", r"\begin{itemize}"]
-                + [r"\item " + esc(readable_source_text(item)) for item in warnings]
+                + [r"\item " + prose_text(item) for item in warnings]
                 + [r"\end{itemize}"]
             )
     else:
