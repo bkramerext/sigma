@@ -70,8 +70,7 @@ def _compact_inflight_investigator(context: dict[str, Any]) -> bool:
         if isinstance(entries, list):
             selected = entries[:6] + entries[-2:] if len(entries) > 8 else entries
             bounded = [
-                _bounded_excerpt(item, 650) if isinstance(item, str) else item
-                for item in selected
+                _bounded_excerpt(item, 650) if isinstance(item, str) else item for item in selected
             ]
             if bounded != entries:
                 excerpt[field] = bounded
