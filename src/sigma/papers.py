@@ -720,6 +720,20 @@ def _safe_math(source: str) -> bool:
 
 
 def _latex_prose(source: str) -> str:
+    def escape_links(text: str) -> str:
+        """Use breakable TeX URLs without changing their visible content."""
+        pieces: list[str] = []
+        cursor = 0
+        for match in re.finditer(r"https?://[^\s<>()\[\]{}\"']+", text):
+            url = match.group(0).rstrip(".,;!?")
+            if not url:
+                continue
+            pieces.append(_latex(text[cursor : match.start()]))
+            pieces.append(r"\url{" + url + "}")
+            cursor = match.start() + len(url)
+        pieces.append(_latex(text[cursor:]))
+        return "".join(pieces)
+
     def plain(text: str) -> str:
         text = _SUPERSCRIPT_SUFFIX.sub(
             lambda match: (
@@ -738,7 +752,7 @@ def _latex_prose(source: str) -> str:
         escaped: list[str] = []
         position = 0
         for match in _MATH_SPAN.finditer(text):
-            escaped.append(_latex(text[position : match.start()]))
+            escaped.append(escape_links(text[position : match.start()]))
             token = match.group(0)
             delimiter = "$$" if token.startswith("$$") else "$"
             body = token[len(delimiter) : -len(delimiter)]
@@ -747,7 +761,7 @@ def _latex_prose(source: str) -> str:
             else:
                 escaped.append(_latex(token))
             position = match.end()
-        escaped.append(_latex(text[position:]))
+        escaped.append(escape_links(text[position:]))
         rendered = "".join(escaped)
         for marker, command in _UNICODE_TEXT_TEX.items():
             rendered = rendered.replace(marker, command)
@@ -3480,6 +3494,7 @@ def _tex(
         r"\usepackage[margin=1in]{geometry}",
         r"\usepackage{amsmath,amssymb,array,booktabs,longtable,pdflscape}",
         r"\usepackage{microtype}",
+        r"\usepackage[hyphens]{url}",
         r"\usepackage{titlesec}",
         *([r"\usepackage{tikz}", r"\usetikzlibrary{fit}"] if draft.diagrams else []),
         r"\emergencystretch=2em",
