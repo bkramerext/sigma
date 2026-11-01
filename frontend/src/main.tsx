@@ -122,7 +122,7 @@ function sessionEstimatedCostLabel(session: ResearchSession): string {
     return `${label} unavailable`;
   }
   // Show USD to the nearest tenth of a cent without implying an API charge.
-  return cost > 0 && cost < 0.001 ? `${label} <$0.001` : `${label} ` + '
+  return cost > 0 && cost < 0.001 ? `${label} <$0.001` : `${label} ${String.fromCharCode(36)}${cost.toFixed(3)}`;
 }
 
 function liveResearchSummary(session: ResearchSession): string | null {
