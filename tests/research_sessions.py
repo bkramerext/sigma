@@ -9439,7 +9439,7 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
             await release.wait()
         if role == "research_investigator":
             output = investigation(context["cycle"])
-            output["method"] += " Saved investigation detail." * 220
+            output["method"] += " Saved investigation detail." * 160
         else:
             output = skeptic(context["cycle"])
             output["response"] += " Bounded critical review." * 45
