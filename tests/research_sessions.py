@@ -9361,12 +9361,18 @@ def test_context_compaction_preserves_obligation_count_for_portfolio_dispatch():
     assert context["obligation_ledger"] == original_ledger
 
     # Older saved dispatch records may have only the legacy flat list.
-    assert research_sessions._context_obligation_count(
-        {"outstanding_obligations": ["first", "second"]}
-    ) == 2
-    assert research_sessions._context_obligation_count(
-        {"outstanding_obligations": ["stale"], "obligation_ledger": []}
-    ) == 0
+    assert (
+        research_sessions._context_obligation_count(
+            {"outstanding_obligations": ["first", "second"]}
+        )
+        == 2
+    )
+    assert (
+        research_sessions._context_obligation_count(
+            {"outstanding_obligations": ["stale"], "obligation_ledger": []}
+        )
+        == 0
+    )
     assert research_sessions._context_obligation_count({}) == 0
 
 
