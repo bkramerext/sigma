@@ -45,7 +45,10 @@ from sigma.research_budget import (
     settle_after_response,
     settle_rejected,
 )
-from sigma.research_context_budget import compact_dispatch_context
+from sigma.research_context_budget import (
+    compact_dispatch_context,
+    restrict_obligation_citations_to_supplied_context,
+)
 from sigma.research_epistemics import (
     argument_availability,
     execution_provenance,
@@ -6517,6 +6520,8 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             }
         )
     compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
+    # Preserve durable lineage but do not offer omitted evidence as citable.
+    restrict_obligation_citations_to_supplied_context(context)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -7876,6 +7881,8 @@ def _portfolio_context(
         if handoff_group is not None:
             context["context_manifest"]["sources"].append(handoff_group)
     compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
+    # Preserve durable lineage but do not offer omitted evidence as citable.
+    restrict_obligation_citations_to_supplied_context(context)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
