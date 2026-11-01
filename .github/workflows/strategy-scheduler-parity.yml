@@ -6,6 +6,10 @@ on:
     paths:
       - 'src/sigma/research_sessions.py'
       - 'src/sigma/research_budget.py'
+      - 'src/sigma/cloud_research.py'
+      - 'tests/research_sessions.py'
+      - 'tests/cloud_research.py'
+      - 'tests/strategy_global_slots.py'
       - 'tests/strategy_scheduler_parity.py'
       - '.github/workflows/strategy-scheduler-parity.yml'
   workflow_dispatch:
@@ -75,7 +79,7 @@ jobs:
           print("PASS: baseline and candidate have identical canonical provider requests, "
                 "peer handoffs, reviewed artifacts, coordinator decisions, and outcomes.")
           PY
-      - name: Verify 32 global provider slots across two backend processes
+      - name: Verify real local admission and 32 global provider slots across processes
         run: |
           PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
             uv run --project candidate --locked --no-sync python \
