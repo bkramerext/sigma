@@ -5717,6 +5717,67 @@ async def test_strategy_skeptic_does_not_wait_for_sibling_investigator(path: Pat
         assert roles == ["research_investigator", "research_skeptic"], roles
 
 
+async def test_preflight_failure_isolates_branch_and_commits_sibling(path: Path):
+    """A branch preflight failure cannot throw away a sibling's completed review."""
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Completed sibling route", "Finish an independent argument."
+    ).project.strategies[-1]
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    research_sessions.save_limits(str(path), limits)
+    original_role_call = research_sessions._portfolio_role_call
+    sibling_completed = asyncio.Event()
+
+    async def injected_role_call(session_id, location, strategy_id, role, cycle, semaphore, lock):
+        if strategy_id == first.id and role == "investigator":
+            await asyncio.wait_for(sibling_completed.wait(), timeout=5)
+            raise ProjectError(
+                "AI account or billing connection could not be verified; session paused before a new call."
+            )
+        result = await original_role_call(
+            session_id, location, strategy_id, role, cycle, semaphore, lock
+        )
+        if strategy_id == second.id and role == "skeptic" and result is True:
+            sibling_completed.set()
+        return result
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        output = (
+            investigation(context["cycle"])
+            if payload["text"]["format"]["name"] == "research_investigator"
+            else skeptic(context["cycle"], "stop")
+        )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch.object(research_sessions, "_portfolio_role_call", new=injected_role_call),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kw: REAL_CLIENT(transport=httpx.MockTransport(handler), **kw),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), first.id, str(uuid4()), view.project.id, credential["identity"],
+            expected_limits=limits, strategy_ids=[first.id, second.id],
+        )
+        final = await asyncio.wait_for(wait_for(path, started["id"]), timeout=10)
+
+    assert sibling_completed.is_set()
+    assert len(final["artifacts"]) == 1, final.get("message")
+    assert final["artifacts"][0]["strategy_id"] == second.id
+    saved = {branch["strategy_id"]: branch for branch in final["strategy_runs"]}
+    assert saved[first.id]["status"] == "paused"
+    assert saved[second.id]["status"] == "ended"
+    assert final["status"] == "paused"
+    reopened = research_sessions.get_session(str(path), started["id"])
+    assert len(reopened["artifacts"]) == 1
+
+
 async def test_duplicate_strategy_dispatch_is_fenced_during_provider_call(path: Path):
     """Two dispatchers must not run the same strategy turn concurrently."""
     view, first, credential, config = await setup(path)
@@ -10364,6 +10425,11 @@ def main():
         asyncio.run(
             test_duplicate_strategy_dispatch_is_fenced_during_provider_call(
                 root / "duplicate-strategy-dispatch.sigma"
+            )
+        )
+        asyncio.run(
+            test_preflight_failure_isolates_branch_and_commits_sibling(
+                root / "fault-isolation-421.sigma"
             )
         )
         asyncio.run(test_provider_gate_fairness_and_cancelled_waiter())
