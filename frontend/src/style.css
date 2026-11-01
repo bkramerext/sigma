@@ -278,15 +278,21 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   --home-corner-gap: 26px;
   --home-corner-pill-height: 34px;
 }
-.home-page .home-topline { height: 52px; }
+.home-page .home-topline {
+  box-sizing: border-box;
+  height: 52px;
+  padding: var(--home-corner-gap) 0 0 var(--home-corner-gap);
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: flex-start;
+}
 .home-page .home-hero { margin-top: 12px; }
 /* Home corner actions are independent of the right-hand authentication stack. */
 .home-page .home-left-actions {
-  position: absolute;
-  top: var(--home-corner-gap);
-  left: var(--home-corner-gap);
+  position: relative;
   z-index: 3;
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
@@ -304,7 +310,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 }
 @media (max-width: 700px) {
   .home-page { --home-corner-gap: 18px; --home-corner-pill-height: 28px; }
-  .home-page .home-topline { padding-top: var(--home-corner-gap); }
+  .home-page .home-topline { padding: var(--home-corner-gap) 0 0 var(--home-corner-gap); }
   .home-page .home-left-actions { gap: 8px; }
   .home-page .home-projects { padding-top: 0; }
 }
@@ -392,12 +398,14 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   .home-page .home-atmosphere {
     background: linear-gradient(#020711d9, #020711d9), url('/sigma-home-background-copper.png') 35% top / cover no-repeat;
   }
+  /* Keep the Projects column anchored to the left pills, not below the
+     potentially much taller Google/Sponsored/Admin control stack. */
   .home-page .home-projects {
-    position: relative;
-    top: auto;
-    left: auto;
+    position: absolute;
+    top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 1.75 * var(--home-corner-gap) - 20px);
+    left: var(--home-project-edge);
     width: min(520px, calc(100% - 2 * var(--home-project-edge)));
-    margin: max(0px, calc(1.75 * var(--home-corner-gap) - 20px)) 0 0 var(--home-project-edge);
+    margin: 0;
   }
   .home-page .home-projects-heading { gap: 6px 13px; }
 }
