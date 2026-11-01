@@ -5098,7 +5098,6 @@ def _remove_diagram_figures(tex: str, expected_count: int) -> str:
     return result
 
 
-
 async def _proofread_tex(
     tex: str,
     state: dict[str, Any],
@@ -5119,8 +5118,13 @@ async def _proofread_tex(
         checkpoint = state.get("proofreading")
         if isinstance(checkpoint, dict) and "pass_number" not in checkpoint:
             return await _proofread_tex_single_pass(
-                tex, state, binding=binding, config=config, project_id=project_id,
-                project_path_value=project_path_value, report=report,
+                tex,
+                state,
+                binding=binding,
+                config=config,
+                project_id=project_id,
+                project_path_value=project_path_value,
+                report=report,
             )
         current_tex = (
             checkpoint["initial_tex"]
@@ -5130,34 +5134,56 @@ async def _proofread_tex(
         pass_number = int(checkpoint.get("pass_number", 1)) if isinstance(checkpoint, dict) else 1
         history = list(checkpoint.get("pass_history", [])) if isinstance(checkpoint, dict) else []
         revised, result = await _proofread_tex_single_pass(
-            current_tex, state, binding=binding, config=config, project_id=project_id,
-            project_path_value=project_path_value, report=report,
-            pass_number=pass_number, pass_history=history,
+            current_tex,
+            state,
+            binding=binding,
+            config=config,
+            project_id=project_id,
+            project_path_value=project_path_value,
+            report=report,
+            pass_number=pass_number,
+            pass_history=history,
         )
-        if (result["status"] != "complete" or revised == current_tex
-                or pass_number >= MAX_PROOFREADER_PASSES):
+        if (
+            result["status"] != "complete"
+            or revised == current_tex
+            or pass_number >= MAX_PROOFREADER_PASSES
+        ):
             return revised, result
         # Record just the completed pass's accounting; totals on the current
         # checkpoint already include the history and must not be counted twice.
         prior_attempts = sum(int(item["provider_calls_attempted"]) for item in history)
         prior_retries = sum(int(item["safe_retry_count"]) for item in history)
         prior_elapsed = sum(int(item["elapsed_seconds"]) for item in history)
-        history.append({
-            "provider_calls_attempted": int(result["provider_calls_attempted"]) - prior_attempts,
-            "safe_retry_count": int(result["safe_retry_count"]) - prior_retries,
-            "elapsed_seconds": int(result["elapsed_seconds"]) - prior_elapsed,
-            "corrections": list(result["corrections"])[sum(len(p["corrections"]) for p in history):],
-            "diagnostics": list(result["diagnostics"]),
-            "original_sha256": (history[0]["original_sha256"] if history else result["initial_sha256"]),
-        })
+        history.append(
+            {
+                "provider_calls_attempted": int(result["provider_calls_attempted"])
+                - prior_attempts,
+                "safe_retry_count": int(result["safe_retry_count"]) - prior_retries,
+                "elapsed_seconds": int(result["elapsed_seconds"]) - prior_elapsed,
+                "corrections": list(result["corrections"])[
+                    sum(len(p["corrections"]) for p in history) :
+                ],
+                "diagnostics": list(result["diagnostics"]),
+                "original_sha256": (
+                    history[0]["original_sha256"] if history else result["initial_sha256"]
+                ),
+            }
+        )
         # The completed pass remains durable until the next pass checkpoint is
         # persisted, so interruption never repeats its paid calls.
         state.pop("proofreading")
         try:
             revised, result = await _proofread_tex_single_pass(
-                revised, state, binding=binding, config=config,
-                project_id=project_id, project_path_value=project_path_value,
-                report=report, pass_number=pass_number + 1, pass_history=history,
+                revised,
+                state,
+                binding=binding,
+                config=config,
+                project_id=project_id,
+                project_path_value=project_path_value,
+                report=report,
+                pass_number=pass_number + 1,
+                pass_history=history,
             )
         except BaseException:
             # If the next pass did not establish its checkpoint, restore the
@@ -5167,7 +5193,11 @@ async def _proofread_tex(
                 _save_work(project_path_value, state)
             raise
         # Continue from the latest checkpoint, retaining cumulative provenance.
-        if result["status"] != "complete" or revised == result["initial_tex"] or pass_number + 1 >= MAX_PROOFREADER_PASSES:
+        if (
+            result["status"] != "complete"
+            or revised == result["initial_tex"]
+            or pass_number + 1 >= MAX_PROOFREADER_PASSES
+        ):
             return revised, result
         tex = revised
         # The completed pass is inspected at the start of the next iteration.
@@ -5195,13 +5225,19 @@ async def _proofread_tex_single_pass(
             "pass_history": list(pass_history or []),
             "initial_tex": tex,
             "initial_sha256": hashlib.sha256(tex.encode()).hexdigest(),
-            "original_sha256": (pass_history or [{}])[0].get("original_sha256", hashlib.sha256(tex.encode()).hexdigest()),
+            "original_sha256": (pass_history or [{}])[0].get(
+                "original_sha256", hashlib.sha256(tex.encode()).hexdigest()
+            ),
             "bounds": [[start, end] for start, end in bounds],
             "corrected_chunks": [None] * len(bounds),
             "attempts": ["pending"] * len(bounds),
-            "corrections": [category for p in (pass_history or []) for category in p["corrections"]],
+            "corrections": [
+                category for p in (pass_history or []) for category in p["corrections"]
+            ],
             "diagnostics": _tex_static_diagnostics(tex),
-            "provider_calls_attempted": sum(int(p["provider_calls_attempted"]) for p in (pass_history or [])),
+            "provider_calls_attempted": sum(
+                int(p["provider_calls_attempted"]) for p in (pass_history or [])
+            ),
             "provider_calls_prior_at_start": int(state.get("proofreading_calls_prior", 0)),
             "provider_calls_accounting_version": 2,
             "safe_retry_count": sum(int(p["safe_retry_count"]) for p in (pass_history or [])),
@@ -5268,8 +5304,12 @@ async def _proofread_tex_single_pass(
             )
         return final_tex, checkpoint
     pending_calls = sum(attempt == "pending" for attempt in attempts)
-    if (int(state.get("proofreading_calls_prior", 0))
-            + int(checkpoint["provider_calls_attempted"]) + pending_calls > MAX_PROOFREAD_CALLS):
+    if (
+        int(state.get("proofreading_calls_prior", 0))
+        + int(checkpoint["provider_calls_attempted"])
+        + pending_calls
+        > MAX_PROOFREAD_CALLS
+    ):
         raise ProjectError(
             "The bounded proofreading call limit is exhausted; the authored draft remains saved."
         )
@@ -5978,7 +6018,9 @@ async def _generate_impl(
                 "correction_categories": sorted(set(proofreading.get("corrections", []))),
                 "unresolved_diagnostics": proofreading.get("diagnostics", [])[:100],
                 "fallback_reason": proofreading.get("fallback_reason"),
-                "original_tex_sha256": proofreading.get("original_sha256", proofreading.get("initial_sha256")),
+                "original_tex_sha256": proofreading.get(
+                    "original_sha256", proofreading.get("initial_sha256")
+                ),
                 "corrected_tex_sha256": proofreading.get("final_sha256"),
                 "provider_calls_attempted": int(work.get("proofreading_calls_prior", 0))
                 + int(proofreading.get("provider_calls_attempted", 0)),
