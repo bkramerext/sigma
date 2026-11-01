@@ -1,0 +1,1061 @@
+{
+  "release_id": "phase2-i2-v1",
+  "status": "STAGING",
+  "ready": false,
+  "created_at_utc": "2026-11-01T18:27:48Z",
+  "source_pr": "#433",
+  "consumer_pr": "#430",
+  "handoff_pr": "#434",
+  "research_code_sha": "59687773fc5df0ad658538c38e20396add0276b4",
+  "recovery_fix_sha": "5fc8637535fb4c76f175502645a372e8c569899a",
+  "research_method_version": "phase2-i2-v2",
+  "method_catalog_version": "methodology-catalog-v1",
+  "provider": {
+    "connection": "ChatGPT plan",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "api_key_fallback": false,
+    "metered_api_spend": false
+  },
+  "protocol": {
+    "selected_strategies_per_project": 2,
+    "rounds_per_project": 3,
+    "expected_role_turns_per_project": 12,
+    "expected_total_turns": 60,
+    "turn_interpretation": "Each strategy performs 3 Investigator/Skeptic rounds (6 role turns); two strategies yield 12 completed role turns per project. Failed attempts are not completed turns."
+  },
+  "parallel_execution": {
+    "five_project_sessions_launched_concurrently": true,
+    "project_sessions_in_flight_at_export": 0,
+    "actual_global_provider_concurrency": "Existing admission/gate allowed up to 10 strategy calls across five projects; no scheduler or global worker changes were made."
+  },
+  "totals": {
+    "completed_role_turns": 32,
+    "failed_or_uncertain_attempts": 7,
+    "never_dispatched_required_turns": 21,
+    "complete_sessions": 0,
+    "incomplete_sessions": 5
+  },
+  "staging_blockers": [
+    "ChatGPT plan/app returned subscription_sharing_usage_limit_exceeded; usage-limit scope/reset not identified. No provider retries after rejection.",
+    "All five protocol runs remain incomplete.",
+    "Xenopus attempt b0ee377a-c83c-4687-8a4a-8180252c8a2e has call_failed_dispatch_unknown and must not be blindly replayed.",
+    "Chat 2 scientific review has not occurred."
+  ],
+  "projects": [
+    {
+      "key": "agent",
+      "file": "agent-reliability.bundle.json.gz",
+      "title": "AI Agent Reliability and Evaluation v1",
+      "project_id": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+      "input_sha256_uncompressed": "666c96aafcaaec048099f9d25ef57f66fdd284a54fb5e7aad3425fad4fde79e3",
+      "input_path": "frozen_inputs/agent.bundle.json.gz",
+      "problem_sha256": "30ee8fc81efbb3b3f4fd44910483e03b1bdef6dddaee677fb1c489335f66d75d",
+      "investigation_type": "computer_science",
+      "status": "STAGING_INCOMPLETE",
+      "session_status": "failed",
+      "session_id": "e3f02cce-aed5-42f7-aa01-a5cad3c99c18",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "provider_mode": "ChatGPT plan",
+      "api_key_fallback": false,
+      "code_sha": "59687773fc5df0ad658538c38e20396add0276b4",
+      "method_version": "phase2-i2-v2",
+      "method_catalog_version": "methodology-catalog-v1",
+      "method_source_set_sha256": "c3157a3836c5fe2bfce56bef8e0df8594aa14d7c4477ed2fcfdbc6c760dc6ffd",
+      "method_selection_status": "selected",
+      "method_mode": "computer_science",
+      "method_branch": "ai-reliability",
+      "method_sources": [
+        {
+          "id": "nasem-scientific-methods",
+          "tier": "general",
+          "title": "NASEM — Scientific Methods and Knowledge, chapter 2",
+          "url": "https://www.nationalacademies.org/read/25303/chapter/5",
+          "branch": null
+        },
+        {
+          "id": "acm-software-research",
+          "tier": "discipline",
+          "title": "ACM SIGSOFT — Empirical Standards",
+          "url": "https://www2.sigsoft.org/EmpiricalStandards/docs/standards",
+          "branch": null
+        },
+        {
+          "id": "acm-engineering-method",
+          "tier": "branch",
+          "title": "ACM SIGSOFT — Engineering Research",
+          "url": "https://www2.sigsoft.org/EmpiricalStandards/docs/standards",
+          "branch": "ai-reliability"
+        }
+      ],
+      "protocol": {
+        "selected_strategies": 2,
+        "rounds": 3,
+        "expected_role_turns": 12,
+        "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
+      },
+      "calls_used": 10,
+      "configured_call_limit": 18,
+      "cycle_limit": 3,
+      "turns_completed": 8,
+      "turns_failed": 2,
+      "turns_never_dispatched": 2,
+      "strategies": [
+        {
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "strategy_title": "Develop a rigorous framework for measuring AI agent reliability",
+          "turns_completed": 4,
+          "turns_failed": 1,
+          "turns_never_dispatched": 1,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "c8689012-3adc-4851-a880-f2db996f7fa0",
+              "request_body_sha256": "b6530fad26bdad0a51ff2bb792d43d9f98865cdcd46733a73c10399b6a745e55",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "12067c2c-900d-4396-acb1-5e819908be3a",
+              "request_body_sha256": "06a11a39c84d1c19be4a4ea2653fe9142185f1de0830906850f40e8388181008",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "8b319058-00bc-4c36-b16f-04fcbb9e25d1",
+              "request_body_sha256": "0dd04549039b71a8bc770b292f1779f0f994917eaa768b6a02ced72d301b909c",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "c41728bc-c0c7-474a-a73c-fd9ba4987d40",
+              "request_body_sha256": "cd6a621de00ad350bd65854f9769bbcbdfac63f93170ac5d8ed955e14c8614a5",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "failed",
+              "attempt_id": "b32aa5bc-cbf9-448f-96a5-0821a7102d19",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        },
+        {
+          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
+          "strategy_title": "Understand failure propagation and recovery in autonomous AI agents",
+          "turns_completed": 4,
+          "turns_failed": 1,
+          "turns_never_dispatched": 1,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "34f57df3-e101-426f-a223-28b1123f1944",
+              "request_body_sha256": "188d1458be10698a9b3060b577b5f35c4c3bbc48d0b538060a2cf823648670ce",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "c4ef7e2d-c130-45fc-991d-f1c567c00d2d",
+              "request_body_sha256": "4408349645a7c031ada949ca9c72a0ab6382c12ff460fcf7b75f45cee45635f9",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "ff9e0f39-af89-4039-a679-3c7953eb182e",
+              "request_body_sha256": "eb979adeab988be57a73a27ffb54c5771382d0bfa138d9a327e6fa0847de55cc",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "9f470849-0878-40e5-9efd-f5e37b98f805",
+              "request_body_sha256": "cab5a58107df96eca005ce9c7a8d6bfac61f4b04815ba6c92e5e160796daeb2e",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "failed",
+              "attempt_id": "96ab13b3-e85a-4b40-bead-5277b72f051d",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        }
+      ],
+      "failed_attempts": [
+        {
+          "attempt_id": "b32aa5bc-cbf9-448f-96a5-0821a7102d19",
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "role": "investigator",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected"
+        },
+        {
+          "attempt_id": "96ab13b3-e85a-4b40-bead-5277b72f051d",
+          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
+          "role": "investigator",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected"
+        }
+      ],
+      "started_at": "2026-11-01T18:01:22.082967+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:10:38.076166+00:00",
+      "outcome_label": "Mixed · partial progress, unresolved",
+      "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
+      "output_bundle": {
+        "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/agent-reliability.bundle.json.gz",
+        "sha256_compressed": "bff09bd1085a8eacb3ea696ba8870a774747c7f5bb109198b860953e4707f548",
+        "sha256_uncompressed": "c70fce03ae0416ca6cae5f42f0e3b6215f717ef3ecc225cb146695831c83df7e",
+        "compressed_bytes": 3497023,
+        "uncompressed_bytes": 9738359,
+        "gzip_json_valid": true
+      },
+      "mandatory_source_omitted_count": 0,
+      "wall_clock_seconds": 555.993,
+      "provider_call_attempts": 10,
+      "automatic_retry_attempts": 0,
+      "tokens_used": 177468,
+      "cost_status": "unavailable",
+      "termination_reason_code": "provider_or_strategy_failure"
+    },
+    {
+      "key": "sovereign",
+      "file": "sovereign-ai-federation.bundle.json.gz",
+      "title": "Sovereign AI Federation v2",
+      "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+      "input_sha256_uncompressed": "40cdebb730fb4cef73ea2676e9dba8e6666630ee2ec2976af595365f7b6c5ea5",
+      "input_path": "frozen_inputs/sovereign.bundle.json.gz",
+      "problem_sha256": "88cb02de230083d68c645c93de2cb48bf72da9610b29384123dfe6a05692f204",
+      "investigation_type": "computer_science",
+      "status": "STAGING_INCOMPLETE",
+      "session_status": "ended",
+      "session_id": "d82391f1-956a-4546-adfd-20f030e33688",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "provider_mode": "ChatGPT plan",
+      "api_key_fallback": false,
+      "code_sha": "59687773fc5df0ad658538c38e20396add0276b4",
+      "method_version": "phase2-i2-v2",
+      "method_catalog_version": "methodology-catalog-v1",
+      "method_source_set_sha256": "a9ea45d010fb210fb48acfaa3e8badee85dc07cb59d436706fa4f7f9b2897623",
+      "method_selection_status": "selected",
+      "method_mode": "computer_science",
+      "method_branch": "federation",
+      "method_sources": [
+        {
+          "id": "nasem-scientific-methods",
+          "tier": "general",
+          "title": "NASEM — Scientific Methods and Knowledge, chapter 2",
+          "url": "https://www.nationalacademies.org/read/25303/chapter/5",
+          "branch": null
+        },
+        {
+          "id": "acm-software-research",
+          "tier": "discipline",
+          "title": "ACM SIGSOFT — Empirical Standards",
+          "url": "https://www2.sigsoft.org/EmpiricalStandards/docs/standards",
+          "branch": null
+        },
+        {
+          "id": "nasa-federation-decisions",
+          "tier": "branch",
+          "title": "NASA — 6.8 Decision Analysis",
+          "url": "https://www.nasa.gov/reference/6-8-decision-analysis/",
+          "branch": "federation"
+        }
+      ],
+      "protocol": {
+        "selected_strategies": 2,
+        "rounds": 3,
+        "expected_role_turns": 12,
+        "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
+      },
+      "calls_used": 7,
+      "configured_call_limit": 18,
+      "cycle_limit": 3,
+      "turns_completed": 6,
+      "turns_failed": 1,
+      "turns_never_dispatched": 5,
+      "strategies": [
+        {
+          "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "strategy_title": "Sovereignty and trust boundaries",
+          "turns_completed": 3,
+          "turns_failed": 1,
+          "turns_never_dispatched": 2,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "d17acaf4-09ba-4ba0-bb19-20839f004f11",
+              "request_body_sha256": "e9a0193d38cc101dd2b3a5f61f2a6628548699b73c979ed989b0ff1db8819ca4",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "67d4b9e8-b14e-4e0f-ba1f-972782f85dc1",
+              "request_body_sha256": "c3abc6787d39726e40eecb3b1cba456eaf1df31c083ce3ab86cd841aecdacdc4",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "6adcf9e3-fbb3-4e72-8f3d-9edb35f268e2",
+              "request_body_sha256": "96bcd7544c50a3d9cf189eca7ce48155d7c76748082ac4b30eda4b0942c083b4",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "failed",
+              "attempt_id": "f5ba8fdd-daca-4651-bf5a-7944c87ac7d2",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        },
+        {
+          "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+          "strategy_title": "Fairness, reliability and pilot",
+          "turns_completed": 3,
+          "turns_failed": 0,
+          "turns_never_dispatched": 3,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "3457952f-709b-48bb-b873-54115193b43a",
+              "request_body_sha256": "d2013eb6977b37e25cdb6af7499811e18a34a695b0345500e9fd21d86a91732a",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "d7ee0652-ba42-49ed-901d-8d4c7bd5e03e",
+              "request_body_sha256": "79c75d131525eca32a905ecc316a4fd997e646b039d69b8cb37f46d06d81b69e",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "3b17e3df-e071-4bf8-9fc5-4d1fe64e0397",
+              "request_body_sha256": "06a0c763818e5e19a4ec7c6349f5bd722b2044a227f8f4e848805f5a46123855",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        }
+      ],
+      "failed_attempts": [
+        {
+          "attempt_id": "f5ba8fdd-daca-4651-bf5a-7944c87ac7d2",
+          "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected"
+        }
+      ],
+      "started_at": "2026-11-01T18:01:22.152161+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:09:25.955290+00:00",
+      "outcome_label": "Mixed · partial progress, unresolved",
+      "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
+      "output_bundle": {
+        "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/sovereign-ai-federation.bundle.json.gz",
+        "sha256_compressed": "8306ba6b2f7df28f13cfaa3737d4b13d4f89cddc8b6ad93fdc530f98e2e975be",
+        "sha256_uncompressed": "05f8497f3c51085a3015a17ac3a7568e007697aaf6747e7699d32f7e6d216af4",
+        "compressed_bytes": 1203453,
+        "uncompressed_bytes": 3322261,
+        "gzip_json_valid": true
+      },
+      "mandatory_source_omitted_count": 0,
+      "wall_clock_seconds": 483.803,
+      "provider_call_attempts": 7,
+      "automatic_retry_attempts": 0,
+      "tokens_used": 134250,
+      "cost_status": "unavailable",
+      "termination_reason_code": "provider_or_strategy_failure"
+    },
+    {
+      "key": "xenopus",
+      "file": "xenopus-tadpoles.bundle.json.gz",
+      "title": "Xenopus Tadpoles v9",
+      "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+      "input_sha256_uncompressed": "371e3baf395ba3d66508df1a64d12f4e914e4823dd19c8ec3a66447565be46bb",
+      "input_path": "frozen_inputs/xenopus.bundle.json.gz",
+      "problem_sha256": "3151e8adfc4d211cb9f740af0ebf65f16ee76fce1f422ba2c21be90bc3925b44",
+      "investigation_type": "biology",
+      "status": "STAGING_INCOMPLETE",
+      "session_status": "failed",
+      "session_id": "44e759ac-38bb-4e8d-8c4c-4850541ad3dd",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "provider_mode": "ChatGPT plan",
+      "api_key_fallback": false,
+      "code_sha": "59687773fc5df0ad658538c38e20396add0276b4",
+      "method_version": "phase2-i2-v2",
+      "method_catalog_version": "methodology-catalog-v1",
+      "method_source_set_sha256": "b8f054176cfcdfc0a15994d3996afe04f8c0c07bc54ee40af61639b812f4ba26",
+      "method_selection_status": "selected",
+      "method_mode": "biology",
+      "method_branch": "animal-regeneration",
+      "method_sources": [
+        {
+          "id": "nasem-scientific-methods",
+          "tier": "general",
+          "title": "NASEM — Scientific Methods and Knowledge, chapter 2",
+          "url": "https://www.nationalacademies.org/read/25303/chapter/5",
+          "branch": null
+        },
+        {
+          "id": "nc3rs-experimental-design",
+          "tier": "discipline",
+          "title": "NC3Rs — Experimental Design",
+          "url": "https://eda.nc3rs.org.uk/experimental-design",
+          "branch": null
+        },
+        {
+          "id": "nc3rs-experimental-unit",
+          "tier": "branch",
+          "title": "NC3Rs — Experimental Unit",
+          "url": "https://eda.nc3rs.org.uk/experimental-design-unit",
+          "branch": "animal-regeneration"
+        }
+      ],
+      "protocol": {
+        "selected_strategies": 2,
+        "rounds": 3,
+        "expected_role_turns": 12,
+        "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
+      },
+      "calls_used": 7,
+      "configured_call_limit": 12,
+      "cycle_limit": 3,
+      "turns_completed": 5,
+      "turns_failed": 2,
+      "turns_never_dispatched": 5,
+      "strategies": [
+        {
+          "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001",
+          "strategy_title": "Establish the known-mechanism frontier",
+          "turns_completed": 3,
+          "turns_failed": 1,
+          "turns_never_dispatched": 2,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "9551797f-1433-447f-9116-c635fef1159f",
+              "request_body_sha256": "25b99002b0da5780abf694f8d79e112ebf93a8fce9c97d5f4bdde4d3454b9a14",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "11f0cab6-c4db-4d4a-abe5-e3eb80724111",
+              "request_body_sha256": "e48508b1eb375bd080e7ecd33c579af14d80c886796e82c528a06ed049cc3fef",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "7c3d8e2b-aa1b-4bd0-9bb5-c81dd4d9dff5",
+              "request_body_sha256": "c472a12c19afef4a07163a7c25eaa0b7149d1e7658e8c38d573db76000af6d13",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "failed",
+              "attempt_id": "5898c421-a6c3-41f5-a480-ad97b2cf23e5",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        },
+        {
+          "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
+          "strategy_title": "Find a novel temporal coupling, not another marker",
+          "turns_completed": 2,
+          "turns_failed": 1,
+          "turns_never_dispatched": 3,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "6bc8183e-1843-4495-988c-9c5cad9ed344",
+              "request_body_sha256": "79d8ba0a6f3110aae7cc371f83a9d7ec6bb2cf0e334f2c04d7a9fd7692e798f5",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "4483eb11-eb73-48ea-b341-9825e3c97b67",
+              "request_body_sha256": "79963c54e91d1957a93c95278c812d49902f8266b4395ed2a0d2768b11ee8536",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "failed",
+              "attempt_id": "b0ee377a-c83c-4687-8a4a-8180252c8a2e",
+              "failure_kind": "provider_error",
+              "provider_error_code": null,
+              "dispatch_status": "call_failed_dispatch_unknown"
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        }
+      ],
+      "failed_attempts": [
+        {
+          "attempt_id": "b0ee377a-c83c-4687-8a4a-8180252c8a2e",
+          "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
+          "role": "investigator",
+          "failure_kind": "provider_error",
+          "provider_error_code": null,
+          "dispatch_status": "call_failed_dispatch_unknown"
+        },
+        {
+          "attempt_id": "5898c421-a6c3-41f5-a480-ad97b2cf23e5",
+          "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected"
+        }
+      ],
+      "started_at": "2026-11-01T18:01:22.173037+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:09:12.103325+00:00",
+      "outcome_label": "Mixed · partial progress, unresolved",
+      "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
+      "output_bundle": {
+        "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/xenopus-tadpoles.bundle.json.gz",
+        "sha256_compressed": "4083599b9f73f7bdab386ddc77443a4cfca8196af69765a3d829aa7b5175d4c6",
+        "sha256_uncompressed": "254be1896eaf774793bb03e47fed48c507e12f0eca9a3d03deffb8cce1a9ef68",
+        "compressed_bytes": 872460,
+        "uncompressed_bytes": 2712639,
+        "gzip_json_valid": true
+      },
+      "mandatory_source_omitted_count": 0,
+      "wall_clock_seconds": 469.93,
+      "provider_call_attempts": 7,
+      "automatic_retry_attempts": 0,
+      "tokens_used": 79881,
+      "cost_status": "unavailable",
+      "termination_reason_code": "provider_or_strategy_failure"
+    },
+    {
+      "key": "math",
+      "file": "nonconsecutive-subset-sums.bundle.json.gz",
+      "title": "Nonconsecutive Subset Sums Modulo 3",
+      "project_id": "7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a",
+      "input_sha256_uncompressed": "1dbba53ff6bee2a095c3b3daabc40cc2b88320687d323df658a88e10dbfed368",
+      "input_path": "frozen_inputs/math.project.json",
+      "problem_sha256": "d72ef1f9904142be654e72c3dbb5e168790e721eff801057b7c458e51d067035",
+      "investigation_type": "mathematical",
+      "status": "STAGING_INCOMPLETE",
+      "session_status": "ended",
+      "session_id": "6ce6a07a-c844-4681-a6ec-ede98aa923ea",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "provider_mode": "ChatGPT plan",
+      "api_key_fallback": false,
+      "code_sha": "59687773fc5df0ad658538c38e20396add0276b4",
+      "method_version": "phase2-i2-v2",
+      "method_catalog_version": "methodology-catalog-v1",
+      "method_source_set_sha256": "47b2921da0d7c075fdb3a1ead31f5814f5187524708fd3e7c85d88fba417ecd7",
+      "method_selection_status": "selected",
+      "method_mode": "mathematical",
+      "method_branch": "combinatorics",
+      "method_sources": [
+        {
+          "id": "nasem-scientific-methods",
+          "tier": "general",
+          "title": "NASEM — Scientific Methods and Knowledge, chapter 2",
+          "url": "https://www.nationalacademies.org/read/25303/chapter/5",
+          "branch": null
+        },
+        {
+          "id": "tao-solving-mathematical-problems",
+          "tier": "discipline",
+          "title": "Terence Tao — Solving Mathematical Problems",
+          "url": "https://terrytao.wordpress.com/career-advice/solving-mathematical-problems/",
+          "branch": null
+        },
+        {
+          "id": "applied-combinatorics",
+          "tier": "branch",
+          "title": "Oscar Levin — Generating Functions (open HTML textbook)",
+          "url": "https://discrete.openmathbooks.org/dmoi4/sec_addtops-genfun.html",
+          "branch": "combinatorics"
+        }
+      ],
+      "protocol": {
+        "selected_strategies": 2,
+        "rounds": 3,
+        "expected_role_turns": 12,
+        "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
+      },
+      "calls_used": 8,
+      "configured_call_limit": 18,
+      "cycle_limit": 3,
+      "turns_completed": 7,
+      "turns_failed": 1,
+      "turns_never_dispatched": 4,
+      "strategies": [
+        {
+          "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
+          "strategy_title": "Roots-of-unity weighted Fibonacci polynomials",
+          "turns_completed": 3,
+          "turns_failed": 1,
+          "turns_never_dispatched": 2,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "7a9db6d1-fc15-4ba5-9462-20eb79ab3e07",
+              "request_body_sha256": "78af9ed362372e6c5b2ba7a1f3944ac7d4418637b160a094cd1edf57969c6dc6",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "843e4082-fd9b-47c9-bc9d-e70dbed5a24b",
+              "request_body_sha256": "5da233f92a8ede80fb670a65ce4e22a15461bac14d65712085d8c0ac1cbfa1ad",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "1afb8373-352e-49e5-90eb-7c696e27ce3c",
+              "request_body_sha256": "fd608530ac35111d377020bdc1930d66a555876908a22d7bed546e8b14a6f3c1",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "failed",
+              "attempt_id": "bcca62a5-cd09-467c-8cf1-e489a6cf9ff2",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        },
+        {
+          "strategy_id": "9ad51640-ff9a-4d22-a928-518f032003bf",
+          "strategy_title": "Gap removal and Gaussian binomial sums",
+          "turns_completed": 4,
+          "turns_failed": 0,
+          "turns_never_dispatched": 2,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "8ebcb10b-506f-43d4-a180-8b996e290d86",
+              "request_body_sha256": "efa35e02b9350d3e2adde056d3700f11bf3a2972aaaad8054d4324c60935de42",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "27cbef6b-b256-452e-bc48-d045fbb6818d",
+              "request_body_sha256": "023c75f4f8e1e9b471e4042675153d0487bf331fd0dda2c5d5114449f02329f5",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "d9af25c9-cf16-4e90-955d-86c015f90b4d",
+              "request_body_sha256": "4a2217cdfaae7cfdce6a09e4c4d62747c23567747b8140c9f1654f653f7a30f1",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "fac0c2e0-6d98-461f-aff1-4eefde5d49af",
+              "request_body_sha256": "ae7b095bcd9bb1015d4610d1ed81756aac34f83e77aa1d9a31acbac74123d965",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        }
+      ],
+      "failed_attempts": [
+        {
+          "attempt_id": "bcca62a5-cd09-467c-8cf1-e489a6cf9ff2",
+          "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected"
+        }
+      ],
+      "started_at": "2026-11-01T18:01:22.184063+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:09:12.372880+00:00",
+      "outcome_label": "Positive · solution candidate (unverified)",
+      "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
+      "output_bundle": {
+        "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/nonconsecutive-subset-sums.bundle.json.gz",
+        "sha256_compressed": "0ea59ef540fe7244c942b2e5f4dea9ef85d291169e5b98fc883f11a9a0fb2250",
+        "sha256_uncompressed": "1e43522fb6ac170d91dfafcd12a7dddda9c56c05cfe662dda33cd1f1ad8de2b7",
+        "compressed_bytes": 179017,
+        "uncompressed_bytes": 496827,
+        "gzip_json_valid": true
+      },
+      "mandatory_source_omitted_count": 0,
+      "wall_clock_seconds": 470.189,
+      "provider_call_attempts": 8,
+      "automatic_retry_attempts": 0,
+      "tokens_used": 107500,
+      "cost_status": "unavailable",
+      "termination_reason_code": "provider_or_strategy_failure"
+    },
+    {
+      "key": "warp",
+      "file": "warp-drive.bundle.json.gz",
+      "title": "Warp Drive Design / Physics",
+      "project_id": "e8211dc4-b70f-49d1-a514-671f44ed7e8c",
+      "input_sha256_uncompressed": "f50007626c9d2dc04f2ea1b5f45a10ec003685db4bf28dac1ae2517c37031164",
+      "input_path": "frozen_inputs/warp.project.json",
+      "problem_sha256": "2c21817948d99c92d596629ddda2c8a6941ea8a610a4647b3c3ae8ed3ce5a08d",
+      "investigation_type": "physics",
+      "status": "STAGING_INCOMPLETE",
+      "session_status": "ended",
+      "session_id": "71bc9990-fab0-4c1a-b03c-1d6daa976a3e",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "provider_mode": "ChatGPT plan",
+      "api_key_fallback": false,
+      "code_sha": "59687773fc5df0ad658538c38e20396add0276b4",
+      "method_version": "phase2-i2-v2",
+      "method_catalog_version": "methodology-catalog-v1",
+      "method_source_set_sha256": "561c0007f1f3cee346aca8ba986362f3109343c61ce58700d2bf2635cd5ef896",
+      "method_selection_status": "selected",
+      "method_mode": "physics",
+      "method_branch": "relativity",
+      "method_sources": [
+        {
+          "id": "nasem-scientific-methods",
+          "tier": "general",
+          "title": "NASEM — Scientific Methods and Knowledge, chapter 2",
+          "url": "https://www.nationalacademies.org/read/25303/chapter/5",
+          "branch": null
+        },
+        {
+          "id": "nasem-physical-models",
+          "tier": "discipline",
+          "title": "NASEM — Assessing Reliability of Complex Models, Summary",
+          "url": "https://www.nationalacademies.org/read/13395/chapter/2",
+          "branch": null
+        },
+        {
+          "id": "tong-einstein-equations",
+          "tier": "branch",
+          "title": "David Tong — General Relativity, §4 Einstein Equations",
+          "url": "https://davidtong.org/teaching/general-relativity/grhtml/S4.html",
+          "branch": "relativity"
+        }
+      ],
+      "protocol": {
+        "selected_strategies": 2,
+        "rounds": 3,
+        "expected_role_turns": 12,
+        "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
+      },
+      "calls_used": 7,
+      "configured_call_limit": 18,
+      "cycle_limit": 3,
+      "turns_completed": 6,
+      "turns_failed": 1,
+      "turns_never_dispatched": 5,
+      "strategies": [
+        {
+          "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
+          "strategy_title": "Separate geometry from motion",
+          "turns_completed": 3,
+          "turns_failed": 1,
+          "turns_never_dispatched": 2,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "0d1a6696-52ea-4191-82bb-300f746d18b6",
+              "request_body_sha256": "1137ed06612d377840858c9afbb50d1719a8f0ab949a4dd40d0c51a047ce6e9f",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "3f508098-978f-429e-86cb-4989af6126d8",
+              "request_body_sha256": "911023f732c9f545b7a495f718cd53060185b19b3dab8c74d9dffc72a53783a8",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "010385cf-2c4d-4f12-a086-17a6b37bec23",
+              "request_body_sha256": "6c580f3568dd42e1a33216a1411255cb48d3d5c3ef9f4fe6120bc2e55ba30c0a",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "failed",
+              "attempt_id": "38c6496d-f4c5-451b-a813-004cccb10327",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        },
+        {
+          "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
+          "strategy_title": "Audit the stress-energy claim",
+          "turns_completed": 3,
+          "turns_failed": 0,
+          "turns_never_dispatched": 3,
+          "turns": [
+            {
+              "round": 1,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "8761ec5e-c6d6-4690-8e99-5c2f38e99d28",
+              "request_body_sha256": "574e576557fa379dbc42b756509e65f3722d936548a744e838e68e3bfa762df4",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 1,
+              "role": "skeptic",
+              "status": "completed",
+              "attempt_id": "23641e13-baf1-42c2-b0f5-154125f3472e",
+              "request_body_sha256": "e28b1e9ea32edbd0e8538c9079d886ba3bc0ddd9d9ce9892d791e779890b46a7",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "investigator",
+              "status": "completed",
+              "attempt_id": "297b8995-dbc2-4387-bcbe-a036e98b22db",
+              "request_body_sha256": "74930759cb346dc4dfa8d54166f1139b5ffab9c1482f6c14156ecc25bc5903b7",
+              "all_selected_method_notes_present": true
+            },
+            {
+              "round": 2,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "investigator",
+              "status": "never_dispatched"
+            },
+            {
+              "round": 3,
+              "role": "skeptic",
+              "status": "never_dispatched"
+            }
+          ]
+        }
+      ],
+      "failed_attempts": [
+        {
+          "attempt_id": "38c6496d-f4c5-451b-a813-004cccb10327",
+          "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected"
+        }
+      ],
+      "started_at": "2026-11-01T18:01:22.186239+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:10:27.232374+00:00",
+      "outcome_label": "Mixed · partial progress, unresolved",
+      "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
+      "output_bundle": {
+        "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/warp-drive.bundle.json.gz",
+        "sha256_compressed": "e4aef10f97074ab23d7dbc92eddd5ee8a9b05b14f01b427d30644cc09e6d6b35",
+        "sha256_uncompressed": "7aa67ae66ffa3fa46989a714ad556f59fe8ad456c2524eb0c28a9de146d70d19",
+        "compressed_bytes": 239429,
+        "uncompressed_bytes": 640669,
+        "gzip_json_valid": true
+      },
+      "mandatory_source_omitted_count": 0,
+      "wall_clock_seconds": 545.046,
+      "provider_call_attempts": 7,
+      "automatic_retry_attempts": 0,
+      "tokens_used": 128816,
+      "cost_status": "unavailable",
+      "termination_reason_code": "provider_or_strategy_failure"
+    }
+  ],
+  "release_gate": "Never READY until all five sessions have 12 completed role turns including each final Skeptic, exports pass full validation, and Chat 2 independently approves scientific review.",
+  "validation": {
+    "all_five_gzip_bundles_decompress_and_parse": true,
+    "compressed_and_uncompressed_hashes_verified": true,
+    "all_five_imported_into_disposable_isolated_workspaces": true,
+    "all_project_ids_match_pinned_identities": true,
+    "completed_turn_request_hashes_and_method_notes_rechecked": true,
+    "mandatory_context_source_omissions": 0,
+    "scientific_review_complete": false,
+    "ready_gate_passed": false
+  },
+  "execution_timing": {
+    "parallel_launch_start_utc": "2026-11-01T18:01:22.082967+00:00",
+    "last_attempt_finished_utc": "2026-11-01T18:10:38.076166+00:00",
+    "combined_wall_clock_seconds": 555.993,
+    "per_project_wall_clock_seconds": {
+      "agent": 555.993,
+      "sovereign": 483.803,
+      "xenopus": 469.93,
+      "math": 470.189,
+      "warp": 545.046
+    }
+  },
+  "provider_accounting": {
+    "provider_call_attempts": 39,
+    "completed_provider_responses": 32,
+    "confirmed_provider_limit_rejections": 6,
+    "dispatch_unknown_attempts": 1,
+    "automatic_retries": 0,
+    "monetary_api_spend": 0,
+    "chatgpt_plan_usage_consumed": true,
+    "plan_usage_units_unavailable": true,
+    "tokens_reported_across_sessions": 627915
+  }
+}
