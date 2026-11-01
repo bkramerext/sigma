@@ -800,7 +800,7 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
         raise ProjectError("Maximum concurrent sessions must be between 1 and 4")
     result["max_concurrent_sessions"] = concurrency
     bounds = {
-        "research_rounds": (1, 5),
+        "research_rounds": (1, 9),
         "model_calls": (2, 120),
         "output_tokens_per_call": (256, 20000),
     }
