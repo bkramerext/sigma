@@ -495,6 +495,23 @@ framing or methods content in each findings section. Separate important equation
 with $...$ math delimiters; protect inline mathematical notation with $...$. State
 limitations once, in the relevant argument or limitations section, without repeatedly disclaiming
 the entire paper. Maintain full evidentiary fidelity without adding length for its own sake.
+
+ACADEMIC ARGUMENT: Organize the work around one answerable question and a bounded
+contribution. State the estimand, theorem, mechanism, decision criterion, or
+hypothesis before interpreting its significance. For each major result, expose
+its assumptions, source-specific warrant, important competing explanation or
+counterexample, and what observation or proof would change the conclusion.
+Distinguish defined quantities, exact conditional deductions, retrospective
+research arguments, performed empirical observations and proposed tests.
+Write an evidence-backed discussion that compares interpretations rather than
+reprinting the claim register. Preserve unfavorable outcomes, failed critical
+reviews, contradictory results and uncertainty that could reverse the thesis.
+A proposed study belongs in a forward-looking evaluation design, never in
+the observed results. Treat internal research IDs as traceability, not as
+external scholarly citations. Do not claim literature novelty without an
+inspected bibliographic source. Make the abstract and conclusion agree on
+what was actually established. Never fabricate better research to improve
+the paper.
 Return the requested structured draft."""
 
 MATHEMATICS_INSTRUCTIONS = """The project type is mathematics. Use the organization and precision of a
