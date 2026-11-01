@@ -399,7 +399,18 @@ def _connect() -> sqlite3.Connection:
             db.execute("ALTER TABLE jobs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'research'")
         call_columns = {row["name"] for row in db.execute("PRAGMA table_info(calls)")}
         if "maximum_liability_usd" not in call_columns:
-            db.execute("ALTER TABLE calls ADD COLUMN maximum_liability_usd REAL NOT NULL DEFAULT 0")
+            # Serialize the one-time migration across backend processes.
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                columns = {row["name"] for row in db.execute("PRAGMA table_info(calls)")}
+                if "maximum_liability_usd" not in columns:
+                    db.execute(
+                        "ALTER TABLE calls ADD COLUMN maximum_liability_usd REAL NOT NULL DEFAULT 0"
+                    )
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
         os.chmod(path, 0o600)
         return db
     except (OSError, sqlite3.Error) as exc:
