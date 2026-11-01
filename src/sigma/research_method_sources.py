@@ -178,11 +178,20 @@ def _usable(row: Mapping[str, Any]) -> bool:
     )
 
 
-def _branch(mode: str, text: str) -> str | None:
-    for kind, specialty, expression in BRANCH_PATTERNS:
-        if kind == mode and expression.search(text):
-            return specialty
-    return None
+def _branch(mode: str, title: str, text: str) -> str | None:
+    """Prefer the project's declared topic over incidental method keywords."""
+    ranked: list[tuple[int, int, str]] = []
+    for order, (kind, specialty, expression) in enumerate(BRANCH_PATTERNS):
+        if kind != mode:
+            continue
+        # Count distinct topical evidence, heavily weighting project title.
+        # E.g. an AI agent reliability study mentioning a gateway as an
+        # implementation detail must not become a federation methods study.
+        title_hits = len({m.group().casefold() for m in expression.finditer(title)})
+        context_hits = len({m.group().casefold() for m in expression.finditer(text)})
+        if title_hits or context_hits:
+            ranked.append((12 * title_hits + context_hits, -order, specialty))
+    return max(ranked)[2] if ranked else None
 
 
 def _source(row: Mapping[str, str]) -> dict[str, str]:
@@ -231,8 +240,8 @@ def select_method_sources(
     """
     if not isinstance(mode, str):
         mode = "default"
-    search_text = " ".join([title, problem, *list(strategies)])[:40_000]
-    branch = _branch(mode, search_text)
+    search_text = " ".join([problem, *list(strategies)])[:40_000]
+    branch = _branch(mode, title, search_text)
     prior = sorted(
         (s for s in prior_sessions if isinstance(s, Mapping)),
         key=lambda s: (str(s.get("created_at") or ""), str(s.get("id") or "")),
