@@ -4663,8 +4663,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton}/>
   </div>;
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView} projectActions={projectActionBar}>
+    {!guest && <div className="project-types-pane-control"><button type="button" className="about-action project-types-action" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button></div>}
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      {!guest && <div className="project-types-pane-control"><button type="button" className="about-action project-types-action" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button></div>}
       <header className="workspace-pane-heading project-pane-heading">
         <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
           <button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}>
