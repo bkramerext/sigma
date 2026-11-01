@@ -133,6 +133,7 @@ def exercise(ui_url: str, root: Path) -> None:
         failures: list[str] = []
         opened_projects: list[dict] = []
         recent_responses: list[str] = []
+        api_failures: list[str] = []
         paper_requests: list[str] = []
         mutation_requests: list[str] = []
         research_dispatch_requests: list[str] = []
@@ -143,6 +144,14 @@ def exercise(ui_url: str, root: Path) -> None:
             lambda response: (
                 recent_responses.append(response.url)
                 if response.url.endswith("/api/projects/recent")
+                else None
+            ),
+        )
+        page.on(
+            "response",
+            lambda response: (
+                api_failures.append(f"{response.status} {response.url}")
+                if "/api/" in response.url and response.status >= 400
                 else None
             ),
         )
@@ -245,7 +254,10 @@ def exercise(ui_url: str, root: Path) -> None:
         )
         sample_group.evaluate("element => { element.open = true; }")
         expect(sample_group.locator("button.sample-open")).to_be_visible()
-        expect(page.get_by_text("Authentication required.")).to_have_count(0)
+        if page.get_by_text("Authentication required.").count():
+            raise AssertionError(
+                f"unexpected authentication failure; API responses: {api_failures}"
+            )
 
         page.get_by_role("button", name="About SIGMA", exact=True).click()
         expect(page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
@@ -277,11 +289,10 @@ def exercise(ui_url: str, root: Path) -> None:
         # Guests have not selected a verified Google account, so they cannot
         # request an invitation yet. The two pills must never appear together.
         expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
-        expect(
-            page.locator(
-                "header .header-controls button:visible, header .header-controls a:visible"
-            )
-        ).to_have_count(5)
+        controls = page.locator(
+            "header .header-controls button:visible, header .header-controls a:visible"
+        )
+        expect(controls).to_have_count(5)
         papers_before_dialog = len(paper_requests)
         page.get_by_role("button", name="LaTeX research paper").click()
         tex_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")

@@ -1,38 +1,35 @@
-"""Unified project type catalog, isolation, validation and image service boundaries."""
+"""Unified project type catalog, transactional persistence and session safeguards."""
 
-import asyncio
-import base64
-import io
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
-from PIL import Image
 
-from sigma import project_type_icons, project_types, research_sessions
+from sigma import project_types, research_sessions
 from sigma.api import app
-from sigma.projects import ProjectError, create_project, create_strategy, inspect_project
+from sigma.projects import (
+    ProjectError,
+    create_project,
+    create_strategy,
+    initialize_project,
+    inspect_project,
+)
 
 
 def main() -> None:
     builtins = project_types.builtin_types()
     ids = {item.id for item in builtins}
     assert len(ids) == 12 and "other" not in ids and "literature" in ids
-    assert next(item for item in builtins if item.id == "literature").icon["key"] == "literature"
+    literature = next(item for item in builtins if item.id == "literature")
+    assert literature.icon["key"] == "literature"
     assert [item.id for item in builtins if (item.behavior or {}).get("lean")] == ["mathematical"]
 
-    png = io.BytesIO()
-    Image.new("RGBA", (128, 128), (214, 163, 111, 255)).save(png, format="PNG")
-    icon = {
-        "kind": "data",
-        "data_uri": "data:image/png;base64," + base64.b64encode(png.getvalue()).decode(),
-    }
     with TemporaryDirectory() as directory:
-        root = Path(directory)
+        root = Path(directory).resolve()
         first = root / "first"
         second = root / "second"
         first.mkdir()
@@ -42,7 +39,7 @@ def main() -> None:
                 {
                     "name": "Field Notes",
                     "scope": "Field research",
-                    "icon": icon,
+                    "icon": _placeholder(),
                     "description": "Saved locally",
                     "based_on": "literature",
                     "research_standards_references": [],
@@ -50,34 +47,29 @@ def main() -> None:
                 }
             )
             assert created.user_defined and created.origin == "literature"
-            stored = project_types._store_path()
-            assert stored.stat().st_mode & 0o777 == 0o600
+            assert project_types._store_path().stat().st_mode & 0o777 == 0o600
             assert project_types.get_type(created.id) == created
-            try:
-                project_types.save_type({"name": "field notes", "scope": "duplicate", "icon": icon})
-            except ProjectError:
-                pass
-            else:
-                raise AssertionError("case-insensitive duplicate name accepted")
-            try:
-                project_types.save_type(
-                    {
-                        "name": "Bad URL",
-                        "scope": "Research",
-                        "icon": icon,
-                        "research_standards_references": ["javascript:alert(1)"],
-                    }
-                )
-            except ProjectError:
-                pass
-            else:
-                raise AssertionError("unsafe reference URL accepted")
-            snapshot = created.record()
-            assert project_types.safe_project_snapshot(snapshot)
-            normalized = project_types.normalize_project_snapshot(snapshot, created.id)
-            assert normalized is not None and normalized["name"] == "Field Notes"
-            project_types.remove_type(created.id)
-            assert project_types.get_type(created.id) is None
+            assert project_types.safe_project_snapshot(created.record())
+            normalized_snapshot = project_types.normalize_project_snapshot(
+                created.record(), created.id
+            )
+            assert normalized_snapshot is not None
+            assert normalized_snapshot["name"] == "Field Notes"
+            for invalid in (
+                {"name": "field notes", "scope": "duplicate", "icon": _placeholder()},
+                {
+                    "name": "Bad URL",
+                    "scope": "Research",
+                    "icon": _placeholder(),
+                    "research_standards_references": ["javascript:alert(1)"],
+                },
+            ):
+                try:
+                    project_types.save_type(invalid)
+                except ProjectError:
+                    pass
+                else:
+                    raise AssertionError("invalid custom project type was accepted")
         with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(second)}):
             assert project_types.custom_types() == []
 
@@ -86,109 +78,202 @@ def main() -> None:
         with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root)}), TestClient(app) as client:
             catalog = client.get("/api/project-types")
             assert catalog.status_code == 200
-            custom_record = {
-                "id": "browser-test-literature-derived",
-                "name": "Independent Literature",
-                "scope": "Independent literary study",
-                "description": "Copied from a built-in type once.",
-                "based_on": "literature",
-                "origin": "literature",
-                "user_defined": True,
-                "icon": next(
-                    item for item in catalog.json()["project_types"] if item["id"] == "literature"
-                )["icon"],
-                "research_standards_references": [],
-                "publication_standards_references": [],
-                "behavior": {},
-            }
+            revision = catalog.json()["revision"]
+            placeholder = _placeholder()
+            parent = _record("draft-parent", "Draft parent", "Copied scope", placeholder)
+            child = _record(
+                "draft-child",
+                "Derived child",
+                "Independent copied scope",
+                placeholder,
+                "draft-parent",
+            )
             saved = client.put(
                 "/api/project-types",
                 json={
-                    "project_types": [custom_record],
-                    "expected_revision": catalog.json()["revision"],
+                    "project_types": [parent, child],
+                    "expected_revision": revision,
                 },
             )
             assert saved.status_code == 200, saved.text
-            project = create_project(
-                "Deleted type fixture", "Retain the saved project context", custom_record["id"]
+            assert len(saved.json()["project_types"]) == 2
+
+            # Cross-draft based_on is a provenance hint only: the saved fields are independent.
+            child_saved = next(
+                item for item in saved.json()["project_types"] if item["id"] == "draft-child"
             )
-            strategy = create_strategy(
-                project.path, "Read", "Inspect the saved sources."
-            ).project.strategies[0]
-            usage = client.get(f"/api/project-types/{custom_record['id']}/usage")
-            assert usage.json()["project_count"] == 1
-            deleted = client.request(
-                "DELETE",
-                f"/api/project-types/{custom_record['id']}",
+            assert child_saved["based_on"] == "draft-parent"
+            assert child_saved["scope"] == "Independent copied scope"
+            parent["scope"] = "Parent later changed"
+            edited = client.put(
+                "/api/project-types",
                 json={
-                    "confirm": True,
-                    "expected_project_count": 1,
+                    "project_types": [parent, child_saved],
                     "expected_revision": saved.json()["revision"],
                 },
             )
+            assert edited.status_code == 200, edited.text
+            assert (
+                next(
+                    item for item in edited.json()["project_types"] if item["id"] == "draft-child"
+                )["scope"]
+                == "Independent copied scope"
+            )
+
+            # Stale catalog revisions reject the whole Save, including staged removals.
+            stale = client.get("/api/project-types").json()
+            other = _record("concurrent", "Concurrent", "Concurrent edit", placeholder)
+            changed = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [parent, child_saved, other],
+                    "expected_revision": stale["revision"],
+                },
+            )
+            assert changed.status_code == 200, changed.text
+            conflict = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [child_saved],
+                    "expected_revision": stale["revision"],
+                    "confirmed_removals": {"draft-parent": 0},
+                },
+            )
+            assert (
+                conflict.status_code == 400 and project_types.get_type("draft-parent") is not None
+            )
+
+            # A change in project usage after confirmation also rejects the atomic Save.
+            child_project = create_project(
+                "Saved child", "Retain its copied context", "draft-child"
+            )
+            child_usage = client.get("/api/project-types/draft-child/usage").json()["project_count"]
+            assert child_usage == 1
+            stale_usage = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [parent, other],
+                    "expected_revision": changed.json()["revision"],
+                    "confirmed_removals": {"draft-child": 0},
+                },
+            )
+            assert (
+                stale_usage.status_code == 400 and project_types.get_type("draft-child") is not None
+            )
+
+            # Deleting the original leaves the derived type intact, including after edit/reopen.
+            remove_parent = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [child_saved, other],
+                    "expected_revision": changed.json()["revision"],
+                    "confirmed_removals": {"draft-parent": 0},
+                },
+            )
+            assert remove_parent.status_code == 200, remove_parent.text
+            assert project_types.get_type("draft-parent") is None
+            retained_child = project_types.get_type("draft-child")
+            assert retained_child is not None and retained_child.based_on == "draft-parent"
+            assert retained_child.scope == "Independent copied scope"
+            reopen = client.get("/api/project-types").json()
+            edit_after_origin_delete = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [retained_child.record(), other],
+                    "expected_revision": reopen["revision"],
+                },
+            )
+            assert edit_after_origin_delete.status_code == 200, edit_after_origin_delete.text
+
+            # Delete with confirmed usage, preserve project identity/snapshot, then explicitly continue.
+            usage = client.get("/api/project-types/draft-child/usage").json()["project_count"]
+            assert usage == 1
+            latest = client.get("/api/project-types").json()
+            deleted = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [other],
+                    "expected_revision": latest["revision"],
+                    "confirmed_removals": {"draft-child": usage},
+                },
+            )
             assert deleted.status_code == 200, deleted.text
-            persisted = inspect_project(project.path).project
-            assert persisted.investigation_type == custom_record["id"]
+            persisted = inspect_project(child_project.path).project
+            assert persisted.investigation_type == "draft-child"
             assert persisted.project_type_snapshot is not None
-            assert persisted.project_type_snapshot["scope"] == custom_record["scope"]
+            assert persisted.project_type_snapshot["scope"] == "Independent copied scope"
+            strategy = create_strategy(
+                child_project.path, "Read", "Inspect saved sources."
+            ).project.strategies[0]
             try:
-                research_sessions.mock_session(project.path, strategy.id, str(uuid4()), "completed")
+                research_sessions.mock_session(
+                    child_project.path, strategy.id, str(uuid4()), "completed"
+                )
             except ProjectError as exc:
                 assert "unavailable" in str(exc)
             else:
-                raise AssertionError("deleted custom type silently started a session")
+                raise AssertionError("deleted project type silently started a session")
             session = research_sessions.mock_session(
-                project.path, strategy.id, str(uuid4()), "completed", True
+                child_project.path, strategy.id, str(uuid4()), "completed", True
             )
-            assert session["project_type_snapshot"] is not None
-            assert session["project_type_snapshot"]["name"] == custom_record["name"]
             assert session["use_saved_project_type_settings"] is True
+            assert session["project_type_snapshot"]["name"] == "Derived child"
             assert research_sessions._saved_project_type_context(session) == {
-                "name": custom_record["name"],
-                "scope": custom_record["scope"],
-                "description": custom_record["description"],
+                "name": "Derived child",
+                "scope": "Independent copied scope",
+                "description": "",
                 "behavior": {},
             }
 
-    async def generation_check() -> None:
-        with patch.dict(os.environ, {"SIGMA_PROJECT_TYPE_IMAGE_GENERATION_ENABLED": ""}):
+            # Old default projects without a snapshot remain readable but cannot start silently.
+            legacy = initialize_project(
+                root / "legacy-default.sigma", "Legacy default", "Old saved work"
+            )
+            legacy_strategy = create_strategy(
+                legacy.path, "Legacy", "Keep old work safe."
+            ).project.strategies[0]
+            assert inspect_project(legacy.path).project.project_type_snapshot is None
             try:
-                await project_type_icons.generate("x", "y", "z")
+                research_sessions.mock_session(
+                    legacy.path, legacy_strategy.id, str(uuid4()), "completed", True
+                )
             except ProjectError as exc:
-                assert "disabled" in str(exc)
+                assert "safe saved settings" in str(exc)
             else:
-                raise AssertionError("image endpoint must be disabled by default")
-        with (
-            patch.dict(os.environ, {"SIGMA_PROJECT_TYPE_IMAGE_GENERATION_ENABLED": "1"}),
-            patch.object(
-                project_type_icons.openai_connection,
-                "auth_context",
-                new=AsyncMock(
-                    return_value={"status": "connected", "mode": "api_key", "token": "test-only"}
-                ),
-            ),
-            patch.object(project_type_icons.httpx.AsyncClient, "post", new=AsyncMock()) as post,
-        ):
-            response = type(
-                "Response", (), {"content": b"{}", "is_success": False, "status_code": 503}
-            )()
-            post.return_value = response
-            try:
-                await project_type_icons.generate("x", "y", "z")
-            except ProjectError as exc:
-                assert "unchanged" in str(exc)
-            else:
-                raise AssertionError("provider error must retain prior icon")
-            post.assert_awaited_once()
-            assert post.await_args is not None
-            payload = post.await_args.kwargs["json"]
-            assert payload["images"][0]["image_url"].startswith("data:image/png;base64,")
-            assert payload["model"] == "gpt-image-2.5-sunburst"
+                raise AssertionError(
+                    "legacy default without snapshot bypassed the missing-type safeguard"
+                )
 
-    asyncio.run(generation_check())
+            # The image service is intentionally absent from this PR; a fresh account needs no setup.
+            assert (
+                client.post("/api/project-types/icon", json={"name": "x", "scope": "y"}).status_code
+                == 405
+            )
     print(
-        "PASS canonical types, API persistence/isolation, delete snapshot/start gate, validation and mocked image provider boundary"
+        "PASS catalog, placeholder creation without AI, owner isolation, draft bases, transactional removal, snapshots, legacy safeguard and explicit session continuation"
     )
+
+
+def _placeholder() -> dict[str, object]:
+    return project_types.placeholder_icon()
+
+
+def _record(
+    identifier: str, name: str, scope: str, icon: dict[str, object], based_on: str | None = None
+) -> dict[str, object]:
+    return {
+        "id": identifier,
+        "name": name,
+        "scope": scope,
+        "description": "",
+        "based_on": based_on,
+        "origin": based_on,
+        "user_defined": True,
+        "icon": icon,
+        "research_standards_references": [],
+        "publication_standards_references": [],
+        "behavior": {},
+    }
 
 
 if __name__ == "__main__":

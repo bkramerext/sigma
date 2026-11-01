@@ -61,7 +61,7 @@ def main() -> None:
             welcome = page.locator("#invitation-welcome-dialog")
             if welcome.count() and welcome.is_visible():
                 welcome.get_by_role("button", name="Let's get started").click()
-            opener = page.get_by_role("button", name="About")
+            opener = page.get_by_role("button", name="About SIGMA")
             opener.click()
             dialog = page.get_by_role("dialog", name="About SIGMA")
             expect(dialog).to_be_visible()
@@ -136,7 +136,7 @@ def main() -> None:
             if has_feedback_section:
                 expect(feedback).to_have_attribute("open", "")
             page.reload()
-            opener = page.get_by_role("button", name="About")
+            opener = page.get_by_role("button", name="About SIGMA")
             opener.click()
             dialog = page.get_by_role("dialog", name="About SIGMA")
             expect(dialog.locator('[data-about-section="workflow"]')).not_to_have_attribute(
@@ -189,7 +189,7 @@ def main() -> None:
                 "localStorage.setItem('sigma.aboutDisclosureState.v1', JSON.stringify({retired: true, workflow: 'open', features: 'closed'}))"
             )
             page.reload()
-            page.get_by_role("button", name="About").click()
+            page.get_by_role("button", name="About SIGMA").click()
             fallback = page.get_by_role("dialog", name="About SIGMA")
             expect(fallback.locator('[data-about-section="workflow"]')).to_have_attribute(
                 "open", ""

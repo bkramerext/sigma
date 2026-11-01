@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import './project-types.css';
 
 export type ProjectTypeRecord = {
@@ -17,24 +16,41 @@ export type ProjectTypeRecord = {
 };
 
 type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode };
-const blank = (): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', description: '', user_defined: true, icon: { kind: 'pending' }, research_standards_references: [], publication_standards_references: [] });
+const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', description: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
 
 export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const first = useRef<HTMLButtonElement>(null);
+  const initialCustomIds = useRef<string[]>([]);
+  const returnFocus = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
   const [drafts, setDrafts] = useState<ProjectTypeRecord[]>([]);
+  const [placeholderIcon, setPlaceholderIcon] = useState<ProjectTypeRecord['icon'] | null>(null);
   const [showBuiltins, setShowBuiltins] = useState(true);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState('');
-  const [generating, setGenerating] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(null);
 
+  function close() {
+    if (dialog.current?.open) dialog.current.close();
+    onClose();
+    requestAnimationFrame(() => { if (returnFocus.current?.isConnected) returnFocus.current.focus(); });
+  }
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    if (!element.open) element.showModal();
+    first.current?.focus();
+  }, []);
   async function load() {
     const response = await fetch('/api/project-types', { cache: 'no-store' });
     if (!response.ok) throw new Error('Project types could not be loaded.');
-    const data = await response.json() as { project_types: ProjectTypeRecord[]; revision: string };
+    const data = await response.json() as { project_types: ProjectTypeRecord[]; icons: { placeholder: ProjectTypeRecord['icon'] }; revision: string };
     setBuiltins(data.project_types.filter(item => !item.user_defined));
     setDrafts(data.project_types.filter(item => item.user_defined));
+    setPlaceholderIcon(data.icons.placeholder);
+    initialCustomIds.current = data.project_types.filter(item => item.user_defined).map(item => item.id);
     setRevision(data.revision);
   }
   useEffect(() => { void load().catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); }, []);
@@ -44,7 +60,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     setDrafts(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
   }
   function add() {
-    const item = blank();
+    if (!placeholderIcon) return;
+    const item = blank(placeholderIcon);
     setDrafts(previous => [...previous, item]);
     setOpen(item.id);
   }
@@ -56,47 +73,30 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   async function save() {
     setBusy(true); setError('');
     try {
-      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_types: drafts, expected_revision: revision }) });
+      const removed = initialCustomIds.current.filter(id => !drafts.some(draft => draft.id === id));
+      const confirmedRemovals: Record<string, number> = {};
+      for (const id of removed) {
+        const item = drafts.find(candidate => candidate.id === id);
+        const usageResponse = await fetch(`/api/project-types/${encodeURIComponent(id)}/usage`, { cache: 'no-store' });
+        const usage = await usageResponse.json() as { project_count: number };
+        if (!usageResponse.ok) throw new Error('Could not check which projects use a removed type.');
+        confirmedRemovals[id] = usage.project_count;
+        if (usage.project_count && !window.confirm(`Remove “${item?.name ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} will keep their saved type settings and show a missing-type warning.`)) return;
+      }
+      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_types: drafts, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved.');
+      if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved. Reload and review any changed types or project usage.');
       await load();
       window.dispatchEvent(new Event('sigma-project-types-updated'));
-      onClose();
+      close();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
-  }
-  async function remove(item: ProjectTypeRecord) {
-    setBusy(true); setError('');
-    try {
-      const usageResponse = await fetch(`/api/project-types/${encodeURIComponent(item.id)}/usage`);
-      const { project_count: count } = await usageResponse.json() as { project_count: number };
-      const confirmed = window.confirm(count ? `Remove “${item.name}”? ${count} project${count === 1 ? '' : 's'} will keep their saved type settings and show a missing-type warning.` : `Remove “${item.name}”?`);
-      if (!confirmed) return;
-      const response = await fetch(`/api/project-types/${encodeURIComponent(item.id)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true, expected_project_count: count, expected_revision: revision }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail ?? 'Type could not be removed.');
-      await load();
-      window.dispatchEvent(new Event('sigma-project-types-updated'));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setBusy(false); }
-  }
-  async function createIcon(item: ProjectTypeRecord) {
-    if (!item.name.trim() || !item.scope.trim()) return;
-    if (!window.confirm('Generate this icon with OpenAI image generation? This uses the currently selected API-key billing mode and may incur separate API charges.')) return;
-    setGenerating(item.id); setError('');
-    try {
-      const response = await fetch('/api/project-types/icon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: item.name, scope: item.scope, description: item.description }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail ?? 'Icon generation failed. Your current icon was kept.');
-      edit(item.id, { icon: data.icon });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setGenerating(null); }
   }
   const listEditor = (item: ProjectTypeRecord, field: 'research_standards_references' | 'publication_standards_references', readonly: boolean) => {
     const urls = item[field];
     const setAt = (index: number, value: string) => edit(item.id, { [field]: urls.map((url, i) => i === index ? value : url) });
     return <table className="pt-reference-table"><colgroup><col/><col/></colgroup><thead><tr><th>URL</th><th>Action</th></tr></thead><tbody>
-      {urls.map((url, index) => <tr key={`${index}:${url}`}><td>{readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <input aria-label={`${field === 'research_standards_references' ? 'Research' : 'Publication'} reference URL ${index + 1}`} type="url" value={url} onChange={event => setAt(index, event.target.value)}/>}</td><td>{!readonly && <button type="button" onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>}</td></tr>)}
+      {urls.map((url, index) => <tr key={index}><td>{readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <input aria-label={`${field === 'research_standards_references' ? 'Research' : 'Publication'} reference URL ${index + 1}`} type="url" value={url} onChange={event => setAt(index, event.target.value)}/>}</td><td>{!readonly && <button type="button" onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>}</td></tr>)}
       {!readonly && <tr><td><input aria-label={`New ${field === 'research_standards_references' ? 'research' : 'publication'} reference URL`} type="url" placeholder="https://" value="" readOnly/></td><td><button type="button" onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td></tr>}
     </tbody></table>;
   };
@@ -107,20 +107,31 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       <label>Description<textarea value={item.description} disabled={readonly} onChange={event => edit(item.id, { description: event.target.value })}/></label>
       {!readonly && <label>Based on<select value={item.based_on ?? ''} onChange={event => event.target.value ? basedOn(item.id, event.target.value) : edit(item.id, { based_on: null })}><option value="">None</option>{[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)].map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>}
-      <section><h3>Icon</h3><div className="project-type-icon-edit"><span>{renderIcon(item)}</span>{!readonly && <><button type="button" disabled={!item.name.trim() || !item.scope.trim() || generating !== null} onClick={() => void createIcon(item)}>{generating === item.id ? 'Creating icon…' : item.icon.kind === 'data' ? 'Recreate icon' : 'Create icon'}</button>{item.icon.kind !== 'data' && <small>Generate an icon from the name and scope to enable Save.</small>}</>}</div></section>
+      {!readonly && <label>Icon<select aria-label={`Icon for ${item.name || 'new project type'}`} value={item.icon.kind === 'builtin' ? item.icon.key ?? 'placeholder' : ''} onChange={event => { const choice = event.target.value; const source = builtins.find(candidate => candidate.id === choice); edit(item.id, { icon: source ? structuredClone(source.icon) : structuredClone(placeholderIcon ?? item.icon) }); }}><option value="placeholder">Temporary SIGMA placeholder</option>{sortedBuiltins.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select><span className="project-type-icon-edit">{renderIcon(item)}<small>This icon can be replaced later.</small></span></label>}
       <section><h3>Research standards references</h3>{listEditor(item, 'research_standards_references', readonly)}</section>
       <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>
-      {!readonly && <div className="project-type-card-actions"><button type="button" disabled={busy} onClick={() => void remove(item)}>Remove</button></div>}
+      {!readonly && <div className="project-type-card-actions"><button type="button" disabled={busy} onClick={() => setDrafts(previous => previous.filter(candidate => candidate.id !== item.id))}>Remove</button></div>}
     </div>
   </details>;
-  return createPortal(<div className="project-types-scrim" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section className="project-types-dialog" role="dialog" aria-modal="true" aria-labelledby="project-types-title">
-      <header><h2 id="project-types-title">Project Types</h2><div><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button type="button" disabled={busy || drafts.some(item => !item.name.trim() || !item.scope.trim() || item.icon.kind !== 'data' && item.icon.kind !== 'builtin') || drafts.some(item => !item.research_standards_references.every(Boolean) || !item.publication_standards_references.every(Boolean))} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button></div></header>
-      <div className="project-types-body"><label className="project-types-checkbox"><input type="checkbox" checked={showBuiltins} onChange={event => setShowBuiltins(event.target.checked)}/>Show built-in project types</label>
-        {showBuiltins && <section><h3>Built-in project types</h3>{sortedBuiltins.map(item => card(item, true))}</section>}
-        <section><h3>User-defined project types</h3>{sortedDrafts.map(item => card(item, false))}<button type="button" className="project-types-add" disabled={busy} onClick={add}>Add project type</button></section>
-        {error && <p role="alert">{error}</p>}
-      </div>
-    </section>
-  </div>, document.body);
+  const invalidDraft = drafts.some(item => !item.name.trim() || !item.scope.trim() || item.icon.kind !== 'data' && item.icon.kind !== 'builtin' || !item.research_standards_references.every(Boolean) || !item.publication_standards_references.every(Boolean));
+  return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); if (!busy) close(); }} onClick={event => { if (event.target === dialog.current && !busy) close(); }} onKeyDownCapture={event => {
+    if (event.key !== 'Tab') return;
+    const element = dialog.current;
+    if (!element) return;
+    const focusable = Array.from(element.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], summary, [tabindex]:not([tabindex="-1"])')).filter(candidate => candidate.getClientRects().length > 0);
+    if (!focusable.length) { event.preventDefault(); element.focus(); return; }
+    const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
+    const nextIndex = event.shiftKey
+      ? activeIndex <= 0 ? focusable.length - 1 : activeIndex - 1
+      : activeIndex < 0 || activeIndex === focusable.length - 1 ? 0 : activeIndex + 1;
+    event.preventDefault();
+    focusable[nextIndex].focus();
+  }}>
+    <header><h2 id="project-types-title">Project Types</h2><div><button ref={first} type="button" disabled={busy} onClick={close}>Cancel</button><button type="button" disabled={busy || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button></div></header>
+    <div className="project-types-body"><label className="project-types-checkbox"><input type="checkbox" checked={showBuiltins} onChange={event => setShowBuiltins(event.target.checked)}/>Show built-in project types</label>
+      {showBuiltins && <section><h3>Built-in project types</h3>{sortedBuiltins.map(item => card(item, true))}</section>}
+      <section><h3>User-defined project types</h3>{sortedDrafts.map(item => card(item, false))}<button type="button" className="project-types-add" disabled={busy || !placeholderIcon} onClick={add}>Add project type</button></section>
+      {error && <p role="alert">{error}</p>}
+    </div>
+  </dialog>;
 }

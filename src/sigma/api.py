@@ -90,6 +90,13 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
         yield
         return
     principal = getattr(request.state, "cloud_principal", None)
+    if (
+        request.url.path == "/api/project-types"
+        and request.method == "GET"
+        and (not isinstance(principal, cloud_auth.Principal) or principal.role == "guest")
+    ):
+        yield
+        return
     if not isinstance(principal, cloud_auth.Principal):
         raise HTTPException(status_code=401, detail="Authentication required.")
     try:
@@ -141,6 +148,7 @@ class ProjectTypeCatalogBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_types: list[ProjectTypeBody] = Field(max_length=500)
     expected_revision: str = Field(min_length=64, max_length=64)
+    confirmed_removals: dict[str, int] = Field(default_factory=dict)
 
 
 class ProjectTypeDeleteBody(BaseModel):
@@ -150,17 +158,26 @@ class ProjectTypeDeleteBody(BaseModel):
     expected_revision: str = Field(min_length=64, max_length=64)
 
 
-class ProjectTypeIconRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    name: str = Field(min_length=1, max_length=80)
-    scope: str = Field(min_length=1, max_length=500)
-    description: str = Field(default="", max_length=2000)
-
-
 @app.get("/api/project-types")
-def list_project_types_view():
+def list_project_types_view(request: Request):
+    principal = getattr(request.state, "cloud_principal", None)
+    if cloud_workspaces.enabled() and (principal is None or principal.role == "guest"):
+        # Public guests can render sample/type metadata without enumerating a
+        # member's private custom catalog. Writes remain authenticated.
+        builtins = [item.record() for item in project_types.builtin_types()]
+        import hashlib
+
+        revision = hashlib.sha256(
+            json.dumps(builtins, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        return {
+            "project_types": builtins,
+            "icons": {"placeholder": project_types.placeholder_icon()},
+            "revision": revision,
+        }
     return {
         "project_types": [item.record() for item in project_types.all_types()],
+        "icons": {"placeholder": project_types.placeholder_icon()},
         "revision": project_types.catalog_revision(),
     }
 
@@ -168,7 +185,9 @@ def list_project_types_view():
 @app.put("/api/project-types")
 def replace_project_types_view(body: ProjectTypeCatalogBody):
     saved = project_types.replace_custom_types(
-        [item.model_dump() for item in body.project_types], expected_revision=body.expected_revision
+        [item.model_dump() for item in body.project_types],
+        expected_revision=body.expected_revision,
+        confirmed_removals=body.confirmed_removals,
     )
     return {
         "project_types": [item.record() for item in saved],
@@ -192,14 +211,6 @@ def remove_project_type_view(identifier: str, body: ProjectTypeDeleteBody):
         raise ProjectError("Project references changed; review the removal warning again")
     project_types.remove_type(identifier, expected_revision=body.expected_revision)
     return {"deleted": True, "project_count": count}
-
-
-@app.post("/api/project-types/icon")
-async def generate_project_type_icon_view(body: ProjectTypeIconRequest):
-    from sigma.project_type_icons import generate
-
-    icon = await generate(body.name, body.scope, body.description)
-    return {"icon": icon}
 
 
 _cloud_config = cloud_auth.config()

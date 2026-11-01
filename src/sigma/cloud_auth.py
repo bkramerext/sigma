@@ -969,7 +969,8 @@ async def middleware(request: Request, call_next):
     if cfg.error:
         guest_catalog = path == "/api/projects/samples" and request.method == "GET"
         guest_open = path == "/api/projects/samples/open" and request.method == "POST"
-        if guest_catalog or guest_open:
+        guest_types = path == "/api/project-types" and request.method == "GET"
+        if guest_catalog or guest_open or guest_types:
             origin = request.headers.get("origin")
             allowed = {cfg.origin, "http://127.0.0.1:5173", "http://localhost:5173"}
             if guest_open and origin not in allowed:
@@ -1010,6 +1011,8 @@ async def middleware(request: Request, call_next):
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503
         )
     if principal is None:
+        if path == "/api/project-types" and request.method == "GET":
+            return await call_next(request)
         guest_cookie = _cookie_name(GUEST_COOKIE, cfg)
         guest_token = request.cookies.get(guest_cookie)
         guest_workspace = None
@@ -1038,6 +1041,8 @@ async def middleware(request: Request, call_next):
             ("POST", "/api/cloud-auth/invitation-request"),
             ("POST", "/api/cloud-auth/feedback"),
         }
+        if path == "/api/project-types" and request.method == "GET":
+            return await call_next(request)
         if path.startswith("/api/projects/"):
             if not _guest_project_route_allowed(request.method, path):
                 return _guest_secure_response(

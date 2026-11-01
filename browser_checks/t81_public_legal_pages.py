@@ -49,7 +49,10 @@ def main() -> None:
                     )
 
             page.goto(URL)
-            opener = page.get_by_role("button", name="About")
+            welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
+            if welcome.is_visible():
+                welcome.get_by_role("button", name="Let's get started").click()
+            opener = page.get_by_role("button", name="About SIGMA", exact=True)
             expect(opener).to_be_visible()
             opener.click()
             dialog = page.get_by_role("dialog", name="About SIGMA")

@@ -1263,7 +1263,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
   const [confirmMissingType, setConfirmMissingType] = useState(false);
-  const [continueWithSavedType, setContinueWithSavedType] = useState(false);
+  const continueWithSavedType = useRef(false);
+  const missingTypeDialog = useRef<HTMLDialogElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -1271,6 +1272,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const [announcement, setAnnouncement] = useState('');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const dialog = missingTypeDialog.current;
+    if (!dialog) return;
+    if (confirmMissingType && !dialog.open) dialog.showModal();
+    else if (!confirmMissingType && dialog.open) dialog.close();
+  }, [confirmMissingType]);
   const noticeStorageKey = `sigma.dismissedSessionNotices:${path}`;
   const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState<Set<string>>(() => {
     try {
@@ -1395,7 +1402,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const sponsoredSession = cloud?.target === 'hosted'
     || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
-  async function begin(onlyIds?: string[]) {
+  async function begin(onlyIds?: string[], continueUsingSavedTypeSettings = false) {
+    continueWithSavedType.current = continueUsingSavedTypeSettings;
     const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
     setBusy(true); setError('');
     try {
@@ -1436,8 +1444,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       idempotencyKey.current ??= crypto.randomUUID();
       selectedSessionId.current = '';
       const next = mockResearch
-        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType })
-        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType });
+        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current })
+        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
@@ -1606,7 +1614,17 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const runningCount = activeSessionCount;
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
-    {confirmMissingType && createPortal(<div className="project-type-warning-scrim" role="presentation"><section className="project-type-warning-dialog" role="alertdialog" aria-modal="true" aria-labelledby="missing-type-heading"><h2 id="missing-type-heading">Project type unavailable</h2><p>This project refers to “{savedTypeName}”, which has been removed. Starting a new session will use its saved project type settings.</p><div className="project-type-warning-actions">{safeSavedTypeSettings && <button type="button" autoFocus disabled={busy} onClick={() => { setContinueWithSavedType(true); setConfirmMissingType(false); setConfirmStart(false); void begin(); }}>Continue with saved settings</button>}<button type="button" disabled={busy} onClick={() => { setConfirmMissingType(false); onChooseReplacement(); }}>Choose a replacement</button><button type="button" disabled={busy} onClick={() => setConfirmMissingType(false)}>Cancel</button></div>{!safeSavedTypeSettings && <p role="status">Saved settings are incomplete; select a valid project type before starting.</p>}</section></div>, document.body)}
+    <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
+      <h2 id="missing-type-heading">Project type unavailable</h2>
+      {safeSavedTypeSettings
+        ? <p>This project refers to “{savedTypeName}”, which is no longer available. You can continue with its complete saved settings or choose a replacement.</p>
+        : <p>This project refers to “{savedTypeName}”, which is no longer available, and it does not have a complete saved type snapshot. Choose a replacement before starting a new research session.</p>}
+      <div className="project-type-warning-actions">
+        {safeSavedTypeSettings && <button type="button" autoFocus disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); setConfirmStart(false); void begin(undefined, true); }}>Continue with saved settings</button>}
+        <button type="button" autoFocus={!safeSavedTypeSettings} disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); onChooseReplacement(); }}>Choose a replacement</button>
+        <button type="button" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}>Cancel</button>
+      </div>
+    </dialog>
     <header className="workspace-pane-heading sessions-pane-heading">
       <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
@@ -2996,7 +3014,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    {close && <button type="button" className="about-action project-types-action" aria-label="Project Types" title="Project Types" data-tooltip="Project Types" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button>}
+    {close && (!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="about-action project-types-action" aria-label="Project Types" title="Project Types" data-tooltip="Project Types" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
@@ -3465,15 +3483,21 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
   const selectedIndex = choices.findIndex(type => type.value === value);
   useEffect(() => {
     const controller = new AbortController();
-    void fetch('/api/project-types', { signal: controller.signal }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => {
-      projectTypeCache = data.project_types;
-      const next = data.project_types.map(item => ({ value: item.id, label: item.name })).sort((a, b) => a.label.localeCompare(b.label));
-      setChoices(next);
-      const selected = next.findIndex(item => item.value === value);
-      if (selected >= 0) setActiveIndex(selected);
-    }).catch(() => undefined);
-    return () => controller.abort();
-  }, [value]);
+    const refresh = () => {
+      void fetch('/api/project-types', { cache: 'no-store', signal: controller.signal }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => {
+        projectTypeCache = data.project_types;
+        const next = data.project_types.map(item => ({ value: item.id, label: item.name })).sort((a, b) => a.label.localeCompare(b.label));
+        setChoices(next);
+      }).catch(() => undefined);
+    };
+    window.addEventListener('sigma-project-types-updated', refresh);
+    refresh();
+    return () => { controller.abort(); window.removeEventListener('sigma-project-types-updated', refresh); };
+  }, []);
+  useEffect(() => {
+    const selected = choices.findIndex(item => item.value === value);
+    if (selected >= 0) setActiveIndex(selected);
+  }, [choices, value]);
   useEffect(() => {
     if (open) options.current[activeIndex]?.focus();
   }, [activeIndex, open]);
@@ -3984,7 +4008,7 @@ function Home({ initialPath, onOpen }: {
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.icon.key ?? item.id}/>}/>}
+      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     </div>
   </div>;
 }
@@ -4537,7 +4561,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   function closeAbout() {
     setAboutOpen(false);
-    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.about-action')?.focus());
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('button.about-action[aria-label="About SIGMA"]')?.focus());
   }
   const strategies = useMemo(() => {
     if (!view) return [];
@@ -4744,7 +4768,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-    {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.icon.key ?? item.id}/>}/>}
+      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     {paperOpen && (
       <AIPaperDialog path={view.path} projectId={project.id} guest={guest} onCancel={() => {
         window.localStorage.removeItem(paperRecoveryKey(project.id));

@@ -24,6 +24,15 @@ _BUILTIN_FILE = Path(__file__).with_name("data") / "builtin_project_types.json"
 _DATA_URI = re.compile(r"^data:(image/(?:png|webp));base64,([A-Za-z0-9+/]+=*)$")
 
 
+def placeholder_icon() -> dict[str, Any]:
+    try:
+        raw = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))
+        icon = raw["icons"]["placeholder"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError("The placeholder project type icon is invalid") from exc
+    return icon
+
+
 @dataclass(frozen=True)
 class ProjectType:
     id: str
@@ -82,6 +91,8 @@ def _validate_references(value: Any, field: str) -> tuple[str, ...]:
 def _validate_icon(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ProjectError("An icon is required")
+    if value.get("kind") == "builtin" and value.get("key") == "placeholder":
+        return placeholder_icon()
     if value.get("kind") == "builtin" and value.get("key"):
         try:
             catalog = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))
@@ -390,14 +401,30 @@ def remove_type(identifier: str, *, expected_revision: str | None = None) -> boo
 
 
 def replace_custom_types(
-    records: list[dict[str, Any]], *, expected_revision: str | None = None
+    records: list[dict[str, Any]],
+    *,
+    expected_revision: str | None = None,
+    confirmed_removals: dict[str, int] | None = None,
 ) -> list[ProjectType]:
     if len(records) > 500:
         raise ProjectError("Too many custom project types")
-    builtin_ids = {item.id for item in builtin_types()}
+    builtins = builtin_types()
+    builtin_ids = {item.id for item in builtins}
+    old_items = custom_types()
+    old_ids = {item.id for item in old_items}
+    incoming_ids = {
+        raw.get("id") for raw in records if isinstance(raw, dict) and isinstance(raw.get("id"), str)
+    }
+    removed_ids = old_ids - incoming_ids
+    confirmed_removals = confirmed_removals or {}
+    if set(confirmed_removals) != removed_ids:
+        raise ProjectError("Review and confirm every custom project type removal before saving")
+    for identifier in removed_ids:
+        if confirmed_removals[identifier] != project_usage(identifier):
+            raise ProjectError("Project references changed; review the removal warning again")
     result: list[ProjectType] = []
     seen_ids: set[str] = set()
-    seen_names = {item.name.casefold() for item in builtin_types()}
+    seen_names = {item.name.casefold() for item in builtins}
     for raw in records:
         if not isinstance(raw, dict) or raw.get("user_defined") is not True:
             raise ProjectError("Only custom project type records can be saved")
@@ -408,10 +435,11 @@ def replace_custom_types(
         key = item.name.casefold()
         if key in seen_names:
             raise ProjectError("Project type names must be unique")
-        if (
-            item.based_on
-            and get_type(item.based_on) is None
-            and item_id not in {old.id for old in custom_types()}
+        parent_is_in_batch = item.based_on in incoming_ids
+        parent_is_persisted = item.based_on is not None and get_type(item.based_on) is not None
+        parent_is_retained_origin = item_id in old_ids
+        if item.based_on and not (
+            parent_is_in_batch or parent_is_persisted or parent_is_retained_origin
         ):
             # Existing derived types retain origin metadata after their parent is deleted.
             raise ProjectError("Choose an available base project type")
