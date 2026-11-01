@@ -2332,6 +2332,10 @@ def test_maximum_liability_enforced_across_calls() -> None:
             ),
             patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
             patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=False),
+            patch.object(
+                cloud_research, "_effective_user_spend_ceiling_decimal",
+                return_value=Decimal("1.00"),
+            ),
         ):
             binding = cloud_workspaces._CURRENT.set(member)
             try:
