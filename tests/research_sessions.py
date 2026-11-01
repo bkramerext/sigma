@@ -1008,6 +1008,24 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
     sys_inv = research_sessions._role_instructions("investigator", systems)
     law_inv = research_sessions._role_instructions("investigator", law)
 
+    # A new research session receives evidence-to-action expectations, while
+    # a resumed v2 session must not silently adopt a different methodology.
+    assert research_sessions.RESEARCH_METHOD_VERSION == "phase2-i2-v3"
+    assert "actually executed computation" in math_inv
+    assert "actual result" in math_skep
+    assert "novelty unassessed" in physics_inv
+    assert "discriminating next_question" in math_skep
+    assert "discriminating next_question" not in math_inv
+    old_context = {**physics, "research_method_version": "phase2-i2-v2"}
+    old_instructions = research_sessions._role_instructions("skeptic", old_context)
+    assert "actually executed computation" not in old_instructions
+    assert "discriminating next_question" not in old_instructions
+    assert research_sessions._role_instructions("skeptic", {}) == (
+        research_sessions._role_instructions(
+            "skeptic", {"research_method_version": "phase2-i2-v2"}
+        )
+    )
+
     for mode in ResearchMode:
         for role in ("investigator", "skeptic"):
             guidance = research_sessions._role_instructions(
