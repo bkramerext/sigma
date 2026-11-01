@@ -11100,21 +11100,25 @@ def test_obligation_dispatch_citations_exclude_withheld_history() -> None:
     assert actual["source_step_ids"] == ["current-step"]
     assert actual["basis_step_ids"] == ["current-step"]
     assert actual["withheld_source_step_ids_count"] == 1
-    assert actual["source_artifact_availability"] == "incomplete_extract_original_not_supplied"
+    assert actual["source_artifact_availability"] == (
+        "incomplete_extract_original_not_supplied"
+    )
     assert saved == original, "Only the dispatch copy may change"
 
     allowed = {
         "context_artifact_ids": ["present"],
         "prior_session_artifact_ids": [],
         "investigator_step_id": "current-step",
-        "obligation_ledger": [{
-            "obligation_id": "open-2",
-            "source_artifact_ids": ["present"],
-            "source_artifact_count": 1,
-            "supplied_source_artifact_ids": ["present"],
-            "source_step_ids": ["current-step"],
-            "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
-        }],
+        "obligation_ledger": [
+            {
+                "obligation_id": "open-2",
+                "source_artifact_ids": ["present"],
+                "source_artifact_count": 1,
+                "supplied_source_artifact_ids": ["present"],
+                "source_step_ids": ["current-step"],
+                "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
+            }
+        ],
     }
     research_sessions.restrict_obligation_citations_to_supplied_context(allowed)
     assert allowed["obligation_ledger"][0]["source_artifact_ids"] == ["present"]
