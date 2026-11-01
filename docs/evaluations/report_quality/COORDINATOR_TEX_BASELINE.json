@@ -1,0 +1,86 @@
+{
+  "source_commit": "0f6e86e5201a4f3339dcff9592f6e7a7e1ec035c",
+  "method": "Coordinator JS mirror of tex_option_gate.py, applied to GitHub-fetched baseline TeX and compact metadata; no PDF rendering",
+  "papers": {
+    "ai-agent-reliability-v1": {
+      "requested_excerpts": false,
+      "excerpt_appendix_present": true,
+      "excerpt_subsections": 16,
+      "provider_schema_lines": [],
+      "overfull_line_contexts": [
+        {
+          "line": 298,
+          "warning": "warning: report.tex:298: Overfull \\hbox (114.99454pt too wide) in paragraph at lines 297--298",
+          "line_preview": "\\item investigator\\_output/open\\_obligations/0: Implement and independently audit the expiry-boundary test and the earlier six-cell crash test, including queued copies, durable-write failures, client ",
+          "candidate_signals": []
+        },
+        {
+          "line": 389,
+          "warning": "warning: report.tex:389: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 389--389",
+          "line_preview": "\\textit{Source and field: }[Research session 7]: outcome/solution\\_review/strategy\\_findings/1/reasoning\\_steps\\par",
+          "candidate_signals": []
+        }
+      ],
+      "review_flags": [
+        "research excerpts rendered despite false generation option"
+      ]
+    },
+    "ai-sovereignty-v2": {
+      "requested_excerpts": false,
+      "excerpt_appendix_present": true,
+      "excerpt_subsections": 13,
+      "provider_schema_lines": [],
+      "overfull_line_contexts": [
+        {
+          "line": 60,
+          "warning": "warning: report.tex:60: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 59--60",
+          "line_preview": "",
+          "candidate_signals": []
+        },
+        {
+          "line": 526,
+          "warning": "warning: report.tex:526: Overfull \\hbox (100.03801pt too wide) in paragraph at lines 525--526",
+          "line_preview": "\\item The bounded index contains truncated extracts and pointer-only relationships, not the complete underlying proofs, numerical ledger or implementation artifacts. Its selection cannot establish exh",
+          "candidate_signals": []
+        }
+      ],
+      "review_flags": [
+        "research excerpts rendered despite false generation option"
+      ]
+    },
+    "xenopus-tadpoles-v9": {
+      "requested_excerpts": false,
+      "excerpt_appendix_present": true,
+      "excerpt_subsections": 9,
+      "provider_schema_lines": [
+        340
+      ],
+      "overfull_line_contexts": [
+        {
+          "line": 259,
+          "warning": "warning: report.tex:259: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 258--259",
+          "line_preview": "\\item No research artifact was saved for this strategy. \\textit{ (Not listed by author; not presumed resolved; 3 saved source reference(s))}",
+          "candidate_signals": []
+        },
+        {
+          "line": 300,
+          "warning": "warning: report.tex:300: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 300--300",
+          "line_preview": "\\textit{Source and field: }[Research session 21]: outcome/solution\\_review/strategy\\_findings/1/reasoning\\_steps\\par",
+          "candidate_signals": []
+        },
+        {
+          "line": 340,
+          "warning": "warning: report.tex:340: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 340--340",
+          "line_preview": "\\textit{Source and field: }[Research session 8]: steps/0/provider\\_input\\_audit/request\\_body/text/format/schema/properties/reasoning\\_steps\\par",
+          "candidate_signals": [
+            "provider_schema_or_serialized_json"
+          ]
+        }
+      ],
+      "review_flags": [
+        "research excerpts rendered despite false generation option",
+        "provider plumbing or request schema appears in manuscript"
+      ]
+    }
+  }
+}
