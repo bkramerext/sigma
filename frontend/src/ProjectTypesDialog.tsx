@@ -154,8 +154,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const listEditor = (item: ProjectTypeRecord, field: 'research_standards_references' | 'publication_standards_references', readonly: boolean) => {
     const urls = item[field];
     const setAt = (index: number, value: string) => edit(item.id, { [field]: urls.map((url, i) => i === index ? value : url) });
-    return <table className="pt-reference-table"><colgroup><col/><col/></colgroup><thead><tr><th>URL</th><th>Action</th></tr></thead><tbody>
-      {urls.map((url, index) => <tr key={index}><td>{readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <input aria-label={`${field === 'research_standards_references' ? 'Research' : 'Publication'} reference URL ${index + 1}`} type="url" value={url} onChange={event => setAt(index, event.target.value)}/>}</td><td>{!readonly && <button type="button" onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>}</td></tr>)}
+    return <table className="pt-reference-table"><colgroup><col/><col/></colgroup><thead><tr><th scope="col">URL</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>
+      {readonly && urls.length === 0 && <tr><td className="pt-reference-example">http://temp.com/style.html <small>(example only)</small></td><td/></tr>}
+      {urls.map((url, index) => <tr key={index}><td>{readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <input aria-label={`${field === 'research_standards_references' ? 'Research' : 'Publication'} reference URL ${index + 1}`} type="url" placeholder="http://temp.com/style.html" value={url} onChange={event => setAt(index, event.target.value)}/>}</td><td>{!readonly && <button type="button" onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>}</td></tr>)}
       {!readonly && <tr><td><button type="button" onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td><td/></tr>}
     </tbody></table>;
   };
