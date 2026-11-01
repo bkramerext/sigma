@@ -1,0 +1,70 @@
+name: Project Types browser acceptance
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "src/sigma/project_types.py"
+      - "src/sigma/project_type_icons.py"
+      - "src/sigma/api.py"
+      - "browser_checks/project_types_436.py"
+      - ".github/workflows/project-types-browser.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  project-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SIGMA_CLOUD_AUTH_ENABLED: "false"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies and Chromium
+        run: |
+          ./sigma setup
+          uv run --with playwright python -m playwright install chromium
+      - name: Run Project Types Chrome acceptance against isolated local data
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SIGMA_PROJECTS_ROOT="$(mktemp -d)"
+          uv run uvicorn sigma.api:app --host 127.0.0.1 --port 8026 > /tmp/project-types-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort > /tmp/project-types-ui.log 2>&1 &
+          ui_pid=$!
+          trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true; rm -rf "$SIGMA_PROJECTS_ROOT"' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null && curl -fsS http://127.0.0.1:8026/openapi.json >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8026/openapi.json >/dev/null
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/project_types_436.py
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-types-debug
+          path: |
+            /tmp/project-types-api.log
+            /tmp/project-types-ui.log
+          if-no-files-found: ignore
