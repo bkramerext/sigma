@@ -4293,43 +4293,127 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
 
 
 def test_fallback_planner_ranks_complete_research_notes_over_operational_fields() -> None:
-    source = "session:fixture"
+    session = "session:fixture"
+    result_a = "artifact:result-a"
+    result_b = "artifact:result-b"
+    skeptic = "artifact:skeptic"
+    obligation = "artifact:obligation"
+    long_proof = (
+        "P" * 430 + " and therefore this final step follows only if the earlier premises hold."
+    )
     notes = [
         papers.EvidenceNote(
             statement="events/4/project_change/previous/reasoning_effort: high",
             kind="result",
-            evidence_refs=[source],
+            evidence_refs=[session],
         ),
         papers.EvidenceNote(
             statement="events/10/failure_kind: preflight_error",
             kind="negative",
-            evidence_refs=[source],
+            evidence_refs=[session],
         ),
         papers.EvidenceNote(
-            statement="investigator_output/result: The saved comparison found a stable difference between the two measured conditions.",
+            statement="finding: The saved comparison supports a stable difference between the two measured conditions.",
             kind="result",
-            evidence_refs=[source],
+            evidence_refs=[result_a],
         ),
         papers.EvidenceNote(
-            statement="skeptic_response/counterexample: A saved counterexample shows that the proposed rule fails for the boundary case.",
+            statement="finding: An independent comparison reports no stable difference between the two measured conditions.",
+            kind="result",
+            evidence_refs=[result_b],
+        ),
+        papers.EvidenceNote(
+            statement="failure_analysis: The saved retry failure shows that an acknowledged operation can still lack a durable effect record.",
             kind="negative",
-            evidence_refs=[source],
+            evidence_refs=[skeptic],
         ),
         papers.EvidenceNote(
-            statement="investigator_output/proof/0: This proof begins with a long incomplete fragment",
+            statement="proof: and therefore this final step follows only if the earlier premises hold.",
             kind="result",
-            evidence_refs=[source],
+            evidence_refs=[skeptic],
+        ),
+        papers.EvidenceNote(
+            statement="open_obligation: Determine whether the effect record remains durable after a process restart?",
+            kind="question",
+            evidence_refs=[obligation],
         ),
     ]
+    sources = [
+        {
+            "id": session,
+            "kind": "session",
+            "data": {
+                "events": [
+                    {"project_change": {"previous": {"reasoning_effort": "high"}}},
+                    {"failure_kind": "preflight_error"},
+                ]
+            },
+        },
+        {
+            "id": result_a,
+            "kind": "artifact",
+            "data": {"finding": notes[2].statement.removeprefix("finding: ")},
+        },
+        {
+            "id": result_b,
+            "kind": "artifact",
+            "data": {"finding": notes[3].statement.removeprefix("finding: ")},
+        },
+        {
+            "id": skeptic,
+            "kind": "artifact",
+            "data": {
+                "failure_analysis": notes[4].statement.removeprefix("failure_analysis: "),
+                "proof": long_proof,
+            },
+        },
+        {
+            "id": obligation,
+            "kind": "artifact",
+            "data": {"open_obligation": notes[6].statement.removeprefix("open_obligation: ")},
+        },
+    ]
     plan = papers._evidence_based_long_plan(
-        {"title": "Fixture project", "problem": "What changes across conditions?"}, notes, {source}
+        {"title": "Fixture project", "problem": "What changes across conditions?"},
+        notes,
+        {session, result_a, result_b, skeptic, obligation},
+        sources,
     )
     assert all("events/" not in claim.statement for claim in plan.claims)
-    assert all("investigator_output/" not in claim.statement for claim in plan.claims)
-    assert any("stable difference" in claim.statement for claim in plan.claims)
-    assert any("counterexample" in claim.statement for claim in plan.claims)
-    assert all(set(claim.evidence_refs) <= {source} for claim in plan.claims)
+    assert all("proof:" not in claim.statement for claim in plan.claims)
+    result_claim = next(claim for claim in plan.claims if "stable difference" in claim.statement)
+    assert "reports no stable difference" in result_claim.statement
+    assert set(result_claim.evidence_refs) == {result_a, result_b}
+    assert any("retry failure" in claim.statement for claim in plan.claims)
+    assert all(
+        set(claim.evidence_refs) <= {session, result_a, result_b, skeptic, obligation}
+        for claim in plan.claims
+    )
+    assert any(session in section.evidence_refs for section in plan.sections)
+    assert any("process restart" in obligation for obligation in plan.open_obligations)
     assert "stable difference" in plan.conclusions[0]
+
+
+def test_frozen_snapshot_generation_gate_checks_identity_hash_and_source_uniqueness() -> None:
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "frozen-project",
+        "sources": [{"id": "project:frozen-project", "kind": "project", "data": {}}],
+    }
+    validated, digest = papers._validate_frozen_snapshot(package, "frozen-project")
+    assert validated is package
+    assert len(digest) == 64
+    duplicate = {**package, "sources": [*package["sources"], *package["sources"]]}
+    for invalid, project_id, expected in (
+        (package, "other-project", "another project"),
+        (duplicate, "frozen-project", "duplicate"),
+    ):
+        try:
+            papers._validate_frozen_snapshot(invalid, project_id)
+        except papers.ProjectError as exc:
+            assert expected in str(exc)
+        else:
+            raise AssertionError(f"Invalid frozen snapshot was accepted: {expected}")
 
 
 def test_invalid_planning_claim_reference_is_recoverable() -> None:
@@ -5609,6 +5693,7 @@ def main() -> None:
     test_maximum_regions_archived_one_session_stays_fast()
     test_easy_paper_avoids_unnecessary_long_form_calls()
     test_fallback_planner_ranks_complete_research_notes_over_operational_fields()
+    test_frozen_snapshot_generation_gate_checks_identity_hash_and_source_uniqueness()
     test_invalid_planning_claim_reference_is_recoverable()
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
     test_one_shot_publishes_with_repaired_claim_links()

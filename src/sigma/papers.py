@@ -868,6 +868,30 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
     return package, hashlib.sha256(encoded).hexdigest()
 
 
+def _validate_frozen_snapshot(
+    package: dict[str, Any], project_id: str
+) -> tuple[dict[str, Any], str]:
+    """Validate a saved canonical package for an isolated, reproducible paper run."""
+    if (
+        package.get("schema") != "sigma-paper-evidence-v2"
+        or package.get("project_id") != project_id
+        or not isinstance(package.get("sources"), list)
+        or not package["sources"]
+    ):
+        raise ProjectError("Frozen paper snapshot is invalid or belongs to another project")
+    source_ids = [
+        source.get("id") if isinstance(source, dict) else None for source in package["sources"]
+    ]
+    if any(not isinstance(source_id, str) or not source_id for source_id in source_ids):
+        raise ProjectError("Frozen paper snapshot has invalid source identifiers")
+    if len(set(source_ids)) != len(source_ids):
+        raise ProjectError("Frozen paper snapshot contains duplicate source identifiers")
+    encoded = _json(package)
+    if len(encoded) > MAX_CONTEXT_BYTES:
+        raise ProjectError("Frozen paper snapshot exceeds the paper archive limit")
+    return package, hashlib.sha256(encoded).hexdigest()
+
+
 def _paper_long_form(
     package: dict[str, Any],
     *,
@@ -1337,6 +1361,7 @@ def _evidence_based_long_plan(
     project_data: Mapping[str, Any],
     notes: list[EvidenceNote],
     source_ids: set[str],
+    sources: list[dict[str, Any]] | None = None,
 ) -> LongPaperPlan:
     """Build a conservative, source-linked outline if paid planning fails.
 
@@ -1349,24 +1374,69 @@ def _evidence_based_long_plan(
         title = "Research synthesis: " + title
     title = title[:180]
 
-    def candidate(note: EvidenceNote) -> tuple[int, str]:
-        """Select complete research prose; keep operational fields as provenance."""
+    # The note label is intentionally short. Resolve it to the original scalar
+    # value so punctuation inside an arbitrary chunk cannot make a fragment a
+    # paper claim. Only fields referenced by a note are retained here.
+    requested_fields = {
+        (ref, note.statement.partition(": ")[0].casefold())
+        for note in notes
+        for ref in note.evidence_refs
+        if ": " in note.statement
+    }
+    field_values: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
+
+    def collect_fields(value: Any, source_ref: str, source_kind: str, path: str = "") -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                child_path = f"{path}/{key}" if path else str(key)
+                collect_fields(child, source_ref, source_kind, child_path)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                collect_fields(child, source_ref, source_kind, f"{path}/{index}")
+        elif isinstance(value, (str, int, float, bool)):
+            label = path[-55:].casefold()
+            if (source_ref, label) in requested_fields:
+                content = " ".join(str(value).split())
+                field_values.setdefault((source_ref, label), []).append(
+                    (source_kind, path, content)
+                )
+
+    for source in sources or []:
+        source_ref = str(source.get("id") or "")
+        if any(ref == source_ref for ref, _label in requested_fields):
+            collect_fields(source.get("data", {}), source_ref, str(source.get("kind") or ""))
+
+    def candidate(note: EvidenceNote) -> tuple[int, str, str, tuple[str, ...]]:
+        """Select complete, source-verified research prose."""
         label, separator, value = note.statement.partition(": ")
         if not separator:
-            return (-1, "")
+            return (-1, "", "", ())
         path = label.casefold().strip()
-        if path.startswith(
-            ("events/", "project_change/", "title", "created_at", "updated_at")
-        ) or any(
-            part in path for part in ("reasoning_effort", "preflight_error", "failure_kind", "ui_")
-        ):
-            return (-1, "")
         sentence = " ".join(value.split()).strip()
-        if len(sentence) < 35 or not sentence.endswith((".", "?", "!")):
-            return (-1, "")
+        if len(sentence) < 35:
+            return (-1, "", "", ())
+        provenance: list[str] = []
+        valid_refs: list[str] = []
+        for ref in note.evidence_refs:
+            matches = field_values.get((ref, path), [])
+            exact = [entry for entry in matches if entry[2] == sentence]
+            # Multiple path suffix matches are ambiguous, and any truncated
+            # chunk is ineligible even when its last character is punctuation.
+            if len(matches) != 1 or len(exact) != 1:
+                continue
+            source_kind, full_path, _content = exact[0]
+            path_parts = full_path.casefold().split("/")
+            if source_kind == "project" or (source_kind == "session" and path_parts[0] == "events"):
+                continue
+            valid_refs.append(ref)
+            provenance.append(full_path)
+        if not valid_refs:
+            return (-1, "", "", ())
         score = (40 if note.kind in {"result", "negative"} else 20) + min(len(sentence), 260) // 20
         score += 5 if len(note.evidence_refs) > 1 else 0
-        return score, sentence
+        if not sentence.endswith((".", "?", "!")):
+            sentence += "."
+        return score, sentence, ", ".join(provenance), tuple(valid_refs)
 
     ranked_candidates = {id(note): candidate(note) for note in notes}
     question = str(project_data.get("problem") or title).strip()[:850]
@@ -1427,19 +1497,27 @@ def _evidence_based_long_plan(
             if offset >= len(refs) or len(sections) >= FAST_MAX_SECTIONS:
                 continue
             chunk = refs[offset : offset + 40]
-            matching = max(
+            ranked = sorted(
                 (
                     note
                     for note in relevant
-                    if set(note.evidence_refs) & set(chunk) and ranked_candidates[id(note)][0] >= 0
+                    if set(ranked_candidates[id(note)][3]) & set(chunk)
+                    and ranked_candidates[id(note)][0] >= 0
                 ),
-                key=lambda note: (ranked_candidates[id(note)][0], note.statement),
-                default=None,
+                key=lambda note: (ranked_candidates[id(note)][0], ranked_candidates[id(note)][1]),
+                reverse=True,
             )
-            statement = (
-                ranked_candidates[id(matching)][1]
-                if matching is not None
-                else "The saved research contains indexed evidence requiring further analysis."
+            matching: list[EvidenceNote] = []
+            covered_candidate_refs: set[str] = set()
+            for note in ranked:
+                candidate_refs = set(ranked_candidates[id(note)][3]) & set(chunk)
+                if candidate_refs - covered_candidate_refs:
+                    matching.append(note)
+                    covered_candidate_refs.update(candidate_refs)
+                if len(matching) >= 3:
+                    break
+            statement = " ".join(ranked_candidates[id(note)][1] for note in matching) or (
+                "The saved research contains indexed evidence requiring further analysis."
             )
             claim_id = f"C{len(claims) + 1}"
             claims.append(
@@ -1448,23 +1526,27 @@ def _evidence_based_long_plan(
                     statement=statement[:1600],
                     status=(
                         "limitation"
-                        if matching is not None and matching.kind == "limitation"
+                        if matching and all(note.kind == "limitation" for note in matching)
                         else "unresolved"
                     ),
                     evidence_refs=list(
                         dict.fromkeys(
                             ref
-                            for ref in (matching.evidence_refs if matching else chunk)
+                            for note in matching
+                            for ref in ranked_candidates[id(note)][3]
                             if ref in source_ids
                         )
-                    )[:20],
+                    )[:20]
+                    or list(chunk[:1]),
                     reasoning=(
-                        (
-                            f"Recorded at {matching.statement.partition(': ')[0]}; "
-                            if matching
-                            else ""
-                        )
-                        + "This is a recorded research item, not an independently "
+                        "Recorded at "
+                        + "; ".join(ranked_candidates[id(note)][2] for note in matching)
+                        + ". "
+                        if matching
+                        else ""
+                    )
+                    + (
+                        "This is a recorded research item, not an independently "
                         "verified conclusion; the cited saved evidence requires assessment."
                     ),
                 )
@@ -1540,9 +1622,13 @@ def _evidence_based_long_plan(
         eligible = [
             ranked_candidates[id(note)]
             for note in notes
-            if note.kind == kind and ranked_candidates[id(note)][0] >= 0
+            if note.kind == kind
+            and ranked_candidates[id(note)][0] >= 0
+            and ranked_candidates[id(note)][1].endswith((".", "?", "!"))
         ]
-        return max(eligible, default=(-1, ""), key=lambda item: (item[0], item[1]))[1] or None
+        return (
+            max(eligible, default=(-1, "", "", ()), key=lambda item: (item[0], item[1]))[1] or None
+        )
 
     first_question = re.split(r"(?<=[.!?])\s+", question, maxsplit=1)[0]
     if len(first_question) > 320 or not first_question.endswith((".", "!", "?")):
@@ -4413,7 +4499,9 @@ Return the complete plan JSON matching the schema."""
             # A previous attempt reached planning and stopped without saving
             # a plan. Its provider call may have consumed allowance; do not
             # silently repeat it after a browser sleep, restart, or timeout.
-            long_plan = _evidence_based_long_plan(project_data, notes, source_ids)
+            long_plan = _evidence_based_long_plan(
+                project_data, notes, source_ids, package["sources"]
+            )
         else:
             try:
                 plan, _ = await call_with_safe_retry(
@@ -4435,7 +4523,9 @@ Return the complete plan JSON matching the schema."""
                 # potentially paid planning call. Section writing can proceed
                 # from a conservative outline built locally from that evidence.
                 # Cancellation still propagates without publishing.
-                long_plan = _evidence_based_long_plan(project_data, notes, source_ids)
+                long_plan = _evidence_based_long_plan(
+                    project_data, notes, source_ids, package["sources"]
+                )
         state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
         state.pop("planning_fallback_pending", None)
         save_state(state)
@@ -5536,6 +5626,7 @@ async def _generate_impl(
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
     include_diagrams: bool = True,
+    frozen_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -5612,7 +5703,15 @@ async def _generate_impl(
             raise ProjectError(config["message"])
         checkpoint = _load_work(path)
         frozen = checkpoint.get("frozen_package") if checkpoint is not None else None
-        if (
+        if frozen_snapshot is not None:
+            package, snapshot_hash = _validate_frozen_snapshot(frozen_snapshot, view.project.id)
+            if expected_snapshot_sha256 and snapshot_hash != expected_snapshot_sha256:
+                raise ProjectError("Frozen paper snapshot hash does not match the requested source")
+            if checkpoint is not None and checkpoint.get("snapshot_sha256") != snapshot_hash:
+                raise ProjectError(
+                    "A paper checkpoint exists for different frozen evidence; preserve it and restart explicitly."
+                )
+        elif (
             isinstance(frozen, dict)
             and checkpoint is not None
             and checkpoint.get("project_id") == view.project.id
@@ -6251,6 +6350,8 @@ async def generate(
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
     include_diagrams: bool = True,
+    *,
+    frozen_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     key = str(project_path(path).resolve())
@@ -6270,6 +6371,7 @@ async def generate(
             include_validation_notes,
             include_research_excerpts,
             include_diagrams,
+            frozen_snapshot,
         )
     )
     _generation_tasks[key] = task
