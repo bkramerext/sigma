@@ -1701,13 +1701,45 @@ def _evidence_based_long_plan(
     conclusion_claims = [claim for claim in conclusion_claims if claim is not None]
     if not conclusion_claims:
         conclusion_claims = claims[:1]
+    # Synthesize an answer to the question, a counterweight, and the
+    # remaining verification burden. Reprinting the claim register here
+    # produces a paper-shaped log, not a research conclusion.
+    result_claim = next(
+        (c for c in conclusion_claims if claim_kinds.get(c.id) == "result"), None
+    )
+    negative_claim = next(
+        (c for c in conclusion_claims if claim_kinds.get(c.id) == "negative"), None
+    )
+    limitation_claim = next(
+        (c for c in conclusion_claims if claim_kinds.get(c.id) == "limitation"), None
+    )
     conclusions = [
-        f"Recorded {claim_kinds.get(claim.id, 'research')}: {claim.statement}"
-        for claim in conclusion_claims
+        (
+            f"The investigation of {title.rstrip('.')} yields a provisional, "
+            "source-linked account rather than an independently verified "
+            "experimental or formal result."
+        )
     ]
+    if result_claim is not None:
+        conclusions.append(
+            f"The strongest indexed argument is: {result_claim.statement} "
+            "Its validity remains conditional on the saved premises and "
+            "outstanding review."
+        )
+    if negative_claim is not None:
+        conclusions.append(
+            f"This interpretation must also account for the recorded "
+            f"counterevidence: {negative_claim.statement}"
+        )
+    if limitation_claim is not None:
+        conclusions.append(
+            f"The principal remaining evidence boundary is: "
+            f"{limitation_claim.statement}"
+        )
     conclusions.append(
-        "These source records are provisional and require independent assessment; "
-        "unresolved evidence and obligations remain."
+        "A stronger conclusion requires resolving the identified objections, "
+        "checking the exact archived evidence and conducting any proposed "
+        "verification before making empirical or deployment claims."
     )
     return LongPaperPlan(
         title=title,
