@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fractions import Fraction as F
 from itertools import product
+import math
 
 
 def check_agent_outcome_identity() -> int:
@@ -56,6 +57,18 @@ def check_sovereign_cost_threshold() -> int:
     return checked
 
 
+def check_sovereign_power_certificate() -> int:
+    # Sufficient bound for the *specific* conservative CP interval gate,
+    # under IID paired episodes, hypothetical Delta=.20 and discordance=.40.
+    # This verifies arithmetic, not the model assumptions or actual power.
+    threshold = ((math.sqrt(2 * math.log(80)) + 1.2) / 0.10) ** 2
+    assert 1730 < threshold < 1731
+    assert 1800 > threshold
+    # Cantelli with variance .36/n and t=1.2/sqrt(n) gives <=.20.
+    assert F(36, 100) / (F(36, 100) + F(144, 100)) == F(1, 5)
+    return math.floor(threshold) + 1
+
+
 def check_xenopus_model() -> None:
     # U ~ Uniform(0,1); E=U, R=U vs R=1-U.
     e_u = F(1, 2)
@@ -90,9 +103,11 @@ def main() -> None:
     n_agent = check_agent_outcome_identity()
     check_retry_minimax()
     n_cost = check_sovereign_cost_threshold()
+    min_cert = check_sovereign_power_certificate()
     check_xenopus_model()
     print(f"PASS: {n_agent} exact agent joint distributions, 101 retry policies, "
-          f"{n_cost} cost/success cases, and Xenopus conditional algebra checks")
+          f"{n_cost} cost/success cases, power-certificate threshold {min_cert}, "
+          "and Xenopus conditional algebra checks")
     print("Scope: mathematical consistency under stated assumptions; no empirical verification")
 
 
