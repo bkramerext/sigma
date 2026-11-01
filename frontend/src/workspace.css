@@ -331,7 +331,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px;
   margin-right: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 6px;
 }
-.workspace-page .project-pane-actions .text-view-icon.project-qa-button { box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px; padding: 0; font: 700 17px/1 Inter, sans-serif; letter-spacing: .02em; }
+.workspace-page .project-pane-actions .text-view-icon.project-qa-button { box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px; padding: 0; font: 500 17px/1 Inter, sans-serif; letter-spacing: .02em; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { margin-right: 5px; }
 .workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; }
 .workspace-page .project-primary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 1px 0 10px 32px; }
