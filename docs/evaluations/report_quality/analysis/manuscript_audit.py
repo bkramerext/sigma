@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline, deterministic structural audit of SIGMA paper artifacts.
 
 This is NOT a scientific peer reviewer or PDF visual validator. It audits the
@@ -7,14 +6,15 @@ Usage:
     python docs/evaluations/report_quality/analysis/manuscript_audit.py \
       docs/evaluations/report_quality/iteration_1/papers
 """
+
 from __future__ import annotations
 
 import argparse
 import collections
 import hashlib
 import json
-from pathlib import Path
 import re
+from pathlib import Path
 
 CLAIM = re.compile(
     r"(?m)^C(\d+)\s*[·:]\s*(established|conjecture|limitation|unresolved|"
@@ -52,9 +52,7 @@ def audit(meta_path: Path) -> dict:
             item["bytes"] = path.stat().st_size
             item["sha256"] = digest(path)
             if expected.get("sha256"):
-                item["hash_matches_metadata"] = (
-                    item["sha256"] == expected["sha256"]
-                )
+                item["hash_matches_metadata"] = item["sha256"] == expected["sha256"]
                 if not item["hash_matches_metadata"]:
                     problems.append(kind + ": SHA-256 mismatch")
             if expected.get("bytes") is not None and item["bytes"] != expected["bytes"]:
@@ -66,14 +64,16 @@ def audit(meta_path: Path) -> dict:
     text_metrics = None
     if artifact_checks["txt"]["present"]:
         text = (root / (prefix + ".txt")).read_text(encoding="utf-8")
-        claims = [{"id": int(m.group(1)), "label": m.group(2).lower()}
-                  for m in CLAIM.finditer(text)]
+        claims = [
+            {"id": int(m.group(1)), "label": m.group(2).lower()} for m in CLAIM.finditer(text)
+        ]
         claim_ids = [c["id"] for c in claims]
         refs = [int(m.group(1)) for m in POINTER.finditer(text)]
         referenced_unknown = sorted(set(refs) - set(claim_ids))
         if referenced_unknown:
-            problems.append("references to unregistered C-IDs: " +
-                            ",".join(map(str, referenced_unknown)))
+            problems.append(
+                "references to unregistered C-IDs: " + ",".join(map(str, referenced_unknown))
+            )
         if len(claim_ids) != len(set(claim_ids)):
             problems.append("duplicate claim IDs")
         paragraphs = [p for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
@@ -122,8 +122,9 @@ def audit(meta_path: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paper_dir", type=Path)
-    parser.add_argument("--strict", action="store_true",
-                        help="return nonzero on missing/corrupt paper artifacts")
+    parser.add_argument(
+        "--strict", action="store_true", help="return nonzero on missing/corrupt paper artifacts"
+    )
     args = parser.parse_args()
     paths = sorted(args.paper_dir.glob("*.metadata.json"))
     if not paths:

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline structural risk audit for generated SIGMA manuscripts.
 
 Flags are review prompts, not a scientific validity judgment. Reads existing
@@ -8,17 +7,19 @@ Usage:
     python semantic_gate.py path/to/iteration_1/papers
     python semantic_gate.py path/to/iteration_1/papers --compare path/to/iteration_2/papers
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import re
+from pathlib import Path
 
 CLAIM = re.compile(r"(?m)^C(?P<id>\d+)\s*[·:]\s*(?P<status>[^:\n]+):\s*(?P<statement>[^\n]*)")
 RECORD_PATH = re.compile(
     r"\b(?:investigator_output|skeptic_output|solution_review|events|outcome|"
-    r"come/solution_review)(?:/[A-Za-z0-9_-]+){2,}", re.IGNORECASE
+    r"come/solution_review)(?:/[A-Za-z0-9_-]+){2,}",
+    re.IGNORECASE,
 )
 OPERATIONAL_CLAIM = re.compile(
     r"^(?:title|events/\d+(?:/[A-Za-z0-9_-]+)*|project_change|"
@@ -26,7 +27,10 @@ OPERATIONAL_CLAIM = re.compile(
     r"outcome/caveats/\d+)\s*:",
     re.IGNORECASE,
 )
-OMISSION = re.compile(r"(?:omitted|omitting)\s+(\d+)\s+(?:material\s+)?saved\s+(?:research\s+)?field\s+fragment", re.IGNORECASE)
+OMISSION = re.compile(
+    r"(?:omitted|omitting)\s+(\d+)\s+(?:material\s+)?saved\s+(?:research\s+)?field\s+fragment",
+    re.IGNORECASE,
+)
 
 
 def _section(text: str, name: str, next_name: str | None) -> str:
@@ -45,12 +49,11 @@ def audit_text(text: str, metadata: dict) -> dict:
     conclusion = _section(text, "Conclusions", None)
     body = text.split("\nClaim register\n", 1)[0]
     claims = [m.groupdict() for m in CLAIM.finditer(register)]
-    claim_mentions = {
-        c["id"]: len(re.findall(rf"\bC{re.escape(c['id'])}\b", body))
-        for c in claims
-    }
+    claim_mentions = {c["id"]: len(re.findall(rf"\bC{re.escape(c['id'])}\b", body)) for c in claims}
     warnings = metadata.get("validation_warnings", [])
-    omitted_mentions = sorted({int(m.group(1)) for warning in warnings for m in OMISSION.finditer(warning)})
+    omitted_mentions = sorted(
+        {int(m.group(1)) for warning in warnings for m in OMISSION.finditer(warning)}
+    )
     indexed_omitted = metadata.get("generation", {}).get("evidence_fields_omitted")
     issues = []
     abstract_paths = RECORD_PATH.findall(abstract)
@@ -58,7 +61,8 @@ def audit_text(text: str, metadata: dict) -> dict:
         issues.append("abstract contains raw saved-record locators")
     operational_claims = [
         {"id": c["id"], "statement": c["statement"]}
-        for c in claims if OPERATIONAL_CLAIM.search(c["statement"])
+        for c in claims
+        if OPERATIONAL_CLAIM.search(c["statement"])
     ]
     if operational_claims:
         issues.append("claim register includes operational metadata or raw record locators")

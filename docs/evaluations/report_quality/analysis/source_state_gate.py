@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
 """Extract a small, non-sensitive research-completeness ledger from SIGMA bundles.
 
 Reads a frozen SIGMA project bundle; does not rewrite it, send provider calls,
 or infer that an ended session is scientifically complete. The output is a
 review aid and contains only status/ID metadata, not provider request payloads.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,32 +25,46 @@ def extract(bundle: dict) -> dict:
         steps = record.get("steps") or []
         artifacts = record.get("artifacts") or []
         failed = [
-            {"call_number": step.get("call_number"), "id": step.get("id"),
-             "role": step.get("role"), "status": step.get("status"),
-             "failure_kind": step.get("failure_kind"),
-             "request_status": (step.get("provider_input_audit") or {}).get("status")}
-            for step in steps if step.get("status") != "completed"
+            {
+                "call_number": step.get("call_number"),
+                "id": step.get("id"),
+                "role": step.get("role"),
+                "status": step.get("status"),
+                "failure_kind": step.get("failure_kind"),
+                "request_status": (step.get("provider_input_audit") or {}).get("status"),
+            }
+            for step in steps
+            if step.get("status") != "completed"
         ]
-        sessions.append({
-            "file": path,
-            "session_id": record.get("id"),
-            "status": record.get("status"),
-            "termination_reason_code": record.get("termination_reason_code"),
-            "terminal_reason": record.get("terminal_reason"),
-            "step_count": len(steps),
-            "artifact_count": len(artifacts),
-            "failed_or_incomplete_steps": failed,
-            "artifact_verification": [
-                {"artifact_id": a.get("id"),
-                 "verification_status": (a.get("skeptic_output") or {}).get("verification_status"),
-                 "objective_status": (a.get("skeptic_output") or {}).get("objective_status")}
-                for a in artifacts
-            ],
-        })
+        sessions.append(
+            {
+                "file": path,
+                "session_id": record.get("id"),
+                "status": record.get("status"),
+                "termination_reason_code": record.get("termination_reason_code"),
+                "terminal_reason": record.get("terminal_reason"),
+                "step_count": len(steps),
+                "artifact_count": len(artifacts),
+                "failed_or_incomplete_steps": failed,
+                "artifact_verification": [
+                    {
+                        "artifact_id": a.get("id"),
+                        "verification_status": (a.get("skeptic_output") or {}).get(
+                            "verification_status"
+                        ),
+                        "objective_status": (a.get("skeptic_output") or {}).get("objective_status"),
+                    }
+                    for a in artifacts
+                ],
+            }
+        )
     project = files.get("project.json", {})
-    return {"project_id": project.get("id"), "project_title": project.get("title"),
-            "sessions": sessions,
-            "scope": "saved status metadata; not independent verification of research claims"}
+    return {
+        "project_id": project.get("id"),
+        "project_title": project.get("title"),
+        "sessions": sessions,
+        "scope": "saved status metadata; not independent verification of research claims",
+    }
 
 
 def main() -> None:

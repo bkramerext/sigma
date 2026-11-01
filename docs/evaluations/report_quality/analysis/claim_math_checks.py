@@ -1,15 +1,15 @@
-#!/usr/bin/env python3
 """Exact-arithmetic checks for selected conditional claims in SIGMA's three baseline papers.
 
 Checks algebraic consistency of the *stated models*, not empirical premises,
 source accuracy, model-generated reasoning outside these formulas, or biology.
 No network, provider calls, or external datasets.
 """
+
 from __future__ import annotations
 
+import math
 from fractions import Fraction as F
 from itertools import product
-import math
 
 
 def check_agent_outcome_identity() -> int:
@@ -48,9 +48,11 @@ def check_sovereign_cost_threshold() -> int:
     checked = 0
     for cost in range(1, 10):
         for success in range(1, 10):
-            for delta_cost in range(0, 6):
-                for delta_success in range(0, 6):
-                    cheaper_per_success = F(cost + delta_cost, success + delta_success) < F(cost, success)
+            for delta_cost in range(6):
+                for delta_success in range(6):
+                    cheaper_per_success = F(cost + delta_cost, success + delta_success) < F(
+                        cost, success
+                    )
                     ratio_condition = F(delta_success, success) > F(delta_cost, cost)
                     assert cheaper_per_success == ratio_condition
                     checked += 1
@@ -72,7 +74,7 @@ def check_sovereign_sensitive_stratum() -> None:
     assert local_total + 667 * F(9, 10) >= 1400
     # A-only can meet the aggregate gate but cannot meet sensitive coverage.
     assert 1800 * F(9, 10) == 1620
-    assert 0 < 160
+    assert local_sensitive > 0
 
 
 def check_sovereign_power_certificate() -> int:
@@ -124,9 +126,11 @@ def main() -> None:
     check_sovereign_sensitive_stratum()
     min_cert = check_sovereign_power_certificate()
     check_xenopus_model()
-    print(f"PASS: {n_agent} exact agent joint distributions, 101 retry policies, "
-          f"{n_cost} cost/success cases, power-certificate threshold {min_cert}, "
-          "and Xenopus conditional algebra checks")
+    print(
+        f"PASS: {n_agent} exact agent joint distributions, 101 retry policies, "
+        f"{n_cost} cost/success cases, power-certificate threshold {min_cert}, "
+        "and Xenopus conditional algebra checks"
+    )
     print("Scope: mathematical consistency under stated assumptions; no empirical verification")
 
 

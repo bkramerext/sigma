@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Numerically evaluate the exact paired-discordance pilot gate in SIGMA's frozen
 Sovereign AI Federation v2 paper. No inference, data access, or provider calls.
 
@@ -7,6 +6,7 @@ distribution up to floating-point evaluation of beta quantiles and binomial CDFs
 It is NOT a proof of statistical assumptions, an empirical pilot, or a validated
 sample-size recommendation.
 """
+
 from __future__ import annotations
 
 import argparse

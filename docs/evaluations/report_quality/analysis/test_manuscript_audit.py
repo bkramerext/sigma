@@ -1,12 +1,13 @@
 """Deterministic offline unit tests for manuscript_audit.py (no provider calls)."""
+
 from __future__ import annotations
 
 import hashlib
 import importlib.util
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 MODULE = Path(__file__).with_name("manuscript_audit.py")
 SPEC = importlib.util.spec_from_file_location("manuscript_audit", MODULE)
@@ -35,8 +36,11 @@ class ManuscriptAuditTests(unittest.TestCase):
                 "C2 is labeled established, but cited saved evidence includes unverified material."
             ],
         }
-        for ext, data in [("txt", self.txt.encode()), ("tex", b"\\documentclass{article}"),
-                          ("pdf", b"%PDF-1.4 test fixture only")]:
+        for ext, data in [
+            ("txt", self.txt.encode()),
+            ("tex", b"\\documentclass{article}"),
+            ("pdf", b"%PDF-1.4 test fixture only"),
+        ]:
             (self.root / ("sample." + ext)).write_bytes(data)
             self.metadata["hashes"][ext] = {
                 "sha256": hashlib.sha256(data).hexdigest(),
