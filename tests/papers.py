@@ -1628,6 +1628,7 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
         ["A validator recorded an unsupported citation."],
         snapshot,
         include_research_details=True,
+        include_research_excerpts=True,
         **opts,
     )
     for required in (
