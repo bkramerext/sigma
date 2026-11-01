@@ -28,11 +28,11 @@ jobs:
         with:
           path: candidate
           persist-credentials: false
-      - name: Check out immutable original scheduler baseline
+      - name: Check out immutable baseline (main for #423; #425 for #426)
         uses: actions/checkout@v4
         with:
-          ref: 48c1fb2322a95ddcb5a218cca29fcba59c4f8108
-          path: original-main
+          ref: ${{ github.event.pull_request.number == 426 && '430874b16ffd902250825e618d8e1f22fbd734cb' || '48c1fb2322a95ddcb5a218cca29fcba59c4f8108' }}
+          path: research-baseline
           persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,11 +42,11 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Install synthetic-test dependencies, no live API
         run: uv sync --project candidate --locked --no-dev
-      - name: Run real original-main scheduler against deterministic synthetic provider
+      - name: Run actual baseline scheduler against deterministic synthetic provider
         run: |
-          PYTHONPATH="$GITHUB_WORKSPACE/original-main/src" \
+          PYTHONPATH="$GITHUB_WORKSPACE/research-baseline/src" \
             uv run --project candidate --locked --no-sync python \
-            candidate/tests/strategy_scheduler_parity.py original-main baseline-parity.json
+            candidate/tests/strategy_scheduler_parity.py research-baseline baseline-parity.json
       - name: Run candidate parallel scheduler against identical synthetic provider
         run: |
           PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
@@ -69,10 +69,10 @@ jobs:
               left = json.dumps(baseline["semantic"], sort_keys=True, indent=2).splitlines()
               right = json.dumps(parallel["semantic"], sort_keys=True, indent=2).splitlines()
               print("\n".join(list(difflib.unified_diff(
-                  left, right, fromfile="original-main", tofile="parallel", lineterm=""
+                  left, right, fromfile="baseline", tofile="parallel", lineterm=""
               ))[:250]))
               raise AssertionError("Research semantics changed under strategy parallelization.")
-          print("PASS: original-main and candidate have identical canonical provider requests, "
+          print("PASS: baseline and candidate have identical canonical provider requests, "
                 "peer handoffs, reviewed artifacts, coordinator decisions, and outcomes.")
           PY
       - name: Verify 32 global provider slots across two backend processes
@@ -80,9 +80,9 @@ jobs:
           PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
             uv run --project candidate --locked --no-sync python \
             candidate/tests/strategy_global_slots.py
-      - name: Validate stop/resume handoff and timeout recovery on actual original main
+      - name: Validate stop/resume on baseline revision
         run: |
-          PYTHONPATH="$GITHUB_WORKSPACE/original-main/src:$GITHUB_WORKSPACE/candidate/tests" uv run --project candidate --locked --no-sync python - <<'PY'
+          PYTHONPATH="$GITHUB_WORKSPACE/research-baseline/src:$GITHUB_WORKSPACE/candidate/tests" uv run --project candidate --locked --no-sync python - <<'PY'
           import asyncio
           from pathlib import Path
           from tempfile import TemporaryDirectory
@@ -94,7 +94,7 @@ jobs:
               base = Path(root)
               asyncio.run(test_peer_finding_changes_target_investigator_after_stop_and_resume(base / "peer.sigma"))
               asyncio.run(test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(base / "timeout.sigma"))
-          print("Original main: stop/resume and timeout recovery passed.")
+          print("Baseline: stop/resume and timeout recovery passed.")
           PY
       - name: Validate stop/resume handoff and timeout recovery on parallel branch
         run: |
