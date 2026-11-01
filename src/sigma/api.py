@@ -27,6 +27,7 @@ from sigma import (
     cloud_workspaces,
     papers,
     project_types,
+    project_type_icons,
     proposals,
     python_sandbox,
     research_qa,
@@ -145,6 +146,12 @@ class ProjectTypeBody(BaseModel):
     behavior: dict[str, bool] = Field(default_factory=dict)
 
 
+class ProjectTypeIconBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=80)
+    scope: str = Field(min_length=1, max_length=500)
+
+
 class ProjectTypeCatalogBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_types: list[ProjectTypeBody] = Field(max_length=500)
@@ -181,6 +188,14 @@ def list_project_types_view(request: Request):
         "icons": {"placeholder": project_types.placeholder_icon()},
         "revision": project_types.catalog_revision(),
     }
+
+
+@app.post("/api/project-types/icon")
+async def generate_project_type_icon_view(body: ProjectTypeIconBody):
+    name, scope = body.name.strip(), body.scope.strip()
+    if not name or not scope:
+        raise ProjectError("Name and scope are required to generate an icon")
+    return {"icon": await project_type_icons.generate_icon(name, scope)}
 
 
 @app.put("/api/project-types")
