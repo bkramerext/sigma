@@ -5203,6 +5203,7 @@ async def _proofread_tex(
         # The completed pass is inspected at the start of the next iteration.
         # The next source is prepared by the normal transition above.
 
+
 async def _proofread_tex_single_pass(
     tex: str,
     state: dict[str, Any],
