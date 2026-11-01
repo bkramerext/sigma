@@ -481,6 +481,7 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 
 /* Welcome's 16px copy is scaled 1.25x in its dialog. Match the visible
    20px typography here without scaling the entire Terms card. */
+.terms-of-service-shell { width: 100%; max-width: none; }
 .terms-of-service-card { width: min(100%, 780px); }
 .terms-of-service-copy { display: grid; gap: 24px; max-width: 690px; margin: 24px 0 6px; }
 .terms-of-service-card .terms-of-service-copy > p { margin: 0; color: #bcc5cc; font: 400 20px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
