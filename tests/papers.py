@@ -523,6 +523,7 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
 
 
 
+
 def test_tex_proofreader_three_passes_with_early_convergence() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "three-pass.sigma"
@@ -531,9 +532,14 @@ def test_tex_proofreader_three_passes_with_early_convergence() -> None:
             "a" * 64, view.project.id, "b" * 64, "fixture", "high", kind="one_shot"
         )
         tex = (
-            r"\documentclass{article}" + "\n" + r"\begin{document}" + "\n"
+            r"\documentclass{article}"
+            + "\n"
+            + r"\begin{document}"
+            + "\n"
             + r"$\\alpha+\\beta=3$"
-            + "\n" + r"\end{document}" + "\n"
+            + "\n"
+            + r"\end{document}"
+            + "\n"
         )
         calls = 0
 
@@ -562,7 +568,8 @@ def test_tex_proofreader_three_passes_with_early_convergence() -> None:
                 patch.object(papers, "_provider_structured", new=provider),
             ):
                 return await papers._proofread_tex(
-                    tex, state,
+                    tex,
+                    state,
                     binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
                     config={"model": "fixture", "reasoning_effort": "high"},
                     project_id=view.project.id,
@@ -580,6 +587,7 @@ def test_tex_proofreader_three_passes_with_early_convergence() -> None:
         again, _ = asyncio.run(run())
         assert again == result
         assert calls == 3
+
 
 def test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data() -> None:
     normal = r"\documentclass{article}\begin{document}Result $x=3$.\end{document}"
