@@ -15,7 +15,7 @@ import threading
 import weakref
 import zlib
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
 from dataclasses import replace
@@ -10110,11 +10110,8 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         # Skeptic without waiting for an unrelated slow Investigator. Each
         # branch remains strictly sequential; the coordinator still applies
         # cross-branch decisions at a completed wave boundary.
-        await run_wave(
-            [
-                _portfolio_strategy_pipeline(session_id, path, branch, semaphore, state_lock)
-                for branch in selected
-            ]
+        await _portfolio_run_selected(
+            session_id, path, selected, semaphore, state_lock, run_wave
         )
         async with state_lock:
             record = _read(path, session_id)
@@ -10168,6 +10165,29 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             )
             _event(record, "coordinator.portfolio_review", record["message"])
             _save(path, record)
+
+
+async def _portfolio_run_selected(
+    session_id: str,
+    path: str,
+    selected: list[dict[str, Any]],
+    semaphore: asyncio.Semaphore,
+    state_lock: asyncio.Lock,
+    run_wave: Callable[[list[Any]], Awaitable[list[Any]]],
+) -> None:
+    """Schedule independent I/S branches; coordinator still commits a full round.
+
+    The dispatched roles never publish peer-visible artifacts until this whole
+    batch returns and _portfolio_worker performs its coordinated review. Tests
+    can replace this dispatch seam with the original wave-based scheduler to
+    check that parallel dispatch preserves the actual research inputs/results.
+    """
+    await run_wave(
+        [
+            _portfolio_strategy_pipeline(session_id, path, branch, semaphore, state_lock)
+            for branch in selected
+        ]
+    )
 
 
 async def _portfolio_strategy_pipeline(
