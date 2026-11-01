@@ -202,10 +202,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     </table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" key={item.id} open={open === item.id}>
-    <div className="project-type-card-header">
-      <summary onClick={event => { event.preventDefault(); setOpen(previous => previous === item.id ? null : item.id); }}><span className="project-type-card-icon">{renderEffectiveIcon(item)}</span><strong>{item.name || 'New project type'}</strong><small>{readonly ? 'Built-in' : 'Custom'}</small></summary>
-      {!readonly && <button type="button" className="project-type-remove" disabled={busy} aria-label={`Remove project type ${item.name || 'new project type'}`} onClick={() => removeDraft(item.id)}>Remove</button>}
-    </div>
+    <summary onClick={event => { event.preventDefault(); setOpen(previous => previous === item.id ? null : item.id); }}>
+      <span className="project-type-card-icon">{renderEffectiveIcon(item)}</span><strong>{item.name || 'New project type'}</strong><small>{readonly ? 'Built-in' : 'Custom'}</small>
+      {!readonly && <button type="button" className="project-type-remove" disabled={busy} aria-label={`Remove project type ${item.name || 'new project type'}`} onClick={event => { event.preventDefault(); event.stopPropagation(); removeDraft(item.id); }}>Remove</button>}
+    </summary>
     <div className="project-type-card-body">
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
