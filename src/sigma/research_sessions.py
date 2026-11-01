@@ -8244,6 +8244,22 @@ async def _portfolio_role_call(
             )
             if branch.get("status") not in {"queued", "running"}:
                 return False
+            # Enforce the saved dependency state, not merely the absence of a
+            # provider request. A second Investigator cannot start after its
+            # result was saved but before the matching Skeptic has dispatched.
+            if role == "investigator":
+                if (
+                    cycle != branch.get("cycle", 0) + 1
+                    or branch.get("pending_investigation") is not None
+                    or branch.get("pending_skeptic") is not None
+                ):
+                    return False
+            elif (
+                cycle != branch.get("cycle")
+                or branch.get("pending_investigation") is None
+                or branch.get("pending_skeptic") is not None
+            ):
+                return False
             # Persistent per-strategy dispatch fencing. The session state lock
             # protects this check and the subsequent saved step reservation,
             # even when another strategy's provider call is still in flight.
