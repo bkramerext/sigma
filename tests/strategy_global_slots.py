@@ -1,4 +1,5 @@
 """Offline cross-process test of the hosted backend-wide provider slot bound."""
+
 from __future__ import annotations
 
 import os
@@ -44,7 +45,10 @@ with patch.object(research_sessions.cloud_workspaces, 'storage_root', return_val
                 def run_child() -> str:
                     result = subprocess.run(
                         [sys.executable, "-c", child, str(root)],
-                        check=True, capture_output=True, text=True, timeout=8,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=8,
                     )
                     return result.stdout.strip()
 
