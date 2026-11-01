@@ -9412,6 +9412,48 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
     )
     assert len(huge_question["problem"]) == research_sessions.MAX_AGENT_CONTEXT_BYTES + 1
 
+    # One valid Investigator may contain 24 reasoning steps with 12 KB each:
+    # a Skeptic must still receive an honestly incomplete bounded extract,
+    # and the exact full Investigator response must remain untouched.
+    oversized_investigator = {
+        "claim": "A provisional local result, not a proof.",
+        "method": "Method detail " * 400,
+        "reasoning_steps": [
+            {
+                "title": f"Step {i}",
+                "argument": "Reasoning detail " * 720,
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            }
+            for i in range(24)
+        ],
+        "open_obligations": ["Resolve the remaining counterexample"],
+        "evidence_status": "Unverified model reasoning.",
+    }
+    saved_investigator = deepcopy(oversized_investigator)
+    skeptic_context = {
+        "problem": "Evaluate the provisional result without inventing proof.",
+        "investigator_output": oversized_investigator.copy(),
+        "investigator_step_id": "saved-investigator-step",
+        "context_manifest": {"sources": []},
+    }
+    assert research_sessions._json_bytes(skeptic_context) > research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert research_sessions.compact_dispatch_context(
+        skeptic_context, limit=research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    assert research_sessions._json_bytes(skeptic_context) <= research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert skeptic_context["investigator_output_extract_complete"] is False
+    excerpt = skeptic_context["investigator_output"]
+    assert excerpt["extract_complete"] is False
+    assert excerpt["evidence_availability"] == "incomplete_extract_original_not_supplied"
+    assert excerpt["reasoning_steps_total"] == 24
+    assert excerpt["reasoning_steps_omitted"] == 20
+    assert "reasoning_steps" in excerpt["extract_truncated_fields"]
+    assert skeptic_context["context_manifest"]["inflight_investigator_extract"]["source_step_id"] == (
+        "saved-investigator-step"
+    )
+    assert oversized_investigator == saved_investigator
+
 
 async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Path):
     """Three strategies and three rounds continue despite live UI-style edits."""
