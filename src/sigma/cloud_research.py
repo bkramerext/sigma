@@ -273,15 +273,21 @@ def _next_global_reset_at() -> str | None:
 
 
 def _global_call_amount_units(db: sqlite3.Connection) -> int:
+    """Reserve worst-case liability globally; user allowances remain estimates."""
     window_start = _global_window_start()
-    if window_start is None:
-        return _call_amount_units(db, "")
-    # Unresolved reservations and unknown dispatches remain obligations
-    # across month boundaries; only settled older usage leaves the window.
-    return _call_amount_units(
-        db,
-        "WHERE created_at>=? OR status IN ('reserved','unknown')",
-        (window_start,),
+    query = "SELECT amount_usd, maximum_liability_usd, status FROM calls"
+    params: tuple[Any, ...] = ()
+    if window_start is not None:
+        # An unsettled request remains an obligation across month boundaries.
+        query += " WHERE created_at>=? OR status IN ('reserved','unknown')"
+        params = (window_start,)
+    return sum(
+        _usd_units(
+            max(row["amount_usd"], row["maximum_liability_usd"])
+            if row["status"] in {"reserved", "unknown"}
+            else row["amount_usd"]
+        )
+        for row in db.execute(query, params)
     )
 
 
@@ -367,7 +373,8 @@ def _connect() -> sqlite3.Connection:
                 input_tokens INTEGER,
                 output_tokens INTEGER,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                maximum_liability_usd REAL NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS allowance_windows (
                 workspace_id TEXT PRIMARY KEY,
@@ -390,6 +397,11 @@ def _connect() -> sqlite3.Connection:
             db.execute("ALTER TABLE jobs ADD COLUMN session_slot INTEGER NOT NULL DEFAULT 0")
         if "job_kind" not in columns:
             db.execute("ALTER TABLE jobs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'research'")
+        call_columns = {row["name"] for row in db.execute("PRAGMA table_info(calls)")}
+        if "maximum_liability_usd" not in call_columns:
+            db.execute(
+                "ALTER TABLE calls ADD COLUMN maximum_liability_usd REAL NOT NULL DEFAULT 0"
+            )
         os.chmod(path, 0o600)
         return db
     except (OSError, sqlite3.Error) as exc:
@@ -1268,7 +1280,14 @@ def recover_job(session_id: str) -> None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
-def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reservation: int) -> None:
+def reserve_call(
+    session_id: str,
+    call_id: str,
+    amount_usd: float,
+    token_reservation: int,
+    *,
+    maximum_liability_usd: float | None = None,
+) -> None:
     """Write a conservative cost reservation before making provider I/O."""
     owner = _workspace_id()
     global_ceiling = _spend_ceiling_decimal()
@@ -1277,9 +1296,14 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
     user_ceiling_units = _ceiling_units(user_ceiling)
     unlimited_admin = _admin_has_unlimited_spend()
     amount_units = _usd_units(amount_usd)
+    liability_units = _usd_units(
+        amount_usd if maximum_liability_usd is None else maximum_liability_usd
+    )
+    if liability_units < amount_units:
+        raise CloudResearchUnavailable("Provider liability cannot be below estimated usage.")
     reserved_amount = amount_units / USD_UNITS
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
-    if amount_units <= 0 or amount_units > global_ceiling_units:
+    if amount_units <= 0 or liability_units > global_ceiling_units:
         raise CloudResearchUnavailable(
             "The next provider call cannot be reserved within the global spend ceiling."
         )
@@ -1308,12 +1332,12 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                     "This provider attempt was already reserved and cannot be replayed."
                 )
             used_units = _global_call_amount_units(db)
-            if used_units + amount_units > global_ceiling_units:
+            if used_units + liability_units > global_ceiling_units:
                 remaining_units = max(0, global_ceiling_units - used_units)
                 raise CloudResearchUnavailable(
                     f"{_global_ceiling_failure_message()} "
                     f"Remaining global capacity: ${remaining_units / USD_UNITS:.4f}; "
-                    f"next call requires ${amount_units / USD_UNITS:.4f}. "
+                    f"next call may require up to ${liability_units / USD_UNITS:.4f}. "
                     "No provider call was made."
                 )
             user_used_units = _user_call_amount_units(db, owner)
@@ -1328,7 +1352,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 )
             now = _now()
             db.execute(
-                "INSERT INTO calls VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO calls VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     call_id,
                     session_id,
@@ -1340,6 +1364,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                     None,
                     now,
                     now,
+                    liability_units / USD_UNITS,
                 ),
             )
     except sqlite3.Error as exc:
