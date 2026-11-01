@@ -142,7 +142,7 @@
 .home-page .home-cloud-prompt { position: absolute; z-index: 1; top: 72px; right: clamp(26px, 5vw, 72px); margin: 0; }
 @media (max-width: 900px) {
   .home-page .home-cloud-prompt { position: relative; top: auto; right: auto; margin: 18px 0 0 clamp(26px, 5.4vw, 90px); }
-  .home-page .home-projects { position: relative; top: auto; left: auto; width: min(520px, calc(100% - 2 * var(--home-project-edge))); margin: calc(1.75 * var(--home-corner-gap)) 0 0 var(--home-project-edge); }
+  .home-page .home-projects { position: relative; top: auto; left: auto; width: min(520px, calc(100% - 2 * var(--home-project-edge))); margin: max(0px, calc(1.75 * var(--home-corner-gap) - 20px)) 0 0 var(--home-project-edge); }
 }
 .home-page { height: 100dvh; min-height: 100dvh; overflow: hidden; }
 .home-page > .home-shell { height: 100%; min-height: 0; overflow: hidden; }
