@@ -67,3 +67,18 @@ I implemented a deterministic numerical check in `docs/evaluations/report_qualit
 The paper's `n=1800` **sufficient for at least 80%** statement is consistent with this calculation, but **extremely conservative** under the particular specified model. The older approximate `486` calculation does **not** reach 80% for the actual proposed gate in this numerical check. The first `n` reaching 80% among 450–550 was 521; this is **not** a globally optimal, deployable or independently validated sample size. No institutional enrollment recommendation follows: task/researcher clustering, changing task mix, shared-queue interference, budget constraints and the separate safety/fairness gates remain unresolved. A next-stage research challenge is to analyze sensitivity to discordance probability and cluster dependence, not merely to repeat `n=1800` as a polished-looking fact.
 
 This independently checks one narrow conditional quantitative claim while preserving the frozen manuscript and its unresolved evidence gaps.
+
+
+### Adversarial sensitivity: the 1,800-episode certificate is not robust to a different alternative
+
+Using the **same exact decision rule**, parameterize `q=p10+p01` and `Δ=p10-p01`, so `p10=(q+Δ)/2`, `p01=(q-Δ)/2`. These are **hypothetical probability models**, not observed campus outcomes:
+
+| Hypothetical true difference Δ | Discordance q | P(pass gate) at n=800 | P(pass gate) at n=1800 |
+|---:|---:|---:|---:|
+| 0.20 | 0.40 | 0.9613 | 0.99998 |
+| 0.20 | 0.80 | 0.7613 | 0.9902 |
+| 0.15 | 0.40 | 0.2688 | 0.7117 |
+| 0.15 | 0.80 | 0.1835 | 0.4632 |
+| 0.12 | 0.40 | 0.0230 | 0.0649 |
+
+**Finding:** The numerical certificate is **conditional on the precise alternative**. It does not mean that 1,800 pairs provides 80% power across plausible useful-completion improvements or discordance rates. At `Δ=0.15, q=0.80`, the modeled probability of passing is only ~46% even at 1,800 pairs. More importantly, IID may be false when 100 researchers contribute repeated tasks to shared queues; the table does not address that dependence. A rigorous pilot needs a prespecified design alternative, nuisance-parameter sensitivity and clustering-aware analysis. This is a discriminating harder case for the report generator's treatment of quantitative claims.
