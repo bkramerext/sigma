@@ -57,7 +57,9 @@ MAX_LONG_PAPER_CALLS = (
     + MAX_LONG_PAPER_OUTLINE_CALLS
     + MAX_LONG_PAPER_SECTIONS
 )
-MAX_PROOFREAD_CALLS = 32
+MAX_PROOFREADER_PASSES = 3
+MAX_PROOFREAD_CHUNKS = 32
+MAX_PROOFREAD_CALLS = MAX_PROOFREADER_PASSES * MAX_PROOFREAD_CHUNKS
 MAX_PROOFREAD_CHUNK_CHARS = 16_000
 MAX_PROOFREAD_CHUNK_BYTES = 32_000
 MAX_PROOFREAD_TEX_BYTES = 2_000_000
@@ -1907,7 +1909,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         attempts = proofreading.get("attempts")
         if (
             not isinstance(bounds, list)
-            or not 1 <= len(bounds) <= MAX_PROOFREAD_CALLS
+            or not 1 <= len(bounds) <= MAX_PROOFREAD_CHUNKS
             or not isinstance(corrected, list)
             or len(corrected) != len(bounds)
             or not isinstance(attempts, list)
@@ -4704,9 +4706,9 @@ def _tex_chunks(tex: str) -> list[tuple[int, int]]:
         chunks.append((chunk_start, chunk_end))
     if not chunks:
         chunks = [(0, len(tex))]
-    if len(chunks) > MAX_PROOFREAD_CALLS:
+    if len(chunks) > MAX_PROOFREAD_CHUNKS:
         raise ProjectError(
-            f"The paper needs more than {MAX_PROOFREAD_CALLS} bounded proofreading calls; the authored draft is saved."
+            f"The paper needs more than {MAX_PROOFREAD_CHUNKS} bounded proofreading chunks; the authored draft is saved."
         )
     if (
         chunks[0][0] != 0
@@ -5096,6 +5098,7 @@ def _remove_diagram_figures(tex: str, expected_count: int) -> str:
     return result
 
 
+
 async def _proofread_tex(
     tex: str,
     state: dict[str, Any],
@@ -5106,12 +5109,89 @@ async def _proofread_tex(
     project_path_value: str,
     report: PaperStageCallback,
 ) -> tuple[str, dict[str, Any]]:
-    """Checkpoint exact authored TeX and bounded, content-preserving patches."""
+    """Iteratively proofread revised TeX, stopping at convergence or the pass limit.
+
+    A complete pass is checkpointed before starting the next one. On resume,
+    the active checkpoint's initial source is the revised input for that pass.
+    Legacy checkpoints without pass metadata retain their previous behavior.
+    """
+    while True:
+        checkpoint = state.get("proofreading")
+        if isinstance(checkpoint, dict) and "pass_number" not in checkpoint:
+            return await _proofread_tex_single_pass(
+                tex, state, binding=binding, config=config, project_id=project_id,
+                project_path_value=project_path_value, report=report,
+            )
+        current_tex = (
+            checkpoint["initial_tex"]
+            if isinstance(checkpoint, dict) and checkpoint.get("pass_number", 1) > 1
+            else tex
+        )
+        pass_number = int(checkpoint.get("pass_number", 1)) if isinstance(checkpoint, dict) else 1
+        history = list(checkpoint.get("pass_history", [])) if isinstance(checkpoint, dict) else []
+        revised, result = await _proofread_tex_single_pass(
+            current_tex, state, binding=binding, config=config, project_id=project_id,
+            project_path_value=project_path_value, report=report,
+            pass_number=pass_number, pass_history=history,
+        )
+        if (result["status"] != "complete" or revised == current_tex
+                or pass_number >= MAX_PROOFREADER_PASSES):
+            return revised, result
+        # Record just the completed pass's accounting; totals on the current
+        # checkpoint already include the history and must not be counted twice.
+        prior_attempts = sum(int(item["provider_calls_attempted"]) for item in history)
+        prior_retries = sum(int(item["safe_retry_count"]) for item in history)
+        prior_elapsed = sum(int(item["elapsed_seconds"]) for item in history)
+        history.append({
+            "provider_calls_attempted": int(result["provider_calls_attempted"]) - prior_attempts,
+            "safe_retry_count": int(result["safe_retry_count"]) - prior_retries,
+            "elapsed_seconds": int(result["elapsed_seconds"]) - prior_elapsed,
+            "corrections": list(result["corrections"]),
+            "diagnostics": list(result["diagnostics"]),
+        })
+        # The completed pass remains durable until the next pass checkpoint is
+        # persisted, so interruption never repeats its paid calls.
+        state.pop("proofreading")
+        try:
+            revised, result = await _proofread_tex_single_pass(
+                revised, state, binding=binding, config=config,
+                project_id=project_id, project_path_value=project_path_value,
+                report=report, pass_number=pass_number + 1, pass_history=history,
+            )
+        except BaseException:
+            # If the next pass did not establish its checkpoint, restore the
+            # completed pass rather than leave a missing resume marker.
+            if "proofreading" not in state:
+                state["proofreading"] = checkpoint
+                _save_work(project_path_value, state)
+            raise
+        # Continue from the latest checkpoint, retaining cumulative provenance.
+        if result["status"] != "complete" or revised == result["initial_tex"] or pass_number + 1 >= MAX_PROOFREADER_PASSES:
+            return revised, result
+        tex = revised
+        # The completed pass is inspected at the start of the next iteration.
+        # The next source is prepared by the normal transition above.
+
+async def _proofread_tex_single_pass(
+    tex: str,
+    state: dict[str, Any],
+    *,
+    binding: Mapping[str, Any],
+    config: dict[str, Any],
+    project_id: str,
+    project_path_value: str,
+    report: PaperStageCallback,
+    pass_number: int = 1,
+    pass_history: list[dict[str, Any]] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Checkpoint one bounded, content-preserving proofreading pass."""
     checkpoint = state.get("proofreading")
     if checkpoint is None:
         bounds = _tex_chunks(tex)
         checkpoint = {
             "status": "running",
+            "pass_number": pass_number,
+            "pass_history": list(pass_history or []),
             "initial_tex": tex,
             "initial_sha256": hashlib.sha256(tex.encode()).hexdigest(),
             "bounds": [[start, end] for start, end in bounds],
@@ -5119,11 +5199,11 @@ async def _proofread_tex(
             "attempts": ["pending"] * len(bounds),
             "corrections": [],
             "diagnostics": _tex_static_diagnostics(tex),
-            "provider_calls_attempted": 0,
+            "provider_calls_attempted": sum(int(p["provider_calls_attempted"]) for p in (pass_history or [])),
             "provider_calls_prior_at_start": int(state.get("proofreading_calls_prior", 0)),
             "provider_calls_accounting_version": 2,
-            "safe_retry_count": 0,
-            "elapsed_seconds": 0,
+            "safe_retry_count": sum(int(p["safe_retry_count"]) for p in (pass_history or [])),
+            "elapsed_seconds": sum(int(p["elapsed_seconds"]) for p in (pass_history or [])),
             "ai_performed": False,
             "fallback_reason": None,
         }
@@ -5185,7 +5265,9 @@ async def _proofread_tex(
                 "The saved corrected TeX checksum is invalid; the draft is preserved."
             )
         return final_tex, checkpoint
-    if int(state.get("proofreading_calls_prior", 0)) + len(bounds) > MAX_PROOFREAD_CALLS:
+    pending_calls = sum(attempt == "pending" for attempt in attempts)
+    if (int(state.get("proofreading_calls_prior", 0))
+            + int(checkpoint["provider_calls_attempted"]) + pending_calls > MAX_PROOFREAD_CALLS):
         raise ProjectError(
             "The bounded proofreading call limit is exhausted; the authored draft remains saved."
         )
