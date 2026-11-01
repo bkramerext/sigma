@@ -745,11 +745,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             diagnostic_disclosure = diagnostic_row.locator("button.session-row-disclosure")
             if diagnostic_disclosure.get_attribute("aria-expanded") != "true":
                 diagnostic_disclosure.click()
-            expect(
-                diagnostic.get_by_role("alert").filter(
-                    has_text="Session #"
-                )
-            ).to_contain_text("could not be displayed")
+            expect(diagnostic.get_by_role("alert").filter(has_text="Session #")).to_contain_text(
+                "could not be displayed"
+            )
             expect(diagnostic.get_by_role("heading", name="Strategies")).to_be_visible()
             diagnostic.close()
 

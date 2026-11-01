@@ -399,6 +399,8 @@ async def test_last_shared_turn_failure_survives_terminal_sibling_finalization(p
         role = payload["text"]["format"]["name"]
         calls.append((strategy_id, role, cycle))
         if strategy_id == first.id and role == "research_skeptic":
+            if cycle == 2:
+                raise httpx.ReadTimeout("final shared turn timed out")
             terminal_review = skeptic(1, "stop", "no_progress")
             terminal_review["remaining_obligations"] = []
             terminal_review["next_question"] = ""
@@ -409,8 +411,6 @@ async def test_last_shared_turn_failure_survives_terminal_sibling_finalization(p
             result = investigation(cycle)
             result["open_obligations"] = []
             return httpx.Response(200, json=provider_response(result))
-        if strategy_id == second.id and role == "research_skeptic" and cycle == 2:
-            raise httpx.ReadTimeout("final shared turn timed out")
         if strategy_id == second.id and role == "research_skeptic":
             return httpx.Response(200, json=provider_response(skeptic(1)))
         return httpx.Response(200, json=provider_response(investigation(cycle)))
@@ -445,16 +445,16 @@ async def test_last_shared_turn_failure_survives_terminal_sibling_finalization(p
         finished["message"],
         branches,
     )
-    assert calls[-1] == (second.id, "research_skeptic", 2), (calls, finished["message"], branches)
-    assert branches[first.id]["status"] == "ended"
+    assert calls[-1] == (first.id, "research_skeptic", 2), (calls, finished["message"], branches)
+    assert branches[first.id]["status"] == "failed"
     assert branches[first.id]["artifacts"]
-    assert branches[second.id]["status"] == "failed"
-    assert branches[second.id]["termination_reason_code"] == "timeout"
+    assert branches[first.id]["termination_reason_code"] == "timeout"
+    assert branches[second.id]["status"] == "ended"
     assert [step["status"] for step in finished["steps"]].count("failed") == 1
     assert finished["steps"][-1]["failure_kind"] == "timeout"
     assert finished["termination_reason_code"] == "provider_or_strategy_failure"
     assert len(finished["artifacts"]) == 2
-    assert "Second route: provider response timed out" in finished["message"]
+    assert "Saved approach: provider response timed out" in finished["message"]
     assert "final available turn" in finished["message"]
     assert "no further agent turn remained for recovery" in finished["message"]
     assert "2 findings were preserved" in finished["message"]
@@ -9852,14 +9852,11 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
     assert finished["calls_used"] == 18, (finished["calls_used"], finished["message"])
     assert len(submitted) == 18
     assert len(finished["artifacts"]) == 9
-    first_artifact = next(
-        a for a in finished["artifacts"] if a["strategy_id"] == first.id
-    )
+    first_artifact = next(a for a in finished["artifacts"] if a["strategy_id"] == first.id)
     assert first_artifact["skeptic_output"]["stop_reason"] == "decisive_counterexample"
     assert first_artifact["coordinator_decision"] == "revise"
     assert any(
-        event["kind"] == "coordinator.provisional_stop_reopened"
-        for event in finished["events"]
+        event["kind"] == "coordinator.provisional_stop_reopened" for event in finished["events"]
     )
     assert len({strategy_id for strategy_id, _, _ in submitted}) == 3
     saved = research_sessions._read(str(path), started["id"])
@@ -10162,9 +10159,7 @@ def main():
                 root / "portfolio-three-turns.sigma"
             )
         )
-        asyncio.run(
-            test_portfolio_round_ceiling_not_mislabeled_as_funding_shortage()
-        )
+        test_portfolio_round_ceiling_not_mislabeled_as_funding_shortage()
         asyncio.run(
             test_eighteen_turns_survive_project_edits_and_bounded_context(
                 root / "portfolio-eighteen-turns.sigma"

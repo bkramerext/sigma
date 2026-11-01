@@ -8270,7 +8270,8 @@ def _commit_portfolio_review(
         len(record.get("strategy_runs", [])) > 1
         and cycle < int(record.get("cycle_limit", 3))
         and int(record.get("calls_used", 0)) + 2 <= int(record.get("call_limit", CALL_LIMIT))
-        and decision in {
+        and decision
+        in {
             "stop_decisive_counterexample",
             "stop_no_progress",
             "stop_productive_conclusion",

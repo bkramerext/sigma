@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import re
-from pathlib import Path
 
 from sigma.project_bundle import transform_members
 from sigma.projects import ProjectError, _stage, project_path, project_write_lock
