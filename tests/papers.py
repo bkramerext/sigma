@@ -4292,6 +4292,26 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
     assert papers._paper_long_form(package) is True
 
 
+def test_fallback_planner_ranks_complete_research_notes_over_operational_fields() -> None:
+    source = "session:fixture"
+    notes = [
+        papers.EvidenceNote(statement="events/4/project_change/previous/reasoning_effort: high", kind="result", evidence_refs=[source]),
+        papers.EvidenceNote(statement="events/10/failure_kind: preflight_error", kind="negative", evidence_refs=[source]),
+        papers.EvidenceNote(statement="investigator_output/result: The saved comparison found a stable difference between the two measured conditions.", kind="result", evidence_refs=[source]),
+        papers.EvidenceNote(statement="skeptic_response/counterexample: A saved counterexample shows that the proposed rule fails for the boundary case.", kind="negative", evidence_refs=[source]),
+        papers.EvidenceNote(statement="investigator_output/proof/0: This proof begins with a long incomplete fragment", kind="result", evidence_refs=[source]),
+    ]
+    plan = papers._evidence_based_long_plan(
+        {"title": "Fixture project", "problem": "What changes across conditions?"}, notes, {source}
+    )
+    assert all("events/" not in claim.statement for claim in plan.claims)
+    assert all("investigator_output/" not in claim.statement for claim in plan.claims)
+    assert any("stable difference" in claim.statement for claim in plan.claims)
+    assert any("counterexample" in claim.statement for claim in plan.claims)
+    assert all(set(claim.evidence_refs) <= {source} for claim in plan.claims)
+    assert "stable difference" in plan.conclusions[0]
+
+
 def test_invalid_planning_claim_reference_is_recoverable() -> None:
     """Repair an inconsistent paid outline without repeating the plan call."""
     package, valid_plan = fast_package()
@@ -5568,6 +5588,7 @@ def main() -> None:
     test_easy_paper_start_over_escapes_repeated_paid_planning()
     test_maximum_regions_archived_one_session_stays_fast()
     test_easy_paper_avoids_unnecessary_long_form_calls()
+    test_fallback_planner_ranks_complete_research_notes_over_operational_fields()
     test_invalid_planning_claim_reference_is_recoverable()
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
     test_one_shot_publishes_with_repaired_claim_links()
