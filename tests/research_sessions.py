@@ -817,6 +817,21 @@ def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_
     assert stable["status"] == "reused"
     assert stable["sources"][-1]["notes"] == original_note
 
+    # A project can mention the other branch's terms incidentally. Its title
+    # and central objective, not the first matching word, select the method.
+    reliability = research_method_sources.select_method_sources(
+        "computer_science", "AI Agent Reliability",
+        "Evaluate reliability when jobs pass a gateway and route retries",
+        ("Model external acknowledgment",), ()
+    )
+    assert reliability["branch"] == "ai-reliability"
+    federation = research_method_sources.select_method_sources(
+        "computer_science", "Sovereign AI Federation",
+        "Evaluate agent reliability under a campus gateway and network partition",
+        ("Compare authorization policies",), ()
+    )
+    assert federation["branch"] == "federation"
+
     # Specialty changed within the *same* project type: previous source is no
     # longer comprehensive; do not blindly persist a combinatorics reference.
     original = research_method_sources.select_method_sources(
