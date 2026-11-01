@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
+import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type ErrorInfo } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
@@ -16,6 +16,35 @@ import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } f
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
+
+// A failure while presenting historical research must never unmount the app.
+// This boundary does not write to projects, interrupt workers, or discard data.
+class ResearchDisplayBoundary extends Component<
+  { label: string; children: ReactNode },
+  { message: string | null }
+> {
+  state: { message: string | null } = { message: null };
+
+  static getDerivedStateFromError(error: unknown): { message: string } {
+    return { message: error instanceof Error ? error.message : String(error) };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('SIGMA research display error:', this.props.label, error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.message) return this.props.children;
+    return <div className="workspace-state" role="alert">
+      <strong>{this.props.label} could not be displayed.</strong>
+      <p>The research is still saved. This is a display error, not a session failure.</p>
+      <p className="error">{this.state.message}</p>
+      <button type="button" className="text-view-link" onClick={() => window.location.reload()}>Reload display</button>
+      <a className="text-view-link" href="/">Return Home</a>
+    </div>;
+  }
+}
+
 
 // Prospective navigation rail; keep implementation available for later activation.
 const ENABLE_WORKSPACE_SIDEBAR = false;
@@ -1411,7 +1440,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
-    {currentUnderstanding && <CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/>}
+    {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
@@ -1435,7 +1464,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
               </div>
             </div>
-            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/>
+            {sessionExpanded
+              ? <ResearchDisplayBoundary label={`Session #${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary>
+              : <div id={`session-content-${item.id}`} hidden/>}
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
@@ -4541,8 +4572,8 @@ function App() {
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
     {url.pathname === '/' ? <Home initialPath={lastPath} onOpen={view => {
       setOpenedView(view); setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path); navigate(projectUrl(view.path));
-    }}/> : url.pathname === '/project' ? <ProjectScreen key={location}
-      initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/>
+    }}/> : url.pathname === '/project' ? <ResearchDisplayBoundary key={location} label="Project workspace"><ProjectScreen
+      initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/></ResearchDisplayBoundary>
       : <><Header goHome={goHome}/><h1>Page not found</h1><a href="/" onClick={goHome}>Return Home</a></>}
   </main><FloatingTooltip/></>;
 }
