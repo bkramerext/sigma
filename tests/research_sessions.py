@@ -5778,7 +5778,14 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
         finished = await wait_for(path, started["id"])
 
     branches = finished["strategy_runs"]
-    assert requests == 55, (requests, finished["message"])
+    assert requests == 55, (
+        requests,
+        finished["message"],
+        [(branch["strategy_title"], branch["status"], branch.get("current_action"),
+          branch.get("reason"), branch.get("cycle")) for branch in branches],
+        [(step.get("status"), step.get("failure_kind"), step.get("error"),
+          step.get("message")) for step in finished.get("steps", [])[-12:]],
+    )
     assert finished["calls_used"] == 55
     assert finished["status"] == "ended", (finished["status"], finished["message"])
     assert len(finished["artifacts"]) == 27
