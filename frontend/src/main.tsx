@@ -2574,7 +2574,7 @@ function AboutArchitecture() {
                 <span className="about-diagram-node-subtitle">{strategy.subtitle}</span>
               </div>
               <div className="about-strategy-round" aria-label="Research round: Investigator turn followed by Skeptic turn">
-                <span>Investigator</span><b aria-hidden="true">→</b><span>Skeptic</span>
+                <span><strong>Investigator</strong></span><b aria-hidden="true">→</b><span><strong>Skeptic</strong></span>
               </div>
               {help(strategy.id, strategy.title)}
             </div>);
@@ -2586,9 +2586,9 @@ function AboutArchitecture() {
       <div className="about-session-frame">
         <div className="about-session-heading">{card('session', 'Research Session', 'A run where SIGMA investigates your selected approaches')}</div>
         <div className="about-agent-cycle-preview">
-          <span className="about-agent-role">Investigator<small>Tries an idea</small></span>
+          <span className="about-agent-role"><strong>Investigator</strong><small>Tries an idea</small></span>
           <svg className="about-agent-review-arrow" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-agent-arrow-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <span className="about-agent-role">Skeptic<small>Looks for flaws</small></span>
+          <span className="about-agent-role"><strong>Skeptic</strong><small>Looks for flaws</small></span>
           <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show') + ' Investigator and Skeptic example'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Show'}</button>
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
