@@ -5715,6 +5715,9 @@ async def _proofread_tex_single_pass(
                     )
                     continue
                 trial = candidate.replace(proposal.find, proposal.replace, 1)
+                if trial == candidate:
+                    # An identical replacement is not an accepted correction.
+                    continue
                 current_chunks[index] = trial
                 if (
                     _tex_semantic_signature(trial) != original_signature
