@@ -11100,9 +11100,7 @@ def test_obligation_dispatch_citations_exclude_withheld_history() -> None:
     assert actual["source_step_ids"] == ["current-step"]
     assert actual["basis_step_ids"] == ["current-step"]
     assert actual["withheld_source_step_ids_count"] == 1
-    assert actual["source_artifact_availability"] == (
-        "incomplete_extract_original_not_supplied"
-    )
+    assert actual["source_artifact_availability"] == ("incomplete_extract_original_not_supplied")
     assert saved == original, "Only the dispatch copy may change"
 
     allowed = {
