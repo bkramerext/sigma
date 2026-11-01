@@ -2964,8 +2964,11 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         "Methods and evidence",
         "Findings and hypotheses",
         (
-            "Distinguish observed biology from mechanistic hypotheses and proposed experiments. "
-            "Identify organisms, developmental stages, controls, and cross-species limitations."
+            "Distinguish observed biology from mathematical identifiability, mechanistic hypotheses "
+            "and proposed interventions. Identify organism and developmental stage, biological unit, "
+            "whether specimens are paired, sample and assay provenance, and cross-species limits. "
+            "Compare mechanisms through predictions that would genuinely discriminate them; state "
+            "matched-time controls, alternative explanations and falsifiers without inventing results."
         ),
     ),
     "chemistry": (
@@ -2991,8 +2994,11 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         "Methods and evidence",
         "Algorithms, results, and limitations",
         (
-            "Distinguish algorithmic guarantees from tests, benchmarks and conjectures. "
-            "Document counterexamples, complexity assumptions and reproducibility."
+            "Define the workload, outcome oracle, unit of analysis, execution horizon, and evaluators "
+            "before drawing reliability conclusions. Distinguish formal conditional guarantees, "
+            "counterexamples, saved incidents, observed benchmarks and proposed fault-injection studies. "
+            "Document retracted generalizations, correlated repetitions, sampling assumptions and "
+            "what external evidence would validate a claimed improvement."
         ),
     ),
     "engineering": (
@@ -3000,8 +3006,11 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         "Methods and evidence",
         "Design analysis and tradeoffs",
         (
-            "Distinguish simulated, measured and predicted performance, with operating "
-            "constraints, failure modes and validation gaps."
+            "Distinguish architectural premises, precise invariants, hypothetical sensitivity "
+            "calculations, independently observed performance and proposed pilots. Compare a fair "
+            "existing baseline against each new component; explain policy, reliability, capacity, "
+            "cost per useful outcome, adversarial failure modes and verification gaps without "
+            "presenting proposed mechanisms as deployed features."
         ),
     ),
     "economics": (
