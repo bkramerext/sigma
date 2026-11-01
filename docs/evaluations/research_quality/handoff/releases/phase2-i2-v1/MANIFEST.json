@@ -31,14 +31,14 @@
   },
   "totals": {
     "completed_role_turns": 32,
-    "failed_or_uncertain_attempts": 15,
+    "failed_or_uncertain_attempts": 17,
     "never_dispatched_required_turns": 18,
     "complete_sessions": 0,
     "incomplete_sessions": 5,
     "failed_protocol_roles": 10
   },
   "staging_blockers": [
-    "After the safe recovery fix, all four resumable projects were retried sequentially at two concurrent strategy calls; all eight attempts received the same provider sharing usage-limit error despite the user-provided Usage page showing remaining overall allowance. Stop further retries until the provider cause is clarified.",
+    "After a 13.6-minute cooldown from the prior canary rejection (no Retry-After value was available), one single-project canary again received the same subscription-sharing rejection twice. In total, all 10 explicit post-fix recovery calls across five resumption batches were rejected, with no added research turns. Further retries are paused pending reset/support clarification.",
     "All five protocol runs remain incomplete.",
     "Xenopus attempt b0ee377a-c83c-4687-8a4a-8180252c8a2e has call_failed_dispatch_unknown and must not be blindly replayed.",
     "Chat 2 scientific review has not occurred."
@@ -96,7 +96,7 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 12,
+      "calls_used": 14,
       "configured_call_limit": 18,
       "cycle_limit": 3,
       "turns_completed": 8,
@@ -158,6 +158,15 @@
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
                   "request_body_sha256": "439d3441b65965dcd3a4e71b3b3bd53e7c68afda6ad8cd914e10e7014d89977b",
                   "all_selected_method_notes_present": true
+                },
+                {
+                  "attempt_id": "d0692479-b1fd-47ce-9815-32e98ea6c56a",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "3682f1bfbde327f38183ca9118ddda8eda967fb4aff39b5d723b26cc803e62aa",
+                  "all_selected_method_notes_present": true,
+                  "retry_after_seconds": null
                 }
               ]
             },
@@ -223,6 +232,15 @@
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
                   "request_body_sha256": "63dccecd0488d96e35a8fdae110d64ca16b7ac3bff78dbf5cc53e344316a6c35",
                   "all_selected_method_notes_present": true
+                },
+                {
+                  "attempt_id": "d12b0e0c-cc4c-453c-9cb7-f8928be4a3e5",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "2e2717d8e5f77351b3af04829d16d023d4276a49bdeed4ba8ff6f1ee942b6c48",
+                  "all_selected_method_notes_present": true,
+                  "retry_after_seconds": null
                 }
               ]
             },
@@ -272,25 +290,47 @@
           "request_body_sha256": "63dccecd0488d96e35a8fdae110d64ca16b7ac3bff78dbf5cc53e344316a6c35",
           "started_at": "2026-11-01T18:49:53.738913+00:00",
           "finished_at": "2026-11-01T18:49:56.187036+00:00"
+        },
+        {
+          "attempt_id": "d0692479-b1fd-47ce-9815-32e98ea6c56a",
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "role": "investigator",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "3682f1bfbde327f38183ca9118ddda8eda967fb4aff39b5d723b26cc803e62aa",
+          "started_at": "2026-11-01T19:03:34.164963+00:00",
+          "finished_at": "2026-11-01T19:03:36.829427+00:00"
+        },
+        {
+          "attempt_id": "d12b0e0c-cc4c-453c-9cb7-f8928be4a3e5",
+          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
+          "role": "investigator",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "2e2717d8e5f77351b3af04829d16d023d4276a49bdeed4ba8ff6f1ee942b6c48",
+          "started_at": "2026-11-01T19:03:34.300820+00:00",
+          "finished_at": "2026-11-01T19:03:36.682942+00:00"
         }
       ],
       "started_at": "2026-11-01T18:01:22.082967+00:00",
-      "last_attempt_finished_at": "2026-11-01T18:49:56.187036+00:00",
+      "last_attempt_finished_at": "2026-11-01T19:03:36.829427+00:00",
       "outcome_label": "Mixed · partial progress, unresolved",
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/agent-reliability.bundle.json.gz",
-        "sha256_compressed": "07451f585de66609cc29e3c0c675c395e0de69e1a5def65fe4ba141ee7c834da",
-        "sha256_uncompressed": "71198fe89c78ed241d0c1e1047a5594159aa03093b1e420c7f9d62060c502ac4",
-        "compressed_bytes": 3556322,
-        "uncompressed_bytes": 9847376,
+        "sha256_compressed": "3b2ddc01a94228866fe0dc08cf6d043763b9ddb149d0a88b9355662ad33a5760",
+        "sha256_uncompressed": "8a6bb21f05d8aa4fa4c347317d571111170eca957151745d2e666f5f5cc86ad1",
+        "compressed_bytes": 3630087,
+        "uncompressed_bytes": 9957993,
         "gzip_json_valid": true,
-        "research_step_count": 12,
-        "session_attempt_count": 12
+        "research_step_count": 14,
+        "session_attempt_count": 14
       },
       "mandatory_source_omitted_count": 0,
       "wall_clock_seconds": 555.993,
-      "provider_call_attempts": 12,
+      "provider_call_attempts": 14,
       "automatic_retry_attempts": 0,
       "tokens_used": 177468,
       "cost_status": "unavailable",
@@ -325,6 +365,38 @@
           "finished_at": "2026-11-01T18:49:56.187036+00:00",
           "token_usage_status": "unavailable",
           "all_selected_method_notes_present": true
+        },
+        {
+          "attempt_id": "d0692479-b1fd-47ce-9815-32e98ea6c56a",
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "role": "investigator",
+          "round": 3,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "3682f1bfbde327f38183ca9118ddda8eda967fb4aff39b5d723b26cc803e62aa",
+          "started_at": "2026-11-01T19:03:34.164963+00:00",
+          "finished_at": "2026-11-01T19:03:36.829427+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true,
+          "retry_after_seconds": null
+        },
+        {
+          "attempt_id": "d12b0e0c-cc4c-453c-9cb7-f8928be4a3e5",
+          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
+          "role": "investigator",
+          "round": 3,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "2e2717d8e5f77351b3af04829d16d023d4276a49bdeed4ba8ff6f1ee942b6c48",
+          "started_at": "2026-11-01T19:03:34.300820+00:00",
+          "finished_at": "2026-11-01T19:03:36.682942+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true,
+          "retry_after_seconds": null
         }
       ]
     },
@@ -1392,13 +1464,48 @@
     ],
     "projects_completed_turns_during_recovery": 0,
     "projects_paused_after_same_provider_error": 4,
-    "additional_provider_attempts": 8,
-    "additional_confirmed_provider_rejections": 8,
+    "additional_provider_attempts": 10,
+    "additional_confirmed_provider_rejections": 10,
     "automatic_retries": 0,
     "xenopus_resumed": false,
-    "xenopus_blocker": "Unknown dispatch cannot be replayed safely; five call attempts remain for at least seven pending role turns."
+    "xenopus_blocker": "Unknown dispatch cannot be replayed safely; five call attempts remain for at least seven pending role turns.",
+    "explicit_resumption_batches": [
+      {
+        "project": "agent",
+        "started_after_prior_rejection_seconds": null,
+        "attempts": 2,
+        "completed_turns": 0,
+        "result": "same provider rejection"
+      },
+      {
+        "project": "sovereign",
+        "attempts": 2,
+        "completed_turns": 0,
+        "result": "same provider rejection"
+      },
+      {
+        "project": "math",
+        "attempts": 2,
+        "completed_turns": 0,
+        "result": "same provider rejection"
+      },
+      {
+        "project": "warp",
+        "attempts": 2,
+        "completed_turns": 0,
+        "result": "same provider rejection"
+      },
+      {
+        "project": "agent",
+        "started_after_prior_rejection_seconds": 818,
+        "attempts": 2,
+        "completed_turns": 0,
+        "retry_after_seconds": null,
+        "result": "same provider rejection"
+      }
+    ]
   },
-  "provider_call_attempts_total": 47,
-  "confirmed_provider_rejections_total": 14,
+  "provider_call_attempts_total": 49,
+  "confirmed_provider_rejections_total": 16,
   "dispatch_unknown_attempts_total": 1
 }
