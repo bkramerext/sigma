@@ -1556,7 +1556,11 @@ def _evidence_based_long_plan(
     covered: set[str] = set()
     groups: list[tuple[str, str, list[str], list[EvidenceNote]]] = []
     for heading, purpose, kinds in categories:
-        relevant = [note for note in notes if note.kind in kinds]
+        relevant = [
+            note
+            for note in notes
+            if note.kind in kinds and ranked_candidates[id(note)][0] >= 0
+        ]
         refs = list(
             dict.fromkeys(
                 ref for note in relevant for ref in note.evidence_refs if ref in source_ids
