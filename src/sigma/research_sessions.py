@@ -8248,8 +8248,29 @@ async def _portfolio_role_call(
             # provider request. A second Investigator cannot start after its
             # result was saved but before the matching Skeptic has dispatched.
             if role == "investigator":
+                prior_cycle = branch.get("cycle", 0)
+                # Transient failures retry the same cycle under a new durable
+                # request ID. Do not block a legitimate retry, and never
+                # rerun a successfully completed Investigator turn.
+                retry_cycle = (
+                    cycle == prior_cycle
+                    and any(
+                        item.get("strategy_id") == strategy_id
+                        and item.get("role") == "investigator"
+                        and item.get("cycle") == cycle
+                        and item.get("status") in {"failed", "incomplete"}
+                        for item in record.get("steps", [])
+                    )
+                    and not any(
+                        item.get("strategy_id") == strategy_id
+                        and item.get("role") == "investigator"
+                        and item.get("cycle") == cycle
+                        and item.get("status") == "completed"
+                        for item in record.get("steps", [])
+                    )
+                )
                 if (
-                    cycle != branch.get("cycle", 0) + 1
+                    not (cycle == prior_cycle + 1 or retry_cycle)
                     or branch.get("pending_investigation") is not None
                     or branch.get("pending_skeptic") is not None
                 ):
