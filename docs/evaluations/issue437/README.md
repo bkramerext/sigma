@@ -15,7 +15,7 @@ Base: `main` at `92bc34eda4c53decd6de29af315100251a5fde62`
 | Existing multi-agent architecture content remains | **MET** | Existing disclosure and component remain; the Chrome harness confirms architecture content is present. |
 | README has an equivalent inline flow and stage notes; its lead-in is concise | **MET** | The original walkthrough is condensed, session settings link to Getting Started, and the six-stage diagram/bullets directly follow the short lead-in. Diagram arrows distinguish research export from the optional-paper route. |
 | Mermaid source renders as a complete, legible diagram | **MET** | [Independent Mermaid JS v11 Chrome render](readme-mermaid-independent.png) shows six labeled nodes and six connectors. `browser_checks/issue437_mermaid_render.py` extracts the exact README block and checks nodes and route labels. |
-| GitHub's own rendered Mermaid display | **UNVERIFIED** | The corrected pushed README page has not yet been rechecked. Earlier, real Chrome remained on a spinner after 15 seconds. The complete independent Chrome render is evidence for the Mermaid source, not GitHub's rendering. |
+| GitHub's own rendered Mermaid display | **UNVERIFIED** | Real Chrome loaded the corrected pushed README at HTTP 200 and recognized the Mermaid block, but after 15 seconds GitHub's render target remained empty/loading (the target contained only action icons and no diagram SVG). Independent Mermaid rendering confirms the source itself renders. |
 | Welcome points newcomers to About SIGMA; no proof/publishing overclaims | **MET** | Real Chrome guest-flow check asserts the Welcome line. About and README say a paper is optional and publication is user-decided; they do not claim independent verification or automatic journal submission. |
 
 ## Checks run
@@ -25,6 +25,6 @@ Base: `main` at `92bc34eda4c53decd6de29af315100251a5fde62`
 - `uv run --with playwright --no-sync python browser_checks/issue437_mermaid_render.py` — **passed** in real Chrome using the independent Mermaid JS v11 renderer; rendered all six stage labels and six connectors, including the optional paper branch and separate research/paper export paths. Screenshot: [independent Mermaid render](readme-mermaid-independent.png).
 - `uv run --with playwright,httpx --no-sync python browser_checks/guest_samples.py` — **passed** in real Google Chrome; included the Welcome guidance assertion.
 - `git diff --check` — **passed**.
-- GitHub preview check after pushing the corrections — pending. Its completed rendering remains **UNVERIFIED** unless Chrome shows the diagram.
+- GitHub preview recheck after push — HTTP 200, Mermaid block recognized, but no completed diagram was visible after 15 seconds. GitHub visual rendering remains **UNVERIFIED**. The independent rendering is complete and captured above.
 
 No paid provider calls or deployments occurred. No research scheduling, paper-generation, or project API code changed.
