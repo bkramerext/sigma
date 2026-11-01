@@ -3117,6 +3117,70 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     assert r"\section*{Claim status and evidence}" in math_tex
 
 
+def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures() -> None:
+    catalog = papers.paper_writing_sources
+    calls: list[str] = []
+
+    async def fetch(url: str) -> str | None:
+        calls.append(url)
+        if "pmc.ncbi" in url:
+            return None
+        return "Readable, relevant scientific writing guidance. " * 20
+
+    project = {
+        "investigation_type": "mathematical",
+        "title": "Nonconsecutive Subset Sums Modulo 3",
+        "problem": "Prove a recurrence and exact limit.",
+    }
+
+    async def check() -> None:
+        chosen, status = await catalog.select(project, fetch=fetch)
+        assert status == "selected"
+        assert len(chosen) == 3
+        assert {item["tier"] for item in chosen} == {
+            "general", "discipline", "branch"
+        }
+        assert all(len(item["excerpt"]) >= 450 for item in chosen)
+        assert all(item["type"] == "mathematical" and item["branch"] == "combinatorics"
+                   for item in chosen)
+        count = len(calls)
+        reused, mode = await catalog.select(project, chosen, fetch=fetch)
+        assert mode == "reused" and reused == chosen and len(calls) == count
+        damaged = [dict(item) for item in chosen]
+        damaged[0]["sha256"] = "0" * 64
+        updated, mode = await catalog.select(project, damaged, fetch=fetch)
+        assert mode == "selected" and updated == chosen
+        no_urls, status = await catalog.select(
+            {"investigation_type": "law", "title": "Legal memorandum"},
+            fetch=lambda _url: unavailable(),
+        )
+        assert status == "unavailable" and no_urls == []
+
+    async def unavailable() -> None:
+        raise RuntimeError("unavailable writing source")
+
+    asyncio.run(check())
+
+
+def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> None:
+    source = {
+        "title": "Writing Mathematics",
+        "url": "https://example.org/writing-math",
+        "tier": "discipline",
+        "type": "mathematical",
+        "branch": "general",
+        "excerpt": "A source excerpt used only for writing.",
+        "sha256": "a" * 64,
+    }
+    tex = papers._tex(draft(), [], "f" * 64, writing_sources=[source])
+    assert r"\\section*{Paper writing source material used}" in tex
+    assert "Writing Mathematics" in tex
+    assert r"\\url{https://example.org/writing-math}" in tex
+    assert "not the scientific evidence or findings" in tex
+    empty_tex = papers._tex(draft(), [], "f" * 64, writing_sources=[])
+    assert "No external writing-guidance sources were recorded." in empty_tex
+
+
 def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
     """Each project type gets general, evidence-specific genre instructions."""
     cases = (
@@ -6136,6 +6200,8 @@ def main() -> None:
     test_research_type_specific_tex_sections_and_authoring_guidance()
     test_military_style_guidance_reaches_all_authoring_paths()
     test_math_and_physics_methodology_reaches_every_authoring_path()
+    test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
+    test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
     test_paper_failure_reason_survives_reopen()
