@@ -142,8 +142,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       setGeneratingId(null);
     }
   }
-  async function save() {
-    if (JSON.stringify(drafts) === initialDrafts.current) return;
+  async function save(closeAfter = true) {
+    if (JSON.stringify(drafts) === initialDrafts.current) { if (closeAfter) close(); return; }
     setBusy(true); setError('');
     try {
       const removed = initialCustomIds.current.filter(id => !drafts.some(draft => draft.id === id));
@@ -160,7 +160,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved. Reload and review any changed types or project usage.');
       await load();
       window.dispatchEvent(new Event('sigma-project-types-updated'));
-      close();
+      setAddingId(null);
+      if (closeAfter) close();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
@@ -202,7 +203,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   }}>
     <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !!generatingId || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy || !!generatingId} onClick={close}>Cancel</button></div></header>
     <div className="project-types-body">
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !!generatingId || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim() || !!drafts.find(d => d.id === addingId && isDuplicateName(d))} onClick={() => setAddingId(null)}>Save</button><button type="button" disabled={!!generatingId} onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !!generatingId || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !!generatingId || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim() || !!drafts.find(d => d.id === addingId && isDuplicateName(d))} onClick={() => void save(false)}>Save</button><button type="button" disabled={!!generatingId} onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !!generatingId || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       {error && <p role="alert">{error}</p>}
     </div>
