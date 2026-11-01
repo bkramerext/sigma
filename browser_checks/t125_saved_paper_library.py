@@ -55,9 +55,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
 
     from sigma import papers
 
-    pdf_bytes = papers._compile_pdf(
-        r"\documentclass{article}\begin{document}Saved paper fixture.\end{document}"
-    )
+    tex_source = r"\documentclass{article}\begin{document}Saved paper fixture.\end{document}"
+    pdf_bytes = papers._compile_pdf(tex_source)
     identifiers = ["a" * 32, "b" * 32]
     for index, paper_id in enumerate(identifiers):
         hostile = (
@@ -88,6 +87,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
                     "conclusions": ["No independent verification is implied."],
                     "conclusion_claim_ids": [],
                 },
+                "tex_source": tex_source,
                 "validation_warnings": [],
                 "author_review_warnings": [],
                 "obligation_reconciliation": [],
@@ -176,15 +176,16 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
             expect(dialog).to_be_visible()
             row = dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
-            expect(row.get_by_role("button", name="Saved fixture 1")).to_be_visible()
-            expect(row).to_contain_text("Version 2")
+            expect(row.locator(".saved-paper-title-toggle")).to_be_visible()
+            expect(row).to_contain_text("Version 1")
+            expected_basename = papers.paper_download_basename(str(project_path), identifiers[0])
             expect(row.get_by_role("link", name="Download text file")).to_be_visible()
             expect(row.get_by_role("link", name="Download PDF")).to_be_visible()
             open_link = row.get_by_role("link", name="Open PDF in browser")
             expect(open_link).to_have_attribute("target", "_blank")
             preview = row.locator(".ai-paper-preview")
             expect(preview).to_be_hidden()
-            row.get_by_role("button", name="Expand saved paper: Saved fixture 1").click()
+            row.locator("button.saved-paper-expand").click()
             expect(preview).to_be_visible()
             expect(preview).to_contain_text("Saved section")
             expect(preview).to_contain_text("<script>window.__paperXss = true</script>")
@@ -194,6 +195,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             with page.expect_download() as download_info:
                 row.get_by_role("link", name="Download text file").click()
             text_download = download_info.value
+            assert text_download.suggested_filename == f"{expected_basename}.txt"
+            text_disposition = page.evaluate(
+                "async href => (await fetch(href)).headers.get('content-disposition')",
+                row.get_by_role("link", name="Download text file").get_attribute("href"),
+            )
+            assert (
+                f"filename*=UTF-8''{quote(f'{expected_basename}.txt', safe='')}" in text_disposition
+            )
             text_content = Path(text_download.path()).read_text(encoding="utf-8")
             assert (
                 "Saved fixture 1" in text_content
@@ -203,7 +212,27 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             with page.expect_download() as download_info:
                 row.get_by_role("link", name="Download PDF").click()
             pdf_download = download_info.value
+            assert pdf_download.suggested_filename == f"{expected_basename}.pdf"
+            pdf_disposition = page.evaluate(
+                "async href => (await fetch(href)).headers.get('content-disposition')",
+                row.get_by_role("link", name="Download PDF").get_attribute("href"),
+            )
+            assert (
+                f"filename*=UTF-8''{quote(f'{expected_basename}.pdf', safe='')}" in pdf_disposition
+            )
             assert Path(pdf_download.path()).read_bytes() == pdf_bytes
+
+            with page.expect_download() as download_info:
+                row.get_by_role("link", name="Download TeX file").click()
+            tex_download = download_info.value
+            assert tex_download.suggested_filename == f"{expected_basename}.tex"
+            tex_disposition = page.evaluate(
+                "async href => (await fetch(href)).headers.get('content-disposition')",
+                row.get_by_role("link", name="Download TeX file").get_attribute("href"),
+            )
+            assert (
+                f"filename*=UTF-8''{quote(f'{expected_basename}.tex', safe='')}" in tex_disposition
+            )
 
             with page.expect_popup() as page_info:
                 open_link.click()
@@ -215,6 +244,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             with urllib.request.urlopen(pdf_tab.url, timeout=10) as pdf_response:
                 assert pdf_response.headers.get_content_type() == "application/pdf"
                 assert "inline" in pdf_response.headers.get("Content-Disposition", "")
+                assert (
+                    f"filename*=UTF-8''{quote(f'{expected_basename}.pdf', safe='')}"
+                    in pdf_response.headers.get("Content-Disposition", "")
+                )
                 assert pdf_response.read() == pdf_bytes
             pdf_tab.close()
 
@@ -242,6 +275,11 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             page.set_viewport_size({"width": 390, "height": 844})
             second_row = dialog.locator(
                 f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]'
+            )
+            expect(second_row).to_contain_text("Version 2")
+            second_basename = papers.paper_download_basename(str(project_path), identifiers[1])
+            expect(second_row.get_by_role("link", name="Download text file")).to_have_attribute(
+                "download", f"{second_basename}.txt"
             )
             expect(second_row.get_by_role("link", name="Download text file")).to_be_visible()
             expect(second_row.get_by_role("link", name="Open PDF in browser")).to_be_visible()
