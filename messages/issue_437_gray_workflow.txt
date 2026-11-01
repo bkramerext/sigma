@@ -1,0 +1,34 @@
+R4R handoff — Issue #437: High-level SIGMA workflow diagrams
+
+Branch: gray/issue-437-workflow
+Base: main at 92bc34eda4c53decd6de29af315100251a5fde62
+Head: pending commit
+PR: pending
+
+Changes
+- Added a first, expanded-by-default “How SIGMA works” disclosure with six short, connected stages and concise stage notes. Paper creation is marked optional; publication is explicitly the user's choice.
+- Persisted the expanded/collapsed state of every About disclosure under stable section IDs in browser local storage, with per-section defaults and safe fallback for stale/invalid values.
+- Preserved the multi-agent architecture diagram and existing About sections.
+- Added the equivalent inline Mermaid diagram and associated stage bullets near “Using SIGMA” in README.md.
+- Added a low-key Welcome sentence pointing new users to the About SIGMA pill.
+- Added focused real-Chrome acceptance coverage and retained desktop/mobile screenshots in docs/evaluations/issue437/.
+
+Verification actually run
+- `./sigma test` — passed all steps, including Ruff, Ruff format, Pyright (0 diagnostics), frontend typecheck, and production build. The optional graph-present Python sandbox case skipped because the local sandbox image is unavailable. The build reported the existing main chunk size advisory.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173 uv run --with playwright --no-sync python browser_checks/issue437_workflow.py` — passed in real Google Chrome at 1440×960 and 390×844. Checked section order and defaults, all five disclosures available in this cloud-enabled fixture across close/reopen/reload, stale/invalid saved IDs, responsive stacking, no horizontal dialog overflow, six stage descriptions, and retained architecture content.
+- `uv run --with playwright,httpx --no-sync python browser_checks/guest_samples.py` — passed in real Google Chrome; Welcome guidance assertion included.
+- `npm --prefix frontend run typecheck` — passed after the final UI helper change.
+- Ruff check/format for the three changed browser checks and `git diff --check` — passed.
+- Screenshots: docs/evaluations/issue437/about-workflow-desktop.png and docs/evaluations/issue437/about-workflow-mobile.png.
+- README uses GitHub Mermaid syntax and is inline, but visual rendering on the pushed GitHub PR remains UNVERIFIED pending a rendered-page check.
+
+Acceptance
+- MET: About workflow structure, introductory accuracy, first-visit default, persistent states, desktop/mobile layout, existing architecture content, inline README source, Welcome sentence, and publication/proof wording.
+- UNVERIFIED: README's actual GitHub Mermaid rendering pending inspection of the pushed PR page.
+- No research scheduler, agent behavior, paper-generation system, or project API changed. No paid provider calls and no deployment occurred.
+
+Coordination and preserved work
+- Issue #435 was checked and is currently assigned to Green. Its pre-existing dirty work remains untouched in `/Users/admin/sigma_gray` on `gray/issue-328-paper-progress` (modified frontend/src/main.tsx, src/sigma/api.py, src/sigma/papers.py, tests/papers.py, and untracked projects/.sigma-session-logs/). #435 is parked/preserved; none of those edits were copied into this branch.
+- Red owns #436, which includes renaming the About navigation pill and Project Types UI. This branch changes AboutDialog content in frontend/src/main.tsx but leaves the header pill and project-type implementation unchanged. The shared component file is an integration overlap; sequence/rebase against #436 through the human/coordinator. No direct worker coordination occurred.
+
+No self-merge. Waiting for coordinator review.

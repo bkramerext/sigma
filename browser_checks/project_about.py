@@ -64,7 +64,7 @@ with sync_playwright() as playwright:
             "contentColor": "rgb(196, 206, 216)",
         }, (width, appearance)
         expect(dialog.locator(".about-intro")).to_contain_text("research workbench")
-        expect(dialog.locator(".about-disclosure")).to_have_count(3)
+        expect(dialog.locator(".about-disclosure")).to_have_count(4)
         expect(dialog.get_by_role("link", name="Terms of Service", exact=True)).to_be_visible()
         assert len(api_requests) == requests_before, "Opening About made an API request"
         assert dialog.evaluate("element => element.matches(':modal')")
