@@ -514,18 +514,52 @@ what was actually established. Never fabricate better research to improve
 the paper.
 Return the requested structured draft."""
 
-MATHEMATICS_INSTRUCTIONS = """The project type is mathematics. Use the organization and precision of a
-mathematics paper, rather than a generic project report: introduce notation and definitions; state
-the main result precisely with its hypotheses; organize the argument into clearly titled lemmas or
-proof sections; explain every nontrivial implication; and close with consequences, limitations, and
-the result's verification status. A reader should be able to follow the proof without consulting
-the agent transcript. For a claimed extremal formula, separately prove the upper bound and exhibit
-an admissible construction attaining it, then derive the formula and check boundary cases. Use
-theorem/proof language only when the saved evidence supports each step. If the saved argument is
-incomplete or unverified, say so plainly while still explaining the supported proof candidate in
-clearly and economically; identify the precise gap once rather than repeating the same caveat
-at the end of every section. A mathematical paper is a sequence of definitions, results, and
-justifications, not a verbose narration of the research process."""
+MATHEMATICS_INSTRUCTIONS = """Write a mathematics research paper, not a laboratory report.
+Choose the form appropriate to the actual mathematical result: theorem, equivalence,
+constructive result, counterexample, algorithm, certified numerical method or
+unresolved conjecture. Do not impose one proof technique on every branch of mathematics.
+State exact definitions, domains, quantifiers, hypotheses, results and proof status.
+Order lemmas by logical dependency, justify nontrivial steps, and explain the
+consequences of each result. If a theorem is an equivalence, justify both directions;
+if asymptotic, prove the limit and its necessary assumptions. Preserve correct special
+cases and meaningful negative results when a broad theorem fails.
+Finite enumeration or numerical pattern matching is not a universal proof without
+a rigorous reduction; floating-point calculations are not exact certificates.
+Do not invent bridging deductions or computations missing from the saved research.
+Use consistent notation, explanatory mathematical prose and a readable theorem-level
+abstract. Treat diagrams as aids whose meaning is explained in text, never as proofs
+on their own. Identify precise unresolved proof gaps rather than a generic caveat."""
+
+PHYSICS_INSTRUCTIONS = """Write a physical-science paper suited to the evidence actually
+present: theoretical derivation, experimental observation, numerical simulation,
+instrument/method, comparative framework or speculative testable hypothesis.
+Do not force a laboratory Methods/Results narrative on a theoretical paper.
+Separate governing assumptions, model equations, mathematical consequences,
+actual simulation outcomes, independently measured observations and future work.
+Define relevant variables, physical units, coordinate or gauge conventions,
+sign conventions, initial/boundary conditions and domains of validity.
+Distinguish physical invariants from coordinate artifacts where relevant.
+A chosen metric or field ansatz is not automatically a verified solution;
+a formal solution is not evidence of stability, realizability or engineering
+feasibility. Discuss conservation laws, alternatives, limiting cases and
+counterexamples when relevant to the saved argument. Include apparatus,
+calibration, error estimates or simulation convergence details only if real
+measurements or computations were performed. Never invent measurements, error
+bars, experiments, materials, numerical results or physical devices.
+Explain the meaning and limits of figures and equations in prose. Clearly
+label hypothetical scenarios and distinguish conditional predictions from
+validated phenomena. State unresolved falsification and physical feasibility
+obligations precisely; preserve meaningful negative results and objections."""
+
+
+def _subject_methodology(investigation_type: str) -> str:
+    """Broad writing guidance suited to research type, not a narrow specialty."""
+    if investigation_type == "mathematical":
+        return MATHEMATICS_INSTRUCTIONS
+    if investigation_type == "physics":
+        return PHYSICS_INSTRUCTIONS
+    return ""
+
 
 VISUAL_AUTHORING_INSTRUCTIONS = """VISUALS: Actively consider both explanatory diagrams and informative tables, and include each when it materially strengthens the paper. Use the supplied diagrams field and section tables fields. Diagrams can clarify architecture, trust boundaries, decision flows, or evidence-supported mechanisms. Tables can compare alternatives, report source-backed quantitative results, expose assumptions, or summarize sensitivity analyses. Ground every visual in saved evidence and link it to the appropriate source references and claim IDs. Label proposals and hypothetical calculations clearly. Write complete, grammatical captions; never stop at a schema or character limit. Do not add decorative or trivial diagrams, repetitive tables, duplicate prose, fabricated measurements, or unsupported conclusions. A visual is optional when the evidence does not justify it."""
 
