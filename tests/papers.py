@@ -5787,7 +5787,56 @@ def test_review_fallback_rejects_process_text_as_claim() -> None:
     assert all(not paragraph.startswith("Recorded result:") for paragraph in plan.conclusions)
 
 
+def test_review_proofreader_accepts_safe_patch_but_rejects_mutation() -> None:
+    """One unsafe suggestion must not discard an unrelated safe layout repair."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "mixed-proofread.sigma"
+        view = initialize_project(path, "Mixed proofreading", "Protect research claims")
+        state = papers._new_work(
+            "c" * 64, view.project.id, "d" * 64, "fixture", "high", kind="one_shot"
+        )
+        tex = (
+            "\\documentclass{article}\n\\emergencystretch=2em\n"
+            "\\begin{document}\nThe result is 3.\n\\end{document}\n"
+        )
+        async def provider(_input, _binding, _config, *, response_model, **_kwargs):
+            return response_model(corrections=[
+                papers.TeXCorrection(
+                    category="spacing",
+                    find=r"\emergencystretch=2em",
+                    replace=r"\emergencystretch=4em",
+                    rationale="Safe line breaking adjustment.",
+                ),
+                papers.TeXCorrection(
+                    category="spacing",
+                    find="result is 3",
+                    replace="result is 4",
+                    rationale="Unsafe scientific alteration fixture.",
+                ),
+            ]), "fixture"
+
+        async def report(*_args, **_kwargs):
+            return None
+
+        with (
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            patch.object(papers, "_provider_structured", new=provider),
+        ):
+            corrected, result = asyncio.run(papers._proofread_tex(
+                tex, state,
+                binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                config={"model": "fixture", "reasoning_effort": "high"},
+                project_id=view.project.id, project_path_value=str(path), report=report,
+            ))
+        assert r"\emergencystretch=4em" in corrected
+        assert "The result is 3" in corrected and "The result is 4" not in corrected
+        assert result["status"] == "fallback"
+        assert result["corrections"] == ["spacing"]
+        assert "changed protected scientific" in result["fallback_reason"]
+
+
 def main() -> None:
+    test_review_proofreader_accepts_safe_patch_but_rejects_mutation()
     test_review_fallback_question_and_tex_safety()
     test_review_fallback_rejects_process_text_as_claim()
     test_tex_proofreading_preserves_science_and_checkpoints_provider_work()
