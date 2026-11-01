@@ -89,7 +89,7 @@ with sync_playwright() as playwright:
     literature.locator("summary").click()
     expect(literature.locator(".project-type-card-icon svg")).to_be_visible()
     expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(2)
-    expect(literature.get_by_text("Actions")).to_have_count(0)
+    expect(literature.get_by_role("columnheader", name="Action", exact=True)).to_have_count(0)
     builtin_names = (
         dialog.locator(".project-types-body > section")
         .nth(1)
