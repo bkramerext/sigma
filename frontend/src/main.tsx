@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
+import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
@@ -113,6 +113,50 @@ type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negativ
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
 type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; backend_build_commit?: string | null; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; configured_duration_limit_minutes?: number | null; duration_limit_minutes?: number | null; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 
+
+/**
+ * API/project snapshots can contain historical or partially persisted sessions.
+ * Normalize render-only fields without modifying the saved research record.
+ */
+function sessionForDisplay(value: unknown): ResearchSession | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Partial<ResearchSession>;
+  if (typeof raw.id !== 'string' || !raw.id) return null;
+  const missing = ['steps', 'events', 'artifacts', 'outcome'].filter(key => !(key in raw));
+  if (missing.length) console.warn('Research session has incomplete display fields', { id: raw.id, missing });
+  const statuses = ['queued', 'running', 'paused', 'stopped', 'completed', 'ended', 'failed'] as const;
+  const assessments = ['pending', 'positive', 'mixed', 'negative'] as const;
+  const outcome = raw.outcome && typeof raw.outcome === 'object' && !Array.isArray(raw.outcome)
+    ? raw.outcome : null;
+  const branches = Array.isArray(raw.strategy_runs) ? raw.strategy_runs.filter(branch =>
+    !!branch && typeof branch === 'object' && !Array.isArray(branch))
+    .map(branch => ({ ...branch, artifacts: Array.isArray(branch.artifacts) ? branch.artifacts : [] })) : undefined;
+  return {
+    ...raw,
+    session_number: typeof raw.session_number === 'number' && Number.isFinite(raw.session_number) ? raw.session_number : 0,
+    strategy_id: typeof raw.strategy_id === 'string' ? raw.strategy_id : '',
+    strategy_title: typeof raw.strategy_title === 'string' ? raw.strategy_title : 'Saved session',
+    status: statuses.includes(raw.status as typeof statuses[number]) ? raw.status as ResearchSession['status'] : 'failed',
+    current_question: typeof raw.current_question === 'string' ? raw.current_question : '',
+    current_action: typeof raw.current_action === 'string' ? raw.current_action : 'Saved activity unavailable',
+    message: typeof raw.message === 'string' ? raw.message : '',
+    calls_used: typeof raw.calls_used === 'number' && Number.isFinite(raw.calls_used) ? raw.calls_used : 0,
+    call_limit: typeof raw.call_limit === 'number' && Number.isFinite(raw.call_limit) ? raw.call_limit : 0,
+    cycle: typeof raw.cycle === 'number' && Number.isFinite(raw.cycle) ? raw.cycle : 0,
+    steps: Array.isArray(raw.steps) ? raw.steps : [],
+    events: Array.isArray(raw.events) ? raw.events : [],
+    artifacts: Array.isArray(raw.artifacts) ? raw.artifacts : [],
+    strategy_runs: branches,
+    outcome: {
+      ...(outcome ?? {}),
+      assessment: assessments.includes(outcome?.assessment as typeof assessments[number])
+        ? outcome?.assessment as ResearchOutcome['assessment'] : 'pending',
+      label: typeof outcome?.label === 'string' ? outcome.label : 'Outcome unavailable',
+      provisional: typeof outcome?.provisional === 'boolean' ? outcome.provisional : true,
+    },
+  } as ResearchSession;
+}
+
 function sessionEstimatedCostLabel(session: ResearchSession): string {
   const cost = session.estimated_cost_usd;
   // ChatGPT tokens are not billed to the operator's API account; show the
@@ -168,6 +212,20 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   if (recordedReason) return { cause: recordedReason, next: 'Review the stop details above, then resume when the project and AI connection are ready. Backend safeguards still apply.' };
   if (!hasCompleteFinding) return { cause: 'The session was stopped before it saved a complete finding.', next: 'Resume when you are ready; backend safeguards still apply.' };
   return { cause: 'The session is stopped. Saved research is preserved.', next: 'Review the saved findings, then resume when the project and AI connection are ready. Backend safeguards still apply.' };
+}
+
+function StoppedSessionNotice({ session, dismissed, onDismiss }: {
+  session: ResearchSession; dismissed: boolean; onDismiss: () => void;
+}) {
+  if (dismissed) return null;
+  const guidance = stoppedSessionGuidance(session);
+  const hasCompleteFinding = session.artifacts.some(artifact =>
+    Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
+  return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${session.session_number} stopped and what to do next`}>
+    <SessionNoticeDismiss number={session.session_number} onDismiss={onDismiss}/>
+    <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
+    {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
+  </div>;
 }
 type EvidencePointer = { project_id: string; session_id: string; session_number: number; strategy_id: string; artifact_id: string; artifact_sequence: number; record_path: string; available: boolean };
 type CurrentFinding = { id: string; text: string; investigated_claim: string; source: EvidencePointer; status: string; verification: string; strategy_title: string; objections: string[]; evidence_kind: string };
@@ -412,6 +470,40 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
 }
 
 type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
+
+type SessionRenderBoundaryProps = { sessionId: string; sessionNumber: number; revision?: string; children: ReactNode; fallback?: ReactNode };
+type SessionRenderBoundaryState = { error: Error | null };
+
+/** A single corrupt historical record must not take down the project workspace. */
+class SessionRenderBoundary extends Component<SessionRenderBoundaryProps, SessionRenderBoundaryState> {
+  state: SessionRenderBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): SessionRenderBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Unable to render saved research session', {
+      sessionId: this.props.sessionId,
+      sessionNumber: this.props.sessionNumber,
+      error,
+      componentStack: info.componentStack,
+    });
+  }
+
+  componentDidUpdate(previous: SessionRenderBoundaryProps) {
+    if ((previous.sessionId !== this.props.sessionId || previous.revision !== this.props.revision) && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    if (this.state.error) return this.props.fallback ?? <li className="session-row session-render-error" data-session-id={this.props.sessionId}>
+      <p role="alert"><strong>Session #{this.props.sessionNumber} could not be displayed.</strong> Its saved record remains available in the project export.</p>
+    </li>;
+    return this.props.children;
+  }
+}
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -1044,6 +1136,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
+  const [invalidSessionCount, setInvalidSessionCount] = useState(0);
   const [maxConcurrentSessions, setMaxConcurrentSessions] = useState(1);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
   const selectedSessionId = useRef('');
@@ -1105,7 +1198,21 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     const response = await fetch(`/api/projects/research-sessions?${query}`, { signal });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
-    const nextSessions = data.sessions as ResearchSession[];
+    if (!Array.isArray(data.sessions)) throw new Error('Research sessions response is missing its sessions array');
+    const rawSessions = data.sessions as unknown[];
+    const nextSessions: ResearchSession[] = rawSessions
+      .map(value => {
+        try { return sessionForDisplay(value); }
+        catch (cause) {
+          console.warn('Saved research session could not be normalized for display', {
+            id: value && typeof value === 'object' && 'id' in value ? value.id : undefined,
+            error: errorMessage(cause),
+          });
+          return null;
+        }
+      })
+      .filter((item: ResearchSession | null): item is ResearchSession => item !== null);
+    setInvalidSessionCount(rawSessions.length - nextSessions.length);
     setSessions(nextSessions);
     // Keep UI admission in sync with the limits snapshot used by the server.
     setMaxConcurrentSessions(Number(data.max_concurrent_sessions) || 1);
@@ -1386,6 +1493,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
+    {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
@@ -1393,7 +1501,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           const currentAction = (readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action)
             .replace(/\bpaused\b/gi, 'stopped').replace(/\bpausing\b/gi, 'stopping').replace(/\bpause\b/gi, 'stop');
           const sessionExpanded = expandedSessionIds.has(item.id);
-          return <li className="session-row" key={item.id} data-session-id={item.id}>
+          return <SessionRenderBoundary key={item.id} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at}><li className="session-row" data-session-id={item.id}>
             <div className="session-row-heading">
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
@@ -1405,13 +1513,13 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {(item.status === 'paused' || item.status === 'stopped') && !dismissedNoticeKeys.has(sessionNoticeKey(item)) && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><SessionNoticeDismiss number={item.session_number} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
+                {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session #{item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
               </div>
             </div>
             <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/>
-          </li>;
+          </li></SessionRenderBoundary>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
     </div>
