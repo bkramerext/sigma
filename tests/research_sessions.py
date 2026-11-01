@@ -763,6 +763,115 @@ async def setup(path: Path):
     return view, strategy, credential, config
 
 
+def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_if_needed():
+    from sigma import research_method_sources
+
+    scenarios = (
+        ("computer_science", "Agent Reliability Evaluation", "Fault injection with retries and acknowledgments", "ai-reliability"),
+        ("engineering", "Sovereign AI Federation", "Campus gateway revocation routing", "federation"),
+        ("biology", "Xenopus Tadpoles", "Tail regeneration and wound timing", "animal-regeneration"),
+        ("mathematical", "Nonconsecutive Subset Sums", "Count subsets modulo three", "combinatorics"),
+        ("physics", "Warp Drive Design", "Spacetime metric and stress energy", "relativity"),
+    )
+    for mode, title, problem, branch in scenarios:
+        frozen = research_method_sources.select_method_sources(
+            mode, title, problem, ("Propose a method",), ()
+        )
+        assert frozen["status"] == "selected"
+        assert frozen["branch"] == branch
+        assert len(frozen["sources"]) == 3
+        assert [row["tier"] for row in frozen["sources"]] == ["general", "discipline", "branch"]
+        assert all(
+            source["url"].startswith("https://") and len(source["notes"]) >= 50
+            for source in frozen["sources"]
+        )
+        assert research_method_sources.methodology_digest(frozen) == (
+            research_method_sources.methodology_digest(frozen)
+        )
+
+        # Next session must reuse the same source content and IDs; changing
+        # catalog selection order must not accidentally change the findings.
+        later = research_method_sources.select_method_sources(
+            mode, title, problem, ("Another method",),
+            ({"id": "prior-session-id", "created_at": "2026-11-01T00:00:00+00:00",
+              "research_method_sources": frozen},)
+        )
+        assert later["status"] == "reused"
+        assert later["source_session_id"] == "prior-session-id"
+        assert later["sources"] == frozen["sources"]
+
+    # Specialty changed within the *same* project type: previous source is no
+    # longer comprehensive; do not blindly persist a combinatorics reference.
+    original = research_method_sources.select_method_sources(
+        "mathematical", "Counting subsets", "combinatorics recurrence", (), ()
+    )
+    updated = research_method_sources.select_method_sources(
+        "mathematical", "Topology problem", "topological spaces and homotopy",
+        (), ({"id": "old", "research_method_sources": original},)
+    )
+    assert updated["branch"] is None and updated["status"] == "selected"
+    assert len(updated["sources"]) == 2
+    assert not any(source.get("branch") for source in updated["sources"])
+
+
+def test_method_source_bad_or_unreadable_candidates_never_block(monkeypatch):
+    from sigma import research_method_sources
+
+    untrusted = dict(research_method_sources.BY_ID["applied-combinatorics"])
+    untrusted["notes"] = ""  # URL alone is not usable methods content.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            research_method_sources, "BY_ID",
+            {**research_method_sources.BY_ID, untrusted["id"]: untrusted},
+        )
+        patch.setattr(
+            research_method_sources, "CATALOG",
+            tuple(untrusted if row["id"] == untrusted["id"] else row
+                  for row in research_method_sources.CATALOG),
+        )
+        selected = research_method_sources.select_method_sources(
+            "mathematical", "Counting", "nonconsecutive subset recurrence", (), ()
+        )
+    assert selected["status"] == "selected"
+    assert len(selected["sources"]) == 2
+    assert all(item["notes"] for item in selected["sources"])
+    # An invalid previous reference is not carried forward.
+    previous = {
+        "id": "prior",
+        "research_method_sources": {
+            "mode": "mathematical",
+            "branch": "combinatorics",
+            "sources": [{"id": "missing"}, {"id": "tao-solving-mathematical-problems"}],
+        },
+    }
+    refreshed = research_method_sources.select_method_sources(
+        "mathematical", "Counting", "subset recurrence", (), (previous,)
+    )
+    assert refreshed["status"] == "selected"
+    assert len(refreshed["sources"]) == 3
+    assert refreshed["source_session_id"] is None
+
+
+def test_research_methodology_outcome_is_not_claimed_as_independent_science():
+    from sigma import research_method_sources
+
+    selected = research_method_sources.select_method_sources(
+        "physics", "Warp", "causal spacetime metric", (), ()
+    )
+    record = {
+        "id": "method-test", "status": "queued", "steps": [], "artifacts": [],
+        "strategy_runs": [], "research_method_sources": selected,
+    }
+    outcome = research_sessions._outcome(record)
+    assert outcome["source_material"] == selected
+    assert outcome["source_material"]["status"] == "selected"
+    assert "verification_label" in outcome
+    # The helper returns exactly the same bounded source notes every time.
+    assert [r["id"] for r in outcome["source_material"]["sources"]] == [
+        "nasem-scientific-methods", "nasem-physical-models", "tong-einstein-equations"
+    ]
+
+
 def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
     """Every current research mode gets a shared core and one suited lens."""
     from sigma.projects import ResearchMode
