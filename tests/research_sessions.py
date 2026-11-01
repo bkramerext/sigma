@@ -942,6 +942,23 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
         assert "For any branch of physics" not in fallback
 
 
+def test_method_sources_yield_to_mandatory_research_when_context_is_full():
+    """Noncritical methodology must never make a genuine research turn fail."""
+    context = {
+        "problem": "A fixed scientific objective.",
+        "methodology_source_material": [
+            {"id": "source", "notes": "optional methods " * 1000}
+        ],
+        "methodology_source_status": "selected",
+        "context_manifest": {"sources": []},
+    }
+    assert research_sessions.compact_dispatch_context(context, limit=1200)
+    assert "methodology_source_material" not in context
+    assert context["methodology_source_status"] == "omitted_due_to_context_limit"
+    assert context["problem"] == "A fixed scientific objective."
+    assert context["context_manifest"]["methodology_sources_not_supplied"]["count"] == 1
+
+
 def test_method_source_notes_reach_real_role_request_audit():
     """The pre-turn source decision reaches both roles without a provider call."""
     from sigma import research_method_sources
