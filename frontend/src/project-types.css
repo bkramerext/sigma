@@ -38,6 +38,8 @@
 .pt-reference-table th, .pt-reference-table td { padding: 4px 6px; border-bottom: 1px solid #35404a; text-align: left; }
 .pt-reference-table th:last-child, .pt-reference-table td:last-child { text-align: right; }
 .pt-reference-table td input { min-height: 32px; text-overflow: ellipsis; }
+.pt-reference-example { color: #aebbc7; font-style: italic; overflow-wrap: anywhere; }
+.pt-reference-example small { margin-left: 6px; color: #94a4b2; font-size: 11px; }
 .pt-reference-table td button { min-height: 28px; padding: 2px 5px; border: 0; color: #e0aa8b; background: transparent; text-decoration: underline; }
 .project-type-card-actions { display: flex; justify-content: flex-end; }
 .project-types-add { margin-top: 8px; }
