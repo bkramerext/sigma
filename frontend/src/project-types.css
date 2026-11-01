@@ -23,7 +23,7 @@
 .project-type-card > summary strong { flex: 1; font-weight: 600; }
 .project-type-card > summary small { color: #edc38d; }
 .project-type-card-icon, .project-type-card-icon > * { display: inline-flex; width: 23px; height: 23px; align-items: center; justify-content: center; color: #d6a36f; }
-.project-type-card-body { display: grid; gap: 12px; padding: 4px 14px 15px 44px; }
+.project-type-card-body { display: grid; gap: 12px; padding: 4px 14px 15px 33px; }
 .project-type-card-body > label { display: grid; gap: 5px; color: #c6d0d9; font-size: 12px; }
 .project-type-card-body :is(input, textarea, select) { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid #59636e; border-radius: 4px; color: #e5ebf0; background: #080f17; }
 .project-type-card-body textarea { min-height: 62px; resize: vertical; }
@@ -57,7 +57,7 @@
   .project-types-dialog > header h2 { font-size: 22px; }
   .project-types-dialog > header > .project-types-header-actions { margin-left: 0; }
   .project-types-body { padding: 12px 12px 18px; }
-  .project-type-card-body { padding-left: 14px; }
+  .project-type-card-body { padding-left: 33px; }
   .pt-reference-table col:first-child { width: 76%; }
   .pt-reference-table col:last-child { width: 24%; }
 }
