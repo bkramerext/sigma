@@ -75,6 +75,11 @@ jobs:
           print("PASS: original-main and candidate have identical canonical provider requests, "
                 "peer handoffs, reviewed artifacts, coordinator decisions, and outcomes.")
           PY
+      - name: Verify 32 global provider slots across two backend processes
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_global_slots.py
       - name: Validate stop/resume handoff and timeout recovery on actual original main
         run: |
           PYTHONPATH="$GITHUB_WORKSPACE/original-main/src:$GITHUB_WORKSPACE/candidate/tests" uv run --project candidate --locked --no-sync python - <<'PY'
