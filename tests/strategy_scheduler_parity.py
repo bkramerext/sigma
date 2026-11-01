@@ -19,10 +19,11 @@ code_root = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(code_root / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import httpx  # noqa: E402
-import research_sessions as fixture  # noqa: E402
-from sigma import research_sessions  # noqa: E402
-from sigma.projects import create_strategy  # noqa: E402
+import httpx
+import research_sessions as fixture
+
+from sigma import research_sessions
+from sigma.projects import create_strategy
 
 UUID_RE = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
@@ -68,9 +69,7 @@ def canonicalize(value, names: dict[str, str]):
             obj = obj.replace(identifier, label)
         obj = TIMESTAMP_RE.sub("<timestamp>", obj)
         return UUID_RE.sub(
-            lambda match: unknown.setdefault(
-                match.group(0), f"<opaque-id-{len(unknown) + 1}>"
-            ),
+            lambda match: unknown.setdefault(match.group(0), f"<opaque-id-{len(unknown) + 1}>"),
             obj,
         )
 
@@ -158,8 +157,12 @@ async def snapshot():
             ),
         ):
             started = await research_sessions.start_session(
-                str(path), first.id, str(uuid4()), view.project.id,
-                credential["identity"], expected_limits=limits,
+                str(path),
+                first.id,
+                str(uuid4()),
+                view.project.id,
+                credential["identity"],
+                expected_limits=limits,
                 strategy_ids=[first.id, second.id],
             )
             final = await asyncio.wait_for(fixture.wait_for(path, started["id"]), timeout=12)
@@ -177,9 +180,7 @@ async def snapshot():
             str(path): "<project-path>",
         }
         for item in final["artifacts"]:
-            names[item["id"]] = (
-                f"<artifact-{titles[item['strategy_id']]}-{item['strategy_cycle']}>"
-            )
+            names[item["id"]] = f"<artifact-{titles[item['strategy_id']]}-{item['strategy_cycle']}>"
         for item in final["steps"]:
             names[item["id"]] = (
                 f"<step-{titles[item['strategy_id']]}-{item['cycle']}-{item['role']}>"
