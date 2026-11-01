@@ -658,8 +658,8 @@
 .workspace-page .strategy-assessments td:last-child { color: #b8c7d3; }
 .workspace-page .session-outcome.outcome-positive { border-left-color: #75b18c; }
 .workspace-page .session-outcome.outcome-positive > p:first-child span { color: #a5d1b3; }
-.workspace-page .session-outcome.outcome-negative { border-left-color: #d38578; }
-.workspace-page .session-outcome.outcome-negative > p:first-child span { color: #e6a69a; }
+.workspace-page .session-outcome.outcome-negative { border-left-color: #e2be91; }
+.workspace-page .session-outcome.outcome-negative > p:first-child span { color: #e2be91; }
 .workspace-page .session-outcome.outcome-pending > p:first-child span,
 .workspace-page .session-outcome.outcome-mixed > p:first-child span { color: #e2be91; }
 
@@ -688,7 +688,7 @@
 .workspace-page .outcome-conclusion-actions .markdown-logo path { fill: currentColor; }
 .workspace-page .outcome-label { color: #e2be91; font-size: 13px; overflow-wrap: anywhere; }
 .workspace-page .outcome-label.outcome-positive { color: #a5d1b3; }
-.workspace-page .outcome-label.outcome-negative { color: #e6a69a; }
+.workspace-page .outcome-label.outcome-negative { color: #e2be91; }
 .workspace-page .outcome-general { margin: 7px 0 12px; }
 .workspace-page .outcome-simple { margin: 10px 0 2px; }
 .workspace-page .advanced-outcome-hint { margin: 10px 0 0; color: #aebdc8; font-size: 12px; line-height: 1.5; }
@@ -934,7 +934,7 @@
 
 /* Session subtitle uses the same assessment palette as the detailed outcome. */
 .workspace-page .session-outcome-inline.outcome-positive span { color: #a5d1b3; }
-.workspace-page .session-outcome-inline.outcome-negative span { color: #e6a69a; }
+.workspace-page .session-outcome-inline.outcome-negative span { color: #e2be91; }
 .workspace-page .session-outcome-inline.outcome-pending span,
 .workspace-page .session-outcome-inline.outcome-mixed span { color: #e2be91; }
 
