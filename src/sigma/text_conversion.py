@@ -96,7 +96,6 @@ def _saved_research_block(path: str, session_id: str, field_path: str) -> str:
     return value
 
 
-
 def _looks_like_sse(data: bytes) -> bool:
     """Recognize event-stream framing when a ChatGPT bridge omits its media type."""
     try:
@@ -145,16 +144,23 @@ async def _convert_text(
     field_path: str | None = None,
 ) -> dict:
     target_format = _format(target)
-    if _gate.locked():
-        raise ProjectError("A text conversion is already active. Wait or cancel it")
+    # Serialize conversion calls instead of rejecting concurrent requests.
+    # A cancelled HTTP request also cancels its wait for this lock.
     async with _gate:
         async with asyncio.timeout(CALL_SECONDS + 5):
             view = inspect_project(path)
             if expected_project_id is not None and view.project.id != expected_project_id:
                 raise ProjectError("Project identity changed; reopen it before converting")
             if scope == "research-block":
-                if not session_id or strategy_id is not None or target_format != "markdown" or not field_path:
-                    raise ProjectError("Research text conversion requires a saved session, field and Markdown")
+                if (
+                    not session_id
+                    or strategy_id is not None
+                    or target_format != "markdown"
+                    or not field_path
+                ):
+                    raise ProjectError(
+                        "Research text conversion requires a saved session, field and Markdown"
+                    )
                 raw_block = _saved_research_block(path, session_id, field_path)
                 if expected_digest is None:
                     raise ProjectError("Research text source digest is required")
@@ -203,7 +209,11 @@ async def _convert_text(
                 return source
             source_format: Format = source["source_format"]
             source_body: str = source[source_format]["body"]
-            limit = 20000 if scope in {"project", "research-conclusion", "research-block"} else MAX_STRATEGY_APPROACH
+            limit = (
+                20000
+                if scope in {"project", "research-conclusion", "research-block"}
+                else MAX_STRATEGY_APPROACH
+            )
             if len(source_body) > limit:
                 raise ProjectError("Source text exceeds the conversion limit")
             binding = await auth_context()
@@ -416,7 +426,9 @@ async def _convert_text(
                     "AI account/billing mode changed during conversion; nothing was saved"
                 )
             latest = inspect_project(path).project
-            if (latest.ai_model, latest.reasoning_effort) != (
+            if scope not in {"research-conclusion", "research-block"} and (
+                latest.ai_model, latest.reasoning_effort
+            ) != (
                 config["model"],
                 config["reasoning_effort"],
             ):
@@ -433,7 +445,10 @@ async def _convert_text(
                     record = next((item for item in records if item.get("id") == session_id), None)
                     outcome = record.get("outcome") if record else None
                     latest_text = outcome.get("conclusion") if isinstance(outcome, dict) else None
-                if not isinstance(latest_text, str) or digest(latest_text) != source["source_digest"]:
+                if (
+                    not isinstance(latest_text, str)
+                    or digest(latest_text) != source["source_digest"]
+                ):
                     raise ProjectError(
                         "Saved research text changed during conversion; reopen before retrying"
                     )

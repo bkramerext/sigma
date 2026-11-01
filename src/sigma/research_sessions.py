@@ -12,7 +12,7 @@ import os
 import re
 import threading
 import zlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import replace
@@ -4039,16 +4039,16 @@ async def submit_intervention(
         if (
             kind not in {"objection", "evidence", "priority"}
             or not normalized
-            or len(normalized) > 1200
+            or len(normalized) > 20000
         ):
             _reject_intervention(
                 record,
                 intervention_id=intervention_id,
                 kind=kind,
-                text=normalized[:1200],
+                text=normalized[:20000],
                 strategy_ids=selected_ids,
                 agent_roles=roles,
-                reason="Feedback type or text is invalid; feedback must be 1–1,200 characters.",
+                reason="Feedback type or text is invalid; feedback may be up to 20,000 characters.",
             )
         if (
             not roles
@@ -4280,7 +4280,6 @@ def _snapshot(path: str) -> tuple[Any, str]:
     return view, _digest(state.read_bytes())
 
 
-
 def _same_session_project(record: dict[str, Any], view: Any) -> bool:
     """Research runs on frozen session inputs, not the mutable project revision.
 
@@ -4292,7 +4291,7 @@ def _same_session_project(record: dict[str, Any], view: Any) -> bool:
 
 
 async def _frozen_session_configuration(
-    view: Any, credential: dict[str, Any], record: dict[str, Any]
+    view: Any, credential: Mapping[str, Any], record: dict[str, Any]
 ) -> dict[str, Any]:
     """Check provider access for the model selected when the session began."""
     pinned = replace(
@@ -4700,16 +4699,14 @@ async def start_session(
         raise ProjectError(config["message"])
     async with _manager_lock:
         with _project_manager_lock(view.path):
-            # A project may change during preflight. Do not admit stale research.
-            locked_view, locked_guard = _snapshot(view.path)
-            if locked_view.project.id != expected_project_id or locked_guard != guard:
-                raise ProjectError("Project changed during research preflight; review it and retry")
-            limits = get_limits(view.path)
-            limits = _validate_limits(limits)
-            if expected_limits is not None and _validate_limits(expected_limits) != limits:
-                raise ProjectError(
-                    "Research limits changed before confirmation; review the current limits and retry"
-                )
+            # The session is created from the preflight's frozen research inputs.
+            # UI updates and changed limits during preflight apply to future starts
+            # and must not invalidate or cancel this one. Read the latest safety
+            # limits without rebuilding the chosen problem, strategies, or model.
+            locked_view, _locked_guard = _snapshot(view.path)
+            if locked_view.project.id != expected_project_id:
+                raise ProjectError("Project identity changed during research preflight")
+            limits = _validate_limits(get_limits(view.path))
             runtime_limits = _effective_limits(limits)
             records = _all(view.path)
             existing = next(
@@ -5080,7 +5077,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
     credential = await auth_context()
     guard_state_hash = _project_guard_state(view.project)
     if not _same_session_project(record, view):
-        record["message"] = "Project or strategy changed; research remains paused."
+        record["message"] = "Project identity changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
     config = await _frozen_session_configuration(view, credential, record)
@@ -5127,9 +5124,9 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
-            locked_view, locked_guard = _snapshot(record["project_path"])
+            locked_view, _locked_guard = _snapshot(record["project_path"])
             if not _same_session_project(record, locked_view):
-                record["message"] = "Project or strategy changed; research remains paused."
+                record["message"] = "Project identity changed; research remains paused."
                 _save(record["project_path"], record)
                 raise ProjectError(record["message"])
             record["guard_hash"] = guard
@@ -8293,7 +8290,7 @@ async def _portfolio_role_call(
                 _save(path, record)
                 return False
             try:
-                view, guard = _snapshot(path)
+                view, _guard = _snapshot(path)
             except Exception as exc:
                 _record_preflight_failure(record, branch, role, "project_snapshot", exc)
                 _save(path, record)
@@ -8326,7 +8323,7 @@ async def _portfolio_role_call(
             try:
                 config = await asyncio.wait_for(
                     _frozen_session_configuration(view, credential, record),
-                    timeout=PREFLIGHT_TIMEOUT
+                    timeout=PREFLIGHT_TIMEOUT,
                 )
             except Exception as exc:
                 _record_preflight_failure(record, branch, role, "model_configuration", exc)
@@ -9274,7 +9271,7 @@ async def _execute_pending_python(
         ) <= datetime.now(UTC):
             return
         if record.get("guard_hash"):
-            view, guard = _snapshot(path)
+            view, _guard = _snapshot(path)
             if not _same_session_project(record, view):
                 raise ProjectError(
                     f"Project identity changed; session paused before {tool} dispatch."
@@ -10732,7 +10729,7 @@ async def _worker(session_id: str, path: str) -> None:
                     )
                     _save(path, record)
                     return
-                view, guard = _snapshot(path)
+                view, _guard = _snapshot(path)
                 credential = await auth_context()
                 if not _same_session_project(record, view):
                     record["status"] = "paused"

@@ -647,12 +647,23 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
         try {
           const expectedDigest = await sha256Text(block.source);
           if (controller.signal.aborted) continue;
+          // Hosted inference requires a current account binding. Obtain it for
+          // each queued block; never silently reuse a different account.
+          const settingsResponse = await fetch(
+            `/api/projects/proposals/config?${new URLSearchParams({ path })}`,
+            { signal: controller.signal },
+          );
+          const settings = await settingsResponse.json();
+          if (!settingsResponse.ok || !settings.available) {
+            throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
+          }
           finishProviderRequest = beginProviderRequest('text-conversion');
           const converted = await post<{ body: string; source_digest: string; warnings: string[] }>(
             'text/convert',
             {
               path, scope: 'research-block', session_id: session.id, field_path: block.field,
               target: 'markdown', expected_digest: expectedDigest,
+              expected_binding: settings.binding, expected_project_id: session.project_id,
             },
             controller.signal,
           );
@@ -681,7 +692,6 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   function enqueueConversions(target: OutcomeMarkdownSection[]) {
     const candidates = blocks.filter(block => target.includes(block.section) && block.source.trim().length >= 40
       && block.source.length <= 20000 && convertedBlocksRef.current[block.field]?.source !== block.source
-      && conversionCurrent.current?.field !== block.field
       && !conversionQueue.current.some(item => item.field === block.field && item.source === block.source));
     if (!candidates.length) return;
     if (!conversionWorker.current) { completedConversions.current = 0; totalConversions.current = 0; }
@@ -717,7 +727,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       aria-pressed={active} title={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
       data-tooltip={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
       onClick={onClick}>{markdownSymbol}</button>;
-  const outcomeFormatToggle = markdownButton('all research sections', ['conclusion', 'reasoning', 'citations', 'assessments'].every(section => activeSections.has(section)), toggleAllMarkdown);
+  const outcomeFormatToggle = markdownButton('all research sections', (['conclusion', 'reasoning', 'citations', 'assessments'] as OutcomeMarkdownSection[]).every(section => activeSections.has(section)), toggleAllMarkdown);
   const conclusionFormatToggle = markdownButton('Conclusion', activeSections.has('conclusion'), () => toggleMarkdownSection('conclusion'));
   const reasoningFormatToggle = markdownButton('Reasoning / proof', activeSections.has('reasoning'), () => toggleMarkdownSection('reasoning'));
   const citationsFormatToggle = markdownButton('Citations and evidence', activeSections.has('citations'), () => toggleMarkdownSection('citations'));

@@ -668,7 +668,7 @@
 .workspace-page .outcome-heading { display: flex; align-items: center; justify-content: flex-start; min-width: 0; }
 .workspace-page .outcome-heading-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .workspace-page .outcome-heading h3 { margin: 0; color: #f0d0a4; font: 400 19px/1.35 Georgia,serif; }
-.workspace-page .outcome-heading-title > .sigma-render-toggle { position: static; display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 0 0 0 20px; padding: 0; appearance: none; border: 0; border-radius: 0; background: transparent; color: #aab4ba; box-shadow: none; cursor: pointer; }
+.workspace-page .outcome-heading-title > .sigma-render-toggle { position: static; display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 0; padding: 0; appearance: none; border: 0; border-radius: 0; background: transparent; color: #aab4ba; box-shadow: none; cursor: pointer; }
 .workspace-page .outcome-heading-title > .sigma-render-toggle:hover:not(:disabled),
 .workspace-page .outcome-heading-title > .sigma-render-toggle[aria-pressed="true"] { border: 0; background: transparent; color: #f1c58d; box-shadow: none; }
 .workspace-page .outcome-heading-title > .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }

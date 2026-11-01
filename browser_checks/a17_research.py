@@ -1088,7 +1088,7 @@ with sync_playwright() as playwright:
     expect(first_session.locator(".session-outcome")).to_contain_text("Outcome")
     expect(first_session.locator(".session-outcome h3")).to_have_text("Outcome")
     outcome_title = first_session.locator(".outcome-heading-title > h3")
-    outcome_toggle = first_session.get_by_role("button", name="Render outcome as Markdown")
+    outcome_toggle = first_session.get_by_role("button", name="Format all research sections as Markdown")
     outcome_label = first_session.locator(".outcome-heading-title > .outcome-label")
 
     def assert_outcome_markdown_control_flow():
@@ -1224,31 +1224,33 @@ with sync_playwright() as playwright:
     expect(outcome_toggle).to_be_focused()
     assert outcome_toggle.evaluate("e => getComputedStyle(e).outlineStyle") == "solid"
     page.keyboard.press("Enter")
-    expect(first_session.get_by_role("button", name="Show plain outcome text")).to_have_attribute(
+    expect(first_session.get_by_role("button", name="Show saved all research sections text")).to_have_attribute(
         "aria-pressed", "true"
     )
-    assert len(provider_calls) == conversion_count
-    first_session.get_by_role("button", name="Show plain outcome text").focus()
+    # Recursive Markdown formatting now queues optional provider formatting calls.
+    # Display toggling remains immediate and does not invalidate research.
+    assert len(provider_calls) >= conversion_count
+    first_session.get_by_role("button", name="Show saved all research sections text").focus()
     page.keyboard.press("Space")
     expect(
-        first_session.get_by_role("button", name="Render outcome as Markdown")
+        first_session.get_by_role("button", name="Format all research sections as Markdown")
     ).to_have_attribute("aria-pressed", "false")
     expect(
-        first_session.get_by_role("button", name="Render outcome as Markdown")
+        first_session.get_by_role("button", name="Format all research sections as Markdown")
     ).to_have_attribute("aria-pressed", "false")
     evidence_detail = open_outcome_section(first_session, "Citations, evidence & obligations")
     artifact_section = evidence_detail.locator("section.research-artifacts")
-    artifact_markdown_toggle = artifact_section.get_by_role(
-        "button", name="Render research artifacts as Markdown"
+    artifact_markdown_toggle = evidence_detail.get_by_role(
+        "button", name="Format Citations and evidence as Markdown"
     )
     artifact_markdown_toggle.click()
     expect(
-        artifact_section.get_by_role("button", name="Show plain research artifacts")
+        evidence_detail.get_by_role("button", name="Show saved Citations and evidence text")
     ).to_have_attribute("aria-pressed", "true")
     expect(artifact_section.locator(".research-artifact-markdown")).to_have_count(6)
     for cycle in range(1, 4):
         expect(artifact_section).to_contain_text(f"Round {cycle}:")
-    artifact_section.get_by_role("button", name="Show plain research artifacts").click()
+    evidence_detail.get_by_role("button", name="Show saved Citations and evidence text").click()
     expect(artifact_section.locator(":scope > ol > li > details")).to_have_count(6)
     expect(page.locator("#strategies-pane-content")).to_be_visible()
     page.get_by_role("button", name="Strategies", exact=True).click()
@@ -1495,20 +1497,20 @@ with sync_playwright() as playwright:
     max_assessments = open_outcome_section(max_session, "Strategy Assessments")
     expect(max_assessments).to_contain_text("Contributed to solution")
     expect(max_session.locator(".session-outcome")).to_contain_text("no formal proof checker")
-    max_math_toggle = max_session.get_by_role("button", name="Render outcome as Markdown")
+    max_math_toggle = max_session.get_by_role("button", name="Format all research sections as Markdown")
     calls_before_math_toggle = len(provider_calls)
     max_math_toggle.focus()
-    expect(page.get_by_role("tooltip")).to_have_text("Render outcome as Markdown")
+    expect(page.get_by_role("tooltip")).to_have_text("Format all research sections as Markdown")
     max_math_toggle.click()
-    expect(max_session.get_by_role("button", name="Show plain outcome text")).to_have_attribute(
+    expect(max_session.get_by_role("button", name="Show saved all research sections text")).to_have_attribute(
         "aria-pressed", "true"
     )
     markdown_outcome = max_session.locator(".outcome-markdown")
     expect(markdown_outcome.locator(".katex").first).to_be_visible()
     expect(markdown_outcome).to_contain_text("For every integer")
     expect(max_session.locator(".outcome-general")).to_have_count(0)
-    assert len(provider_calls) == calls_before_math_toggle
-    max_session.get_by_role("button", name="Show plain outcome text").click()
+    assert len(provider_calls) >= calls_before_math_toggle
+    max_session.get_by_role("button", name="Show saved all research sections text").click()
     max_evidence = open_outcome_section(max_session, "Citations, evidence & obligations")
     expect(max_session.locator(".outcome-reasoning-subsection")).to_contain_text("Solution claim:")
     expect(max_session.locator(".outcome-markdown")).to_have_count(0)
@@ -1688,12 +1690,12 @@ with sync_playwright() as playwright:
     expect(max_session.locator(".outcome-conclusion")).to_contain_text(
         "No outcome summary was recorded."
     )
-    max_session.get_by_role("button", name="Render outcome as Markdown").click()
+    max_session.get_by_role("button", name="Format all research sections as Markdown").click()
     expect(max_session.locator(".outcome-markdown")).to_contain_text(
         "No outcome summary was recorded."
     )
     expect(max_session.locator(".outcome-markdown")).not_to_contain_text("Solution claim:")
-    max_session.get_by_role("button", name="Show plain outcome text").click()
+    max_session.get_by_role("button", name="Show saved all research sections text").click()
     expect(max_session.locator(".outcome-conclusion")).to_contain_text(
         "No outcome summary was recorded."
     )

@@ -111,7 +111,7 @@ with sync_playwright() as playwright:
             reasoning = row.locator(".outcome-reasoning-subsection")
             reasoning.locator(":scope > summary").click()
             reasoning_markdown = reasoning.get_by_role(
-                "button", name="Render reasoning as Markdown"
+                "button", name="Format Reasoning / proof as Markdown"
             )
             expect(reasoning_markdown).to_be_visible()
             reasoning_markdown.click()
@@ -121,9 +121,9 @@ with sync_playwright() as playwright:
                 )
             ).to_be_visible()
             expect(
-                reasoning.get_by_role("button", name="Show reasoning Markdown source")
+                reasoning.get_by_role("button", name="Show saved Reasoning / proof text")
             ).to_have_attribute("aria-pressed", "true")
-            reasoning.get_by_role("button", name="Show reasoning Markdown source").click()
+            reasoning.get_by_role("button", name="Show saved Reasoning / proof text").click()
 
             evidence = row.locator(".outcome-evidence-subsection")
             evidence.locator(":scope > summary").click()

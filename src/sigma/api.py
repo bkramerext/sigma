@@ -424,7 +424,7 @@ class ResearchControlRequest(OpenRequest):
 class ResearchInterventionRequest(OpenRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
     kind: Literal["objection", "evidence", "priority"]
-    text: str = Field(min_length=1, max_length=1200)
+    text: str = Field(min_length=1, max_length=20000)
     strategy_ids: list[str] | None = Field(default=None, min_length=1, max_length=12)
     agent_roles: list[Literal["investigator", "skeptic"]] = Field(
         default_factory=lambda: ["investigator", "skeptic"], min_length=1, max_length=2
