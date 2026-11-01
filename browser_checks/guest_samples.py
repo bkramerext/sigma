@@ -178,6 +178,9 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(welcome).to_contain_text(
             "decides whether to include sponsorship when granting your invitation"
         )
+        expect(welcome.locator(".invitation-welcome-about-hint")).to_contain_text(
+            "About SIGMA pill"
+        )
         expect(welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
         assert welcome.evaluate("el => getComputedStyle(el).transform") == (
             "matrix(1.25, 0, 0, 1.25, 0, 0)"

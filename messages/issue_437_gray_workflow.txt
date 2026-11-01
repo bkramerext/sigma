@@ -1,0 +1,29 @@
+R4R correction handoff — Issue #437 / PR #439
+
+PR: https://github.com/bkramerext/sigma/pull/439
+Branch: gray/issue-437-workflow
+Base: main at 92bc34eda4c53decd6de29af315100251a5fde62
+Correction implementation commit: bfe4321d87c38c6c8461c3efed997352b40096c6 (PR branch tip includes the final evidence/handoff update)
+
+Changes requested and addressed
+- README/About stage 6 now separates export of research records and reports from PDF/TeX export of an optional paper. It explicitly leaves paper sharing/publication to the user.
+- Condensed the README lead-in to the diagram; the session controls and limits remain linked to Getting Started.
+- Independently rendered the exact README Mermaid block through Mermaid JS v11 in real Chrome. The diagram shows all six labels, six connectors, a direct research-record/report export route, and a separate optional-paper route. Screenshot is docs/evaluations/issue437/readme-mermaid-independent.png; reproducible check is browser_checks/issue437_mermaid_render.py.
+- Changed narrow-screen explanatory text from 11px to 12px. Chrome acceptance now verifies Enter/Space keyboard disclosure toggles and complete wrapping/no clipping at 390×844 and 320×740, then scrolls to and confirms the final stage is visible. About disclosure persistence, architecture diagram and Welcome behavior remain covered.
+
+Current verification actually run
+- Focused real-Chrome About/persistence/responsive/keyboard check: browser_checks/issue437_workflow.py.
+- Independent Mermaid JS v11 renderer check: browser_checks/issue437_mermaid_render.py.
+- Guest Welcome real-Chrome check: browser_checks/guest_samples.py.
+- `./sigma test`: passed after review corrections, including Python scenarios, Ruff lint/format, Pyright (0 diagnostics), frontend typecheck and production build. The existing large JavaScript chunk advisory remains; optional graph-present sandbox scenario skipped because its local image is unavailable.
+- Post-push GitHub Mermaid preview: real Chrome loaded the corrected README at HTTP 200 and recognized its Mermaid source, but the enrichment target remained empty/loading after 15 seconds. GitHub's own rendered diagram is UNVERIFIED. Independent Mermaid JS v11 rendering passed and its screenshot is preserved.
+
+GitHub Mermaid rendering remains a separate criterion: previous pushed page returned HTTP 200 and recognized the Mermaid block, but Chrome showed only a spinner for 15 seconds. The independent Mermaid renderer now produces a complete diagram. Keep GitHub rendering UNVERIFIED unless Chrome confirms the corrected pushed page has a completed diagram.
+
+Acceptance report and screenshots: docs/evaluations/issue437/README.md and docs/evaluations/issue437/.
+
+Coordination
+- #435 remains assigned to Green. Its pre-existing uncommitted work remains untouched in `/Users/admin/sigma_gray` on `gray/issue-328-paper-progress`; this PR uses its own worktree and includes none of that work.
+- Red owns #436, including About navigation; this branch changes no pill/navigation or Project Types logic. The shared frontend/src/main.tsx AboutDialog file remains an integration overlap. Report sequencing/conflicts to the coordinator through the human; no worker-to-worker communication occurred.
+
+No paid provider calls, deployment, self-merge, or changes to research/paper execution systems.

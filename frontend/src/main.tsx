@@ -1,4 +1,4 @@
-import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
+import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
@@ -2868,9 +2868,7 @@ function FeedbackForm() {
       setError(cause instanceof Error ? cause.message : 'Feedback could not be sent. Please try again.');
     } finally { setBusy(false); }
   }
-  return <details className="about-disclosure about-feedback-disclosure">
-    <summary>Send product feedback</summary>
-    <div className="about-disclosure-content">
+  return <>
       {sent ? <p role="status">Thanks for your feedback. It has been sent for administrator review.</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
         <label>Feedback<textarea required minLength={10} maxLength={4000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Share a suggestion or describe a problem."/></label>
         <button type="submit" className="admin-text-action about-feedback-send" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send Feedback'}</button>
@@ -2878,13 +2876,58 @@ function FeedbackForm() {
         <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider. Read the <a href={privacyNoticeHref('about')}>Privacy Notice</a>.</p>
         {error && <p role="alert">{error}</p>}
       </form>}
-    </div>
-  </details>;
+  </>;
 }
 
 function privacyNoticeHref(returnDialog: 'invitation' | 'about') {
   const returnTo = `${window.location.pathname}${window.location.search}`;
   return `/privacy?return_to=${encodeURIComponent(returnTo)}&return_dialog=${returnDialog}`;
+}
+
+const ABOUT_DISCLOSURE_KEY = 'sigma.aboutDisclosureState.v1';
+const ABOUT_DISCLOSURE_DEFAULTS: Record<string, boolean> = {
+  workflow: true,
+  features: false,
+  architecture: false,
+  provenance: false,
+  feedback: false,
+};
+
+function savedAboutDisclosureState(): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(ABOUT_DISCLOSURE_KEY) ?? '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  } catch { return {}; }
+}
+
+function aboutDisclosureState(section: keyof typeof ABOUT_DISCLOSURE_DEFAULTS): boolean {
+  try {
+    const saved = savedAboutDisclosureState();
+    return typeof saved[section] === 'boolean' ? saved[section] : ABOUT_DISCLOSURE_DEFAULTS[section];
+  } catch { return ABOUT_DISCLOSURE_DEFAULTS[section]; }
+}
+
+function rememberAboutDisclosure(event: SyntheticEvent<HTMLDetailsElement>, section: keyof typeof ABOUT_DISCLOSURE_DEFAULTS) {
+  try {
+    const saved = savedAboutDisclosureState();
+    saved[section] = event.currentTarget.open;
+    window.localStorage.setItem(ABOUT_DISCLOSURE_KEY, JSON.stringify(saved));
+  } catch { /* About remains usable when browser storage is unavailable. */ }
+}
+
+function AboutWorkflow() {
+  const stages = [
+    { title: 'Create a project', notes: ['Choose a subject or sample.', 'State the question you want to investigate.'] },
+    { title: 'Explore strategies', notes: ['Develop several approaches to the question.', 'Choose which strategies to investigate.'] },
+    { title: 'Run research', notes: ['Investigator and Skeptic examine selected strategies.', 'Sessions save evidence, objections, results, and open questions.'] },
+    { title: 'Review and refine', notes: ['Inspect findings, the Outcome, and Current Understanding.', 'Revise strategies or run more sessions when useful.'] },
+    { title: 'Draft a paper (optional)', notes: ['Synthesize saved research into an academic paper draft.', 'A draft is not proof or independent verification.'] },
+    { title: 'Review and export', notes: ['Export research records and reports for inspection or sharing; no paper is required.', 'If you create a paper, review its claims, evidence, citations, and limitations before exporting PDF or TeX.', 'You choose whether and where to share or publish a paper.'] },
+  ];
+  return <ol className="about-workflow" aria-label="SIGMA research workflow">{stages.map((stage, index) => <li className="about-workflow-stage" key={stage.title}>
+    <div className="about-workflow-step"><span className="about-workflow-number" aria-hidden="true">{index + 1}</span><h3>{stage.title}</h3></div>
+    <ul className="about-workflow-notes">{stage.notes.map(note => <li key={note}>{note}</li>)}</ul>
+  </li>)}</ol>;
 }
 
 function AboutDialog({ onClose }: { onClose: () => void }) {
@@ -2899,7 +2942,11 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
-      <details className="about-disclosure">
+      <details className="about-disclosure about-workflow-disclosure" data-about-section="workflow" open={aboutDisclosureState('workflow')} onToggle={event => rememberAboutDisclosure(event, 'workflow')}>
+        <summary>How SIGMA works</summary>
+        <div className="about-disclosure-content"><AboutWorkflow/></div>
+      </details>
+      <details className="about-disclosure" data-about-section="features" open={aboutDisclosureState('features')} onToggle={event => rememberAboutDisclosure(event, 'features')}>
         <summary>Key Features</summary>
         <div className="about-disclosure-content">
       <section className="about-feature"><h4>Multi-Strategy Exploration</h4><p>Hard problems often need more than one approach. Each strategy explores a particular angle, rather than proposing an answer. Strategies can be tested, revised, or combined as the research develops. Even failed approaches can teach us something useful.</p></section>
@@ -2914,15 +2961,15 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
           <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
         </div>
       </details>
-      <details className="about-disclosure about-architecture-disclosure">
+      <details className="about-disclosure about-architecture-disclosure" data-about-section="architecture" open={aboutDisclosureState('architecture')} onToggle={event => rememberAboutDisclosure(event, 'architecture')}>
         <summary>How SIGMA Works: Multi-Agentic Research</summary>
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
-      <details className="about-disclosure about-provenance-disclosure">
+      <details className="about-disclosure about-provenance-disclosure" data-about-section="provenance" open={aboutDisclosureState('provenance')} onToggle={event => rememberAboutDisclosure(event, 'provenance')}>
         <summary>Vision for Investigation Provenance</summary>
         <div id="about-provenance-details" className="about-disclosure-content"><AboutProvenanceVision/></div>
       </details>
-      {cloud?.enabled && cloud.ready && <FeedbackForm/>}
+      {cloud?.enabled && cloud.ready && <details className="about-disclosure about-feedback-disclosure" data-about-section="feedback" open={aboutDisclosureState('feedback')} onToggle={event => rememberAboutDisclosure(event, 'feedback')}><summary>Send product feedback</summary><div className="about-disclosure-content"><FeedbackForm/></div></details>}
     </div>
     <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('about')}>Privacy Notice</a><a className="about-privacy-link" href="/tos">Terms of Service</a></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
   </dialog></div>;
@@ -5680,6 +5727,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     {audience === 'requested' && <p className="invitation-welcome-intro">We've received your request and will get back to you soon. In the meantime, feel free to explore SIGMA as a guest.</p>}
     {audience === 'sponsored' && <p className="invitation-welcome-intro">SIGMA tracks your sponsored allowance as you use ChatGPT. When you’re ready, you can connect your own ChatGPT account from the Sponsored ChatGPT pill.</p>}
     {audience === 'invited' && <p className="invitation-welcome-intro">Welcome to SIGMA.</p>}
+    <p className="invitation-welcome-about-hint">New to SIGMA? Open the About SIGMA pill for a quick guide to how it works.</p>
     <p id="invitation-welcome-phrase" className="invitation-welcome-phrase">{phrase}</p>
     {error && audience !== 'nonmember' && <p role="alert">{error}</p>}
     {audience === 'nonmember' && invitationRequested && <p className="invitation-welcome-requested" role="status">Your invitation request is recorded and awaiting administrator review.</p>}
