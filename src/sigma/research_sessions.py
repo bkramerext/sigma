@@ -5279,7 +5279,11 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record["deadline_at"] = (
                 datetime.fromisoformat(record["deadline_at"]) + stopped_for
             ).isoformat()
-        record.pop("stopped_at", None)
+        # Persist the pause extension before the later guarded re-read below.
+        # Keep a checkpoint so time spent in preflight is also excluded if
+        # authentication/model checks fail or another resume is attempted.
+        record["stopped_at"] = _now()
+        _save(record["project_path"], record)
     if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
         record["deadline_at"]
     ) <= datetime.now(UTC):
@@ -5360,6 +5364,16 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
+            if record.get("stopped_at"):
+                stopped_for = datetime.now(UTC) - datetime.fromisoformat(record["stopped_at"])
+                record["stopped_duration_seconds"] = (
+                    float(record.get("stopped_duration_seconds", 0)) + stopped_for.total_seconds()
+                )
+                if isinstance(record.get("deadline_at"), str):
+                    record["deadline_at"] = (
+                        datetime.fromisoformat(record["deadline_at"]) + stopped_for
+                    ).isoformat()
+                record.pop("stopped_at", None)
             locked_view, _locked_guard = _snapshot(record["project_path"])
             if not _same_session_project(record, locked_view):
                 record["message"] = "Project identity changed; research remains paused."

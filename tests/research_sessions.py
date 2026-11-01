@@ -3729,7 +3729,7 @@ async def test_pause_counts_interrupted_call(path: Path):
         await asyncio.wait_for(started_call.wait(), 2)
         progress = research_sessions.get_session(str(path), started["id"])
         assert "Investigator agent turn 1/12 in progress" in progress["message"]
-        paused = await research_sessions.control_session(str(path), started["id"], "pause")
+        await research_sessions.control_session(str(path), started["id"], "pause")
         await asyncio.sleep(0.02)
         paused = research_sessions.get_session(str(path), started["id"])
     assert paused["status"] == "paused" and paused["calls_used"] == 1
@@ -8058,6 +8058,56 @@ async def test_resume_limits_reconcile_portfolio_terminal_state(path: Path):
             action["action"] not in {"continue", "revise"}
             for action in ended["portfolio_decision"]["strategy_actions"]
         )
+
+
+async def test_resume_persists_paused_time_before_guarded_reread(path: Path):
+    view, strategy, credential, config = await setup(path)
+    entered = asyncio.Event()
+
+    async def handler(_request):
+        entered.set()
+        await asyncio.Event().wait()
+        return httpx.Response(200, json=provider_response(investigation(1)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        await research_sessions.control_session(str(path), started["id"], "pause")
+
+    saved = research_sessions._read(str(path), started["id"])
+    saved["status"] = "paused"
+    saved["deadline_at"] = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
+    saved["stopped_at"] = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
+    for branch in saved["strategy_runs"]:
+        branch["status"] = "paused"
+    research_sessions._save(str(path), saved)
+
+    async def idle_worker(*_args):
+        await asyncio.Event().wait()
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=idle_worker),
+    ):
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        durable = research_sessions._read(str(path), started["id"])
+        assert datetime.fromisoformat(durable["deadline_at"]) > datetime.now(UTC)
+        assert durable["stopped_duration_seconds"] >= 59
+        assert durable.get("stopped_at") is None
+        await research_sessions.control_session(str(path), started["id"], "pause")
 
 
 async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
