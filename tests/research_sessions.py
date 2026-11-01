@@ -6243,7 +6243,7 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
         assert finished["status"] == "ended" and finished["calls_used"] == 8
         assert len(finished["artifacts"]) == 4 and len(seen) == 8
         titles = {first.id: first.title, second.id: second.title}
-        findings = [
+        findings = sorted(
             (
                 titles[artifact["strategy_id"]], artifact["strategy_cycle"],
                 artifact["claim_or_question"], artifact["method"],
@@ -6251,7 +6251,7 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
                 artifact["next_question"],
             )
             for artifact in finished["artifacts"]
-        ]
+        )
         decisions = [
             (
                 titles[branch["strategy_id"]], branch["status"], branch["cycle"],
