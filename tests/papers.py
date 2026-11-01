@@ -4417,9 +4417,15 @@ def test_fallback_planner_ranks_complete_research_notes_over_operational_fields(
     )
     assert all("events/" not in claim.statement for claim in plan.claims)
     assert all("proof:" not in claim.statement for claim in plan.claims)
-    result_claim = next(claim for claim in plan.claims if "stable difference" in claim.statement)
-    assert "reports no stable difference" in result_claim.statement
-    assert {result_a, result_b} <= set(result_claim.evidence_refs)
+    result_claim = next(
+        claim for claim in plan.claims if "supports a stable difference" in claim.statement
+    )
+    contrary_claim = next(
+        claim for claim in plan.claims if "reports no stable difference" in claim.statement
+    )
+    assert result_claim.id != contrary_claim.id
+    assert result_claim.evidence_refs == [result_a]
+    assert contrary_claim.evidence_refs == [result_b]
     assert any("retry failure" in claim.statement for claim in plan.claims)
     full_proof_claim = next(
         claim for claim in plan.claims if "derivation starts" in claim.statement
