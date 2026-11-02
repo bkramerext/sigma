@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-import hashlib
 import json
 import os
-from typing import Any
+from typing import Any, TypedDict
 
 import pypdfium2
 from pydantic import BaseModel, ConfigDict, Field
@@ -109,7 +108,12 @@ def best_score(summaries: list[dict[str, Any]]) -> int | None:
     ]
     return max(scores, default=None)
 
-def project_metadata(path: str) -> dict[str, int | None]:
+class ProjectPaperMetadata(TypedDict):
+    paper_count: int
+    best_paper_score: int | None
+
+
+def project_metadata(path: str) -> ProjectPaperMetadata:
     """One canonical aggregate for the project-list and TeX tooltip."""
     from sigma import papers
 
