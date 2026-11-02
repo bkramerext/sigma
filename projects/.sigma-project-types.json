@@ -1,0 +1,29 @@
+{
+  "project_types": [
+    {
+      "based_on": "chemistry",
+      "behavior": {},
+      "icon": {
+        "elements": [
+          {
+            "attrs": {
+              "d": "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7 16h10M9 13h6"
+            },
+            "tag": "path"
+          }
+        ],
+        "key": "chemistry",
+        "kind": "builtin",
+        "view_box": "0 0 24 24"
+      },
+      "id": "a0247f51-683a-43da-8f81-cfdd6d6a713d",
+      "name": "Chemistry2",
+      "origin": "chemistry",
+      "publication_standards_references": [],
+      "research_standards_references": [],
+      "scope": "Chemical substances, reactions, molecular structure and materials.",
+      "user_defined": true
+    }
+  ],
+  "schema_version": 1
+}
