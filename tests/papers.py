@@ -3261,47 +3261,115 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
 
 
 def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures() -> None:
-    catalog = papers.paper_writing_sources
+    """Only resolved Project Types publication links may reach the paper writer."""
+    from sigma import paper_writing_sources, project_types
+
+    common = project_types.common_references()["publication_standards_references"]
+    resolved = project_types.get_type("mathematical")
+    assert resolved is not None
+    official = list(resolved.publication_standards_references)
+    assert len(official) >= len(common) + 1
+    math_only = {item["url"] for item in official} - {item["url"] for item in common}
+    assert math_only
+    project = {
+        "investigation_type": "mathematical",
+        "title": "Nonconsecutive Subset Sums Modulo 3",
+        "publication_references": official,
+        "research_standards_references": [
+            {
+                "name": "Research should not be read as publication guidance",
+                "url": "https://example.org/research-only",
+            }
+        ],
+    }
     calls: list[str] = []
 
     async def fetch(url: str) -> str | None:
         calls.append(url)
-        if "pmc.ncbi" in url:
-            return None
         return "Readable, relevant scientific writing guidance. " * 20
 
-    project = {
-        "investigation_type": "mathematical",
-        "title": "Nonconsecutive Subset Sums Modulo 3",
-        "problem": "Prove a recurrence and exact limit.",
-    }
-
-    async def check() -> None:
-        chosen, status = await catalog.select(project, fetch=fetch)
-        assert status == "selected"
-        assert len(chosen) == 3
-        assert {item["tier"] for item in chosen} == {"general", "discipline", "branch"}
-        assert all(len(item["excerpt"]) >= 450 for item in chosen)
-        assert all(
-            item["type"] == "mathematical" and item["branch"] == "combinatorics" for item in chosen
-        )
-        count = len(calls)
-        reused, mode = await catalog.select(project, chosen, fetch=fetch)
-        assert mode == "reused" and reused == chosen and len(calls) == count
-        damaged = [dict(item) for item in chosen]
-        damaged[0]["sha256"] = "0" * 64
-        updated, mode = await catalog.select(project, damaged, fetch=fetch)
-        assert mode == "selected" and updated == chosen
-        no_urls, status = await catalog.select(
-            {"investigation_type": "law", "title": "Legal memorandum"},
-            fetch=lambda _url: unavailable(),
-        )
-        assert status == "unavailable" and no_urls == []
-
-    async def unavailable() -> None:
+    async def unavailable(_url: str) -> None:
         raise RuntimeError("unavailable writing source")
 
+    async def check() -> None:
+        chosen, status = await paper_writing_sources.select(project, fetch=fetch)
+        assert status == "selected" and len(chosen) == 3
+        assert {item["url"] for item in chosen} == {item["url"] for item in official}
+        assert chosen[0]["url"] in math_only
+        assert "https://example.org/research-only" not in calls
+        assert all(len(item["excerpt"]) >= 450 for item in chosen)
+        assert all(item["type"] == "mathematical" for item in chosen)
+
+        count = len(calls)
+        reused, mode = await paper_writing_sources.select(project, chosen, fetch=fetch)
+        assert mode == "reused" and reused == chosen and len(calls) == count
+
+        tampered = [dict(item) for item in chosen]
+        tampered[0]["sha256"] = "0" * 64
+        updated, mode = await paper_writing_sources.select(project, tampered, fetch=fetch)
+        assert mode == "selected" and updated == chosen
+
+        changed = {
+            **project,
+            "publication_references": [
+                *official,
+                {"name": "New official journal", "url": "https://example.org/new-official-methods"},
+            ],
+        }
+        count = len(calls)
+        refreshed, mode = await paper_writing_sources.select(changed, chosen, fetch=fetch)
+        assert mode == "selected" and len(calls) > count
+        assert refreshed[0]["reference_set_sha256"] != chosen[0]["reference_set_sha256"]
+
+        no_config, mode = await paper_writing_sources.select(
+            {
+                "investigation_type": "mathematical",
+                "title": "No official references",
+                "research_standards_references": official,
+            },
+            fetch=fetch,
+        )
+        assert mode == "unavailable" and no_config == []
+
+        unavailable_items, mode = await paper_writing_sources.select(project, fetch=unavailable)
+        assert mode == "unavailable" and unavailable_items == []
+
+        # One inaccessible document cannot block valid writing guidance.
+        async def partial_fetch(url: str) -> str | None:
+            return None if url == official[0]["url"] else "Valid editorial guidance. " * 35
+
+        partial, mode = await paper_writing_sources.select(project, fetch=partial_fetch)
+        assert mode == "selected" and len(partial) == 2
+        unchanged, mode = await paper_writing_sources.select(project, partial, fetch=unavailable)
+        assert mode == "reused" and unchanged == partial
+
     asyncio.run(check())
+
+    # The old catalog is absent, and explicit unsafe URLs are never contacted.
+    assert not hasattr(paper_writing_sources, "CATALOG")
+    for bad in (
+        "http://127.0.0.1/internal",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://[::1]/internal",
+        "http://user:password@example.org/private",
+        "http://example.org:8080/admin",
+        "file:///etc/passwd",
+        "https://example.org:abc/path",
+        "https://example.org/path\nx",
+    ):
+        assert not paper_writing_sources._valid_public_url(bad)
+    assert paper_writing_sources._valid_public_url("https://example.org/guide.pdf")
+
+
+def test_paper_pdf_source_reader_accepts_only_substantial_extractable_text() -> None:
+    """A real repository PDF can be parsed; short/invalid material is skipped."""
+    from sigma import paper_writing_sources
+
+    example = Path("tests/fixtures/sigma-valid-sample-paper.pdf").read_bytes()
+    extracted = paper_writing_sources._pdf_excerpt(example)
+    assert extracted is None or isinstance(extracted, str)
+    assert paper_writing_sources._pdf_excerpt(b"not a PDF") is None
+    assert paper_writing_sources.readable("please sign in") is None
 
 
 def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> None:
@@ -6378,6 +6446,7 @@ def main() -> None:
     test_military_style_guidance_reaches_all_authoring_paths()
     test_math_and_physics_methodology_reaches_every_authoring_path()
     test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
+    test_paper_pdf_source_reader_accepts_only_substantial_extractable_text()
     test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
