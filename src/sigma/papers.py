@@ -3712,7 +3712,6 @@ def _diagram_layout(
     return positions, node_heights
 
 
-
 def _frozen_research_diagnostics(package: dict[str, Any]) -> list[dict[str, str]]:
     """Bounded, source-attributed diagnostic excerpts from the frozen research.
 
@@ -4254,7 +4253,13 @@ def _tex(
                 + str(item.get("detail", ""))
             )
         if obligation_reconciliation:
-            for item in obligation_reconciliation[:40]:
+            distinct_obligations = list(
+                {
+                    str(item.get("text", "")).strip().casefold(): item
+                    for item in obligation_reconciliation
+                }.values()
+            )
+            for item in distinct_obligations[:18]:
                 items.append(
                     "Open obligation ["
                     + str(item.get("status", "unresolved"))
@@ -4263,6 +4268,11 @@ def _tex(
                     + " [Sources: "
                     + ", ".join(str(ref) for ref in item.get("source_refs", [])[:8])
                     + "]"
+                )
+            if len(distinct_obligations) > 18:
+                items.append(
+                    f"{len(distinct_obligations) - 18} further distinct obligations "
+                    "remain in the saved reconciliation."
                 )
         if material_omissions:
             for item in material_omissions[:40]:
