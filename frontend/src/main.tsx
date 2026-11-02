@@ -1844,7 +1844,46 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   </dialog>;
 }
 
-type PaperSummary = { paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[] } };
+type PaperScore = {
+  rubric_id: string;
+  rubric_version: number;
+  pdf_sha256: string;
+  total: number;
+  provisional: boolean;
+  categories: Record<'tex_correctness' | 'readability' | 'sustained_answer' | 'research_rigor' | 'evidence' | 'visuals', { earned: number; max: number; explanation: string }>;
+};
+const paperScoreCategories: { key: keyof PaperScore['categories']; title: string }[] = [
+  { key: 'tex_correctness', title: 'TeX correctness' },
+  { key: 'readability', title: 'Human readability, including layout' },
+  { key: 'sustained_answer', title: 'Clear question and sustained answer' },
+  { key: 'research_rigor', title: 'Research rigor and correctness' },
+  { key: 'evidence', title: 'Evidence and verification' },
+  { key: 'visuals', title: 'Useful visuals' },
+];
+
+function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () => void }) {
+  const element = useRef<HTMLDialogElement>(null);
+  useEffect(() => { element.current?.showModal(); }, []);
+  return <dialog ref={element} className="project-settings-dialog paper-score-dialog" aria-labelledby="paper-score-title"
+    onCancel={event => { event.preventDefault(); onClose(); }}>
+    <header className="settings-header"><h2 id="paper-score-title">Paper Score</h2>
+      <div className="settings-actions"><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
+    </header>
+    <div className="settings-body">
+      <p className="settings-hint">SIGMA is experimental. Research and paper authoring are still works in progress. These scores are meant to convey: yes, we know there are issues.</p>
+      <p className="settings-hint">Provisional evaluation of the PDF and its documented research. This is not independent scientific verification or a human cold read.</p>
+      <h3>Total: {score.total}/100</h3>
+      <table className="paper-score-table"><thead><tr><th>Criterion</th><th>Score</th></tr></thead>
+        <tbody>{paperScoreCategories.map(({ key, title }) => <tr key={key}><td><strong>{title}</strong><p>{score.categories[key].explanation}</p></td>
+          <td className="paper-score-points">{score.categories[key].earned}/{score.categories[key].max}</td></tr>)}
+          <tr><th>Total</th><th className="paper-score-points">{score.total}/100</th></tr>
+        </tbody>
+      </table>
+    </div>
+  </dialog>;
+}
+
+type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[] } };
 type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'source_material' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
@@ -1900,6 +1939,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
+  const [scoringId, setScoringId] = useState('');
+  const [scoreDialog, setScoreDialog] = useState<PaperScore | null>(null);
+  const [scoreError, setScoreError] = useState('');
+  const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
   const [copiedPaperId, setCopiedPaperId] = useState('');
   const [copyError, setCopyError] = useState('');
@@ -2022,7 +2065,32 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
   }
-  async function removePaper(id: string) {
+  async function scorePaper(paper: PaperSummary) {
+    if (scoringRef.current) return;
+    setScoreError('');
+    if (paper.score) { setScoreDialog(paper.score); return; }
+    if (!binding) { setScoreError('Connect an eligible AI provider before scoring.'); return; }
+    scoringRef.current = true;
+    setScoringId(paper.paper_id);
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/score`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not score the paper.');
+      const score = result.score as PaperScore;
+      setPapers(current => current.map(item => item.paper_id === paper.paper_id ? { ...item, score } : item));
+      setScoreDialog(score);
+      window.dispatchEvent(new Event('sigma-paper-scores-updated'));
+    } catch (cause) {
+      setScoreError(errorMessage(cause));
+    } finally {
+      scoringRef.current = false;
+      setScoringId('');
+    }
+  }
+    async function removePaper(id: string) {
     setBusy(true); setError('');
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { method: 'DELETE' });
@@ -2233,12 +2301,13 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)}{paperProgress.status === 'active' ? ` · ${paperTimingLabel(paperProgress, paperClock)}` : ''}</span>{paperProgress.stage === 'proofreading' && <span className="settings-hint">Checking and correcting typesetting issues.</span>}{paperProgress.stage === 'pdf_check' && <span className="settings-hint">{paperProgress.detail || 'Checking PDF output; the saved TeX remains authoritative and PDFs are not edited.'}</span>}{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections' || paperProgress.stage === 'proofreading') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Waiting for the AI response.' : 'Awaiting an update from SIGMA.'}</span>}{paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="settings-hint">{paperProgress.failure_reason}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningFallback ? 'Continue from saved evidence without repeating the failed planning request.' : planningRetry ? 'Retry or Start over to try a fresh approach.' : continuationAvailable ? 'Continue or Start over.' : checkpointMismatch ? 'Clear outdated paper work to generate again.' : 'Review the error before trying again.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
+      {scoreError && <p role="alert" className="error">{scoreError} <button type="button" className="text-view-link" onClick={() => setScoreError('')}>Dismiss</button></p>}
       {loading && <p>Loading saved versions…</p>}
       {!loading && papers.length > 0 && <section className="saved-paper-library" aria-label="Saved AI papers"><h3>Saved versions</h3>{papers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
             <SavedPaperTitle title={paper.title} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}</p><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
@@ -2277,6 +2346,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       </article>}</div>
       </article>)}</section>}
       </>}
+      {scoreDialog && <PaperScoreDialog score={scoreDialog} onClose={() => setScoreDialog(null)}/>}
     </div>
   </dialog>;
 }
@@ -3721,7 +3791,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; pinned: boolean; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; pinned: boolean; error: string | null };
 // A versioned project's family is its title without the final " vN" suffix.
 // Pinning is a presentation choice: hidden siblings remain in the account's
 // complete Saved Projects index and become visible again on unpin.
@@ -3829,7 +3899,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
             {entry.pinned && <svg className="recent-title-pin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 10.8V6a2 2 0 0 0-2-2H5V2h14v2h-2a2 2 0 0 0-2 2v4.8a2 2 0 0 0 .6 1.4L17 14v2H7v-2l1.4-1.8A2 2 0 0 0 9 10.8Z"/><path d="M12 16v6"/></svg>}
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} title={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? 'Unpin' : 'Pin'}</button>}{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" title="Remove this project" onClick={event => {
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.paper_count ?? 0} papers · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} title={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? 'Unpin' : 'Pin'}</button>}{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" title="Remove this project" onClick={event => {
             if (confirmRemoveId === entry.id) { setConfirmRemoveId(''); return; }
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
@@ -4416,6 +4486,25 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
+  const [paperMetadata, setPaperMetadata] = useState<{ count: number; best: number | null }>({ count: 0, best: null });
+  useEffect(() => {
+    if (guest || !path || paperOpen) return;
+    let live = true;
+    const update = async () => {
+      try {
+        const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        const items = (data.papers as PaperSummary[]).filter(p => p.pdf_available);
+        const scores = items.map(p => p.score?.total).filter((v): v is number => typeof v === 'number');
+        if (live) setPaperMetadata({ count: items.length, best: scores.length ? Math.max(...scores) : null });
+      } catch { /* Keep prior tooltip while offline. */ }
+    };
+    const changed = () => void update();
+    void update();
+    window.addEventListener('sigma-paper-scores-updated', changed);
+    return () => { live = false; window.removeEventListener('sigma-paper-scores-updated', changed); };
+  }, [path, paperOpen, guest]);
   const [qaOpen, setQaOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
@@ -4706,7 +4795,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   const projectActionBar = <div className="project-primary-actions">
     <div className="project-pane-actions">
-      <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" data-tooltip="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title={`Generate a LaTeX research paper · ${paperMetadata.count} papers generated${paperMetadata.best === null ? '' : ` · Best score ${paperMetadata.best}/100`}`} data-tooltip={`Generate a LaTeX research paper · ${paperMetadata.count} papers generated${paperMetadata.best === null ? '' : ` · Best score ${paperMetadata.best}/100`}`} disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
         <span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span>
       </button>
       <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" title="Ask about saved research" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
