@@ -67,10 +67,7 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [
-        "https://eda.nc3rs.org.uk/experimental-design",
-        "https://eda.nc3rs.org.uk/experimental-design-unit"
-      ],
+      "research_standards_references": [],
       "publication_standards_references": []
     },
     {
@@ -120,10 +117,7 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [
-        "https://www2.sigsoft.org/EmpiricalStandards/docs/standards",
-        "https://github.com/acmsigsoft/EmpiricalStandards/blob/master/docs/standards/EngineeringResearch.md"
-      ],
+      "research_standards_references": [],
       "publication_standards_references": []
     },
     {
@@ -154,9 +148,7 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [
-        "https://www.itl.nist.gov/div898/handbook/pri/section3/pri33.htm"
-      ],
+      "research_standards_references": [],
       "publication_standards_references": []
     },
     {
@@ -197,9 +189,7 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [
-        "https://www.nasa.gov/reference/6-8-decision-analysis/"
-      ],
+      "research_standards_references": [],
       "publication_standards_references": []
     },
     {
