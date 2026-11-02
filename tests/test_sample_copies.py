@@ -60,6 +60,39 @@ class SampleCopyTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
+    def test_crucible_literature_sample_is_editable_and_methodologically_distinct(self):
+        """Shipped literary template has three independent research methods and citation criteria."""
+        catalog_root = Path(__file__).resolve().parents[1] / "samples"
+        with patch.object(samples, "SAMPLES", catalog_root):
+            sample = next(
+                item
+                for item in samples.sample_projects()["projects"]
+                if item["id"] == "the-crucible"
+            )
+            self.assertEqual(sample["investigation_type"], "literature")
+            self.assertEqual(sample["difficulty"], "medium")
+            self.assertEqual(sample["strategy_count"], 3)
+            copied = samples.open_sample_project("the-crucible")
+
+        project = inspect_project(copied.path).project
+        self.assertNotEqual(project.id, "7fa05c30-1b7c-4df3-9d0c-8d95187a2200")
+        self.assertEqual(project.investigation_type, "literature")
+        self.assertIsNotNone(project.difficulty)
+        assert project.difficulty is not None
+        self.assertEqual(project.difficulty.value, "medium")
+        self.assertEqual(len(project.active_order), 3)
+        self.assertEqual(len(set(project.active_order)), 3)
+        methods = [strategy.title.casefold() for strategy in project.strategies]
+        self.assertTrue(any("formalist" in title for title in methods))
+        self.assertTrue(any("historical" in title for title in methods))
+        self.assertTrue(any("reception" in title for title in methods))
+        self.assertIn("CENTRAL RESEARCH QUESTION", project.problem)
+        self.assertIn("EVIDENCE AND CITATION CRITERIA", project.problem)
+        self.assertIn("published literary criticism", project.problem)
+        self.assertIn("bibliography", project.problem)
+        self.assertIn("NON-OVERLAPPING", project.problem.upper())
+        self.assertEqual(project.events[-1].sequence, 4)
+
     def test_opening_twice_creates_two_independent_recent_copies(self):
         first = samples.open_sample_project("sample")
         second = samples.open_sample_project("sample")

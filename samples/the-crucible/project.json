@@ -1,0 +1,78 @@
+{
+  "schema_version": 8,
+  "id": "7fa05c30-1b7c-4df3-9d0c-8d95187a2200",
+  "title": "The Crucible: Early American Culture and Authorship",
+  "problem": "CENTRAL RESEARCH QUESTION\nHow does Arthur Miller's The Crucible interpret the cultural, religious, political, and social forces that shaped early American society, and what can its portrayal of the Salem witch trials reveal about Miller's experiences, intellectual influences, and artistic intentions?\n\nSCOPE AND RESEARCH GOALS\nExamine The Crucible (1953) as both a dramatic work and an interpretation of colonial New England and the Salem witch trials of 1692. Investigate how the play represents cultural and religious beliefs, institutions, social hierarchies, civic authority, relationships, conformity, and dissent, and establish where those portrayals correspond to the historical record or reflect dramatic adaptation. Distinguish the events and cultural setting of 1692 from the time and circumstances in which Miller wrote the play.\n\nSeek substantive, original insights into Miller's artistic decisions, intellectual influences, experiences, worldview, and relationship to his subject. Investigate relevant biographical and authorial evidence; do not automatically treat a character's views as Miller's own or assume a particular historical or political analogy is his complete intention. Assess what available sources can and cannot establish about authorial intent.\n\nGo beyond a plot summary or list of themes. Examine alternative and conflicting interpretations, including the ways contemporary reviews and later scholarship have understood the work. Identify credible disagreements among historians, literary critics, and readers; weigh their supporting evidence; and develop independently reasoned conclusions about the play, its cultural setting, and its author. The investigation may find uncertainty or disagreement without forcing a single interpretation.\n\nEVIDENCE AND CITATION CRITERIA\nCite the primary literary text with an identifiable edition and act/scene/page references where verifiable. Substantiate historical, biographical, and critical claims using independently checked primary sources, scholarly historical accounts, published literary criticism, and reviews; include both contemporaneous and later critical perspectives where accessible. Give traceable author, title, publication/date and stable source location or DOI/URL, plus page numbers when actually verified; include a bibliography. Never invent quotations, critics' positions, archival discoveries, access dates, citations, page numbers, or source contents. If a text or source cannot be accessed, say so rather than implying inspection.\n\nDistinguish (1) what the play depicts, (2) what historical documents show, (3) what Miller documented about his own work, (4) what other scholars or reviewers argue, and (5) what SIGMA independently infers. Examine provenance, relevant chronology, credibility, contradictions, absent evidence, and alternative explanations. Do not count multiple retellings of a single assertion as independent corroboration. Attribute interpretation and speculation accurately, and avoid overconfident claims about motives or a definitive meaning.\n\nTHREE INDEPENDENT METHODOLOGIES\nRun three separate strategies with non-overlapping primary methods and evidence bases: (1) formalist close reading and dramaturgy of the play; (2) archival/historical and biographical source criticism; (3) systematic comparative review of critical reception and scholarship. Each should pursue its own findings and objections before cross-strategy synthesis; do not have all three simply conduct a generic web literature search.\n\nRESEARCH ACCEPTANCE\nA successful outcome should develop a defensible, original answer to the central question, with specific evidence and citations, explicit evaluation of contrary interpretations, historically informed analysis, and meaningful insight into Miller as an author. The analysis must show where the methodologies corroborate or contradict each other, distinguish authorial evidence from interpretation, and acknowledge limitations and unresolved questions. Neither a predetermined thesis nor an uncited literature summary is an acceptable result. Do not generate a final paper or pretend findings exist before research is conducted.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-11-02T19:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-02T19:00:00+00:00",
+      "strategy_id": "7fa05c30-1b7c-4df3-9d0c-8d95187a2201"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-02T19:00:00+00:00",
+      "strategy_id": "7fa05c30-1b7c-4df3-9d0c-8d95187a2202"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-02T19:00:00+00:00",
+      "strategy_id": "7fa05c30-1b7c-4df3-9d0c-8d95187a2203"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "7fa05c30-1b7c-4df3-9d0c-8d95187a2201",
+      "title": "Formalist close reading and dramaturgical analysis",
+      "approach": "Investigate the play as a literary artifact through close reading of a verifiable edition. Analyze language, dramatic structure, character relationships, staging and dialogue, motifs, narrative perspective and internal contrasts; follow tensions and counterreadings in the text. Support interpretations with identifiable act/scene/page references where available. Derive insights from textual form and choices rather than importing biographical claims, historical reconstructions or published critics' verdicts as evidence. Do not assume an author's intention from character dialogue.",
+      "summary": "Text-internal literary interpretation and counterreadings, grounded in the play's dramatic form.",
+      "author_kind": "human",
+      "created_at": "2026-11-02T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "7fa05c30-1b7c-4df3-9d0c-8d95187a2202",
+      "title": "Historical reconstruction and biographical source criticism",
+      "approach": "Independently investigate the cultural, religious and social context of 1692 Salem, alongside dated records of Arthur Miller's life and the play's creation in the early 1950s. Use primary historical documents, reliable historical accounts, verified Miller statements or archival/biographical sources; evaluate dates, provenance, reliability and limits of inference. Identify documented facts, disputed accounts, historical changes and the evidentiary boundaries on claims about authorial intent. Do not use the drama as a substitute for historical documentation or derive conclusions from the popularity of critical interpretations.",
+      "summary": "Historically sourced account of colonial context and authorship, with provenance and uncertainty.",
+      "author_kind": "human",
+      "created_at": "2026-11-02T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "7fa05c30-1b7c-4df3-9d0c-8d95187a2203",
+      "title": "Comparative critical reception and scholarship review",
+      "approach": "Conduct a traceable, comparative review of independent published assessments of The Crucible across periods, including contemporary reception and later scholarly literary criticism. Record publication metadata and the specific claims and evidence of each critic; compare competing interpretive frameworks, changes in reception and unresolved scholarly disagreements. Evaluate possible source dependence, retrospective assumptions and unsupported assertions. This is research into the scholarship and its arguments, not a repeat of close reading or an independent archival reconstruction. Cite only works actually verified and inspected.",
+      "summary": "Evidence-mapped comparison of critical positions, reception history and scholarly disagreements.",
+      "author_kind": "human",
+      "created_at": "2026-11-02T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "literature",
+  "active_order": [
+    "7fa05c30-1b7c-4df3-9d0c-8d95187a2201",
+    "7fa05c30-1b7c-4df3-9d0c-8d95187a2202",
+    "7fa05c30-1b7c-4df3-9d0c-8d95187a2203"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "medium"
+}
