@@ -76,7 +76,6 @@ function ReferenceLink({ reference, onResolved }: { reference: Reference; onReso
   if (!candidate || referenceUrlError(candidate)) return null;
   return <div className="pt-reference-link">
     <a href={candidate} target="_blank" rel="noopener noreferrer">{knownName === candidate ? resolvedTitle || candidate : knownName}</a>
-    <a className="pt-reference-url" href={candidate} target="_blank" rel="noopener noreferrer">{candidate}</a>
   </div>;
 }
 
@@ -136,6 +135,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const [revision, setRevision] = useState('');
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  const [editingReferences, setEditingReferences] = useState<Set<string>>(() => new Set());
 
   function close() {
     if (dialog.current?.open) dialog.current.close();
@@ -275,16 +275,22 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
               ? { ...current, name } : current
           )),
         }));
+        const rowKey = `${item.id}:${field}:${index}`;
+        const editing = editingReferences.has(rowKey) || !reference.url.trim();
         return <tr key={index}><td>
           {readonly ? <ReferenceLink reference={reference}/> : <div className="pt-reference-entry">
             <div className="pt-reference-field">
-              <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
+              {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
-                onChange={event => setAt(index, event.target.value)}/>
-              <ReferenceLink reference={reference} onResolved={setResolved}/>
+                onChange={event => setAt(index, event.target.value)}/> : <ReferenceLink reference={reference} onResolved={setResolved}/>}
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
-            <button type="button" disabled={busy} onClick={() => edit(item.id, { [field]: references.filter((_, i) => i !== index) })}>Remove</button>
+            <button type="button" disabled={busy} onClick={() => setEditingReferences(previous => {
+              const next = new Set(previous);
+              if (next.has(rowKey)) next.delete(rowKey); else next.add(rowKey);
+              return next;
+            })}>{editing ? 'Done' : 'Edit'}</button>
+            <button type="button" disabled={busy} onClick={() => { setEditingReferences(new Set()); edit(item.id, { [field]: references.filter((_, i) => i !== index) }); }}>Remove</button>
           </div>}
         </td></tr>;
       })}
