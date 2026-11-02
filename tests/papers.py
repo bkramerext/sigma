@@ -6943,8 +6943,10 @@ def main() -> None:
                 parsed.sections[0].model_copy(
                     update={
                         "paragraphs": [
-                            r"The count is $R(n)=1+\sum_{j=1}^n j²$. "
-                            r"The line family lies in $\mathbb{R}^2$."
+                            (
+                                r"The count is $R(n)=1+\sum_{j=1}^n j²$. "
+                                r"The line family lies in $\mathbb{R}^2$."
+                            )
                         ]
                     }
                 ),
