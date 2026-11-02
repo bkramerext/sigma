@@ -19,3 +19,9 @@ Branch: `phase1/golden-5-paper-production` (PR #464)
 ## Next
 
 Review the scientific argument separately from layout quality. Next editorial target is Warp Drive. Reconcile the stale paper-test expectations with the present publication contract before treating the full suite as a merge gate.
+
+## Follow-on review: two math papers and Operation Narrow Passage
+
+The user requested links and best-version retention for Maximum Regions, Nonconsecutive Subset Sums, and Operation Narrow Passage. All three existing TeX files compiled with Tectonic; the PDFs have 6, 10, and 17 pages respectively, with no PDF text-bound warnings. First, middle, and final pages were visually inspected. Recompilation alone did not improve Maximum Regions or Operation Narrow Passage, so their prior tracked pairs remain in `papers/`.
+
+The initial Nonconsecutive rebuild placed its writing-method bibliography on an extra 11th page and was rejected. The renderer now reserves those editorial sources for the opt-in validation appendix; the generation metadata still retains the exact source list. The structured reader guide uses proper math notation. The resulting 10-page PDF retains the claim/source notes on its last page, has no text-bound warnings, and replaces the earlier pair. This is a production renderer and structured-source change, not a manual TeX edit.

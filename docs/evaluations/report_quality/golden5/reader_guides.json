@@ -18,8 +18,8 @@
     "boundary": "The study reports analytical distinctions, not a measured biological effect or a validated assay for the proposed intervening state."
   },
   "nonconsecutive-subset-sums-modulo-3": {
-    "question": "How many subsets of the first n positive integers have no neighboring members and a sum divisible by three?",
-    "answer": "An exact Fibonacci correction yields the count for every n, an eight-term recurrence, and a12 = 128. As n grows, the qualifying fraction approaches one third of all no-neighbor subsets.",
+    "question": "How many subsets of the first $n$ positive integers have no neighboring members and a sum divisible by three?",
+    "answer": "An exact Fibonacci correction yields the count for every $n$, an eight-term recurrence, and $a_{12}=128$. As $n$ grows, the qualifying fraction approaches one third of all no-neighbor subsets.",
     "route": "Count no-neighbor subsets, filter their sums by residue, then use the resulting three Fibonacci formulas to derive the recurrence and limit.",
     "boundary": "The recurrence and limit are proved in the saved derivation; the additional claim that order eight is minimal still needs its complete coprimality calculation."
   },
