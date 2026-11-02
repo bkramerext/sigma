@@ -3260,10 +3260,11 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     for research_type, (heading, guidance) in expected.items():
         tex = papers._tex(draft(), [], "f" * 64, investigation_type=research_type)
         assert rf"\section{{{heading}}}" in tex
-        assert guidance in tex
-    math_tex = papers._tex(
-        draft(), [], "f" * 64, math_style=True, include_claim_details=True
-    )
+        # Writing instructions guide generation; they must not leak into the
+        # reader-facing paper as a boilerplate paragraph.
+        assert guidance in papers._paper_style(research_type)[3]
+        assert guidance not in tex
+    math_tex = papers._tex(draft(), [], "f" * 64, math_style=True, include_claim_details=True)
     assert r"\section{Introduction}" in math_tex
     assert r"\section{Claim and source notes}" in math_tex
 
@@ -6942,9 +6943,7 @@ def main() -> None:
     assert r"\textbackslash{}mathbb" not in formula_tex
     unicode_superscript = papers._latex_prose("The saved construction uses j².")
     assert "$j^{2}$" in unicode_superscript
-    math_tex = papers._tex(
-        parsed, warnings, "a" * 64, math_style=True, include_claim_details=True
-    )
+    math_tex = papers._tex(parsed, warnings, "a" * 64, math_style=True, include_claim_details=True)
     math_opening, math_methods, _, _ = papers._paper_style("mathematical")
     assert r"\section{" + math_opening + "}" in math_tex
     assert r"\section{" + math_methods + "}" in math_tex
