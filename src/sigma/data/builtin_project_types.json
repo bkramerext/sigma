@@ -253,14 +253,14 @@
       },
       "research_standards_references": [
         {
-          "name": "Terence Tao — Solving Mathematical Problems",
-          "url": "https://terrytao.wordpress.com/career-advice/solving-mathematical-problems/"
+          "name": "Richard Hammack — Book of Proof (full text)",
+          "url": "https://richardhammack.github.io/BookOfProof/Main.pdf"
         }
       ],
       "publication_standards_references": [
         {
-          "name": "Terence Tao — On Writing Mathematics",
-          "url": "https://terrytao.wordpress.com/advice-on-writing-papers/"
+          "name": "Keith Conrad — Advice on Mathematical Writing (full text)",
+          "url": "https://kconrad.math.uconn.edu/blurbs/proofs/writingtips.pdf"
         }
       ]
     },
@@ -388,8 +388,8 @@
       ],
       "publication_standards_references": [
         {
-          "name": "APS — Physics Manuscript Style Basics",
-          "url": "https://journals.aps.org/authors/style-basics"
+          "name": "IOP — Writing Your Journal Article",
+          "url": "https://publishingsupport.iopscience.iop.org/publishing-support/authors/authoring-for-journals/writing-journal-article/"
         }
       ]
     },
@@ -451,13 +451,13 @@
         "url": "https://www.nationalacademies.org/read/25303"
       },
       {
-        "name": "JBI Manual for Evidence Synthesis — Scoping Reviews",
-        "url": "https://jbi-global.atlassian.net/wiki/spaces/MANUAL/pages/355862497"
+        "name": "JBI — Manual for Evidence Synthesis (full text)",
+        "url": "https://jbi-global-wiki.refined.site/download/attachments/355599504/JBI%20Manual%20for%20Evidence%20Synthesis%202024.pdf"
       }
     ],
     "publication_standards_references": [
       {
-        "name": "PLOS ONE — Detailed Manuscript and Reporting Guidelines",
+        "name": "PLOS ONE — Manuscript and Reporting Guidelines",
         "url": "https://journals.plos.org/plosone/s/submission-guidelines"
       },
       {
