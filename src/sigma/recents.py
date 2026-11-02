@@ -300,7 +300,7 @@ def recent_projects() -> dict:
     from sigma.research_sessions import has_active_session
 
     recent = []
-    for entry in sorted(entries, key=lambda item: not item["pinned"]):
+    for entry in entries:
         try:
             view = inspect_project(entry["path"])
             if str(UUID(view.project.id)) != entry["id"]:
