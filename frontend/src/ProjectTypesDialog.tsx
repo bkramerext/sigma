@@ -390,7 +390,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
         <h4>Research standards references</h4>{listPreferenceEditor('common', 'research_standards_references')}
         <h4>Publication standards references</h4>{listPreferenceEditor('common', 'publication_standards_references')}
       </section>
-      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(names, scopes and icons cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
+      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
     </div>
   </dialog>;
 }
