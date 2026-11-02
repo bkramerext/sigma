@@ -25,15 +25,15 @@ After tests, the existing five-project batch supervisor was launched against `me
 - `./sigma test`: passed all steps, including research-session tests, Ruff, Pyright (0 errors), frontend typecheck/build, and browser tests. The graph-present local execution scenario was explicitly skipped because the sandbox image was unavailable; graph-withheld behavior was checked. The existing large-bundle advisory remains.
 - No browser workflow or paper-generation code was changed.
 
-## Current gate
+## Status at the initial recovery checkpoint (superseded by final protocol completion below)
 
-| Requirement | Status |
+| Requirement | Status at that checkpoint |
 |---|---|
 | Preserve four projects with 12/12 turns in repo | MET |
-| Preserve source project directories unchanged | MET |
+| Keep source project directories in place | MET |
 | Correctly classify pre-dispatch cancellation; preserve uncertainty for running steps | MET |
 | Focused and full repository tests | MET, with documented graph-present sandbox skip |
-| Xenopus complete at 12/12 | UNMET; same-session continuation is in progress |
+| Xenopus complete at 12/12 | UNMET at this checkpoint; later completed by same-session continuation below |
 | Scientific validity / independent source review | UNVERIFIED |
 
 ## Follow-up: supervisor exited on a stale terminal snapshot
@@ -49,3 +49,24 @@ Post-fix, the same batch supervisor resumed only Xenopus again. The latest check
 The recurring `prior failure reference not present` rejection occurred while the exact request context supplied zero `prior_session_failures` and an empty allowed-ID list. The `approved continuation sources` rejection occurred while the exact request context had no `approved_continuation` packet. The validators were correctly enforcing provenance; the model was inventing references for optional arrays that had no allowed members.
 
 Investigator/Skeptic instructions now explicitly say to return an empty `prior_session_failure_attempt_ids` array when no IDs are supplied, and to return an empty `continuation_reviews` array when no approved continuation packet exists. Prior artifacts alone do not authorize that review field. No validator was weakened, no v2 research-method source changed, and no scientific scope or loop/scheduler behavior changed. Focused prompt-contract, cancellation, lint, format and Pyright checks passed. The active Xenopus provider request was already dispatched before this code update and was left untouched; the existing supervisor has the previous prompt code loaded, so this clarification applies only to a later fresh worker process.
+
+## Final protocol completion
+
+The saved Xenopus project was copied into `projects/complete/xenopus-tadpoles.sigma`; its contents match the source project except empty runtime lock files. The five completed project snapshots are listed with deterministic tree hashes in [`projects/complete/README.md`](../projects/complete/README.md). Source project directories remain in place. At finalization, source and archived session records both received the additive protocol-completion label event described below; accepted turns, failed attempts, artifacts, and research conclusions were not rewritten.
+
+| Project | Session | Accepted turns | Provider attempts | Preserved nonaccepted attempts |
+|---|---|---:|---:|---|
+| Agent Reliability | `e3f02cce-aed5-42f7-aa01-a5cad3c99c18` | 12/12 | 21/21 | 6 provider-limited, 2 interrupted/dispatch-unknown, 1 invalid |
+| Sovereign AI | `d82391f1-956a-4546-adfd-20f030e33688` | 12/12 | 18/18 | 3 provider-limited, 3 invalid |
+| Xenopus Tadpoles | `44e759ac-38bb-4e8d-8c4c-4850541ad3dd` | 12/12 | 22/22 | 1 provider-limited, 9 invalid |
+| Nonconsecutive Subset Sums Modulo 3 | `6ce6a07a-c844-4681-a6ec-ede98aa923ea` | 12/12 | 15/18 | 3 provider-limited |
+| Warp Drive | `71bc9990-fab0-4c1a-b03c-1d6daa976a3e` | 12/12 | 16/18 | 3 provider-limited, 1 invalid |
+| **Total** |  | **60/60** | **92** | **16 provider-limited, 14 invalid, 2 interrupted** |
+
+Every provider-limit rejection and invalid response remains recorded and is excluded from accepted turns. The two Agent dispatch-unknown attempts were not replayed. Xenopus reached all 12 accepted turns after the supervisor preserved nine invalid responses, one provider-limited response, and issued distinct safe replacement requests; no validation rule was relaxed. No metered API fallback was used.
+
+All five source session records now carry an additive `session.protocol_complete` event and `Completed · configured protocol` action because the 12 expected role slots are accepted. Lifecycle status remains `ended`; each completion message says findings remain unverified. The update did not rewrite accepted steps, invalid attempts, artifacts, or research conclusions.
+
+The label classification and prompt-contract hardening are in the local source commits reported by Git. The live Xenopus calls 14–22 were recorded with backend build SHA `d6a4b74947730d4323a4a2c345b9ab7120c5b572`; the later empty-reference prompt clarification was not loaded by that already-running worker. It therefore has no demonstrated effect on these results. Its focused regression passed, but research validity remains unverified and must be assessed independently.
+
+Final verification after completion-label changes: `./sigma test` passed all steps, including research-session and batch-supervisor regressions, Ruff/format, Pyright (0 errors/warnings), frontend typecheck/build, and browser tests. The graph-present local execution case was explicitly skipped because the sandbox image was unavailable; graph-withheld behavior passed. The existing frontend chunk-size advisory remains.

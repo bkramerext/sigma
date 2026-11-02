@@ -1,0 +1,621 @@
+{
+  "pending_requests": [],
+  "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+  "records": [
+    {
+      "answer": "**Potentially as a starting point for future research—but the saved evidence does not show that it can help humans regrow body parts.**\n\nThe project concerns **tail regeneration in *Xenopus laevis* tadpoles**, specifically why that ability temporarily declines at certain developmental stages. It is not a study of human regeneration.\n\nThe distinction is important:\n- **Existing background:** The project description cites earlier work linking regeneration to temporary regeneration-initiating skin cells and remodeling of the material surrounding cells. These are not new findings from this project.\n- **Untested hypothesis:** The project proposes investigating whether early injury signals fail to activate a later regenerative program at particular stages. That remains a hypothesis, not a demonstrated mechanism.\n- **Actual saved outcome:** The supplied sessions produced no complete research artifact or established result. They stopped because of usage or spending limits—not because experiments disproved the biological ideas.\n\nTo become useful beyond a research proposal, a candidate mechanism would first need independent biological confirmation, including experiments showing that manipulating it changes regeneration. **Whether it also applies to humans—and could be used safely and effectively—is entirely unanswered by these records.**\n\nSo the appropriate conclusion is: **a possible research direction, not a demonstrated route to human body-part regrowth or an available treatment.**",
+      "created_at": "2026-10-31T17:41:17.071609+00:00",
+      "evidence_snapshot": [
+        {
+          "data": {
+            "outcome": {
+              "argument_availability": {
+                "label": "Structured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed.",
+                "status": "narrative"
+              },
+              "assessment": "mixed",
+              "basis_artifact_ids": [],
+              "caveats": [
+                "No complete research artifact is available.",
+                "Establish the known-mechanism frontier: The global inference-spend ceiling has been reached; saved research remains available.; Find a novel temporal coupling, not another marker: The global inference-spend ceiling has been reached; saved research remains available.; Test a spatial or cell-composition alternative: The global inference-spend ceiling has been reached; saved research remains available.; Design a decisive rescue-versus-block perturbation: The global inference-spend ceiling has been reached; saved research remains available.; Adversarial novelty and external validation: The global inference-spend ceiling has been reached; saved research remains available."
+              ],
+              "conclusion": "### Unresolved investigation\n\nThe session ended without a complete saved finding. No answer to the project question is established.\n\n### Findings across strategies\n- **Establish the known-mechanism frontier — unresolved.** The global inference-spend ceiling has been reached; saved research remains available.\n- **Find a novel temporal coupling, not another marker — unresolved.** The global inference-spend ceiling has been reached; saved research remains available.\n- **Test a spatial or cell-composition alternative — unresolved.** The global inference-spend ceiling has been reached; saved research remains available.\n- **Design a decisive rescue-versus-block perturbation — unresolved.** The global inference-spend ceiling has been reached; saved research remains available.\n- **Adversarial novelty and external validation — unresolved.** The global inference-spend ceiling has been reached; saved research remains available.\n\n### Session caveats\n- No complete research artifact is available.\n- Establish the known-mechanism frontier: The global inference-spend ceiling has been reached; saved research remains available.; Find a novel temporal coupling, not another marker: The global inference-spend ceiling has been reached; saved research remains available.; Test a spatial or cell-composition alternative: The global inference-spend ceiling has been reached; saved research remains available.; Design a decisive rescue-versus-block perturbation: The global inference-spend ceiling has been reached; saved research remains available.; Adversarial novelty and external validation: The global inference-spend ceiling has been reached; saved research remains available.\n\n### Verification and scope\n\nVerification: Incomplete.\n\nThis Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.",
+              "execution_provenance": {
+                "completed_count": 0,
+                "completed_without_recorded_io_count": 0,
+                "note": "No persisted Python/SageMath execution records; authored measurement claims are not established by a saved computation.",
+                "other_count": 0,
+                "records": [],
+                "unidentified_count": 0
+              },
+              "label": "Mixed · no saved result",
+              "metrics": {
+                "operational": [
+                  {
+                    "detail": "The backend commit is captured at creation and at each provider attempt. Older sessions are never retroactively assigned the current checkout version.",
+                    "label": "Backend build",
+                    "value": "Unknown (session build not recorded)"
+                  },
+                  {
+                    "label": "Participating agents",
+                    "value": "Investigator"
+                  },
+                  {
+                    "label": "Agent turns by status",
+                    "value": "0 dispatched · 0 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 5 not dispatched · 0 status unavailable"
+                  },
+                  {
+                    "detail": "Cached tokens are a subset of input tokens.",
+                    "label": "Tokens · input / output / cached / total",
+                    "value": "0 / 0 / 0 / 0"
+                  },
+                  {
+                    "detail": "Agent durations sum distinct call intervals and may overlap under concurrency.",
+                    "label": "Wall-clock / agent call time",
+                    "value": "0s wall · Investigator 0s across 5 call(s) · Skeptic 0"
+                  },
+                  {
+                    "detail": "Distinct Sage execution IDs; recovered/reused results count once. Exact computation is not proof verification.",
+                    "label": "SageMath runs by status",
+                    "value": "0 executions"
+                  },
+                  {
+                    "detail": "Unique persisted execution IDs; recovered or reused results count once.",
+                    "label": "Python runs by status",
+                    "value": "0 executions"
+                  },
+                  {
+                    "detail": "Captured file sizes are summed once per execution ID and file hash/name.",
+                    "label": "Artifacts and storage",
+                    "value": "0 finding(s) · 0 Python file(s) (0 B) · session record 123,927 B"
+                  },
+                  {
+                    "label": "Provider failures / retries",
+                    "value": "0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries"
+                  },
+                  {
+                    "label": "Estimated monetary cost",
+                    "value": "— (plan allowance consumption unknown)"
+                  }
+                ],
+                "research_quality": [
+                  {
+                    "label": "Strategies investigated",
+                    "value": "Establish the known-mechanism frontier, Find a novel temporal coupling, not another marker, Test a spatial or cell-composition alternative, Design a decisive rescue-versus-block perturbation, Adversarial novelty and external validation"
+                  },
+                  {
+                    "detail": "Counts a strategy's cycle once even when its Investigator and Skeptic calls overlap with other strategies.",
+                    "label": "Research rounds",
+                    "value": "0 completed / 5 started"
+                  },
+                  {
+                    "label": "Outcome classification",
+                    "value": "Mixed · no saved result"
+                  },
+                  {
+                    "detail": "Engineering completion, agent agreement, and successful computation do not establish mathematical verification.",
+                    "label": "Verification status",
+                    "value": "Incomplete"
+                  },
+                  {
+                    "label": "Open proof obligations",
+                    "value": "— (no saved findings)"
+                  },
+                  {
+                    "label": "Evidence-backed conclusions",
+                    "value": "— (no saved findings)"
+                  },
+                  {
+                    "label": "Strategy contribution",
+                    "value": "not used: 5"
+                  },
+                  {
+                    "label": "Unresolved objections",
+                    "value": "— (no saved findings)"
+                  }
+                ],
+                "sources": {
+                  "artifact_ids": [],
+                  "execution_ids": [],
+                  "session_id": "757e88e6-270c-47f4-b0df-0c2acecc2fee",
+                  "step_ids": [
+                    "326321dc-bc9f-4969-85f0-e339232df716",
+                    "457cd23a-0196-41d2-b4e4-f996cdf6c0ac",
+                    "6e58c59a-ba5a-4da7-810a-c79d65dd301b",
+                    "ecaab841-9001-4273-a09a-c6f3dd851faa",
+                    "f12de5fd-e020-4e18-9f9d-c2541b3c3eaf"
+                  ],
+                  "strategy_ids": [
+                    "b1010c01-7a62-4b61-912a-4560b0000001",
+                    "b1010c01-7a62-4b61-912a-4560b0000002",
+                    "b1010c01-7a62-4b61-912a-4560b0000003",
+                    "b1010c01-7a62-4b61-912a-4560b0000004",
+                    "b1010c01-7a62-4b61-912a-4560b0000005"
+                  ]
+                }
+              },
+              "provisional": false,
+              "solution_review": {
+                "argument_steps": [],
+                "argument_summary": "No complete research artifact was saved.",
+                "basis_artifact_ids": [],
+                "claim": "No objective result was established in this session.",
+                "status": "not_achieved",
+                "strategy_findings": [
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "The global inference-spend ceiling has been reached; saved research remains available.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001",
+                    "strategy_title": "Establish the known-mechanism frontier"
+                  },
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "The global inference-spend ceiling has been reached; saved research remains available.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
+                    "strategy_title": "Find a novel temporal coupling, not another marker"
+                  },
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "The global inference-spend ceiling has been reached; saved research remains available.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000003",
+                    "strategy_title": "Test a spatial or cell-composition alternative"
+                  },
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "The global inference-spend ceiling has been reached; saved research remains available.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000004",
+                    "strategy_title": "Design a decisive rescue-versus-block perturbation"
+                  },
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "The global inference-spend ceiling has been reached; saved research remains available.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000005",
+                    "strategy_title": "Adversarial novelty and external validation"
+                  }
+                ],
+                "verification_status": "incomplete"
+              },
+              "summary": "The session ended before a complete research cycle was saved. Establish the known-mechanism frontier: The global inference-spend ceiling has been reached; saved research remains available.; Find a novel temporal coupling, not another marker: The global inference-spend ceiling has been reached; saved research remains available.; Test a spatial or cell-composition alternative: The global inference-spend ceiling has been reached; saved research remains available.; Design a decisive rescue-versus-block perturbation: The global inference-spend ceiling has been reached; saved research remains available.; Adversarial novelty and external validation: The global inference-spend ceiling has been reached; saved research remains available.",
+              "verification_label": "Incomplete"
+            },
+            "session_number": 9,
+            "status": "ended"
+          },
+          "id": "session:757e88e6-270c-47f4-b0df-0c2acecc2fee",
+          "kind": "session"
+        },
+        {
+          "data": {
+            "outcome": {
+              "argument_availability": {
+                "label": "Structured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed.",
+                "status": "narrative"
+              },
+              "assessment": "mixed",
+              "basis_artifact_ids": [],
+              "caveats": [
+                "No complete research artifact is available.",
+                "The selected ChatGPT account rejected the request at its usage limit."
+              ],
+              "conclusion": "### Unresolved investigation\n\nThe session ended without a complete saved finding. No answer to the project question is established.\n\n### Findings across strategies\n- **Establish the known-mechanism frontier — failed.** ChatGPT plan or app usage limit reached. Manage usage at https://chatgpt.com/settings/usage; no API-key fallback occurred. (HTTP 400) No strategy was saved.\n- **Find a novel temporal coupling, not another marker — unresolved.** Not started because ChatGPT rejected a request at its usage limit.\n- **Test a spatial or cell-composition alternative — unresolved.** Not started because ChatGPT rejected a request at its usage limit.\n- **Design a decisive rescue-versus-block perturbation — unresolved.** Not started because ChatGPT rejected a request at its usage limit.\n- **Adversarial novelty and external validation — unresolved.** Not started because ChatGPT rejected a request at its usage limit.\n\n### Session caveats\n- No complete research artifact is available.\n- The selected ChatGPT account rejected the request at its usage limit.\n\n### Verification and scope\n\nVerification: Incomplete.\n\nThis Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.",
+              "execution_provenance": {
+                "completed_count": 0,
+                "completed_without_recorded_io_count": 0,
+                "note": "No persisted Python/SageMath execution records; authored measurement claims are not established by a saved computation.",
+                "other_count": 0,
+                "records": [],
+                "unidentified_count": 0
+              },
+              "label": "Mixed · no saved result",
+              "metrics": {
+                "operational": [
+                  {
+                    "detail": "The backend commit is captured at creation and at each provider attempt. Older sessions are never retroactively assigned the current checkout version.",
+                    "label": "Backend build",
+                    "value": "Unknown (session build not recorded)"
+                  },
+                  {
+                    "label": "Participating agents",
+                    "value": "Investigator"
+                  },
+                  {
+                    "label": "Agent turns by status",
+                    "value": "1 dispatched · 0 completed · 1 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable"
+                  },
+                  {
+                    "detail": "Cached tokens are a subset of input tokens.",
+                    "label": "Tokens · input / output / cached / total",
+                    "value": "— (0/1 calls report token usage) / — (0/1 calls report token usage) / — (0/1 calls include cached-token metadata) / — (token usage incomplete for 1 call(s))"
+                  },
+                  {
+                    "detail": "Agent durations sum distinct call intervals and may overlap under concurrency.",
+                    "label": "Wall-clock / agent call time",
+                    "value": "2s wall · Investigator 1s across 1 call(s) · Skeptic —"
+                  },
+                  {
+                    "detail": "Distinct Sage execution IDs; recovered/reused results count once. Exact computation is not proof verification.",
+                    "label": "SageMath runs by status",
+                    "value": "0 executions"
+                  },
+                  {
+                    "detail": "Unique persisted execution IDs; recovered or reused results count once.",
+                    "label": "Python runs by status",
+                    "value": "0 executions"
+                  },
+                  {
+                    "detail": "Captured file sizes are summed once per execution ID and file hash/name.",
+                    "label": "Artifacts and storage",
+                    "value": "0 finding(s) · 0 Python file(s) (0 B) · session record 46,438 B"
+                  },
+                  {
+                    "label": "Provider failures / retries",
+                    "value": "1 provider failure(s) (1 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries"
+                  },
+                  {
+                    "label": "Estimated monetary cost",
+                    "value": "— (plan allowance consumption unknown)"
+                  }
+                ],
+                "research_quality": [
+                  {
+                    "label": "Strategies investigated",
+                    "value": "Establish the known-mechanism frontier"
+                  },
+                  {
+                    "detail": "Counts a strategy's cycle once even when its Investigator and Skeptic calls overlap with other strategies.",
+                    "label": "Research rounds",
+                    "value": "0 completed / 1 started"
+                  },
+                  {
+                    "label": "Outcome classification",
+                    "value": "Mixed · no saved result"
+                  },
+                  {
+                    "detail": "Engineering completion, agent agreement, and successful computation do not establish mathematical verification.",
+                    "label": "Verification status",
+                    "value": "Incomplete"
+                  },
+                  {
+                    "label": "Open proof obligations",
+                    "value": "— (no saved findings)"
+                  },
+                  {
+                    "label": "Evidence-backed conclusions",
+                    "value": "— (no saved findings)"
+                  },
+                  {
+                    "label": "Strategy contribution",
+                    "value": "not used: 5"
+                  },
+                  {
+                    "label": "Unresolved objections",
+                    "value": "— (no saved findings)"
+                  }
+                ],
+                "sources": {
+                  "artifact_ids": [],
+                  "execution_ids": [],
+                  "session_id": "084edf65-b9bb-45f4-9eec-8d55d0fc151c",
+                  "step_ids": [
+                    "c06ba2d2-f32b-4128-84cf-ed2f07cfe46f"
+                  ],
+                  "strategy_ids": [
+                    "b1010c01-7a62-4b61-912a-4560b0000001"
+                  ]
+                }
+              },
+              "provisional": false,
+              "solution_review": {
+                "argument_steps": [],
+                "argument_summary": "No complete research artifact was saved.",
+                "basis_artifact_ids": [],
+                "claim": "No objective result was established in this session.",
+                "status": "not_achieved",
+                "strategy_findings": [
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "failed",
+                    "failure_reason": "ChatGPT plan or app usage limit reached. Manage usage at https://chatgpt.com/settings/usage; no API-key fallback occurred. (HTTP 400) No strategy was saved.",
+                    "objections": [],
+                    "open_obligations": [
+                      "ChatGPT plan or app usage limit reached. Manage usage at https://chatgpt.com/settings/usage; no API-key fallback occurred. (HTTP 400) No strategy was saved."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "execution_failed",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001",
+                    "strategy_title": "Establish the known-mechanism frontier"
+                  },
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "Not started because ChatGPT rejected a request at its usage limit.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
+                    "strategy_title": "Find a novel temporal coupling, not another marker"
+                  },
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "Not started because ChatGPT rejected a request at its usage limit.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000003",
+                    "strategy_title": "Test a spatial or cell-composition alternative"
+                  },
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "Not started because ChatGPT rejected a request at its usage limit.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000004",
+                    "strategy_title": "Design a decisive rescue-versus-block perturbation"
+                  },
+                  {
+                    "claim": "No research artifact was saved for this strategy.",
+                    "execution_status": "ended",
+                    "failure_reason": "Not started because ChatGPT rejected a request at its usage limit.",
+                    "objections": [],
+                    "open_obligations": [
+                      "No research artifact was saved for this strategy."
+                    ],
+                    "reasoning_steps": [],
+                    "research_artifact_id": "",
+                    "research_artifact_ids": [],
+                    "skeptic_response": "",
+                    "status": "no_result",
+                    "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000005",
+                    "strategy_title": "Adversarial novelty and external validation"
+                  }
+                ],
+                "verification_status": "incomplete"
+              },
+              "summary": "The session ended before a complete research cycle was saved. The selected ChatGPT account rejected the request at its usage limit.",
+              "verification_label": "Incomplete"
+            },
+            "session_number": 8,
+            "status": "ended"
+          },
+          "id": "session:084edf65-b9bb-45f4-9eec-8d55d0fc151c",
+          "kind": "session"
+        },
+        {
+          "data": {
+            "active_order": [
+              "b1010c01-7a62-4b61-912a-4560b0000001",
+              "b1010c01-7a62-4b61-912a-4560b0000002",
+              "b1010c01-7a62-4b61-912a-4560b0000003",
+              "b1010c01-7a62-4b61-912a-4560b0000004",
+              "b1010c01-7a62-4b61-912a-4560b0000005"
+            ],
+            "ai_model": "gpt-6.1-sol",
+            "difficulty": "hard",
+            "events": [
+              {
+                "kind": "project.initialized",
+                "sequence": 1,
+                "timestamp": "2026-10-23T19:00:00+00:00"
+              },
+              {
+                "kind": "strategy.created",
+                "sequence": 2,
+                "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001",
+                "timestamp": "2026-10-23T19:00:00+00:00"
+              },
+              {
+                "kind": "strategy.created",
+                "sequence": 3,
+                "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
+                "timestamp": "2026-10-23T19:00:00+00:00"
+              },
+              {
+                "kind": "strategy.created",
+                "sequence": 4,
+                "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000003",
+                "timestamp": "2026-10-23T19:00:00+00:00"
+              },
+              {
+                "kind": "strategy.created",
+                "sequence": 5,
+                "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000004",
+                "timestamp": "2026-10-23T19:00:00+00:00"
+              },
+              {
+                "kind": "strategy.created",
+                "sequence": 6,
+                "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000005",
+                "timestamp": "2026-10-23T19:00:00+00:00"
+              },
+              {
+                "kind": "project.updated",
+                "project_change": {
+                  "current": {
+                    "ai_model": "gpt-6.1-sol",
+                    "difficulty": "hard",
+                    "investigation_type": "biology",
+                    "problem": "Why can Xenopus laevis tadpoles regrow a tail at some stages, temporarily lose much of that ability, and later regain it? Investigate a specific, testable mechanism for this developmental switch; regeneration competence varies between animals.\n\nThe goal is to discover and test a previously unreported, mechanistically discriminating predictor of this switch, not to summarize known regenerative pathways or to claim all embryonic regeneration explained.\n\nKNOWN, NOT NOVEL. A 2024 Genome Biology study identified transient regeneration-initiating cells (RICs) originating from basal epidermal cells and extracellular-matrix remodeling defects associated with regeneration failure. Other work links ROS, inflammatory and developmental signals to regeneration, and studies in X. tropicalis implicate nutritional state in stage-dependent competence. Merely identifying RICs, Wnt/BMP/FGF/ROS, ECM remodeling, or the existence of a refractory stage does NOT satisfy this project. Cross-species stage behavior is context-dependent and publications are not fully consistent; do not conflate X. tropicalis and X. laevis.\n\nOBSERVATIONAL START. Reanalyze publicly available X. laevis regeneration/refractory transcriptomic evidence from GEO GSE245320 and its component series (bulk RNA-seq GSE245317/GSE245318, scRNA-seq GSE245312, spatial GSE245313). In the published stage-40 versus stage-46 comparison, bulk assays include 0, 0.5, 6 hours post-amputation and 3 days; verify actual samples, replicates, units and availability before analysis. scRNA-seq predominantly characterizes regenerating animals, not matched single-cell snapshots across both conditions. These datasets share a study and are NOT independent biological replications. Check later published work through the investigation date and build a cited prior-art ledger.\n\nHYPOTHESIS SPACE. Competing mechanisms include (A) failure to induce the transient epidermal RIC/ECM-remodeling transition, (B) a stage-specific failure to couple early injury signaling to a later regenerative transcriptional program, (C) metabolic or tissue-composition gating, and (D) analytical or developmental-stage confounding. Prioritize one previously unreported *interaction, conditional dependency, or quantitative transition rule* that distinguishes at least two mechanisms, with a measurable direction, timing, tissue/cell type and uncertainty. A possible candidate is a temporal coupling between early wound-response intensity and subsequent RIC/ECM activation that differs by developmental stage; this is a hypothesis to test, not a finding.\n\nRESEARCH METHOD. Predefine biological replicate as the unit of inference; guard against pseudoreplication (cells from the same animal/library), batch confounding, developmental-stage differences, multiple testing, cell-composition artifacts and publication reuse. Fit simple baselines (stage-only, RIC/ECM-only and known signaling modules) before proposing complexity. Quantify uncertainty and require an alternative explanation and counterfactual control. Do not invent gene-expression values, available outcome labels, intervention results, P values or accession coverage. Predictions based solely on stage class labels must not be marketed as predicting animal-level regeneration.\n\nEXIT CRITERIA. Scientific success requires: (1) traceable evidence that the central claim is not simply already established; (2) a specified novel mechanistic prediction, including what experiment, perturbation or independent observations would falsify it; (3) a numerical effect/direction and uncertainty with appropriate baselines and negative controls; and (4) independent biological evidence on previously unseen specimens/conditions supporting the prediction. Independent replication or perturbation confirmation is required before claiming a new biological mechanism. A lower-tier COMPUTATIONAL RESULT can be reported if a previously unreported reproducible association or predictive rule outperforms preregistered known-mechanism baselines on held-out biological units with uncertainty; label it computational, exploratory and not causal. A NOVEL HYPOTHESIS can be reported with a discriminating experiment and evidence synthesis but without confirmation; do not present it as a validated scientific discovery. Otherwise exit NEGATIVE/UNRESOLVED with exact failed hypotheses, missing data and next experiment. Each strategy must deliver a bounded test and stop conditions. Avoid claiming 'solved regeneration' from any single dataset.\n\nREFERENCES/STARTING DATA. https://doi.org/10.1186/s13059-024-03396-3 ; https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE245320 ; https://doi.org/10.1016/j.ydbio.2021.01.005; review https://doi.org/10.3390/ijms252111597 .",
+                    "reasoning_effort": "high",
+                    "show_advanced_outcome_details": true,
+                    "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v9"
+                  },
+                  "previous": {
+                    "ai_model": "gpt-6.1-sol",
+                    "difficulty": "hard",
+                    "investigation_type": "biology",
+                    "problem": "Why can Xenopus laevis tadpoles regrow a tail at some stages, temporarily lose much of that ability, and later regain it? Investigate a specific, testable mechanism for this developmental switch; regeneration competence varies between animals.\n\nThe goal is to discover and test a previously unreported, mechanistically discriminating predictor of this switch, not to summarize known regenerative pathways or to claim all embryonic regeneration explained.\n\nKNOWN, NOT NOVEL. A 2024 Genome Biology study identified transient regeneration-initiating cells (RICs) originating from basal epidermal cells and extracellular-matrix remodeling defects associated with regeneration failure. Other work links ROS, inflammatory and developmental signals to regeneration, and studies in X. tropicalis implicate nutritional state in stage-dependent competence. Merely identifying RICs, Wnt/BMP/FGF/ROS, ECM remodeling, or the existence of a refractory stage does NOT satisfy this project. Cross-species stage behavior is context-dependent and publications are not fully consistent; do not conflate X. tropicalis and X. laevis.\n\nOBSERVATIONAL START. Reanalyze publicly available X. laevis regeneration/refractory transcriptomic evidence from GEO GSE245320 and its component series (bulk RNA-seq GSE245317/GSE245318, scRNA-seq GSE245312, spatial GSE245313). In the published stage-40 versus stage-46 comparison, bulk assays include 0, 0.5, 6 hours post-amputation and 3 days; verify actual samples, replicates, units and availability before analysis. scRNA-seq predominantly characterizes regenerating animals, not matched single-cell snapshots across both conditions. These datasets share a study and are NOT independent biological replications. Check later published work through the investigation date and build a cited prior-art ledger.\n\nHYPOTHESIS SPACE. Competing mechanisms include (A) failure to induce the transient epidermal RIC/ECM-remodeling transition, (B) a stage-specific failure to couple early injury signaling to a later regenerative transcriptional program, (C) metabolic or tissue-composition gating, and (D) analytical or developmental-stage confounding. Prioritize one previously unreported *interaction, conditional dependency, or quantitative transition rule* that distinguishes at least two mechanisms, with a measurable direction, timing, tissue/cell type and uncertainty. A possible candidate is a temporal coupling between early wound-response intensity and subsequent RIC/ECM activation that differs by developmental stage; this is a hypothesis to test, not a finding.\n\nRESEARCH METHOD. Predefine biological replicate as the unit of inference; guard against pseudoreplication (cells from the same animal/library), batch confounding, developmental-stage differences, multiple testing, cell-composition artifacts and publication reuse. Fit simple baselines (stage-only, RIC/ECM-only and known signaling modules) before proposing complexity. Quantify uncertainty and require an alternative explanation and counterfactual control. Do not invent gene-expression values, available outcome labels, intervention results, P values or accession coverage. Predictions based solely on stage class labels must not be marketed as predicting animal-level regeneration.\n\nEXIT CRITERIA. Scientific success requires: (1) traceable evidence that the central claim is not simply already established; (2) a specified novel mechanistic prediction, including what experiment, perturbation or independent observations would falsify it; (3) a numerical effect/direction and uncertainty with appropriate baselines and negative controls; and (4) independent biological evidence on previously unseen specimens/conditions supporting the prediction. Independent replication or perturbation confirmation is required before claiming a new biological mechanism. A lower-tier COMPUTATIONAL RESULT can be reported if a previously unreported reproducible association or predictive rule outperforms preregistered known-mechanism baselines on held-out biological units with uncertainty; label it computational, exploratory and not causal. A NOVEL HYPOTHESIS can be reported with a discriminating experiment and evidence synthesis but without confirmation; do not present it as a validated scientific discovery. Otherwise exit NEGATIVE/UNRESOLVED with exact failed hypotheses, missing data and next experiment. Each strategy must deliver a bounded test and stop conditions. Avoid claiming 'solved regeneration' from any single dataset.\n\nREFERENCES/STARTING DATA. https://doi.org/10.1186/s13059-024-03396-3 ; https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE245320 ; https://doi.org/10.1016/j.ydbio.2021.01.005; review https://doi.org/10.3390/ijms252111597 .",
+                    "reasoning_effort": "high",
+                    "show_advanced_outcome_details": false,
+                    "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v9"
+                  }
+                },
+                "sequence": 7,
+                "timestamp": "2026-10-28T17:36:49.724967+00:00"
+              }
+            ],
+            "id": "01de54c9-9593-413a-9577-1a952d28da70",
+            "investigation_type": "biology",
+            "problem": "Why can Xenopus laevis tadpoles regrow a tail at some stages, temporarily lose much of that ability, and later regain it? Investigate a specific, testable mechanism for this developmental switch; regeneration competence varies between animals.\n\nThe goal is to discover and test a previously unreported, mechanistically discriminating predictor of this switch, not to summarize known regenerative pathways or to claim all embryonic regeneration explained.\n\nKNOWN, NOT NOVEL. A 2024 Genome Biology study identified transient regeneration-initiating cells (RICs) originating from basal epidermal cells and extracellular-matrix remodeling defects associated with regeneration failure. Other work links ROS, inflammatory and developmental signals to regeneration, and studies in X. tropicalis implicate nutritional state in stage-dependent competence. Merely identifying RICs, Wnt/BMP/FGF/ROS, ECM remodeling, or the existence of a refractory stage does NOT satisfy this project. Cross-species stage behavior is context-dependent and publications are not fully consistent; do not conflate X. tropicalis and X. laevis.\n\nOBSERVATIONAL START. Reanalyze publicly available X. laevis regeneration/refractory transcriptomic evidence from GEO GSE245320 and its component series (bulk RNA-seq GSE245317/GSE245318, scRNA-seq GSE245312, spatial GSE245313). In the published stage-40 versus stage-46 comparison, bulk assays include 0, 0.5, 6 hours post-amputation and 3 days; verify actual samples, replicates, units and availability before analysis. scRNA-seq predominantly characterizes regenerating animals, not matched single-cell snapshots across both conditions. These datasets share a study and are NOT independent biological replications. Check later published work through the investigation date and build a cited prior-art ledger.\n\nHYPOTHESIS SPACE. Competing mechanisms include (A) failure to induce the transient epidermal RIC/ECM-remodeling transition, (B) a stage-specific failure to couple early injury signaling to a later regenerative transcriptional program, (C) metabolic or tissue-composition gating, and (D) analytical or developmental-stage confounding. Prioritize one previously unreported *interaction, conditional dependency, or quantitative transition rule* that distinguishes at least two mechanisms, with a measurable direction, timing, tissue/cell type and uncertainty. A possible candidate is a temporal coupling between early wound-response intensity and subsequent RIC/ECM activation that differs by developmental stage; this is a hypothesis to test, not a finding.\n\nRESEARCH METHOD. Predefine biological replicate as the unit of inference; guard against pseudoreplication (cells from the same animal/library), batch confounding, developmental-stage differences, multiple testing, cell-composition artifacts and publication reuse. Fit simple baselines (stage-only, RIC/ECM-only and known signaling modules) before proposing complexity. Quantify uncertainty and require an alternative explanation and counterfactual control. Do not invent gene-expression values, available outcome labels, intervention results, P values or accession coverage. Predictions based solely on stage class labels must not be marketed as predicting animal-level regeneration.\n\nEXIT CRITERIA. Scientific success requires: (1) traceable evidence that the central claim is not simply already established; (2) a specified novel mechanistic prediction, including what experiment, perturbation or independent observations would falsify it; (3) a numerical effect/direction and uncertainty with appropriate baselines and negative controls; and (4) independent biological evidence on previously unseen specimens/conditions supporting the prediction. Independent replication or perturbation confirmation is required before claiming a new biological mechanism. A lower-tier COMPUTATIONAL RESULT can be reported if a previously unreported reproducible association or predictive rule outperforms preregistered known-mechanism baselines on held-out biological units with uncertainty; label it computational, exploratory and not causal. A NOVEL HYPOTHESIS can be reported with a discriminating experiment and evidence synthesis but without confirmation; do not present it as a validated scientific discovery. Otherwise exit NEGATIVE/UNRESOLVED with exact failed hypotheses, missing data and next experiment. Each strategy must deliver a bounded test and stop conditions. Avoid claiming 'solved regeneration' from any single dataset.\n\nREFERENCES/STARTING DATA. https://doi.org/10.1186/s13059-024-03396-3 ; https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE245320 ; https://doi.org/10.1016/j.ydbio.2021.01.005; review https://doi.org/10.3390/ijms252111597 .",
+            "reasoning_effort": "high",
+            "schema_version": 9,
+            "show_advanced_outcome_details": true,
+            "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v9"
+          },
+          "id": "project:01de54c9-9593-413a-9577-1a952d28da70",
+          "kind": "project"
+        },
+        {
+          "data": {
+            "approach": "Attempt to refute the leading candidate by literature search, baseline models, alternate time windows, batch-aware resampling and a genuinely independent cohort or independently generated perturbation/phenotype dataset if accessible. Define the outcome as verified mechanism, replicated computational association, novel unverified hypothesis or unresolved failure. Check that the proposed prediction was not used to select the validation data and quantify uncertainty. No positive biological-mechanism claim without independent biological validation.",
+            "author_kind": "human",
+            "created_at": "2026-10-23T19:00:00+00:00",
+            "enabled": true,
+            "id": "b1010c01-7a62-4b61-912a-4560b0000005",
+            "provenance": null,
+            "removed_at": null,
+            "stage": "draft",
+            "summary": "An auditable novelty verdict, supporting artifacts, independent-test plan/result and clearly graded final claim.",
+            "title": "Adversarial novelty and external validation"
+          },
+          "id": "strategy:b1010c01-7a62-4b61-912a-4560b0000005",
+          "kind": "strategy"
+        },
+        {
+          "data": {
+            "approach": "Use the matched-study spatial atlas GSE245313 and public scRNA GSE245312 to ask whether a candidate temporal signature reflects changed local cell state, abundance of RIC-like cells, tissue mixture, or generalized healing. Clearly flag scRNA comparison gaps and shared-study nonindependence. Construct controls using spatial localization and known marker panels; falsify a proposed mechanism if the pattern reduces to predictable cellular abundance or healing confounds.",
+            "author_kind": "human",
+            "created_at": "2026-10-23T19:00:00+00:00",
+            "enabled": true,
+            "id": "b1010c01-7a62-4b61-912a-4560b0000003",
+            "provenance": null,
+            "removed_at": null,
+            "stage": "draft",
+            "summary": "One spatially localized prediction plus an explicit compositional countermodel and limitations.",
+            "title": "Test a spatial or cell-composition alternative"
+          },
+          "id": "strategy:b1010c01-7a62-4b61-912a-4560b0000003",
+          "kind": "strategy"
+        },
+        {
+          "data": {
+            "approach": "Build a small mechanistic dynamical or causal model of injury cue, transient epidermal state, ECM remodeling and downstream tissue regrowth. Propose one stage-46 rescue and a corresponding stage-40 blocking intervention that make opposite predictions under two alternative mechanisms. Include timing, appropriate sham and injury controls, toxicity, stage matching, sample size assumptions and a quantitative primary endpoint such as blinded morphologic regeneration score at a specified post-amputation time. Identify ethical/laboratory requirements; the software must not claim experiments were conducted.",
+            "author_kind": "human",
+            "created_at": "2026-10-23T19:00:00+00:00",
+            "enabled": true,
+            "id": "b1010c01-7a62-4b61-912a-4560b0000004",
+            "provenance": null,
+            "removed_at": null,
+            "stage": "draft",
+            "summary": "A falsifiable bidirectional perturbation plan with decision thresholds and failure modes.",
+            "title": "Design a decisive rescue-versus-block perturbation"
+          },
+          "id": "strategy:b1010c01-7a62-4b61-912a-4560b0000004",
+          "kind": "strategy"
+        }
+      ],
+      "generation": {
+        "generation_elapsed_seconds": 18,
+        "mode": "chatgpt",
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high"
+      },
+      "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+      "qa_id": "9a2d3dfad68545339c325945c197168e",
+      "question": "Can this research be used to help humans regrow body parts.\n",
+      "request_id": "1ef33e47c5654313aae5f0df08b36f56",
+      "snapshot_sha256": "7cf898bb7c20c4de2f9ca1b984c92241dabc01fcc71b80b1a05b609c763bf867",
+      "sources": [
+        {
+          "kind": "project",
+          "session_number": null,
+          "source_id": "project:01de54c9-9593-413a-9577-1a952d28da70"
+        },
+        {
+          "kind": "session",
+          "session_number": 9,
+          "source_id": "session:757e88e6-270c-47f4-b0df-0c2acecc2fee"
+        },
+        {
+          "kind": "session",
+          "session_number": 8,
+          "source_id": "session:084edf65-b9bb-45f4-9eec-8d55d0fc151c"
+        }
+      ]
+    }
+  ],
+  "schema_version": 1
+}

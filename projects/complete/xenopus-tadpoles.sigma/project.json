@@ -1,0 +1,142 @@
+{
+  "active_order": [
+    "b1010c01-7a62-4b61-912a-4560b0000001",
+    "b1010c01-7a62-4b61-912a-4560b0000002",
+    "b1010c01-7a62-4b61-912a-4560b0000003",
+    "b1010c01-7a62-4b61-912a-4560b0000004",
+    "b1010c01-7a62-4b61-912a-4560b0000005"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "difficulty": "hard",
+  "events": [
+    {
+      "kind": "project.initialized",
+      "sequence": 1,
+      "timestamp": "2026-10-23T19:00:00+00:00"
+    },
+    {
+      "kind": "strategy.created",
+      "sequence": 2,
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001",
+      "timestamp": "2026-10-23T19:00:00+00:00"
+    },
+    {
+      "kind": "strategy.created",
+      "sequence": 3,
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
+      "timestamp": "2026-10-23T19:00:00+00:00"
+    },
+    {
+      "kind": "strategy.created",
+      "sequence": 4,
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000003",
+      "timestamp": "2026-10-23T19:00:00+00:00"
+    },
+    {
+      "kind": "strategy.created",
+      "sequence": 5,
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000004",
+      "timestamp": "2026-10-23T19:00:00+00:00"
+    },
+    {
+      "kind": "strategy.created",
+      "sequence": 6,
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000005",
+      "timestamp": "2026-10-23T19:00:00+00:00"
+    },
+    {
+      "kind": "project.updated",
+      "project_change": {
+        "current": {
+          "ai_model": "gpt-6.1-sol",
+          "difficulty": "hard",
+          "investigation_type": "biology",
+          "problem": "Why can Xenopus laevis tadpoles regrow a tail at some stages, temporarily lose much of that ability, and later regain it? Investigate a specific, testable mechanism for this developmental switch; regeneration competence varies between animals.\n\nThe goal is to discover and test a previously unreported, mechanistically discriminating predictor of this switch, not to summarize known regenerative pathways or to claim all embryonic regeneration explained.\n\nKNOWN, NOT NOVEL. A 2024 Genome Biology study identified transient regeneration-initiating cells (RICs) originating from basal epidermal cells and extracellular-matrix remodeling defects associated with regeneration failure. Other work links ROS, inflammatory and developmental signals to regeneration, and studies in X. tropicalis implicate nutritional state in stage-dependent competence. Merely identifying RICs, Wnt/BMP/FGF/ROS, ECM remodeling, or the existence of a refractory stage does NOT satisfy this project. Cross-species stage behavior is context-dependent and publications are not fully consistent; do not conflate X. tropicalis and X. laevis.\n\nOBSERVATIONAL START. Reanalyze publicly available X. laevis regeneration/refractory transcriptomic evidence from GEO GSE245320 and its component series (bulk RNA-seq GSE245317/GSE245318, scRNA-seq GSE245312, spatial GSE245313). In the published stage-40 versus stage-46 comparison, bulk assays include 0, 0.5, 6 hours post-amputation and 3 days; verify actual samples, replicates, units and availability before analysis. scRNA-seq predominantly characterizes regenerating animals, not matched single-cell snapshots across both conditions. These datasets share a study and are NOT independent biological replications. Check later published work through the investigation date and build a cited prior-art ledger.\n\nHYPOTHESIS SPACE. Competing mechanisms include (A) failure to induce the transient epidermal RIC/ECM-remodeling transition, (B) a stage-specific failure to couple early injury signaling to a later regenerative transcriptional program, (C) metabolic or tissue-composition gating, and (D) analytical or developmental-stage confounding. Prioritize one previously unreported *interaction, conditional dependency, or quantitative transition rule* that distinguishes at least two mechanisms, with a measurable direction, timing, tissue/cell type and uncertainty. A possible candidate is a temporal coupling between early wound-response intensity and subsequent RIC/ECM activation that differs by developmental stage; this is a hypothesis to test, not a finding.\n\nRESEARCH METHOD. Predefine biological replicate as the unit of inference; guard against pseudoreplication (cells from the same animal/library), batch confounding, developmental-stage differences, multiple testing, cell-composition artifacts and publication reuse. Fit simple baselines (stage-only, RIC/ECM-only and known signaling modules) before proposing complexity. Quantify uncertainty and require an alternative explanation and counterfactual control. Do not invent gene-expression values, available outcome labels, intervention results, P values or accession coverage. Predictions based solely on stage class labels must not be marketed as predicting animal-level regeneration.\n\nEXIT CRITERIA. Scientific success requires: (1) traceable evidence that the central claim is not simply already established; (2) a specified novel mechanistic prediction, including what experiment, perturbation or independent observations would falsify it; (3) a numerical effect/direction and uncertainty with appropriate baselines and negative controls; and (4) independent biological evidence on previously unseen specimens/conditions supporting the prediction. Independent replication or perturbation confirmation is required before claiming a new biological mechanism. A lower-tier COMPUTATIONAL RESULT can be reported if a previously unreported reproducible association or predictive rule outperforms preregistered known-mechanism baselines on held-out biological units with uncertainty; label it computational, exploratory and not causal. A NOVEL HYPOTHESIS can be reported with a discriminating experiment and evidence synthesis but without confirmation; do not present it as a validated scientific discovery. Otherwise exit NEGATIVE/UNRESOLVED with exact failed hypotheses, missing data and next experiment. Each strategy must deliver a bounded test and stop conditions. Avoid claiming 'solved regeneration' from any single dataset.\n\nREFERENCES/STARTING DATA. https://doi.org/10.1186/s13059-024-03396-3 ; https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE245320 ; https://doi.org/10.1016/j.ydbio.2021.01.005; review https://doi.org/10.3390/ijms252111597 .",
+          "reasoning_effort": "high",
+          "show_advanced_outcome_details": true,
+          "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v9"
+        },
+        "previous": {
+          "ai_model": "gpt-6.1-sol",
+          "difficulty": "hard",
+          "investigation_type": "biology",
+          "problem": "Why can Xenopus laevis tadpoles regrow a tail at some stages, temporarily lose much of that ability, and later regain it? Investigate a specific, testable mechanism for this developmental switch; regeneration competence varies between animals.\n\nThe goal is to discover and test a previously unreported, mechanistically discriminating predictor of this switch, not to summarize known regenerative pathways or to claim all embryonic regeneration explained.\n\nKNOWN, NOT NOVEL. A 2024 Genome Biology study identified transient regeneration-initiating cells (RICs) originating from basal epidermal cells and extracellular-matrix remodeling defects associated with regeneration failure. Other work links ROS, inflammatory and developmental signals to regeneration, and studies in X. tropicalis implicate nutritional state in stage-dependent competence. Merely identifying RICs, Wnt/BMP/FGF/ROS, ECM remodeling, or the existence of a refractory stage does NOT satisfy this project. Cross-species stage behavior is context-dependent and publications are not fully consistent; do not conflate X. tropicalis and X. laevis.\n\nOBSERVATIONAL START. Reanalyze publicly available X. laevis regeneration/refractory transcriptomic evidence from GEO GSE245320 and its component series (bulk RNA-seq GSE245317/GSE245318, scRNA-seq GSE245312, spatial GSE245313). In the published stage-40 versus stage-46 comparison, bulk assays include 0, 0.5, 6 hours post-amputation and 3 days; verify actual samples, replicates, units and availability before analysis. scRNA-seq predominantly characterizes regenerating animals, not matched single-cell snapshots across both conditions. These datasets share a study and are NOT independent biological replications. Check later published work through the investigation date and build a cited prior-art ledger.\n\nHYPOTHESIS SPACE. Competing mechanisms include (A) failure to induce the transient epidermal RIC/ECM-remodeling transition, (B) a stage-specific failure to couple early injury signaling to a later regenerative transcriptional program, (C) metabolic or tissue-composition gating, and (D) analytical or developmental-stage confounding. Prioritize one previously unreported *interaction, conditional dependency, or quantitative transition rule* that distinguishes at least two mechanisms, with a measurable direction, timing, tissue/cell type and uncertainty. A possible candidate is a temporal coupling between early wound-response intensity and subsequent RIC/ECM activation that differs by developmental stage; this is a hypothesis to test, not a finding.\n\nRESEARCH METHOD. Predefine biological replicate as the unit of inference; guard against pseudoreplication (cells from the same animal/library), batch confounding, developmental-stage differences, multiple testing, cell-composition artifacts and publication reuse. Fit simple baselines (stage-only, RIC/ECM-only and known signaling modules) before proposing complexity. Quantify uncertainty and require an alternative explanation and counterfactual control. Do not invent gene-expression values, available outcome labels, intervention results, P values or accession coverage. Predictions based solely on stage class labels must not be marketed as predicting animal-level regeneration.\n\nEXIT CRITERIA. Scientific success requires: (1) traceable evidence that the central claim is not simply already established; (2) a specified novel mechanistic prediction, including what experiment, perturbation or independent observations would falsify it; (3) a numerical effect/direction and uncertainty with appropriate baselines and negative controls; and (4) independent biological evidence on previously unseen specimens/conditions supporting the prediction. Independent replication or perturbation confirmation is required before claiming a new biological mechanism. A lower-tier COMPUTATIONAL RESULT can be reported if a previously unreported reproducible association or predictive rule outperforms preregistered known-mechanism baselines on held-out biological units with uncertainty; label it computational, exploratory and not causal. A NOVEL HYPOTHESIS can be reported with a discriminating experiment and evidence synthesis but without confirmation; do not present it as a validated scientific discovery. Otherwise exit NEGATIVE/UNRESOLVED with exact failed hypotheses, missing data and next experiment. Each strategy must deliver a bounded test and stop conditions. Avoid claiming 'solved regeneration' from any single dataset.\n\nREFERENCES/STARTING DATA. https://doi.org/10.1186/s13059-024-03396-3 ; https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE245320 ; https://doi.org/10.1016/j.ydbio.2021.01.005; review https://doi.org/10.3390/ijms252111597 .",
+          "reasoning_effort": "high",
+          "show_advanced_outcome_details": false,
+          "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v9"
+        }
+      },
+      "sequence": 7,
+      "timestamp": "2026-10-28T17:36:49.724967+00:00"
+    }
+  ],
+  "id": "01de54c9-9593-413a-9577-1a952d28da70",
+  "investigation_type": "biology",
+  "problem": "Why can Xenopus laevis tadpoles regrow a tail at some stages, temporarily lose much of that ability, and later regain it? Investigate a specific, testable mechanism for this developmental switch; regeneration competence varies between animals.\n\nThe goal is to discover and test a previously unreported, mechanistically discriminating predictor of this switch, not to summarize known regenerative pathways or to claim all embryonic regeneration explained.\n\nKNOWN, NOT NOVEL. A 2024 Genome Biology study identified transient regeneration-initiating cells (RICs) originating from basal epidermal cells and extracellular-matrix remodeling defects associated with regeneration failure. Other work links ROS, inflammatory and developmental signals to regeneration, and studies in X. tropicalis implicate nutritional state in stage-dependent competence. Merely identifying RICs, Wnt/BMP/FGF/ROS, ECM remodeling, or the existence of a refractory stage does NOT satisfy this project. Cross-species stage behavior is context-dependent and publications are not fully consistent; do not conflate X. tropicalis and X. laevis.\n\nOBSERVATIONAL START. Reanalyze publicly available X. laevis regeneration/refractory transcriptomic evidence from GEO GSE245320 and its component series (bulk RNA-seq GSE245317/GSE245318, scRNA-seq GSE245312, spatial GSE245313). In the published stage-40 versus stage-46 comparison, bulk assays include 0, 0.5, 6 hours post-amputation and 3 days; verify actual samples, replicates, units and availability before analysis. scRNA-seq predominantly characterizes regenerating animals, not matched single-cell snapshots across both conditions. These datasets share a study and are NOT independent biological replications. Check later published work through the investigation date and build a cited prior-art ledger.\n\nHYPOTHESIS SPACE. Competing mechanisms include (A) failure to induce the transient epidermal RIC/ECM-remodeling transition, (B) a stage-specific failure to couple early injury signaling to a later regenerative transcriptional program, (C) metabolic or tissue-composition gating, and (D) analytical or developmental-stage confounding. Prioritize one previously unreported *interaction, conditional dependency, or quantitative transition rule* that distinguishes at least two mechanisms, with a measurable direction, timing, tissue/cell type and uncertainty. A possible candidate is a temporal coupling between early wound-response intensity and subsequent RIC/ECM activation that differs by developmental stage; this is a hypothesis to test, not a finding.\n\nRESEARCH METHOD. Predefine biological replicate as the unit of inference; guard against pseudoreplication (cells from the same animal/library), batch confounding, developmental-stage differences, multiple testing, cell-composition artifacts and publication reuse. Fit simple baselines (stage-only, RIC/ECM-only and known signaling modules) before proposing complexity. Quantify uncertainty and require an alternative explanation and counterfactual control. Do not invent gene-expression values, available outcome labels, intervention results, P values or accession coverage. Predictions based solely on stage class labels must not be marketed as predicting animal-level regeneration.\n\nEXIT CRITERIA. Scientific success requires: (1) traceable evidence that the central claim is not simply already established; (2) a specified novel mechanistic prediction, including what experiment, perturbation or independent observations would falsify it; (3) a numerical effect/direction and uncertainty with appropriate baselines and negative controls; and (4) independent biological evidence on previously unseen specimens/conditions supporting the prediction. Independent replication or perturbation confirmation is required before claiming a new biological mechanism. A lower-tier COMPUTATIONAL RESULT can be reported if a previously unreported reproducible association or predictive rule outperforms preregistered known-mechanism baselines on held-out biological units with uncertainty; label it computational, exploratory and not causal. A NOVEL HYPOTHESIS can be reported with a discriminating experiment and evidence synthesis but without confirmation; do not present it as a validated scientific discovery. Otherwise exit NEGATIVE/UNRESOLVED with exact failed hypotheses, missing data and next experiment. Each strategy must deliver a bounded test and stop conditions. Avoid claiming 'solved regeneration' from any single dataset.\n\nREFERENCES/STARTING DATA. https://doi.org/10.1186/s13059-024-03396-3 ; https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE245320 ; https://doi.org/10.1016/j.ydbio.2021.01.005; review https://doi.org/10.3390/ijms252111597 .",
+  "reasoning_effort": "high",
+  "schema_version": 9,
+  "show_advanced_outcome_details": true,
+  "strategies": [
+    {
+      "approach": "Build a sourced evidence ledger through 2026 for the Xenopus laevis refractory period, RIC formation, matrix remodeling, immune/ROS signals, signaling pathways, and nutritional influences. Retrieve GSE245320 metadata and verify exactly which developmental stages, time points, biological replicates and technologies exist; identify any phenotype-labeled independent datasets. Search explicitly for the proposed interaction in prior literature. Do not treat RIC, ECM or metabolic associations as novel discoveries. Stop when the new-versus-known boundary and possible falsifiable gap are unambiguous.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "enabled": true,
+      "id": "b1010c01-7a62-4b61-912a-4560b0000001",
+      "provenance": null,
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A prior-art matrix, dataset audit, 2 competing mechanisms and one genuine untested discriminator.",
+      "title": "Establish the known-mechanism frontier"
+    },
+    {
+      "approach": "Contrast early injury response (0/0.5/6 hpa) with later RIC/ECM-related programs at competent stage 40 and refractory stage 46 using true biological replicate and batch-aware analyses. Test conditional interactions (e.g. wound-response slope × RIC program) against stage-only, RIC-only and familiar gene-module baselines. Inspect multicollinearity, false-discovery control, cell composition and power. Do not infer causal effects from bulk correlations or classify individual regeneration outcomes from stage labels. Stop if the relation is already reported, nonidentifiable or unstable across replicates.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "enabled": true,
+      "id": "b1010c01-7a62-4b61-912a-4560b0000002",
+      "provenance": null,
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A preregistered quantitative interaction hypothesis, uncertainty and baseline comparison, or a documented null.",
+      "title": "Find a novel temporal coupling, not another marker"
+    },
+    {
+      "approach": "Use the matched-study spatial atlas GSE245313 and public scRNA GSE245312 to ask whether a candidate temporal signature reflects changed local cell state, abundance of RIC-like cells, tissue mixture, or generalized healing. Clearly flag scRNA comparison gaps and shared-study nonindependence. Construct controls using spatial localization and known marker panels; falsify a proposed mechanism if the pattern reduces to predictable cellular abundance or healing confounds.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "enabled": true,
+      "id": "b1010c01-7a62-4b61-912a-4560b0000003",
+      "provenance": null,
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "One spatially localized prediction plus an explicit compositional countermodel and limitations.",
+      "title": "Test a spatial or cell-composition alternative"
+    },
+    {
+      "approach": "Build a small mechanistic dynamical or causal model of injury cue, transient epidermal state, ECM remodeling and downstream tissue regrowth. Propose one stage-46 rescue and a corresponding stage-40 blocking intervention that make opposite predictions under two alternative mechanisms. Include timing, appropriate sham and injury controls, toxicity, stage matching, sample size assumptions and a quantitative primary endpoint such as blinded morphologic regeneration score at a specified post-amputation time. Identify ethical/laboratory requirements; the software must not claim experiments were conducted.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "enabled": true,
+      "id": "b1010c01-7a62-4b61-912a-4560b0000004",
+      "provenance": null,
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A falsifiable bidirectional perturbation plan with decision thresholds and failure modes.",
+      "title": "Design a decisive rescue-versus-block perturbation"
+    },
+    {
+      "approach": "Attempt to refute the leading candidate by literature search, baseline models, alternate time windows, batch-aware resampling and a genuinely independent cohort or independently generated perturbation/phenotype dataset if accessible. Define the outcome as verified mechanism, replicated computational association, novel unverified hypothesis or unresolved failure. Check that the proposed prediction was not used to select the validation data and quantify uncertainty. No positive biological-mechanism claim without independent biological validation.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "enabled": true,
+      "id": "b1010c01-7a62-4b61-912a-4560b0000005",
+      "provenance": null,
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "An auditable novelty verdict, supporting artifacts, independent-test plan/result and clearly graded final claim.",
+      "title": "Adversarial novelty and external validation"
+    }
+  ],
+  "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v9"
+}
