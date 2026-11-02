@@ -59,7 +59,9 @@ def _fetch_title(url: str) -> str | None:
     if parts.username is not None or parts.password is not None:
         return None
     host = parts.hostname.encode("idna").decode("ascii")
-    if not host or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for char in host.lower()):
+    if not host or any(
+        char not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for char in host.lower()
+    ):
         return None
     port = parts.port or (443 if parts.scheme == "https" else 80)
     # Validate every returned address, not just the one we will use.
