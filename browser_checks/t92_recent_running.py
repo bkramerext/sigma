@@ -138,8 +138,9 @@ with sync_playwright() as playwright:
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_have_count(0)
     expect(pinned.locator(".recent-title-pin")).to_be_visible()
-    expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_have_count(0)
-    expect(pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")).to_have_count(0)
+    expect(
+        pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
+    ).to_have_count(0)
     unpin = pinned.get_by_role("button", name=f"Unpin {project_title}")
     expect(unpin).to_be_visible()
     assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
@@ -152,13 +153,19 @@ with sync_playwright() as playwright:
     if not pinned.evaluate("group => group.open"):
         pinned.locator("summary").click()
     expect(pinned.locator(".recent-title-pin")).to_be_visible()
-    expect(pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")).to_have_count(0)
+    expect(
+        pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
+    ).to_have_count(0)
     pinned.get_by_role("button", name=f"Unpin {project_title}").click()
     expect(pinned.locator(".recent-title-pin")).to_have_count(0)
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
-    expect(pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")).to_be_visible()
+    expect(
+        pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
+    ).to_be_visible()
     expect(pinned.locator("details.pinned-type-group")).to_have_count(0)
     assert not errors, errors
     browser.close()
-    print("PASS T92 real Chrome: live status, in-category pins, hidden Remove, reload, 1280/390/320px")
+    print(
+        "PASS T92 real Chrome: live status, in-category pins, hidden Remove, reload, 1280/390/320px"
+    )
