@@ -283,7 +283,11 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
               {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
                 autoFocus={editingReferences.has(rowKey)}
-                onChange={event => setAt(index, event.target.value)}
+                onChange={event => {
+                  // Preserve the input once the first character makes a blank row nonempty.
+                  setEditingReferences(previous => new Set(previous).add(rowKey));
+                  setAt(index, event.target.value);
+                }}
                 onKeyDown={event => {
                   if (event.key !== 'Enter') return;
                   event.preventDefault();
