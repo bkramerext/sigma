@@ -29,6 +29,14 @@ Can universities pool uneven AI capacity without surrendering data authority or 
 
 A reservation ledger can preserve spending caps only with complete mediation, enforceable liability bounds, and retained holds for uncertain charges. These mechanisms remain unimplemented and unverified. Actual task quality, capacity, prices, administrative effort, and federation benefit are unknown. A proposed 90-day paired evaluation therefore treats useful completion, policy compliance, financial safety, and incremental federation benefit as separate decision requirements.
 \end{abstract}
+\begingroup\setlength{\fboxsep}{10pt}
+\noindent\fcolorbox{blue!55}{blue!5}{\begin{minipage}{0.90\linewidth}\small\sffamily
+{\large\bfseries\color{blue}In brief}\par\smallskip
+\textbf{The question.} Can universities share AI capacity while keeping campus control over data and hard spending limits?\par\smallskip
+\textbf{The answer.} The paper identifies conditions a campus-controlled broker and reservation ledger would need to meet. It has not shown that a federation can implement those conditions or outperform a campus gateway with separately approved external access.\par\smallskip
+\textbf{The route.} Compare the service options, follow a request across policy and transport boundaries, then examine budget safety and the proposed paired pilot.\par\smallskip
+\textbf{The limit.} Quality, capacity, prices, administrative cost, and the federation's added benefit remain unmeasured.
+\end{minipage}}\endgroup\par\medskip
 \section{Introduction and problem statement}
 The question is whether federation adds policy-permitted, useful research service beyond a campus gateway with separately approved external access. The comparison defines four alternatives: campus-local inference only, approved frontier API only, a campus gateway with separately approved external access, and a proposed federation extension. Federation and frontier routing are hypotheses about additional architecture, not established MindRouter capabilities.
 
@@ -103,6 +111,11 @@ The negative result rules out an unconditional combination of immediate revocati
 \section{The proposed controlled release boundary}
 A campus-controlled broker could close the authorization race by making committed policy updates and new operating-system transport submissions share one serialization boundary. The proposal places authority over managed releases and ownership of their outbound sockets in the same campus-controlled component, rather than treating an earlier policy check as permission to send later. This is a specification proposal: no implementation or executed fault-injection study establishes its mediation, transport, recovery, or ownership premises, and the supplied evidence does not establish these mechanisms as MindRouter capabilities.
 
+\begingroup\setlength{\fboxsep}{9pt}
+\noindent\fcolorbox{blue!45}{blue!4}{\begin{minipage}{0.91\linewidth}\small
+{\sffamily\bfseries\color{blue}Example: Approval changes during a request}\par\smallskip
+Suppose a campus approves an external destination, a researcher starts a request, and an administrator revokes approval before the operating-system send. A separate early policy check can still release the request under stale authority. In the proposed design, the broker must decide against committed policy at the release boundary and reserve the possible charge before that send. This illustrates a required contract, not an implemented guarantee.
+\end{minipage}}\endgroup\par\medskip
 The analytical workload consists of bounded, immutable content units submitted across a managed boundary, including successive chunks of a stream. The unit of analysis is a positive-length prefix accepted by the operating-system transport, and the authorization result concerns every finite event history satisfying the specified transitions, not an observed service period. Its outcome oracle asks whether each acceptance was permitted by the last preceding committed policy in the broker\textquoteright{}s serialization order. Campus security must decide whether that boundary meets institutional requirements; independent implementation testing remains necessary to establish that an actual system realizes it.
 
 Let $B$ denote the broker and $M$ its exclusive serialization gate. An authenticated administrative update becomes effective only when $B$ durably commits it under $M$; an administrator issuing the request, the broker receiving it, and an intent record being written are not themselves policy commitment. Acknowledgment follows the durable commit. Release is defined separately as acceptance of a positive byte count by the outbound operating-system transport during a synchronous, nonblocking submission operation\textemdash{}not application enqueueing, physical packet transmission, or recipient receipt. [[Research session 2, artifact 5]]
@@ -368,10 +381,4 @@ These notes identify the saved evidence for claims used in the article. The comp
 \textit{Evidence: }[Research session 2, artifact 2], [Research session 1, artifact 3]
 \end{description}
 \end{sloppypar}
-\section{Editorial writing sources}
-These sources informed manuscript organization and writing methods, not the scientific evidence or findings.
-\begin{itemize}
-\item PLOS ONE \textemdash{} Manuscript and Reporting Guidelines (general): \url{https://journals.plos.org/plosone/s/submission-guidelines}
-\item EASE \textemdash{} Guidelines for Authors of Scientific Articles (full text) (general): \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/}
-\end{itemize}
 \end{document}

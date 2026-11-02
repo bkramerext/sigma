@@ -33,3 +33,7 @@ The Warp Drive pair was rebuilt from the archived structured draft. The prior PD
 ## Follow-on review: Agent Reliability
 
 Rebuilt from its archived structured draft. An editorial source override condenses the opening correctness/observation section from ten paragraphs to six while preserving the outcome, acknowledgment, automated-evaluator, sampling-cluster, and frozen-roster distinctions and their saved claim links. The first page now has the structured reader guide; the writing-method list no longer occupies the final page. The reviewed PDF has 25 pages (previously 26), no PDF text-bound warnings, and intact claim/source notes. It remains dense and has not been independently validated against a real external service.
+
+## Follow-on review: Sovereign AI Federation
+
+Rebuilt from the archived structured draft with the current production renderer. The 22-page PDF now opens with a reader guide and ends with the claim/source register rather than an editorial-writing-source list. The comparison contract was read and retained: its four alternatives, root-task denominator, and joint success criterion are necessary to make the federation thesis testable. No PDF text-bound warnings were reported. No live federation or task-quality evaluation was performed.
