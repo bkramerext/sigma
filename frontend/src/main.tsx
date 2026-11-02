@@ -2567,7 +2567,10 @@ function FloatingTooltip() {
   }, [active, hide]);
   useLayoutEffect(() => { if (active) position(); }, [active, position]);
   if (!active) return null;
-  return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, document.body);
+  // Modal dialogs live in the browser's top layer, above body-level portals.
+  // Mount the tooltip inside the active dialog so it is actually visible.
+  const dialogTarget = active.element.closest<HTMLDialogElement>('dialog[open]');
+  return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, dialogTarget ?? document.body);
 }
 
 function SettingsGearIcon() {
