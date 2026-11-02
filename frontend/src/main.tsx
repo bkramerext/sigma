@@ -3764,31 +3764,29 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     } catch (cause) { setError(errorMessage(cause)); }
     finally { pending.current = false; setOpening(''); }
   }
-  const pinnedProjects = projects.filter(project => project.pinned);
-  const categoryGroups = projects.filter(project => !project.pinned).reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+  const recentGroups = projects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
     else groups.push({ type, projects: [project] });
     return groups;
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
-  const recentGroups: Array<{ type: ResearchMode | 'pinned'; projects: RecentProject[] }> =
-    pinnedProjects.length ? [{ type: 'pinned', projects: pinnedProjects }, ...categoryGroups] : categoryGroups;
   return <div className="empty home-empty home-recents">
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
-      const groupExpanded = expandedGroups[groupKey] ?? (group.type === 'pinned' ? true : savedHomeGroupOpen('recent', groupKey));
+      const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
       const hiddenRunningProject = !groupExpanded && group.projects.some(entry => entry.research_running);
-      return <details className={`recent-type-group${group.type === 'pinned' ? ' pinned-type-group' : ''}`} key={groupKey} open={groupExpanded} onToggle={event => {
+      return <details className="recent-type-group" key={groupKey} open={groupExpanded} onToggle={event => {
         const isOpen = event.currentTarget.open;
         try { window.localStorage.setItem(`sigma.home.recentGroup:${groupKey}`, String(isOpen)); } catch { /* Preserve state when storage is available. */ }
         setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
       }}>
-      <summary>{group.type === 'pinned' ? <span className="recent-pin-icon" aria-hidden="true">★</span> : <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{group.type === 'pinned' ? 'Pinned' : researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
+      <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
+            {entry.pinned && <svg className="recent-title-pin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 10.8V6a2 2 0 0 0-2-2H5V2h14v2h-2a2 2 0 0 0-2 2v4.8a2 2 0 0 0 .6 1.4L17 14v2H7v-2l1.4-1.8A2 2 0 0 0 9 10.8Z"/><path d="M12 16v6"/></svg>}
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
           </div>
           <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={`${entry.pinned ? 'Unpin' : 'Pin'} ${entry.title}`} onClick={() => void togglePin(entry)}>{entry.pinned ? 'Unpin' : 'Pin'}</button>{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Saved Projects`} aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove from Saved Projects; keep all research" onClick={event => {
