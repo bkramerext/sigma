@@ -23,6 +23,40 @@ def increase_call_limit(ledger: dict[str, Any], new_limit: int) -> tuple[int, in
     return old_limit, new_limit
 
 
+
+def authorize_independent_review_after_unknown(
+    ledger: dict[str, Any], *, uncertain_call_ids: set[str]
+) -> None:
+    """Lift only the unknown-dispatch gate after explicit, audited recovery.
+
+    Unknown requests retain their full input/output/cost reservations. Only a
+    separate Skeptic review can proceed when the caller has validated *all*
+    unknown IDs against saved interrupted review attempts. Usage-bound errors
+    and other blocked states must remain fail-closed.
+    """
+    if ledger.get("version") != LEDGER_VERSION:
+        raise BudgetExceeded("Research budget ledger version is invalid")
+    if ledger.get("blocked_reason") != "Provider call outcome or usage is unknown":
+        raise BudgetExceeded("The blocked research ledger is not eligible for review recovery")
+    calls = ledger.get("calls")
+    if not isinstance(calls, list):
+        raise BudgetExceeded("The saved research budget calls are invalid")
+    unknown_ids = {
+        item.get("call_id") for item in calls if item.get("status") == "unknown"
+    }
+    if (
+        not uncertain_call_ids
+        or unknown_ids != uncertain_call_ids
+        or len(unknown_ids) != sum(item.get("status") == "unknown" for item in calls)
+        or any(item.get("status") == "reserved" for item in calls)
+    ):
+        raise BudgetExceeded(
+            "Unknown provider reservations do not match the independently reviewable saved calls"
+        )
+    # Do not modify usage, any prior call, or the frozen input/cost ceilings.
+    ledger["blocked_reason"] = None
+
+
 def new_ledger(
     *,
     call_limit: int,
