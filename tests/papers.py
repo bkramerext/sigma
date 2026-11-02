@@ -1759,6 +1759,8 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
         ["A validator recorded an unsupported citation."],
         snapshot,
         include_research_details=True,
+        include_claim_details=True,
+        include_validation_notes=True,
         include_research_excerpts=True,
         **opts,
     )
@@ -1772,20 +1774,19 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
     ):
         assert required in concise and required in detailed, required
     for diagnostic in (
-        "Claim status and evidence",
-        "Claims discussed:",
-        "Issues found (diagnostic data)",
-        "Structured reasoning and review records",
+        r"\section{Claim and source notes}",
+        r"\section{Issues found (diagnostic data)}",
+        r"\section{Structured reasoning and review records}",
+        r"\section{Editorial writing sources}",
         "Validation:",
         "Snapshot SHA-256",
-        "Research style:",
-        "About this paper",
+        r"\section*{Evidence and authorship note}",
     ):
         assert diagnostic not in concise, diagnostic
         assert diagnostic in detailed, diagnostic
     assert "Confirm the missing proof step." not in concise
     assert "Confirm the missing proof step." in detailed
-    assert r"\section*{Authorship note}" in concise
+    assert r"\section*{Evidence and authorship note}" not in concise
 
 
 def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
