@@ -764,7 +764,8 @@ def main() -> None:
             )
             assert removed_paused["removed"] and removed_paused["session_number"] == 28
             assert f"research-sessions/{lifecycle_id}.json" not in list_files(created.path)
-            assert _allocate_session_number(created.path, []) == 28
+            # The earlier allocation returned 28 and advanced the counter.
+            assert _allocate_session_number(created.path, []) == 29
             # Completed sessions still reject stale optimistic-concurrency timestamps.
             lifecycle["status"] = "completed"
             _save(created.path, lifecycle)
