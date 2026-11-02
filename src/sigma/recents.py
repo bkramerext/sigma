@@ -78,14 +78,12 @@ def _validate(value: Any) -> dict:
         raise TypeError()
     seen = set()
     for item in value["entries"]:
-        if not isinstance(item, dict) or set(item) != {
-            "id",
-            "path",
-            "accessed_at",
-            "included_example",
-        }:
+        if not isinstance(item, dict) or set(item) not in (
+            {"id", "path", "accessed_at", "included_example"},
+            {"id", "path", "accessed_at", "included_example", "pinned"},
+        ):
             raise ValueError()
-        if not isinstance(item["id"], str):
+        if not isinstance(item["id"], str) or type(item.get("pinned", False)) is not bool:
             raise TypeError()
         UUID(item["id"])
         if (
@@ -145,6 +143,9 @@ def _index():
                     raise ValueError()
                 value = _validate(json.loads(raw))
         original = json.dumps(value, sort_keys=True)
+        # Migrate legacy recents entries without changing any project files.
+        for entry in value["entries"]:
+            entry.setdefault("pinned", False)
         # Older releases inserted canonical sample examples in Recents. Keep
         # their directories but show only independent user work here.
         from sigma.samples import sample_project_ids
@@ -205,6 +206,14 @@ def record_access(view: ProjectView) -> None:
                     "path": view.path,
                     "accessed_at": datetime.now(UTC).isoformat(),
                     "included_example": False,
+                    "pinned": next(
+                        (
+                            entry["pinned"]
+                            for entry in index["entries"]
+                            if entry["id"] == str(UUID(view.project.id))
+                        ),
+                        False,
+                    ),
                 },
                 *(entry for entry in index["entries"] if entry["id"] != str(UUID(view.project.id))),
             ]
@@ -214,6 +223,36 @@ def record_access(view: ProjectView) -> None:
             "Recent Projects could not be updated. The project operation succeeded; check application state permissions.",
             file=sys.stderr,
         )
+
+
+def set_recent_pin(project_id: str, path: str, pinned: bool) -> None:
+    """Pin only a matching entry in the current user's private Saved Projects index."""
+    from sigma import cloud_workspaces
+
+    workspace = cloud_workspaces.current()
+    if workspace is not None and workspace.guest:
+        raise ProjectError("Guests cannot pin projects")
+    if type(pinned) is not bool:
+        raise ProjectError("Pin state must be a boolean")
+    try:
+        canonical_id = str(UUID(project_id))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ProjectError("Invalid project identifier") from exc
+    with _index() as index:
+        entry = next(
+            (
+                item
+                for item in index["entries"]
+                if item["id"] == canonical_id and item["path"] == path
+            ),
+            None,
+        )
+        if entry is None:
+            raise ProjectError("Project is not in this user's Saved Projects")
+        view = inspect_project(entry["path"])
+        if str(UUID(view.project.id)) != canonical_id:
+            raise ProjectError("Project identity changed; cannot pin")
+        entry["pinned"] = pinned
 
 
 def forget_recent(project_id: str, path: str | None = None) -> None:
@@ -237,6 +276,7 @@ class RecentProject:
     research_running: bool
     accessed_at: str | None
     included_example: bool
+    pinned: bool
     available: bool
     error: str | None = None
     project_type_snapshot: dict | None = None

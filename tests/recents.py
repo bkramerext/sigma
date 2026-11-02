@@ -22,7 +22,7 @@ from sigma.projects import (
     inspect_project,
     open_project,
 )
-from sigma.recents import home_projects, recent_projects, state_directory
+from sigma.recents import home_projects, recent_projects, set_recent_pin, state_directory
 from sigma.samples import open_sample_project, sample_projects
 
 
@@ -271,6 +271,28 @@ def check(root: Path, base: Path) -> None:
     open_project(first.path)
     assert recent_projects()["projects"][0]["id"] == first.project.id
 
+    # Pinning is account-local, persists across project access, and does not
+    # rewrite research projects or mutate their version titles.
+    pinned_view = created[1]
+    project_before_pin = Path(pinned_view.path).read_bytes()
+    order_before_pin = [item["id"] for item in recent_projects()["projects"]]
+    set_recent_pin(pinned_view.project.id, pinned_view.path, True)
+    pinned_list = recent_projects()["projects"]
+    assert [item["id"] for item in pinned_list] == order_before_pin
+    assert (
+        next(item for item in pinned_list if item["id"] == pinned_view.project.id)["pinned"] is True
+    )
+    open_project(first.path)
+    assert recent_projects()["projects"][0]["id"] == first.project.id
+    assert Path(pinned_view.path).read_bytes() == project_before_pin
+    try:
+        set_recent_pin(first.project.id, pinned_view.path, True)
+        raise AssertionError("Pinning another project's path was accepted")
+    except ProjectError:
+        pass
+    set_recent_pin(pinned_view.project.id, pinned_view.path, False)
+    assert recent_projects()["projects"][0]["id"] == first.project.id
+
     with TestClient(app) as api:
         before = (state_directory() / "recents.json").read_bytes()
         api_recent = api.get("/api/projects/recent").json()["projects"]
@@ -278,6 +300,29 @@ def check(root: Path, base: Path) -> None:
         assert len(api_recent) > 4
         assert (state_directory() / "recents.json").read_bytes() == before
         assert api.get("/api/projects/samples").json()["projects"] == sample_projects()["projects"]
+        pin_payload = {
+            "project_id": pinned_view.project.id,
+            "path": pinned_view.path,
+            "pinned": True,
+        }
+        pin_response = api.post("/api/projects/recent/pin", json=pin_payload)
+        assert pin_response.status_code == 200 and pin_response.json()["pinned"] is True
+        api_pinned = api.get("/api/projects/recent").json()["projects"]
+        assert api_pinned[0]["id"] == first.project.id
+        assert (
+            next(item for item in api_pinned if item["id"] == pinned_view.project.id)["pinned"]
+            is True
+        )
+        assert (
+            api.post(
+                "/api/projects/recent/pin", json={**pin_payload, "path": first.path}
+            ).status_code
+            == 400
+        )
+        assert (
+            api.post("/api/projects/recent/pin", json={**pin_payload, "pinned": False}).status_code
+            == 200
+        )
         response = api.post("/api/projects/samples/open", json={"sample_id": selected["id"]})
         assert response.status_code == 200
         assert response.json()["path"] != first.path
