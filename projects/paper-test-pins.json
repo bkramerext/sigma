@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "purpose": "Source-controlled initial paper-generation test selections; not an evaluation or scientific endorsement",
+  "projects": [
+    {
+      "id": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+      "title": "AI Agent Reliability and Evaluation v1",
+      "source": "projects/complete/agent-reliability.sigma"
+    },
+    {
+      "id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+      "title": "Sovereign AI Federation v2",
+      "source": "projects/complete/sovereign-ai.sigma"
+    },
+    {
+      "id": "01de54c9-9593-413a-9577-1a952d28da70",
+      "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v9",
+      "source": "projects/complete/xenopus-tadpoles.sigma"
+    }
+  ]
+}

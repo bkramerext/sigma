@@ -3,8 +3,10 @@
 import fcntl
 import json
 import os
+import re
 import stat
 import sys
+import unicodedata
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -67,23 +69,111 @@ def state_directory() -> Path:
     return path
 
 
-def _validate(value: Any) -> dict:
+def project_family(title: str) -> str:
+    """Group case-insensitive project titles differing only in a terminal version."""
+    normalized = " ".join(unicodedata.normalize("NFKC", title).casefold().split())
+    base = re.sub(
+        r"\s+(?:v(?:ersion)?\s*\d+(?:\.\d+)*|\(\s*v(?:ersion)?\s*\d+(?:\.\d+)*\s*\))$",
+        "",
+        normalized,
+    ).strip()
+    return base or normalized
+
+
+def _paper_test_defaults() -> dict[str, str]:
+    """Reviewed project choices checked into source control; never modify archived projects."""
+    manifest_path = ROOT / "projects" / "paper-test-pins.json"
+    if not manifest_path.exists():
+        return {}
+    value = json.loads(manifest_path.read_text(encoding="utf-8"))
     if (
         not isinstance(value, dict)
-        or set(value) != {"version", "entries", "bootstrapped_roots"}
-        or value["version"] != 1
+        or value.get("schema_version") != 1
+        or not isinstance(value.get("projects"), list)
     ):
+        raise ValueError("Invalid paper-test pin manifest")
+    selected: dict[str, str] = {}
+    for record in value["projects"]:
+        if (
+            not isinstance(record, dict)
+            or not isinstance(record.get("title"), str)
+            or not isinstance(record.get("id"), str)
+            or not isinstance(record.get("source"), str)
+        ):
+            raise TypeError("Invalid paper-test pin record")
+        family = project_family(record["title"])
+        project_id = str(UUID(record["id"]))
+        if project_id != record["id"] or not family or family in selected:
+            raise ValueError("Conflicting paper-test pin defaults")
+        selected[family] = project_id
+    return selected
+
+
+def _effective_pins(index: dict) -> dict[str, str]:
+    """Default pins apply only after the specific project has been opened."""
+    pins = dict(index["pins"])
+    saved_ids = {entry["id"] for entry in index["entries"]}
+    dismissed = set(index.get("dismissed_default_pins", []))
+    for family, project_id in _paper_test_defaults().items():
+        if family not in pins and family not in dismissed and project_id in saved_ids:
+            pins[family] = project_id
+    return pins
+
+
+def _validate(value: Any) -> dict:
+    if not isinstance(value, dict) or value.get("version") not in (1, 2):
         raise ValueError()
+    required = {"version", "entries", "bootstrapped_roots"}
+    if value["version"] == 2:
+        required.add("pins")
+    if value["version"] == 2 and "dismissed_default_pins" in value:
+        required.add("dismissed_default_pins")
+    if set(value) != required:
+        raise ValueError()
+    if value["version"] == 2 and "dismissed_default_pins" in value:
+        dismissed = value["dismissed_default_pins"]
+        if (
+            not isinstance(dismissed, list)
+            or len(dismissed) > 10000
+            or len(set(dismissed)) != len(dismissed)
+            or any(
+                not isinstance(family, str) or not family or project_family(family) != family
+                for family in dismissed
+            )
+        ):
+            raise ValueError()
+    if value["version"] == 2:
+        pins = value["pins"]
+        if not isinstance(pins, dict) or len(pins) > 10000:
+            raise ValueError()
+        if any(
+            not isinstance(family, str)
+            or not family
+            or family != project_family(family)
+            or not isinstance(project_id, str)
+            for family, project_id in pins.items()
+        ):
+            raise ValueError()
+        try:
+            ids = [str(UUID(project_id)) for project_id in pins.values()]
+        except ValueError as exc:
+            raise ValueError() from exc
+        if len(set(ids)) != len(ids) or any(
+            raw != canonical for raw, canonical in zip(pins.values(), ids)
+        ):
+            raise ValueError()
     if not isinstance(value["entries"], list) or not isinstance(value["bootstrapped_roots"], dict):
         raise TypeError()
     seen = set()
     for item in value["entries"]:
-        if not isinstance(item, dict) or set(item) not in (
-            {"id", "path", "accessed_at", "included_example"},
-            {"id", "path", "accessed_at", "included_example", "pinned"},
-        ):
+        if not isinstance(item, dict) or set(item) != {
+            "id",
+            "path",
+            "accessed_at",
+            "included_example",
+        }:
             raise ValueError()
-        if not isinstance(item["id"], str) or type(item.get("pinned", False)) is not bool:
+        if not isinstance(item["id"], str):
             raise TypeError()
         UUID(item["id"])
         if (
@@ -128,7 +218,13 @@ def _index():
         try:
             read_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         except FileNotFoundError:
-            value = {"version": 1, "entries": [], "bootstrapped_roots": {}}
+            value = {
+                "version": 2,
+                "entries": [],
+                "bootstrapped_roots": {},
+                "pins": {},
+                "dismissed_default_pins": [],
+            }
         else:
             with os.fdopen(read_fd, encoding="utf-8") as stream:
                 info = os.fstat(stream.fileno())
@@ -143,9 +239,11 @@ def _index():
                     raise ValueError()
                 value = _validate(json.loads(raw))
         original = json.dumps(value, sort_keys=True)
-        # Migrate legacy recents entries without changing any project files.
-        for entry in value["entries"]:
-            entry.setdefault("pinned", False)
+        if value["version"] == 1:
+            value["version"] = 2
+            value["pins"] = {}
+        if "dismissed_default_pins" not in value:
+            value["dismissed_default_pins"] = []
         # Older releases inserted canonical sample examples in Recents. Keep
         # their directories but show only independent user work here.
         from sigma.samples import sample_project_ids
@@ -175,6 +273,8 @@ def _index():
                     os.close(parent_fd)
             finally:
                 staged.unlink(missing_ok=True)
+    except ProjectError:
+        raise
     except (OSError, ValueError, TypeError, KeyError):
         raise ProjectError(
             "Recent Projects index is unavailable. Check its owned 0700 directory/0600 files; research was not altered."
@@ -206,14 +306,6 @@ def record_access(view: ProjectView) -> None:
                     "path": view.path,
                     "accessed_at": datetime.now(UTC).isoformat(),
                     "included_example": False,
-                    "pinned": next(
-                        (
-                            entry["pinned"]
-                            for entry in index["entries"]
-                            if entry["id"] == str(UUID(view.project.id))
-                        ),
-                        False,
-                    ),
                 },
                 *(entry for entry in index["entries"] if entry["id"] != str(UUID(view.project.id))),
             ]
@@ -225,39 +317,16 @@ def record_access(view: ProjectView) -> None:
         )
 
 
-def set_recent_pin(project_id: str, path: str, pinned: bool) -> None:
-    """Pin only a matching entry in the current user's private Saved Projects index."""
-    from sigma import cloud_workspaces
-
-    workspace = cloud_workspaces.current()
-    if workspace is not None and workspace.guest:
-        raise ProjectError("Guests cannot pin projects")
-    if type(pinned) is not bool:
-        raise ProjectError("Pin state must be a boolean")
-    try:
-        canonical_id = str(UUID(project_id))
-    except (ValueError, TypeError, AttributeError) as exc:
-        raise ProjectError("Invalid project identifier") from exc
-    with _index() as index:
-        entry = next(
-            (
-                item
-                for item in index["entries"]
-                if item["id"] == canonical_id and item["path"] == path
-            ),
-            None,
-        )
-        if entry is None:
-            raise ProjectError("Project is not in this user's Saved Projects")
-        view = inspect_project(entry["path"])
-        if str(UUID(view.project.id)) != canonical_id:
-            raise ProjectError("Project identity changed; cannot pin")
-        entry["pinned"] = pinned
-
-
 def forget_recent(project_id: str, path: str | None = None) -> None:
     """Forget a saved entry by identity, or by its saved path if identity drifted."""
     with _index() as index:
+        matched = [
+            entry
+            for entry in index["entries"]
+            if entry["id"] == project_id or (path is not None and entry["path"] == path)
+        ]
+        if any(entry["id"] in _effective_pins(index).values() for entry in matched):
+            raise ProjectError("Unpin this project before removing it from Saved Projects.")
         index["entries"] = [
             entry
             for entry in index["entries"]
@@ -276,8 +345,10 @@ class RecentProject:
     research_running: bool
     accessed_at: str | None
     included_example: bool
-    pinned: bool
     available: bool
+    pinned: bool = False
+    pin_state: str = "remove"
+    hidden_by_family_pin: bool = False
     error: str | None = None
     project_type_snapshot: dict | None = None
 
@@ -289,6 +360,7 @@ def recent_projects() -> dict:
     if workspace is not None and workspace.guest:
         return {"projects": []}
     with _index() as index:
+        pins = _effective_pins(index)
         entries = []
         for entry in index["entries"]:
             copied = dict(entry)
@@ -324,6 +396,18 @@ def recent_projects() -> dict:
                         difficulty=view.project.difficulty,
                         research_running=has_active_session(view.path),
                         available=True,
+                        pinned=(view.project.id in pins.values()),
+                        pin_state=(
+                            "unpin"
+                            if view.project.id in pins.values()
+                            else "remove"
+                            if project_family(view.project.title) in pins
+                            else "pin_remove"
+                        ),
+                        hidden_by_family_pin=(
+                            project_family(view.project.title) in pins
+                            and pins[project_family(view.project.title)] != view.project.id
+                        ),
                     )
                 )
             )
@@ -339,6 +423,8 @@ def recent_projects() -> dict:
                         difficulty=None,
                         research_running=False,
                         available=False,
+                        pinned=(entry["id"] in pins.values()),
+                        pin_state="unpin" if entry["id"] in pins.values() else "remove",
                         error="Unavailable or changed identity. Restore the saved project file, or forget this entry.",
                     )
                 )
@@ -348,3 +434,55 @@ def recent_projects() -> dict:
 
 def home_projects() -> dict:
     return recent_projects()
+
+
+def pinned_projects() -> dict:
+    """Paper-test source selection; does not launch or authorize generation."""
+    return {
+        "projects": [
+            item
+            for item in recent_projects()["projects"]
+            if item["pin_state"] == "unpin" and item["available"]
+        ]
+    }
+
+
+def assert_project_unpinned(project_id: str) -> None:
+    """Protect pinned records from destructive deletion and title changes."""
+    with _index() as index:
+        if project_id in _effective_pins(index).values():
+            raise ProjectError("Unpin this project before removing or renaming it.")
+
+
+def set_project_pin(project_id: str, path: str, pinned: bool) -> None:
+    """Atomically select at most one Saved Project per version family."""
+    if type(pinned) is not bool:
+        raise ProjectError("Pin state must be true or false.")
+    with _index() as index:
+        entry = next(
+            (row for row in index["entries"] if row["id"] == project_id and row["path"] == path),
+            None,
+        )
+        if entry is None:
+            raise ProjectError("Project is not in Saved Projects. Open it before pinning.")
+        pins = index["pins"]
+        active = _effective_pins(index)
+        if not pinned:
+            family = next((key for key, value in active.items() if value == project_id), None)
+            if family is None:
+                raise ProjectError("Only the pinned version can be unpinned.")
+            pins.pop(family, None)
+            if family not in index["dismissed_default_pins"]:
+                index["dismissed_default_pins"].append(family)
+            return
+        view = inspect_project(path)
+        if view.project.id != project_id:
+            raise ProjectError("Project identity changed. Reopen it before pinning.")
+        family = project_family(view.project.title)
+        if active.get(family) == project_id:
+            return
+        if family in active:
+            raise ProjectError("Another version of this project is pinned. Unpin it first.")
+        pins[family] = project_id
+        if family in index["dismissed_default_pins"]:
+            index["dismissed_default_pins"].remove(family)
