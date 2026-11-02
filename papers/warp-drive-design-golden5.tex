@@ -51,48 +51,22 @@ The propagation analysis solved axial affine equations using a translating Killi
 
 This synthesis uses a bounded selection of the archived research. Unreviewed records could affect its conclusions; the full omission ledger remains available with the generation record.
 \section{An operational shortcut without local superluminal motion}
-A finite-duration geometry makes the proposed shortcut operationally precise: an exterior-clock transit can be shorter than a matched Minkowski light-transit time without the information carrier leaving its local photon cone. The construction separates three questions that a coordinate speed alone cannot answer\textemdash{}whether the metric is Lorentzian, whether the carrier is locally timelike, and whether distant clocks register an arrival advantage. Its conclusions are conditional on a prescribed geometry, rather than on an independently established matter source.
+The first question is geometric: can a prescribed spacetime yield an earlier arrival on matched distant clocks while the carrier remains locally slower than light? Use signature $(-,+,+,+)$ and a smooth, nondecreasing center path $x_s(t)$ that starts at $0$ before $t=0$ and ends at $L$ after $t=T$, with $L>cT$. Let $v(t)=dx_s/dt$, $r^2=[x-x_s(t)]^2+y^2+z^2$, and let the smooth profile $f(r)$ equal one near the center and vanish for $r\geq R$. The assigned metric is \[ds^2=-c^2dt^2+[dx-v(t)f(r)dt]^2+dy^2+dz^2.\] It is a target geometry, not a sourced solution.
 
 \begingroup\setlength{\fboxsep}{9pt}
 \noindent\fcolorbox{blue!45}{blue!4}{\begin{minipage}{0.91\linewidth}\small
 {\sffamily\bfseries\color{blue}Example: What the distant clocks compare}\par\smallskip
 Place two exterior stations a distance $L$ apart. A light signal in the matched flat-space reference needs $L/c$ to make the trip. The prescribed pulse carries the central traveler between them in a time $T<L/c$, while the traveler remains timelike in the pulse geometry. The earlier arrival compares two specified spacetime models; it does not demonstrate a buildable source or a local speed above light.
 \end{minipage}}\endgroup\par\medskip
-Use signature $(-,+,+,+)$ and coordinates $(t,x,y,z)$, with $t$ a physical time coordinate, the spatial coordinates measured in length units, and $c$ the local photon speed. Let the center position $x_s(t)$ be smooth and nondecreasing, with $x_s(t)=0$ for $t\leq 0$ and $x_s(t)=L$ for $t\geq T$, where $L>cT$. Define $v(t)=dx_s/dt$ and $r^2=[x-x_s(t)]^2+y^2+z^2$, and choose a smooth dimensionless radial profile satisfying $0\leq f(r)\leq 1$, equal to unity near the center and vanishing for $r\geq R$. The target metric is
+First test local motion. The invertible coframe $(c\,dt,\,dx-vf\,dt,\,dy,\,dz)$ gives Lorentzian signature and $\det(g_{\mu\nu})=-c^2$, even where the coordinate speed $v$ exceeds $c$. On the central path $x=x_s(t)$, $y=z=0$, the shifted spatial differential vanishes, so $ds^2=-c^2dt^2$ and $d\tau=dt$. The carrier is timelike throughout. Relative to observers normal to the time slices, the causal-cone condition is \[(dx-vf\,dt)^2+dy^2+dz^2\leq c^2dt^2.\] The carrier's spatial displacement in that local frame is zero.
 
-$ds^2=-c^2dt^2+[dx-v(t)f(r)dt]^2+dy^2+dz^2.$
+Next test distant arrival. Put stationary stations A and B at $x=-D$ and $x=L+D$, with $D>R$, outside the moving region; synchronize their clocks in the common Minkowski past. At $t=-D/c$, A sends a light signal through the flat pre-pulse region to the carrier at $(0,0)$. The carrier carries that information to $(T,L)$ and relays it through the flat post-pulse region to B, which receives it at $t=T+D/c$. The exterior-clock interval is \[\Delta t_{\mathrm{shortcut}}=T+2D/c<(L+2D)/c=\Delta t_{\mathrm{Minkowski}}.\] The strict inequality is exactly $L>cT$.
 
-The shifted spatial differential changes the relation between coordinate displacement and local motion without changing the metric signature. In particular, the coframe $(c\,dt,\,dx-vf\,dt,\,dy,\,dz)$ is invertible and puts the line element into explicitly Lorentzian form; the coordinate determinant is $\det(g_{\mu\nu})=-c^2$. Thus even an interval with $v(t)>c$ does not make the metric degenerate or change its signature. Because the center is stationary before and after the prescribed motion, and because the profile has compact support, the metric is exactly Minkowski for $t\leq 0$, for $t\geq T$, and outside the moving region $r<R$.
+This compares the assigned geometry with an unmodified Minkowski light transit between the same stationary endpoints. It does not compare a timelike path against the fastest null path in one geometry. The stations, relays, and carrier are idealized test systems with neglected backreaction; the geometric schedule is specified independently of the newly transmitted information. The clock calculation establishes a conditional arrival advantage, not an on-demand method of creating the pulse.
 
-The central carrier follows $x=x_s(t)$ and $y=z=0$, where the profile is constant at $f=1$. Along this trajectory, $dx=v(t)dt$, so the shifted spatial differential vanishes and
+Finally test this geometry's causal ordering. Its inverse metric has $g^{tt}=-1/c^2$, so the gradient of $t$ is everywhere timelike. With the stated future orientation, $t$ strictly increases on every nontrivial future-directed causal curve. That excludes closed causal curves in this single prescribed spacetime. It says nothing by itself about assemblies of moving corridors, additional transport channels, or repeated trips.
 
-$ds^2=-c^2dt^2,\qquad d\tau=dt.$
-
-The carrier is therefore timelike throughout the transit, and its elapsed proper time between departure and arrival is $T$. A large displacement relative to the exterior coordinates does not, by itself, represent locally superluminal motion.
-
-The same distinction follows directly from the local causal cone. Relative to observers normal to the constant-time slices, define the infinitesimal spatial components $d\ell_x=dx-vf\,dt$, $d\ell_y=dy$, and $d\ell_z=dz$; causal displacements satisfy
-
-$d\ell_x^2+d\ell_y^2+d\ell_z^2\leq c^2dt^2.$
-
-The central carrier has vanishing spatial components in this frame, even when its exterior coordinate velocity exceeds $c$. The shortcut consequently does not grant a massive carrier permission to cross its local photon cone; it changes the spacetime geometry used to relate local motion to distant endpoints.
-
-To define those endpoints operationally, place stationary station A at $x=-D$ and station B at $x=L+D$, both on the axis, with $D>R$. Monotonicity of the center trajectory keeps both stations outside the modified region for the entire pulse, so their proper-time increments equal $dt$. Synchronize their clocks in the common Minkowski past. At $t=-D/c$, station A emits a light signal that reaches the central carrier at $(t,x)=(0,0)$, entirely through the flat pre-pulse region.
-
-The carrier retains the signal information until it reaches $(t,x)=(T,L)$ and then emits a light signal toward station B. This final light segment lies entirely in the flat post-pulse region and reaches B at $t=T+D/c$. The elapsed time obtained by subtracting the synchronized exterior-clock readings is therefore
-
-\[\Delta t_{\mathrm{shortcut}}=T+\frac{2D}{c}<\frac{L+2D}{c}=\Delta t_{\mathrm{Minkowski}},\]
-
-where the strict inequality is precisely the imposed condition $L>cT$. The reference on the right is the photon transit between the same stationary endpoints in unmodified Minkowski spacetime, not the fastest null transit in the modified geometry.
-
-This comparison uses two geometries with matched exterior clocks, rather than a timelike carrier racing a null signal through the same metric. The stations, carrier, and relays are idealized test systems whose backreaction is neglected, and the geometric schedule is prearranged independently of the newly transmitted information. The protocol establishes an arrival advantage within that assigned geometry; it does not establish that station A can create the geometry on demand or that an admissible dynamical source generates it.
-
-The assigned spacetime also admits a direct causal-loop test that is independent of the transit comparison. Its inverse metric obeys
-
-$g^{tt}=-\frac{1}{c^2},$
-
-so the gradient of $t$ is timelike everywhere on the stated coordinate domain. Choosing the future orientation in which $dt$ is positive on future-directed causal vectors makes $t$ strictly increase along every nontrivial future-directed causal curve, excluding closed causal curves and supplying the usual stable-causality criterion. This result applies to this spacetime, not automatically to assemblies of relatively moving shortcuts or additional transport channels, whose combined causal structure would require a separate analysis.
-
-The finite-duration construction therefore defeats the purely kinematic inference that an effective shortcut must entail either locally superluminal carrier motion or a causal loop. What remains at issue is whether a physical source and its evolution can realize this operational geometry, not whether its exterior coordinate speed alone contradicts its local light cones.
+The geometric answer is therefore limited but exact: exterior coordinate speed above $c$ need not mean local superluminal motion or a causal loop in this construction. The unresolved physical question is whether admissible source dynamics can form and maintain the assigned geometry.
 
 \begin{figure}[!htbp]
 \centering

@@ -65,26 +65,27 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
     editorial_path = ARCHIVE / slug / "editorial_override.json"
     if editorial_path.exists():
         editorial = json.loads(editorial_path.read_text(encoding="utf-8"))
-        for section in section_data:
-            if section["heading"] != editorial["section"]:
-                continue
-            section["paragraphs"] = editorial["paragraphs"]
-            if "table" in editorial:
-                table = editorial["table"]
-                refs = list(
-                    dict.fromkeys(
-                        ref
-                        for claim_id in table["claim_ids"]
-                        for ref in claim_map[claim_id].evidence_refs
+        for edit in [editorial, *editorial.get("additional_sections", [])]:
+            for section in section_data:
+                if section["heading"] != edit["section"]:
+                    continue
+                section["paragraphs"] = edit["paragraphs"]
+                if "table" in edit:
+                    table = edit["table"]
+                    refs = list(
+                        dict.fromkeys(
+                            ref
+                            for claim_id in table["claim_ids"]
+                            for ref in claim_map[claim_id].evidence_refs
+                        )
                     )
-                )
-                section["tables"].append({**table, "evidence_refs": refs[:20]})
-                section["claim_ids"] = list(
-                    dict.fromkeys([*section["claim_ids"], *table["claim_ids"]])
-                )
-            break
-        else:
-            raise ValueError(f"Editorial section not found: {editorial['section']}")
+                    section["tables"].append({**table, "evidence_refs": refs[:20]})
+                    section["claim_ids"] = list(
+                        dict.fromkeys([*section["claim_ids"], *table["claim_ids"]])
+                    )
+                break
+            else:
+                raise ValueError(f"Editorial section not found: {edit['section']}")
     draft = papers.PaperDraft.model_validate(
         {
             **draft.model_dump(),
