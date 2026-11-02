@@ -85,13 +85,24 @@ with sync_playwright() as playwright:
     assert about_rect and google_rect
     assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
 
-    # The native Project Types dialog traps keyboard focus, closes on Escape,
-    # restores focus, and keeps the Literature/open-book catalog read-only.
+    # Project Types traps focus, ignores Escape/backdrop clicks, and only
+    # dismisses via its Close button (or an explicit successful Save).
     types_button = page.get_by_role("button", name="Project Types", exact=True)
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
+    # Standard Common and discipline guidance is visible but cannot be edited.
+    common_section = dialog.locator(".pt-common-references")
+    expect(common_section.locator(".pt-reference-link")).to_have_count(4)
+    expect(common_section.locator("input, button")).to_have_count(0)
+    expect(common_section.locator(".pt-reference-url")).to_have_count(0)
+    expect(common_section.locator(".pt-reference-link a")).to_have_count(4)
+    math_card = dialog.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
+    math_card.locator("summary").click()
+    expect(math_card.locator(".pt-reference-link")).to_have_count(2)
+    expect(math_card.locator("input:not([disabled]), button")).to_have_count(0)
+    math_card.locator("summary").click()
     expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_have_count(0)
     expect(dialog.get_by_text("(cannot be modified)", exact=True)).to_be_visible()
     page.set_viewport_size({"width": 1440, "height": 1000})
@@ -125,6 +136,10 @@ with sync_playwright() as playwright:
     )
     page.screenshot(path=str(EVIDENCE / "types-mobile.png"), full_page=True)
     page.keyboard.press("Escape")
+    expect(dialog).to_be_visible()
+    page.mouse.click(1, 1)  # Clicking the backdrop must not close the dialog.
+    expect(dialog).to_be_visible()
+    dialog.locator("header").get_by_role("button", name="Close").click()
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()
     page.set_viewport_size({"width": 1440, "height": 1000})
@@ -140,6 +155,8 @@ with sync_playwright() as playwright:
     page.keyboard.press("Shift+Tab")
     expect(add_button).to_be_focused()
     page.keyboard.press("Escape")
+    expect(dialog).to_be_visible()
+    dialog.locator("header").get_by_role("button", name="Close").click()
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()
 
@@ -179,6 +196,8 @@ with sync_playwright() as playwright:
     parent.get_by_role("button", name="New", exact=True).first.click()
     # The next New remains unavailable until the just-created row contains a URL.
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_disabled()
+    # Editable references show URL fields without duplicate title/URL captions.
+    expect(parent.locator(".pt-reference-link")).to_have_count(0)
     url_input = parent.get_by_label("Research reference URL 1")
     url_input.fill("not-a-url")
     expect(url_input).to_have_attribute("aria-invalid", "true")
@@ -189,6 +208,16 @@ with sync_playwright() as playwright:
     expect(parent.get_by_text("Use an HTTP or HTTPS URL with a host.")).to_have_count(0)
     expect(save).to_be_enabled()
     expect(url_input).to_have_value("https://example.org/research-standard")
+    # URL edits commit on Enter; no Done or Remove button while typing.
+    first_entry = parent.locator(".pt-reference-entry").first
+    expect(first_entry.locator("button")).to_have_count(0)
+    url_input.press("Enter")
+    expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
+    expect(first_entry.locator(".pt-reference-link a")).to_have_count(1)
+    expect(first_entry.get_by_role("button", name="Edit")).to_be_visible()
+    expect(first_entry.get_by_role("button", name="Remove")).to_be_visible()
+    first_entry.get_by_role("button", name="Edit").click()
+    url_input = parent.get_by_label("Research reference URL 1")
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_enabled()
     assert url_input.evaluate("element => document.activeElement === element"), (
         "URL input remounted during typing"
@@ -200,14 +229,18 @@ with sync_playwright() as playwright:
     parent.get_by_role("button", name="New", exact=True).first.click()
     expect(parent.get_by_label("Research reference URL 3")).to_have_value("")
     expect(save).to_be_enabled()
-    reference_layout = parent.locator(".pt-reference-entry").first.evaluate(
-        """row => {
-          const input = row.querySelector('input').getBoundingClientRect();
-          const remove = row.querySelector('button').getBoundingClientRect();
-          return {gap: remove.left - input.right, sameLine: Math.abs(remove.top - input.top) < 16};
-        }"""
+    # Rows and the New row have identical vertical spacing and no rules.
+    reference_layout = parent.locator(".pt-reference-table").first.evaluate(
+        """table => [...table.querySelectorAll('td')].map(td => ({
+          paddingTop: getComputedStyle(td).paddingTop,
+          borderBottom: getComputedStyle(td).borderBottomWidth
+        }))"""
     )
-    assert 0 <= reference_layout["gap"] <= 20 and reference_layout["sameLine"], reference_layout
+    assert len(reference_layout) >= 4, reference_layout
+    assert all(
+        row["paddingTop"] == "4px" and row["borderBottom"] == "0px" for row in reference_layout
+    ), reference_layout
+    expect(first_entry.locator("button")).to_have_count(0)
     # A new draft uses local Cancel, not Remove or a second Save.
     expect(
         dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")
@@ -257,7 +290,12 @@ with sync_playwright() as playwright:
     assert child_type["icon"]["key"] == "placeholder"
     assert child_type["based_on"] == parent_type["id"]
     assert child_type["scope"] == "Independent copied scope"
-    assert child_type["research_standards_references"] == ["https://example.org/research-standard"]
+    assert child_type["research_standards_references"] == [
+        {
+            "name": "https://example.org/research-standard",
+            "url": "https://example.org/research-standard",
+        }
+    ]
     assert not [url for url, _ in api_requests if url.endswith("/project-types/icon")]
 
     # Edit/add/remove are all drafts. Cancel discards all three, and Remove
@@ -292,7 +330,7 @@ with sync_playwright() as playwright:
     expect(pending).to_have_count(0)
     # Canceling the new type leaves other unsaved edits in the dialog.
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
-    dialog.locator("header").get_by_role("button", name="Cancel", exact=True).click()
+    dialog.locator("header").get_by_role("button", name="Close", exact=True).click()
     expect(dialog).not_to_be_visible()
     after_cancel = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     assert after_cancel["revision"] == before["revision"]

@@ -30,15 +30,14 @@
 .project-type-card-body section { min-width: 0; }
 .project-type-card-body section h3 { margin-bottom: 6px; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 .pt-reference-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.pt-reference-table td { padding: 4px 0; border-bottom: 1px solid #35404a; text-align: left; }
+.pt-reference-table td { padding: 4px 0; border: 0; text-align: left; }
 .pt-reference-entry { display: flex; align-items: flex-start; gap: 12px; }
 .pt-reference-field { display: grid; flex: 1 1 auto; min-width: 0; gap: 3px; }
 .pt-reference-entry input { min-width: 0; width: 100%; min-height: 32px; text-overflow: ellipsis; }
 .pt-reference-entry button { flex: 0 0 auto; }
 .pt-reference-table td button { min-height: 28px; padding: 2px 5px; border: 0; color: #e0aa8b; background: transparent; text-decoration: underline; }
 .project-type-card > summary .project-type-remove { flex: 0 0 auto; margin-left: 0; white-space: nowrap; }
-.pt-reference-new-row td { padding-top: 7px; }
-.pt-reference-new-row td:first-child { border-bottom-color: transparent; }
+.pt-reference-new-row td { padding-top: 4px; }
 .project-types-add { margin-top: 8px; }
 .project-types-body [role=alert] { color: #f1aaa0; }
 .project-type-missing-warning { margin: 12px 0; padding: 12px 14px; border: 1px solid #b87e4f; border-radius: 6px; color: #e6d4bd; background: #32251c; }
@@ -86,3 +85,13 @@
 .project-types-dialog .pt-picker-width-measure { display: flex; align-items: center; gap: 6px; height: 0; padding: 0 24px; overflow: hidden; visibility: hidden; white-space: nowrap; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
 .project-types-dialog .pt-picker-icon-space { flex: 0 0 20px; }
 .project-types-dialog .pt-picker-chevron-space { flex: 0 0 12px; }
+
+/* Shared and type-specific reference lists use identical controls and previews. */
+.pt-common-references > p { margin: 0 0 12px; color: #b6c3cf; font-size: 12px; line-height: 1.55; }
+.pt-common-references > h4 { margin: 13px 0 6px; color: #cdd7e0; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
+.pt-reference-link { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.project-types-dialog .pt-reference-link a { width: fit-content; max-width: 100%; color: #edc38d; text-underline-offset: 3px; }
+.project-types-dialog .pt-reference-link a:hover { color: #ffe5a6; }
+.project-types-dialog .pt-reference-link .pt-reference-url { color: #aab7c4; font-size: 11px; }
+.project-types-dialog .pt-reference-link .pt-reference-url:hover { color: #e7d1b8; }
+.project-types-dialog .pt-restore-references { justify-self: start; }

@@ -24,6 +24,38 @@ from sigma.projects import (
 from sigma.ui_instance import private_directory
 
 
+def _tighten_owned_state_directory(path: Path) -> None:
+    """Repair old local state directory modes without trusting paths or ownership.
+
+    Only a directory owned by this process is eligible. Use a descriptor to
+    prevent a symlink swap between verification and chmod.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return  # private_directory will create the directory.
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
+            raise ProjectError("Recent Projects state directory is not owned by SIGMA.")
+        if (info.st_mode & 0o777) != 0o700:
+            os.fchmod(fd, 0o700)
+    finally:
+        os.close(fd)
+
+
+def _check_index_file(fd: int) -> None:
+    """Tighten legacy owner-owned index files; reject unsafe file identities."""
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1:
+        raise ValueError("Unsafe Recent Projects file identity")
+    if info.st_mode & 0o077:
+        os.fchmod(fd, 0o600)
+        info = os.fstat(fd)
+    if info.st_mode & 0o077:
+        raise ValueError("Recent Projects file could not be made private")
+
+
 def state_directory() -> Path:
     from sigma import cloud_workspaces
     from sigma.storage import persistent_disk_enabled
@@ -63,6 +95,7 @@ def state_directory() -> Path:
     ):
         raise ProjectError("Application state must remain outside the checkout/project packages.")
     try:
+        _tighten_owned_state_directory(path)
         private_directory(path)
     except (OSError, RuntimeError):
         raise ProjectError("Recent Projects needs an owned private 0700 state directory.") from None
@@ -216,9 +249,7 @@ def _index():
             os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK,
             0o600,
         )
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
-            raise ValueError()
+        _check_index_file(descriptor)
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         path = directory / "recents.json"
         try:
@@ -233,13 +264,7 @@ def _index():
             }
         else:
             with os.fdopen(read_fd, encoding="utf-8") as stream:
-                info = os.fstat(stream.fileno())
-                if (
-                    not stat.S_ISREG(info.st_mode)
-                    or info.st_uid != os.getuid()
-                    or info.st_mode & 0o077
-                ):
-                    raise ValueError()
+                _check_index_file(stream.fileno())
                 raw = stream.read(1000001)
                 if len(raw) > 1000000:
                     raise ValueError()

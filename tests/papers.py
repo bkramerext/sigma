@@ -5904,7 +5904,11 @@ def main() -> None:
     with patch("sigma.api.export_project_view", return_value=evidence_export):
         normalized, fingerprint = papers._snapshot("unused")
     source_map = {source["id"]: source for source in normalized["sources"]}
-    assert source_map["project:pid"]["data"] == {"id": "pid", "title": "A project"}
+    project_source = source_map["project:pid"]["data"]
+    assert project_source["id"] == "pid" and project_source["title"] == "A project"
+    assert project_source["publication_reference_urls"] == [
+        reference["url"] for reference in project_source["publication_references"]
+    ]
     assert source_map["strategy:strat-1"]["data"] == evidence_export["project"]["strategies"][0]
     session_source = source_map["session:session-1"]["data"]
     assert session_source == {

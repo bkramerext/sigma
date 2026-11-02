@@ -251,8 +251,18 @@
         "mathematical": true,
         "lean": true
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Richard Hammack — Book of Proof (full text)",
+          "url": "https://richardhammack.github.io/BookOfProof/Main.pdf"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Keith Conrad — Advice on Mathematical Writing (full text)",
+          "url": "https://kconrad.math.uconn.edu/blurbs/proofs/writingtips.pdf"
+        }
+      ]
     },
     {
       "id": "military",
@@ -370,8 +380,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "NASEM — Assessing the Reliability of Complex Models",
+          "url": "https://www.nationalacademies.org/read/13395/chapter/2"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "IOP — Writing Your Journal Article",
+          "url": "https://publishingsupport.iopscience.iop.org/publishing-support/authors/authoring-for-journals/writing-journal-article/"
+        }
+      ]
     },
     {
       "id": "religion",
@@ -423,5 +443,27 @@
       "research_standards_references": [],
       "publication_standards_references": []
     }
-  ]
+  ],
+  "common_references": {
+    "research_standards_references": [
+      {
+        "name": "NASEM — Reproducibility and Replicability in Science (full report)",
+        "url": "https://www.nationalacademies.org/read/25303"
+      },
+      {
+        "name": "JBI — Manual for Evidence Synthesis (full text)",
+        "url": "https://jbi-global-wiki.refined.site/download/attachments/355599504/JBI%20Manual%20for%20Evidence%20Synthesis%202024.pdf"
+      }
+    ],
+    "publication_standards_references": [
+      {
+        "name": "PLOS ONE — Manuscript and Reporting Guidelines",
+        "url": "https://journals.plos.org/plosone/s/submission-guidelines"
+      },
+      {
+        "name": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/"
+      }
+    ]
+  }
 }

@@ -2696,6 +2696,7 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + guidance
         + " "
         + AMBIENT_RESEARCH_RUBRIC
+        + " Methodology reference URLs in context are uninspected pointers, not retrieved evidence; do not claim they were read. "
         + " Keep responses compact: do not duplicate open obligations or lengthy source text; "
         "retain the essential derivation and uncertainty, and fill every required JSON field. "
         + " For approved_continuation, inspect every selected source and return continuation_reviews exactly once per artifact_id. Use treatment negative_constraint for saved local refutations, unverified_input or method_to_test for other sources; no prior assertion is a certified premise. 'changed_plan' requires a concrete next_test and rationale; this is self-reported, not independently verified. A local counterexample blocks reuse of that candidate as established, not the project. Do not defer or reject a recorded counterexample; a revised candidate must state the changed scope. Distinguish stale/resolved duties, finite checks and conjectures. Never infer proof from prior agreement. "
@@ -4919,6 +4920,13 @@ async def start_session(
                 "project_title": view.project.title,
                 "investigation_type": view.project.investigation_type,
                 "project_type_snapshot": view.project.project_type_snapshot,
+                "research_method_references": list(
+                    current_type.research_standards_references
+                    if (current_type := project_types.get_type(view.project.investigation_type))
+                    else (view.project.project_type_snapshot or {}).get(
+                        "research_standards_references", []
+                    )
+                ),
                 "use_saved_project_type_settings": project_types.get_type(
                     view.project.investigation_type
                 )
@@ -6164,6 +6172,26 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
+    # Frozen at session start. URLs are methodological pointers, not externally
+    # inspected evidence; never pretend a linked document was read.
+    method_references = record.get("research_method_references")
+    if not isinstance(method_references, list):
+        method_references = record.get("research_method_reference_urls")
+    if not isinstance(method_references, list):
+        method_references = (record.get("project_type_snapshot") or {}).get(
+            "research_standards_references", []
+        )
+    if isinstance(method_references, list):
+        named = [
+            {"name": str(ref.get("name") or ref["url"]), "url": ref["url"]}
+            if isinstance(ref, dict) and isinstance(ref.get("url"), str)
+            else {"name": ref, "url": ref}
+            for ref in method_references[:20]
+            if isinstance(ref, str) or (isinstance(ref, dict) and isinstance(ref.get("url"), str))
+        ]
+        context["research_method_references"] = named
+        context["research_method_reference_urls"] = [ref["url"] for ref in named]
+        context["research_method_references_omitted"] = max(0, len(method_references) - 20)
     saved_type_context = _saved_project_type_context(record)
     if saved_type_context is not None:
         context["project_type_settings"] = saved_type_context

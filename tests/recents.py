@@ -480,6 +480,38 @@ def check(root: Path, base: Path) -> None:
     assert len(recent_projects()["projects"]) == 3
     assert inspect_project(first.path).project == edited.project
     assert all(path.read_bytes() == original for path, original in sources.items())
+    # Some pre-hardening local installations have owned 0755 state directories
+    # and 0644 index files. Reading Saved Projects must safely tighten them
+    # rather than incorrectly report a missing Recent Projects index.
+    previous_index = index_path.read_bytes()
+    state_path = state_directory()
+    lock_path = state_path / "recents.lock"
+    os.chmod(state_path, 0o755)
+    os.chmod(index_path, 0o644)
+    os.chmod(lock_path, 0o644)
+    assert recent_projects()["projects"]
+    assert state_path.stat().st_mode & 0o777 == 0o700
+    assert index_path.stat().st_mode & 0o777 == 0o600
+    assert lock_path.stat().st_mode & 0o777 == 0o600
+    assert index_path.read_bytes() == previous_index
+
+    # No automatic "repair" may follow a symlink or overwrite a foreign
+    # index. The saved bytes remain untouched if a symlink appears.
+    backup = state_path / "recents-preserved-backup.json"
+    index_path.rename(backup)
+    try:
+        index_path.symlink_to(backup)
+        try:
+            recent_projects()
+        except ProjectError as exc:
+            assert "index is unavailable" in str(exc)
+        else:
+            raise AssertionError("Symlinked Recent Projects index was accepted")
+        assert backup.read_bytes() == previous_index
+    finally:
+        index_path.unlink(missing_ok=True)
+        backup.rename(index_path)
+    assert recent_projects()["projects"]
     print(
         "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and unlimited recents"
     )
