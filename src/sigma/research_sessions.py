@@ -5374,7 +5374,8 @@ async def control_session(
                     # whose rejected attempts already fit their frozen call ceiling.
                     if record.get("provider_usage_limited") is not True or additional_calls:
                         raise ProjectError(
-                            plan_error or "This terminal session has no safe missing-role continuation."
+                            plan_error
+                            or "This terminal session has no safe missing-role continuation."
                         )
                 else:
                     available_calls = max(
@@ -5421,7 +5422,8 @@ async def control_session(
                         try:
                             increase_call_limit(
                                 record["hard_budget_ledger"],
-                                int(record["hard_budget_ledger"].get("call_limit", 0)) + additional_calls,
+                                int(record["hard_budget_ledger"].get("call_limit", 0))
+                                + additional_calls,
                             )
                         except BudgetExceeded as exc:
                             raise ProjectError(str(exc)) from exc
@@ -5430,7 +5432,11 @@ async def control_session(
                         record["call_limit"] = old_call_limit + additional_calls
                         record["total_token_limit"] = int(record.get("total_token_limit", 0)) + (
                             additional_calls
-                            * (MAX_AGENT_CONTEXT_BYTES + 65_536 + int(record.get("output_token_limit", 0)))
+                            * (
+                                MAX_AGENT_CONTEXT_BYTES
+                                + 65_536
+                                + int(record.get("output_token_limit", 0))
+                            )
                         )
                         record.setdefault("call_limit_adjustments", []).append(
                             {
@@ -5487,9 +5493,12 @@ async def control_session(
                     record["status"] = "paused"
                     record["stopped_at"] = record.get("stopped_at") or _now()
                     record["provider_usage_limited"] = bool(
-                        record.get("provider_usage_limited") or plan.get("had_provider_limit_rejection")
+                        record.get("provider_usage_limited")
+                        or plan.get("had_provider_limit_rejection")
                     )
-                    record["provider_limit_recovery_ready"] = bool(record.get("provider_usage_limited"))
+                    record["provider_limit_recovery_ready"] = bool(
+                        record.get("provider_usage_limited")
+                    )
                     record["protocol_completion_recovery_active"] = True
                     record["protocol_completion_required_calls"] = int(plan["required_calls"])
                     record["current_action"] = "Paused · protocol completion"
@@ -10908,8 +10917,7 @@ def _protocol_completion_recovery_plan(
         if isinstance(step, dict) and step.get("role") in {"investigator", "skeptic"}
     ]
     if any(
-        step.get("status") == "completed" and type(step.get("cycle")) is not int
-        for step in steps
+        step.get("status") == "completed" and type(step.get("cycle")) is not int for step in steps
     ):
         return None, "Accepted research turns contain a non-integer round number."
     completed = {
@@ -10992,9 +11000,7 @@ def _protocol_completion_recovery_plan(
             if sid == strategy_id and role in {"investigator", "skeptic"}
         }
         branch_expected = {
-            (role, cycle)
-            for cycle in target_cycles
-            for role in ("investigator", "skeptic")
+            (role, cycle) for cycle in target_cycles for role in ("investigator", "skeptic")
         }
         if branch_expected <= branch_completed:
             continue
