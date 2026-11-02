@@ -3276,8 +3276,10 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
         "title": "Nonconsecutive Subset Sums Modulo 3",
         "publication_references": official,
         "research_standards_references": [
-            {"name": "Research should not be read as publication guidance",
-             "url": "https://example.org/research-only"}
+            {
+                "name": "Research should not be read as publication guidance",
+                "url": "https://example.org/research-only",
+            }
         ],
     }
     calls: list[str] = []
@@ -3310,8 +3312,8 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
         changed = {
             **project,
             "publication_references": [
-                *official, {"name": "New official journal",
-                            "url": "https://example.org/new-official-methods"}
+                *official,
+                {"name": "New official journal", "url": "https://example.org/new-official-methods"},
             ],
         }
         count = len(calls)
@@ -3320,16 +3322,16 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
         assert refreshed[0]["reference_set_sha256"] != chosen[0]["reference_set_sha256"]
 
         no_config, mode = await paper_writing_sources.select(
-            {"investigation_type": "mathematical",
-             "title": "No official references",
-             "research_standards_references": official},
+            {
+                "investigation_type": "mathematical",
+                "title": "No official references",
+                "research_standards_references": official,
+            },
             fetch=fetch,
         )
         assert mode == "unavailable" and no_config == []
 
-        unavailable_items, mode = await paper_writing_sources.select(
-            project, fetch=unavailable
-        )
+        unavailable_items, mode = await paper_writing_sources.select(project, fetch=unavailable)
         assert mode == "unavailable" and unavailable_items == []
 
         # One inaccessible document cannot block valid writing guidance.
@@ -3338,9 +3340,7 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
 
         partial, mode = await paper_writing_sources.select(project, fetch=partial_fetch)
         assert mode == "selected" and len(partial) == 2
-        unchanged, mode = await paper_writing_sources.select(
-            project, partial, fetch=unavailable
-        )
+        unchanged, mode = await paper_writing_sources.select(project, partial, fetch=unavailable)
         assert mode == "reused" and unchanged == partial
 
     asyncio.run(check())
