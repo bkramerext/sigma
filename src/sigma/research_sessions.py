@@ -38,6 +38,7 @@ from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
 from sigma.research_budget import (
     BudgetExceeded,
+    authorize_independent_review_after_unknown,
     cancel_before_dispatch,
     increase_call_limit,
     mark_unknown,
@@ -5385,6 +5386,36 @@ async def control_session(
                             f"Completing the saved protocol needs {plan['required_calls']} new valid role turns, "
                             f"but only {available_calls} attempts remain. Resume with exactly "
                             f"{required_extension} explicitly authorized additional attempts; no counters were changed."
+                        )
+                    ledger = record.get("hard_budget_ledger")
+                    if isinstance(ledger, dict) and ledger.get("blocked_reason"):
+                        review_ids = {
+                            step["id"]
+                            for step in record.get("steps", [])
+                            if isinstance(step, dict)
+                            and isinstance(step.get("id"), str)
+                            and step.get("status") == "interrupted"
+                            and step.get("role") == "skeptic"
+                            and step.get("failure_kind") == "interrupted"
+                            and isinstance(step.get("provider_input_audit"), dict)
+                            and step["provider_input_audit"].get("status")
+                            == "call_interrupted_dispatch_unknown"
+                            and any(
+                                step["id"] in item["recovery_context"]["prior_attempt_ids"]
+                                for item in plan["branches"]
+                            )
+                        }
+                        try:
+                            authorize_independent_review_after_unknown(
+                                ledger, uncertain_call_ids=review_ids
+                            )
+                        except BudgetExceeded as exc:
+                            raise ProjectError(str(exc)) from exc
+                        _event(
+                            record,
+                            "session.unknown_review_budget_gate_reconciled",
+                            "An explicit independent Skeptic recovery was authorized. "
+                            "Every unknown attempt retains its full token and cost reservations.",
                         )
                     if additional_calls and isinstance(record.get("hard_budget_ledger"), dict):
                         try:
