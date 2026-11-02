@@ -1773,9 +1773,9 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
     for diagnostic in (
         "Claim status and evidence",
         "Claims discussed:",
-        "Frozen obligation reconciliation",
+        "Issues found (diagnostic data)",
         "Structured reasoning and review records",
-        "Validation warnings",
+        "Validation:",
         "Snapshot SHA-256",
         "Research style:",
         "About this paper",
@@ -3116,7 +3116,7 @@ def test_structured_fast_index_preserves_math_review_and_bounds_omissions() -> N
         include_research_excerpts=True,
         obligation_reconciliation=unresolved,
     )
-    assert r"\section{Frozen obligation reconciliation}" in rendered
+    assert r"\section{Issues found (diagnostic data)}" in rendered
     assert r"\section{Selected source-linked research excerpts}" in rendered
     assert "not presumed resolved" in rendered
 
@@ -6859,7 +6859,7 @@ def main() -> None:
         "a" * 64,
         obligation_reconciliation=reconciliation,
     )
-    assert r"\section{Frozen obligation reconciliation}" in reconciled_tex
+    assert r"\section{Issues found (diagnostic data)}" in reconciled_tex
     assert "Frozen obligation 11" in reconciled_tex
     listed = papers._reconcile_obligations(
         parsed.model_copy(update={"open_obligations": ["  Frozen   obligation 0 "]}),
