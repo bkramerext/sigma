@@ -3780,12 +3780,12 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? (group.type === 'pinned' ? true : savedHomeGroupOpen('recent', groupKey));
       const hiddenRunningProject = !groupExpanded && group.projects.some(entry => entry.research_running);
-      return <details className="recent-type-group" key={groupKey} open={groupExpanded} onToggle={event => {
+      return <details className={`recent-type-group${group.type === 'pinned' ? ' pinned-type-group' : ''}`} key={groupKey} open={groupExpanded} onToggle={event => {
         const isOpen = event.currentTarget.open;
         try { window.localStorage.setItem(`sigma.home.recentGroup:${groupKey}`, String(isOpen)); } catch { /* Preserve state when storage is available. */ }
         setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
       }}>
-      <summary>{group.type !== 'pinned' && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{group.type === 'pinned' ? 'Pinned' : researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
+      <summary>{group.type === 'pinned' ? <span className="recent-pin-icon" aria-hidden="true">★</span> : <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{group.type === 'pinned' ? 'Pinned' : researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
