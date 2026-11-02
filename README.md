@@ -33,7 +33,7 @@ SIGMA supports ordinary local use without a Google account, local testing of Goo
 
 ## Example Outcome Papers
 
-Five examples of the research SIGMA can preserve and communicate, spanning proven arguments, partial results, and carefully stated hypotheses. **These papers are experimental AI-generated work, not independently verified publications.** Each PDF is accompanied by its [TeX source](papers/).
+These papers are **proofs of concept**, demonstrating what SIGMA can produce today rather than its intended final quality. Research and paper authoring remain works in progress; further improvements to SIGMA are expected to improve the clarity, rigor, and presentation of future papers. **These examples are experimental AI-generated work, not independently verified publications.** Each PDF is accompanied by its [TeX source](papers/).
 
 | | |
 | :--- | :--- |
