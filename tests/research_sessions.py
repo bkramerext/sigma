@@ -847,17 +847,16 @@ def test_project_type_research_references_replace_keyword_catalog(monkeypatch):
     from sigma import project_types, research_method_sources
 
     monkeypatch.setattr(project_types, "custom_types", list)
-    for mode in ("computer_science", "mathematical", "biology", "physics"):
+    for mode in (item.id for item in project_types.builtin_types()):
         selected = research_method_sources.select_method_sources(
             mode, "Unrelated title", "unrelated subject", (), ()
         )
         assert selected["status"] == "selected"
         assert selected["branch"] is None
-        expected_count = 3 if mode in ("mathematical", "physics") else 2
-        assert len(selected["sources"]) == expected_count
-        assert [item["tier"] for item in selected["sources"]] == (
-            ["general", "general", "discipline"] if expected_count == 3 else ["general", "general"]
-        )
+        assert len(selected["sources"]) == 3, mode
+        assert [item["tier"] for item in selected["sources"]] == [
+            "general", "general", "discipline"
+        ]
         assert all(item["project_type_id"] == "common" for item in selected["sources"][:2])
         assert all(item["project_type_id"] == mode for item in selected["sources"][2:])
         assert selected["advisory"] is None
