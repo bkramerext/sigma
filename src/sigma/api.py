@@ -2000,4 +2000,19 @@ def forget_recent_view(body: ForgetRecentRequest, path: str | None = None):
     return {"forgotten": True}
 
 
+class PinRecentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_id: str
+    path: str
+    pinned: bool
+
+
+@app.post("/api/projects/recent/pin")
+def pin_recent_view(body: PinRecentRequest):
+    from sigma.recents import set_recent_pin
+
+    set_recent_pin(body.project_id, body.path, body.pinned)
+    return {"pinned": body.pinned}
+
+
 app.include_router(cloud_auth.router)
