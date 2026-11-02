@@ -1459,6 +1459,9 @@ def update_project(
 
     edit = ("project", text_format) if text_format else None
     if wanted.title != prior.title:
+        from sigma.recents import assert_project_unpinned
+
+        assert_project_unpinned(inspect_project(value).project.id)
         with _title_registry_lock(projects_root()):
             return _update_project(value, update, edit)
     return _update_project(value, update, edit)

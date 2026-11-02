@@ -3697,7 +3697,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; pin_state: 'pin_remove' | 'unpin' | 'remove'; hidden_by_family_pin: boolean; error: string | null };
 type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
@@ -3756,7 +3756,17 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
-  const recentGroups = projects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+  async function togglePin(entry: RecentProject) {
+    if (pending.current || !entry.available) return;
+    pending.current = true; setOpening(entry.id); setError(''); setConfirmRemoveId('');
+    try {
+      await post('pin', { project_id: entry.id, path: entry.path, pinned: entry.pin_state === 'pin_remove' });
+      await load();
+    } catch (error) { setError(errorMessage(error)); }
+    finally { pending.current = false; setOpening(''); }
+  }
+  const visibleProjects = projects.filter(project => !project.hidden_by_family_pin);
+  const recentGroups = visibleProjects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
@@ -3764,7 +3774,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     return groups;
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
-    {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
+    {loading ? <p role="status">Loading recent projects…</p> : !visibleProjects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
@@ -3779,13 +3789,14 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         <div className="recent-entry">
           <div className="recent-title-row">
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
+            {entry.pin_state === 'unpin' && <span className="recent-pin-indicator" title="Selected project for paper-generation testing">Pinned for papers</span>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Saved Projects`} aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove from Saved Projects; keep all research" onClick={event => {
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{entry.pin_state !== 'remove' && <button type="button" className="recent-pin" disabled={(!entry.available && entry.pin_state !== 'unpin') || !!opening} aria-label={`${entry.pin_state === 'unpin' ? 'Unpin' : 'Pin'} ${entry.title} for paper generation`} title={entry.pin_state === 'unpin' ? 'Unpin for paper generation' : 'Pin for paper-generation testing'} onClick={() => void togglePin(entry)}>{entry.pin_state === 'unpin' ? 'Unpin' : 'Pin'}</button>}{entry.pin_state !== 'unpin' && <button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Saved Projects`} aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove from Saved Projects; keep all research" onClick={event => {
             if (confirmRemoveId === entry.id) { setConfirmRemoveId(''); return; }
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}>Remove</button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
+          }}>Remove</button>}{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
           <span title={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
