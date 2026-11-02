@@ -139,8 +139,12 @@ class ProjectTypeBody(BaseModel):
     based_on: str | None = Field(default=None, max_length=100)
     user_defined: bool = True
     icon: dict[str, Any]
-    research_standards_references: list[str | dict[str, str]] = Field(default_factory=list, max_length=100)
-    publication_standards_references: list[str | dict[str, str]] = Field(default_factory=list, max_length=100)
+    research_standards_references: list[str | dict[str, str]] = Field(
+        default_factory=list, max_length=100
+    )
+    publication_standards_references: list[str | dict[str, str]] = Field(
+        default_factory=list, max_length=100
+    )
     origin: str | None = None
     behavior: dict[str, bool] = Field(default_factory=dict)
 
@@ -183,6 +187,7 @@ def list_project_types_view(request: Request):
         "icons": {"placeholder": project_types.placeholder_icon()},
         "revision": project_types.catalog_revision(),
     }
+
 
 @app.get("/api/reference-title")
 def reference_title_view(url: str):
