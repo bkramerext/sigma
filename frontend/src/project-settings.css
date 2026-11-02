@@ -381,8 +381,10 @@
 .project-settings-dialog.ai-paper-dialog .saved-paper-score-star:hover,
 .project-settings-dialog.ai-paper-dialog .saved-paper-score-star:focus-visible { color: #f5d593; }
 .project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:not(.saved-paper-expand) {
-  display: inline-flex; align-items: center; justify-content: flex-start;
-  width: auto; min-width: 22px; min-height: 28px; padding: 0; margin: 0;
+  position: relative; display: inline-flex; flex: 0 0 22px;
+  align-items: center; justify-content: center;
+  width: 22px; min-width: 22px; height: 28px; min-height: 28px;
+  padding: 0; margin: 0; overflow: visible;
   border: 0; background: transparent; box-shadow: none;
   color: #c88761; line-height: 1; text-decoration: none; cursor: pointer;
 }
@@ -392,7 +394,11 @@
 }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
-.project-settings-dialog.ai-paper-dialog .ai-paper-explaining { font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-explaining {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap; text-decoration: none; pointer-events: none;
+}
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-thanks { width: auto; padding: 0; margin: 0; font-size: 13px; }
 .ai-paper-eli5-output { max-width: 75ch; line-height: 1.65; }
 
