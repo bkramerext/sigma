@@ -52,12 +52,14 @@ def main() -> None:
         assert len(item.research_standards_references) == 1
         assert len(item.publication_standards_references) == 1
         for field in project_types.REFERENCE_FIELDS:
-            assert all(ref["name"] and ref["url"].startswith("https://") for ref in getattr(item, field))
+            assert all(
+                ref["name"] and ref["url"].startswith("https://") for ref in getattr(item, field)
+            )
         effective = project_types.get_type(identifier)
         assert effective is not None
         for field in project_types.REFERENCE_FIELDS:
             assert len(getattr(effective, field)) == 3
-            assert set(ref["url"] for ref in common[field]) <= {
+            assert {ref["url"] for ref in common[field]} <= {
                 ref["url"] for ref in getattr(effective, field)
             }
     for identifier, item in builtins_by_id.items():
@@ -78,9 +80,11 @@ def main() -> None:
                 json={
                     "project_types": [],
                     "expected_revision": before["revision"],
-                    "reference_preferences": {"common": {"hidden_research": [
-                        common["research_standards_references"][0]["url"]
-                    ]}},
+                    "reference_preferences": {
+                        "common": {
+                            "hidden_research": [common["research_standards_references"][0]["url"]]
+                        }
+                    },
                 },
             )
             assert rejected.status_code == 422, rejected.text
@@ -230,11 +234,15 @@ def main() -> None:
             ]
             named_response = client.put(
                 "/api/project-types",
-                json={"project_types": [clean, named], "expected_revision": clean_response.json()["revision"]},
+                json={
+                    "project_types": [clean, named],
+                    "expected_revision": clean_response.json()["revision"],
+                },
             )
             assert named_response.status_code == 200, named_response.text
             saved_named = next(
-                item for item in named_response.json()["project_types"]
+                item
+                for item in named_response.json()["project_types"]
                 if item["id"] == "named-reference"
             )
             assert saved_named["research_standards_references"] == [
