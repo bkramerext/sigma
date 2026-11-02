@@ -386,3 +386,10 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .project-google-signin .google-identity-lines { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 0; line-height: 1.3; }
 .project-google-signin .google-identity-lines > span:first-child { color: #e0d0c8; font-weight: 600; }
 .project-google-signin .google-identity-lines > span:last-child { color: #c9b18f; font-size: 10px; }
+
+/* Sample showcase annotations reuse the Saved Projects star, never pin controls. */
+.home-page .home-samples .recent-title-star {
+  display: inline-flex; align-items: center; vertical-align: middle;
+  margin-right: 6px; padding: 0; border: 0; background: transparent;
+  color: #f4cc69; font-size: 16px; cursor: pointer;
+}
