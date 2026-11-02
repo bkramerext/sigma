@@ -5701,8 +5701,23 @@ def test_combined_visual_schema_and_safe_tex_rendering() -> None:
     assert r"Campus \&" in tex
     assert "Proposed campus trust boundary" in tex
     assert r"\node[boundary,fit=(campus)(policy)" in tex
-    assert r"\begin{longtable}" in tex
+    assert r"\begin{tabular}{" in tex
+    assert r"\begin{longtable}" not in tex
     assert "Evidence: [project:pid]; claims: C1" in tex
+    # Larger comparisons must still use the multipage table path and preserve
+    # the same source attribution as compact tables.
+    long_table = table.model_copy(update={"rows": table.rows * 3})
+    long_paper = paper.model_copy(
+        update={
+            "sections": [
+                paper.sections[0].model_copy(update={"tables": [long_table]}),
+                paper.sections[1],
+            ]
+        }
+    )
+    long_tex = papers._tex(long_paper, [], "a" * 64)
+    assert r"\begin{longtable}{" in long_tex
+    assert "Evidence: [project:pid]; claims: C1" in long_tex
     assert papers._validate(paper, {"sources": [{"id": "project:pid", "data": {}}]})
     visual_free = papers._without_optional_visuals(paper)
     assert visual_free.diagrams == []
