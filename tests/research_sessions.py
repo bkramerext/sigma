@@ -987,10 +987,10 @@ def test_research_methodology_outcome_is_not_claimed_as_independent_science():
     assert outcome["source_material"] == selected
     assert outcome["source_material"]["status"] == "selected"
     assert "verification_label" in outcome
-    assert {r["id"] for r in outcome["source_material"]["sources"]} == {
-        "nasem-scientific-methods",
-        "nasem-physical-models",
-        "tong-einstein-equations",
+    assert {r["url"] for r in outcome["source_material"]["sources"]} == {
+        "https://www.nationalacademies.org/read/25303",
+        "https://jbi-global-wiki.refined.site/download/attachments/355599504/JBI%20Manual%20for%20Evidence%20Synthesis%202024.pdf",
+        "https://www.nationalacademies.org/read/13395/chapter/2",
     }
 
 
