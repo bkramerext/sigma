@@ -7216,6 +7216,7 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
         seen: dict[tuple[str, int, str], dict[str, Any]] = {}
         slow_investigator_active = False
         fast_skeptic_overlapped_slow_investigator = False
+        fast_skeptic_entered = asyncio.Event()
 
         async def handler(request):
             nonlocal slow_investigator_active, fast_skeptic_overlapped_slow_investigator
@@ -7247,12 +7248,18 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             if title == first.title and cycle == 1 and role == "research_investigator":
                 slow_investigator_active = True
                 try:
-                    await asyncio.sleep(0.06)
+                    if name == "parallel":
+                        # A handshake makes the intended overlap deterministic
+                        # even on a busy CI runner; a fixed sleep is racy.
+                        await asyncio.wait_for(fast_skeptic_entered.wait(), timeout=5)
+                    else:
+                        await asyncio.sleep(0.06)
                 finally:
                     slow_investigator_active = False
             elif title == second.title and cycle == 1 and role == "research_skeptic":
                 if slow_investigator_active:
                     fast_skeptic_overlapped_slow_investigator = True
+                fast_skeptic_entered.set()
                 await asyncio.sleep(0.002)
             else:
                 await asyncio.sleep(0.002)
