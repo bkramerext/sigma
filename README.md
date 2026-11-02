@@ -35,11 +35,20 @@ SIGMA supports ordinary local use without a Google account, local testing of Goo
 
 These papers are **proofs of concept**, demonstrating what SIGMA can produce today rather than its intended final quality. Research and paper authoring remain works in progress; further improvements to SIGMA are expected to improve the clarity, rigor, and presentation of future papers. **These examples are experimental AI-generated work, not independently verified publications.** Each PDF is accompanied by its [TeX source](papers/).
 
-| | |
-| :--- | :--- |
-| **<img src="papers/icons/mathematics.svg" width="22" height="22" alt="Mathematics" /> Mathematics · Easy · [Maximum Regions by Lines](papers/maximum-regions.pdf)**<br><br>A complete geometric argument for the greatest number of regions formed by straight lines, including an explicit construction attaining the bound. | **<img src="papers/icons/mathematics.svg" width="22" height="22" alt="Mathematics" /> Mathematics · Hard · [Nonconsecutive Subset Sums](papers/nonconsecutive-subset-sums.pdf)**<br><br>Exact enumeration and a corrected combinatorial identity, with an unproved recurrence and density limit clearly identified. TeX formatting was manually repaired for this example. |
-| **<img src="papers/icons/biology.svg" width="22" height="22" alt="Biology" /> Biology · Hard · [Xenopus Tail Regeneration](papers/xenopus-tail-regeneration.pdf)**<br><br>A testable hypothesis about the developmental loss of regeneration competence, distinguishing what existing data might show from what remains untested. | **<img src="papers/icons/military.svg" width="22" height="22" alt="Military planning" /> Military planning · Hard · [Operation Narrow Passage](papers/operation-narrow-passage.pdf)**<br><br>Conditional analysis of a fictional maritime crisis: competing objectives, uncertainty, and why no response can be guaranteed to succeed. |
-| **<img src="papers/icons/physics.svg" width="22" height="22" alt="Physics" /> Physics · Hard · [Warp Drive Design](papers/warp-drive.pdf)**<br><br>A conditional general-relativistic analysis of a spherical shift bubble, including a negative-energy lower bound and a subluminal travel-time comparison. No realizable propulsion mechanism is claimed. | |
+<table>
+<tr>
+<td width="50%" valign="top"><p><img src="papers/icons/mathematics.svg" width="20" height="20" alt="" /> <strong>Mathematics · Easy</strong></p><p><strong><a href="papers/maximum-regions.pdf">Maximum Regions by Lines</a></strong> · <a href="papers/maximum-regions.tex">TeX</a></p><p>A geometric proof of the maximum number of regions formed by lines.</p></td>
+<td width="50%" valign="top"><p><img src="papers/icons/mathematics.svg" width="20" height="20" alt="" /> <strong>Mathematics · Hard</strong></p><p><strong><a href="papers/nonconsecutive-subset-sums.pdf">Nonconsecutive Subset Sums</a></strong> · <a href="papers/nonconsecutive-subset-sums.tex">TeX</a></p><p>Exact counts and a corrected identity; the proposed recurrence remains unproved.</p></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><p><img src="papers/icons/biology.svg" width="20" height="20" alt="" /> <strong>Biology · Hard</strong></p><p><strong><a href="papers/xenopus-tail-regeneration.pdf">Xenopus Tail Regeneration</a></strong> · <a href="papers/xenopus-tail-regeneration.tex">TeX</a></p><p>A testable hypothesis distinguishing current evidence from open questions.</p></td>
+<td width="50%" valign="top"><p><img src="papers/icons/military.svg" width="20" height="20" alt="" /> <strong>Military planning · Hard</strong></p><p><strong><a href="papers/operation-narrow-passage.pdf">Operation Narrow Passage</a></strong> · <a href="papers/operation-narrow-passage.tex">TeX</a></p><p>Conditional analysis of a fictional crisis, competing objectives, and uncertainty.</p></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><p><img src="papers/icons/physics.svg" width="20" height="20" alt="" /> <strong>Physics · Hard</strong></p><p><strong><a href="papers/warp-drive.pdf">Warp Drive Design</a></strong> · <a href="papers/warp-drive.tex">TeX</a></p><p>A general-relativistic shift-bubble analysis, without claiming practical propulsion.</p></td>
+<td width="50%" valign="top"><p><img src="papers/icons/physics.svg" width="20" height="20" alt="" /> <strong>Physics · Hard</strong></p><p><strong><a href="papers/when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1.pdf">Qubit Decoherence and Non-Markovian Models</a></strong> · <a href="papers/when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1.tex">TeX</a></p><p>When observed coherence decay can distinguish memory effects from alternatives.</p></td>
+</tr>
+</table>
 
 ### Screenshots
 
