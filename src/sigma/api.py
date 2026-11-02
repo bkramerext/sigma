@@ -580,6 +580,7 @@ class PaperGenerateRequest(OpenRequest):
     include_claim_details: bool = False
     include_validation_notes: bool = False
     include_research_excerpts: bool = False
+    include_sigma_issues: bool = False
     # Keep the request name for compatibility; this selects both visual types.
     include_diagrams: bool = True
 
@@ -754,6 +755,30 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
     }
 
 
+@app.post("/api/projects/papers/{paper_id}/eli5")
+async def paper_eli5_view(paper_id: str, body: PaperScoreRequest):
+    from sigma.paper_eli5 import explain
+
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    try:
+        markdown = await explain(
+            body.path, paper_id, body.expected_binding, body.expected_project_id
+        )
+    except ProjectError:
+        raise
+    except Exception:
+        logging.getLogger(__name__).exception("Unexpected ELI5 explanation failure")
+        return JSONResponse(
+            {
+                "error": "The explanation failed unexpectedly. Please retry or inspect the server logs."
+            },
+            status_code=500,
+        )
+    return {"markdown": markdown}
+
+
 @app.get("/api/projects/papers/{paper_id}/pdf")
 def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
     disposition = "inline" if open_in_browser else "attachment"
@@ -840,6 +865,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             include_claim_details=body.include_claim_details,
             include_validation_notes=body.include_validation_notes,
             include_research_excerpts=body.include_research_excerpts,
+            include_sigma_issues=body.include_sigma_issues,
             include_diagrams=body.include_diagrams,
         )
     )
@@ -2042,6 +2068,20 @@ def pin_project_view(body: ProjectPinRequest):
 def pin_recent_project_view(body: ProjectPinRequest):
     """Compatibility route for the in-category Saved Projects pin UI."""
     return pin_project_view(body)
+
+
+@app.get("/api/projects/samples/{sample_id}/top-paper/pdf")
+def sample_top_paper_pdf_view(sample_id: str):
+    from sigma.samples import top_sample_pdf
+
+    return Response(
+        top_sample_pdf(sample_id),
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": 'inline; filename="sigma-sample-paper.pdf"',
+        },
+    )
 
 
 @app.get("/api/projects/samples")

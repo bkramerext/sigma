@@ -1340,7 +1340,7 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert all(not section["tables"] for section in saved["draft"]["sections"])
         assert r"\usepackage{tikz}" not in saved["tex_source"]
         assert r"\begin{longtable}" not in saved["tex_source"]
-        assert r"\section*{About this paper}" in saved["tex_source"]
+        assert r"\begin{abstract}" in saved["tex_source"]
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
         first_stages = [event["stage"] for event in first_events if event["state"] == "active"]
@@ -1517,7 +1517,8 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         table = papers.PaperTable(
             caption="Bounded evidence summary for the saved project.",
             headers=["Record", "Status", "Note"],
-            rows=[["Project question", "Saved", "Frozen"]],
+            # Exercise the longtable fallback rather than the compact-table path.
+            rows=[[f"Project question {index}", "Saved", "Frozen"] for index in range(6)],
             evidence_refs=[project_ref],
             claim_ids=["C1"],
         )
@@ -1758,6 +1759,8 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
         ["A validator recorded an unsupported citation."],
         snapshot,
         include_research_details=True,
+        include_claim_details=True,
+        include_validation_notes=True,
         include_research_excerpts=True,
         **opts,
     )
@@ -1771,20 +1774,19 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
     ):
         assert required in concise and required in detailed, required
     for diagnostic in (
-        "Claim status and evidence",
-        "Claims discussed:",
-        "Issues found (diagnostic data)",
-        "Structured reasoning and review records",
+        r"\section{Claim and source notes}",
+        r"\section{Issues found (diagnostic data)}",
+        r"\section{Structured reasoning and review records}",
+        r"\section{Editorial writing sources}",
         "Validation:",
         "Snapshot SHA-256",
-        "Research style:",
-        "About this paper",
+        r"\section*{Evidence and authorship note}",
     ):
         assert diagnostic not in concise, diagnostic
         assert diagnostic in detailed, diagnostic
     assert "Confirm the missing proof step." not in concise
     assert "Confirm the missing proof step." in detailed
-    assert r"\section*{Authorship note}" in concise
+    assert r"\section*{Evidence and authorship note}" not in concise
 
 
 def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
@@ -1841,6 +1843,7 @@ def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
         "f" * 64,
         math_style=True,
         include_research_details=True,
+        include_validation_notes=True,
         include_research_excerpts=True,
         integrity_records=integrity,
         integrity_excerpts=True,
@@ -2005,7 +2008,9 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 include_validation_notes,
                 include_research_excerpts,
                 include_diagrams,
+                include_sigma_issues,
             ):
+                assert include_sigma_issues is False
                 assert include_research_details is False
                 assert include_claim_details is False
                 assert include_validation_notes is False
@@ -3114,6 +3119,7 @@ def test_structured_fast_index_preserves_math_review_and_bounds_omissions() -> N
         ],
         integrity_excerpts=True,
         include_research_excerpts=True,
+        include_validation_notes=True,
         obligation_reconciliation=unresolved,
     )
     assert r"\section{Issues found (diagnostic data)}" in rendered
@@ -3254,10 +3260,13 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     for research_type, (heading, guidance) in expected.items():
         tex = papers._tex(draft(), [], "f" * 64, investigation_type=research_type)
         assert rf"\section{{{heading}}}" in tex
-        assert guidance in tex
-    math_tex = papers._tex(draft(), [], "f" * 64, math_style=True)
+        # Writing instructions guide generation; they must not leak into the
+        # reader-facing paper as a boilerplate paragraph.
+        assert guidance in papers._paper_style(research_type)[3]
+        assert guidance not in tex
+    math_tex = papers._tex(draft(), [], "f" * 64, math_style=True, include_claim_details=True)
     assert r"\section{Introduction}" in math_tex
-    assert r"\section*{Claim status and evidence}" in math_tex
+    assert r"\section{Claim and source notes}" in math_tex
 
 
 def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures() -> None:
@@ -3382,12 +3391,21 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
         "excerpt": "A source excerpt used only for writing.",
         "sha256": "a" * 64,
     }
-    tex = papers._tex(draft(), [], "f" * 64, writing_sources=[source])
-    assert r"\section*{Paper writing source material used}" in tex
+    # Editorial sources are recorded but kept out of normal reader-facing PDFs.
+    default_tex = papers._tex(draft(), [], "f" * 64, writing_sources=[source])
+    assert r"\section{Editorial writing sources}" not in default_tex
+    assert "Writing Mathematics" not in default_tex
+
+    # When validation notes are explicitly requested, sources are disclosed as
+    # writing-method guidance and distinguished from scientific evidence.
+    tex = papers._tex(
+        draft(), [], "f" * 64, writing_sources=[source], include_validation_notes=True
+    )
+    assert r"\section{Editorial writing sources}" in tex
     assert "Writing Mathematics" in tex
     assert r"\url{https://example.org/writing-math}" in tex
     assert "not the scientific evidence or findings" in tex
-    empty_tex = papers._tex(draft(), [], "f" * 64, writing_sources=[])
+    empty_tex = papers._tex(draft(), [], "f" * 64, include_validation_notes=True)
     assert "No external writing-guidance sources were recorded." in empty_tex
 
 
@@ -5700,8 +5718,24 @@ def test_combined_visual_schema_and_safe_tex_rendering() -> None:
     assert r"\input{secret}" not in tex
     assert r"Campus \&" in tex
     assert "Proposed campus trust boundary" in tex
-    assert r"\begin{longtable}" in tex
+    assert r"\node[boundary,fit=(campus)(policy)" in tex
+    assert r"\begin{tabular}{" in tex
+    assert r"\begin{longtable}" not in tex
     assert "Evidence: [project:pid]; claims: C1" in tex
+    # Larger comparisons must still use the multipage table path and preserve
+    # the same source attribution as compact tables.
+    long_table = table.model_copy(update={"rows": table.rows * 3})
+    long_paper = paper.model_copy(
+        update={
+            "sections": [
+                paper.sections[0].model_copy(update={"tables": [long_table]}),
+                paper.sections[1],
+            ]
+        }
+    )
+    long_tex = papers._tex(long_paper, [], "a" * 64)
+    assert r"\begin{longtable}{" in long_tex
+    assert "Evidence: [project:pid]; claims: C1" in long_tex
     assert papers._validate(paper, {"sources": [{"id": "project:pid", "data": {}}]})
     visual_free = papers._without_optional_visuals(paper)
     assert visual_free.diagrams == []
@@ -6291,9 +6325,21 @@ def test_review_fallback_question_and_tex_safety() -> None:
     )
     assert r"\section{Selected source-linked research excerpts}" not in tex
     assert r"\section{Structured reasoning and review records}" not in tex
-    assert r"\section*{About this paper}" in tex
-    assert r"\begin{sloppypar}" in tex
-    assert r"\end{sloppypar}" in tex
+    # Research detail is not permission to append the claim audit ledger.
+    assert r"\section{Claim and source notes}" not in tex
+    assert r"\section*{Evidence and authorship note}" not in tex
+    with_claims = papers._tex(
+        draft(),
+        [],
+        "a" * 64,
+        integrity_records=[{"kind": "research", "description": "Saved private artifact"}],
+        include_research_details=True,
+        include_claim_details=True,
+        include_research_excerpts=False,
+    )
+    assert r"\section{Claim and source notes}" in with_claims
+    assert r"\begin{sloppypar}" in with_claims
+    assert r"\end{sloppypar}" in with_claims
 
 
 def test_review_fallback_rejects_process_text_as_claim() -> None:
@@ -6743,11 +6789,13 @@ def main() -> None:
         include_research_excerpts=True,
     )
     assert r"\section{Structured reasoning and review records}" in integrity_tex
-    assert r"\section*{Evidence coverage limitation}" in integrity_tex
-    opening_heading = papers._paper_style("default")[0]
-    assert integrity_tex.index("Evidence coverage limitation") < integrity_tex.index(
-        r"\section{" + opening_heading + "}"
-    )
+    # Coverage is disclosed as short manuscript prose, not as a standalone
+    # boilerplate section ahead of the research question.
+    notice = "Unreviewed records could affect its conclusions"
+    assert notice in integrity_tex
+    methods_heading = papers._paper_style("default")[1]
+    assert integrity_tex.index(r"\section{" + methods_heading + "}") < integrity_tex.index(notice)
+    assert "Evidence coverage limitation" not in integrity_tex
     material = papers._material_evidence_omissions(
         [
             {"field": "data/id", "source_ref": "artifact:math-session:proof"},
@@ -6770,8 +6818,8 @@ def main() -> None:
     limited_math_tex = papers._tex(
         limited, [], "d" * 64, math_style=True, material_omissions=material
     )
-    assert "Evidence coverage limitation" in limited_math_tex
-    assert "were not reviewed for this paper" in limited_math_tex
+    assert "Unreviewed records could affect its conclusions" in limited_math_tex
+    assert "full omission ledger remains available with the generation record" in limited_math_tex
     assert original_abstract in limited_math_tex
     assert original_conclusions[0] in limited_math_tex
 
@@ -6858,6 +6906,7 @@ def main() -> None:
         [],
         "a" * 64,
         obligation_reconciliation=reconciliation,
+        include_validation_notes=True,
     )
     assert r"\section{Issues found (diagnostic data)}" in reconciled_tex
     assert "Frozen obligation 11" in reconciled_tex
@@ -6873,27 +6922,36 @@ def main() -> None:
         assert "unknown evidence IDs" in str(exc)
     else:
         raise AssertionError("Unknown evidence references must be rejected")
-    tex = papers._tex(parsed, warnings, "a" * 64)
+    tex = papers._tex(parsed, warnings, "a" * 64, include_validation_notes=True)
     assert r"AI-generated research synthesis \textperiodcentered{} SIGMA" in tex
-    assert r"\section*{About this paper}" in tex
-    about_start = tex.index(r"\section*{About this paper}")
-    assert about_start < tex.index(r"\section{" + papers._paper_style("default")[0] + "}")
-    assert (
-        "This paper was generated by SIGMA, an AI-assisted research system, from the project's recorded investigations, findings, and supporting evidence."
-        in tex
-    )
-    assert "The analysis and conclusions reflect an automated synthesis of that research." in tex
-    assert (
-        "Readers should evaluate its arguments, supporting evidence, and stated limitations before relying on its conclusions."
-        in tex
+    assert r"\section*{Evidence and authorship note}" in tex
+    assert r"Snapshot SHA-256:" in tex
+    assert "This document is not independent verification." in tex
+    assert tex.index(r"\section{" + papers._paper_style("default")[0] + "}") < tex.index(
+        r"\section*{Evidence and authorship note}"
     )
     assert r"\frac{n(n+1)}{2}" in tex
     assert r"\textbackslash{}input" not in tex
     notation = papers._latex_prose(r"Let $R(\mathcal{A})$ denote the region count.")
     assert r"$R(\mathcal{A})$" in notation
     assert r"\textbackslash{}mathcal" not in notation
+    # Render formulas from the reader-facing article, not from the opt-in
+    # claim ledger. Claim reasoning is retained in the paper record.
     formula_draft = parsed.model_copy(
         update={
+            "sections": [
+                parsed.sections[0].model_copy(
+                    update={
+                        "paragraphs": [
+                            (
+                                r"The count is $R(n)=1+\sum_{j=1}^n j²$. "
+                                r"The line family lies in $\mathbb{R}^2$."
+                            )
+                        ]
+                    }
+                ),
+                *parsed.sections[1:],
+            ],
             "claims": [
                 parsed.claims[0].model_copy(
                     update={
@@ -6901,24 +6959,25 @@ def main() -> None:
                         "reasoning": r"The line family lies in $\mathbb{R}^2$.",
                     }
                 )
-            ]
+            ],
         }
     )
     formula_tex = papers._tex(formula_draft, warnings, "a" * 64, math_style=True)
+    assert r"\section{Claim and source notes}" not in formula_tex
     assert r"$R(n)=1+\sum_{j=1}^n j^{2}$" in formula_tex
     assert r"$\mathbb{R}^2$" in formula_tex
     assert r"\textbackslash{}sum" not in formula_tex
     assert r"\textbackslash{}mathbb" not in formula_tex
     unicode_superscript = papers._latex_prose("The saved construction uses j².")
     assert "$j^{2}$" in unicode_superscript
-    math_tex = papers._tex(parsed, warnings, "a" * 64, math_style=True)
+    math_tex = papers._tex(parsed, warnings, "a" * 64, math_style=True, include_claim_details=True)
     math_opening, math_methods, _, _ = papers._paper_style("mathematical")
     assert r"\section{" + math_opening + "}" in math_tex
     assert r"\section{" + math_methods + "}" in math_tex
     assert r"\section{Verification status and limitations}" in math_tex
     assert r"\section{Conclusion}" in math_tex
     assert math_tex.index(r"\section{Conclusion}") < math_tex.index(
-        r"\section*{Claim status and evidence}"
+        r"\section{Claim and source notes}"
     )
     injected_section = parsed.sections[0].model_copy(
         update={"paragraphs": [r"Run \input{host-file} now."]}

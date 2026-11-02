@@ -1,0 +1,5 @@
+# Operation Narrow Passage Round 10 paper source
+
+`metadata.full.json.gz` is the complete paper record decoded from the local Round 10 project export `operation-narrow-passage-v3.json` under `/private/tmp/issue336_round10/`. Its paper ID is `81b9b61d61db43d0b31f8a8fa42451a1`, project ID is `4060cb04-3ed7-4ae4-9f61-2c3691313759`, and frozen snapshot SHA-256 is `2092017a771b8fc8dd0622b8ea2ce0f51fa90f8f0cf50507796fcbfffa7c887a`. The archived record's TeX SHA-256 is `c6a88986aa08ac3c43bcbcb340b8f1f2f85f238ff9f93a100bf6c9ee54a0514c`, equal to the previously tracked `papers/operation-narrow-passage.tex` before this rebuild.
+
+This paper is additional to the canonical Golden 5. `scripts/rebuild_golden5_papers.py operation-narrow-passage-round10` applies the structured reader guide, worked example, and source-linked comparison table, then renders TeX and compiles PDF without an AI provider call. The crisis is fictional and the paper is an analytical synthesis, not a validated operational or legal recommendation.

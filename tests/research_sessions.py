@@ -855,7 +855,9 @@ def test_project_type_research_references_replace_keyword_catalog(monkeypatch):
         assert selected["branch"] is None
         assert len(selected["sources"]) == 3, mode
         assert [item["tier"] for item in selected["sources"]] == [
-            "general", "general", "discipline"
+            "general",
+            "general",
+            "discipline",
         ]
         assert all(item["project_type_id"] == "common" for item in selected["sources"][:2])
         assert all(item["project_type_id"] == mode for item in selected["sources"][2:])
@@ -6816,7 +6818,10 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     )
     requests = 0
     dispatched_contexts = []
-    dispatch_limit = 65_000  # Force compaction before and after turn eleven.
+    # Leave room for the expanded project-type methodology and provenance
+    # metadata while still exercising dispatch compaction under a limit well
+    # below the 256 KB production guard.
+    dispatch_limit = 96_000
 
     async def handler(request):
         nonlocal requests
@@ -6907,7 +6912,7 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     # runs. Test the invariant rather than requiring a particular algorithm
     # or provenance marker: cumulative saved research greatly exceeds the
     # allowable request, but every submitted packet remains under budget.
-    assert research_sessions._json_bytes(finished["artifacts"]) > dispatch_limit * 5
+    assert research_sessions._json_bytes(finished["artifacts"]) > dispatch_limit * 3
     assert all(
         len(a["investigator_output"]["method"]) > 4_000
         and len(a["investigator_output"]["reasoning_steps"]) == 4
@@ -7211,6 +7216,7 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
         seen: dict[tuple[str, int, str], dict[str, Any]] = {}
         slow_investigator_active = False
         fast_skeptic_overlapped_slow_investigator = False
+        fast_skeptic_entered = asyncio.Event()
 
         async def handler(request):
             nonlocal slow_investigator_active, fast_skeptic_overlapped_slow_investigator
@@ -7242,12 +7248,18 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             if title == first.title and cycle == 1 and role == "research_investigator":
                 slow_investigator_active = True
                 try:
-                    await asyncio.sleep(0.06)
+                    if name == "parallel":
+                        # A handshake makes the intended overlap deterministic
+                        # even on a busy CI runner; a fixed sleep is racy.
+                        await asyncio.wait_for(fast_skeptic_entered.wait(), timeout=5)
+                    else:
+                        await asyncio.sleep(0.06)
                 finally:
                     slow_investigator_active = False
             elif title == second.title and cycle == 1 and role == "research_skeptic":
                 if slow_investigator_active:
                     fast_skeptic_overlapped_slow_investigator = True
+                fast_skeptic_entered.set()
                 await asyncio.sleep(0.002)
             else:
                 await asyncio.sleep(0.002)

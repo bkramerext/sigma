@@ -1,0 +1,3 @@
+# Nonconsecutive Subset Sums Modulo 3 paper recovery
+
+The first run failed in section 1/5 with a malformed long-paper stage response after 6 provider calls. The failure checkpoint preserved the source index and outline. At the user's request, generation resumed from that checkpoint with table and diagram authoring disabled. The saved content was reused and the remaining sections completed. The final paper is 14 pages; its PDF layout status is `no_severe_box_warnings_reported`. The recovery took 90.92 seconds and the checkpoint records 13 cumulative provider calls. See `metadata.json` for hashes and proofreading results.

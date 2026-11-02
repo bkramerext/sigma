@@ -1,0 +1,14 @@
+{
+  "run_started_at": "2026-11-02T06:12:34.146147+00:00",
+  "run_finished_at": "2026-11-02T06:16:44.462625+00:00",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider_mode": "chatgpt",
+  "completed": 0,
+  "failed": [
+    {
+      "name": "nonconsecutive-subset-sums-modulo-3",
+      "type": "ProjectError",
+      "error": "Provider returned malformed long-paper stage content. No paper was published."
+    }
+  ]
+}

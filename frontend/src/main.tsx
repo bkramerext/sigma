@@ -1706,9 +1706,9 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { name: string; copied: boolean; disabled?: boolean; onCopy: () => void }) {
   return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} title={copied ? 'Copied' : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={disabled} onClick={onCopy}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
 }
-function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void }) {
+function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, actions }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; actions?: ReactNode }) {
   const titleLabel = `${expanded ? 'Collapse' : 'Expand'} ${itemLabel}: ${title}`;
-  return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title"><span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/></h4></div>;
+  return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title"><span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><span className="saved-paper-title-tools"><CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>{actions && <span className="saved-paper-inline-actions">{actions}</span>}</span></h4></div>;
 }
 async function sha256Text(value: string): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
@@ -1893,7 +1893,7 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[] } };
 type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'source_material' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
-type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
+type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function paperProgressOperation(progress: PaperProgress): string {
   const count = progress.current !== null && progress.total !== null ? ` (${progress.current} of ${progress.total})` : '';
@@ -1961,6 +1961,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [includeClaimDetails, setIncludeClaimDetails] = useState(() => window.localStorage.getItem('sigma.paper.claims:' + projectId) !== 'false');
   const [includeValidationNotes, setIncludeValidationNotes] = useState(() => window.localStorage.getItem('sigma.paper.validation:' + projectId) === 'true');
   const [includeResearchExcerpts, setIncludeResearchExcerpts] = useState(() => window.localStorage.getItem('sigma.paper.excerpts:' + projectId) === 'true');
+  const [includeSigmaIssues, setIncludeSigmaIssues] = useState(() => window.localStorage.getItem('sigma.paper.issues:' + projectId) === 'true');
   const [includeDiagramsAndTables, setIncludeDiagramsAndTables] = useState(() => window.localStorage.getItem('sigma.paper.diagrams:' + projectId) !== 'false');
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
@@ -1976,6 +1977,11 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
+  const [eli5Id, setEli5Id] = useState('');
+  const [explainingId, setExplainingId] = useState('');
+  const [eli5Error, setEli5Error] = useState('');
+  const [eli5ErrorId, setEli5ErrorId] = useState('');
+  const explainingRef = useRef(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
   useEffect(() => {
@@ -2072,6 +2078,48 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function readPaperResponse(response: Response, action: string): Promise<any> {
+    const text = await response.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = null; }
+    if (!response.ok) {
+      const message = typeof data?.error === 'string' ? data.error
+        : typeof data?.detail === 'string' ? data.detail
+        : response.status >= 500
+          ? `${action} failed because the server encountered an error (HTTP ${response.status}). Please retry.`
+          : `${action} failed (HTTP ${response.status}).`;
+      throw new Error(message);
+    }
+    if (!data || typeof data !== 'object') throw new Error(`${action} returned an invalid response.`);
+    return data;
+  }
+  async function explainPaper(paper: PaperSummary) {
+    if (explainingRef.current) return;
+    explainingRef.current = true;
+    setEli5Error('');
+    setEli5ErrorId('');
+    setExplainingId(paper.paper_id);
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      const record = await readPaperResponse(response, "Loading the paper");
+      const saved = record.eli5;
+      let markdown = saved?.version === 2 && saved?.source_sha256 === record.pdf_sha256 && typeof saved.markdown === 'string' ? saved.markdown : '';
+      if (!markdown) {
+        if (!binding) throw new Error('Connect an eligible AI provider to explain this paper.');
+        const result = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/eli5`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
+        });
+        const data = await readPaperResponse(result, "Explaining this paper");
+        if (typeof data.markdown !== "string" || !data.markdown.trim()) throw new Error("The explanation was empty.");
+        markdown = data.markdown;
+      }
+      setSelected({ ...record, eli5: { version: 2, source_sha256: record.pdf_sha256, markdown } } as PaperRecord);
+      setEli5Id(paper.paper_id);
+      setExpandedPaperId(paper.paper_id);
+    } catch (cause) { setEli5ErrorId(paper.paper_id); setEli5Error(errorMessage(cause)); }
+    finally { explainingRef.current = false; setExplainingId(''); }
   }
   async function scorePaper(paper: PaperSummary) {
     if (scoringRef.current) return;
@@ -2193,7 +2241,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       requestDispatched = true;
       window.localStorage.setItem(paperRecoveryKey(projectId), '1');
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_diagrams: includeDiagramsAndTables }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -2264,6 +2312,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
     !planningFallback;
   const generating = busy || request.current !== null || paperProgress?.status === 'active';
+  const bestScoredPaper = papers
+    .filter(paper => paper.pdf_available && paper.score != null && paper.score.total >= 50)
+    .sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0) || b.paper_version - a.paper_version)[0];
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading"
     onKeyDownCapture={event => { if (event.key === 'Escape' && generating) { event.preventDefault(); event.stopPropagation(); } }}
     onCancel={event => { event.preventDefault(); if (!generating) onCancel(); }}>
@@ -2279,6 +2330,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Include claim details</label>
         <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include issues found</label>
         <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Include research excerpts</label>
+        <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)), setIncludeSigmaIssues(event.target.checked))}/>Include Issues and Bugs section</label>
       </div>
       {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot
@@ -2314,7 +2366,13 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       {!loading && papers.length > 0 && <section className="saved-paper-library" aria-label="Saved AI papers"><h3>Saved versions</h3>{papers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={paper.title} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/>
+            <SavedPaperTitle title={paper.title} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}
+              actions={<>
+                {bestScoredPaper?.paper_id === paper.paper_id && <a className="saved-paper-score-star" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" aria-label="Top scoring paper, click to view" data-tooltip="Top scoring paper, click to view">★</a>}
+                {eli5Id === paper.paper_id
+                  ? <button type="button" className="text-view-link ai-paper-eli5-thanks" onClick={() => setEli5Id('')}>Thanks</button>
+                  : <button type="button" className="ai-paper-eli5-balloon" disabled={!!explainingId} data-tooltip="Explain it to me like I'm 5" aria-label="Explain it to me like I'm 5" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
+              </>}/>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
@@ -2322,9 +2380,12 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           </div>
           <div className="saved-paper-actions">{copyError && <p className="error" role="alert">{copyError}</p>}<a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/txt?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.txt`}>Download text file</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.tex`}>Download TeX file</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.pdf`}>Download PDF</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open PDF in browser</a></>}</div>
         </div>
+        {eli5Error && eli5ErrorId === paper.paper_id && <p className="error" role="alert">{eli5Error}</p>}
         {confirmDeleteId === paper.paper_id && <div className="saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}><p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p><span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}><button type="button" className="text-view-link" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button></span></div>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
-        <h3>{selected.draft.title}</h3>
+        {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
+          ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""}/></Suspense></div>
+          : <><h3>{selected.draft.title}</h3>
         {selected.generation.publication_status === 'needs_review' && <p role="status" className="ai-paper-warning"><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</p>}
         <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
         <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
@@ -2351,6 +2412,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
         <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
         {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
+        </>}
       </article>}</div>
       </article>)}</section>}
       </>}
@@ -2507,7 +2569,10 @@ function FloatingTooltip() {
   }, [active, hide]);
   useLayoutEffect(() => { if (active) position(); }, [active, position]);
   if (!active) return null;
-  return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, document.body);
+  // Modal dialogs live in the browser's top layer, above body-level portals.
+  // Mount the tooltip inside the active dialog so it is actually visible.
+  const dialogTarget = active.element.closest<HTMLDialogElement>('dialog[open]');
+  return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, dialogTarget ?? document.body);
 }
 
 function SettingsGearIcon() {
@@ -3810,7 +3875,7 @@ function visibleRecentProjects(projects: RecentProject[]): RecentProject[] {
   const pinnedFamilies = new Set(projects.filter(project => project.pinned && project.available).map(recentProjectFamilyKey));
   return projects.filter(project => project.pinned || !pinnedFamilies.has(recentProjectFamilyKey(project)));
 }
-type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number };
+type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number; best_paper_score?: number | null };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 const paperCount = (count: number) => `${count} ${count === 1 ? 'paper' : 'papers'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
@@ -3869,6 +3934,27 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
+  async function openTopPaper(entry: RecentProject) {
+    if (pending.current) return;
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) { setError('Allow pop-ups to open the top-scoring paper.'); return; }
+    tab.opener = null;
+    pending.current = true; setOpening(entry.id); setError('');
+    try {
+      const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path: entry.path })}`, { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? 'Could not load paper scores.');
+      const scored = (payload.papers as PaperSummary[] | undefined ?? [])
+        .filter(paper => paper.pdf_available && paper.score != null && paper.score.total >= 50)
+        .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0) || right.paper_version - left.paper_version);
+      if (!scored.length) throw new Error('No scored paper with an available PDF meets the 50-point threshold.');
+      const pdf = `/api/projects/papers/${encodeURIComponent(scored[0].paper_id)}/pdf?${new URLSearchParams({ path: entry.path, open_in_browser: 'true' })}`;
+      tab.location.replace(pdf);
+    } catch (cause) {
+      tab.close();
+      setError(errorMessage(cause));
+    } finally { pending.current = false; setOpening(''); }
+  }
   async function togglePin(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError(''); setConfirmRemoveId('');
     try {
@@ -3905,15 +3991,15 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            {entry.pinned && <svg className="recent-title-pin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 10.8V6a2 2 0 0 0-2-2H5V2h14v2h-2a2 2 0 0 0-2 2v4.8a2 2 0 0 0 .6 1.4L17 14v2H7v-2l1.4-1.8A2 2 0 0 0 9 10.8Z"/><path d="M12 16v6"/></svg>}
+            {entry.best_paper_score != null && entry.best_paper_score >= 50 && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="Top scoring paper, click to view" data-tooltip="Top scoring paper, click to view" data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} title={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? 'Unpin' : 'Pin'}</button>}{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" title="Remove this project" onClick={event => {
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" onClick={event => {
             if (confirmRemoveId === entry.id) { setConfirmRemoveId(''); return; }
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}>Remove</button>}{!entry.pinned && confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
+          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}{!entry.pinned && confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
           <span title={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -3963,7 +4049,7 @@ function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView)
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
     {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
-      <ul>{group.samples.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><span>{strategyCount(sample.strategy_count)} · {difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= 50 && <button type="button" className="recent-title-annotation recent-title-star" data-tooltip="Top scoring paper, click to view" data-tooltip-follow-cursor="true" aria-label="Top scoring paper, click to view" onClick={() => window.open(`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`, "_blank", "noopener,noreferrer")}>★</button>}<button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><span>{strategyCount(sample.strategy_count)} · {difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;

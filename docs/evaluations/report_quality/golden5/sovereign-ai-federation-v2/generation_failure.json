@@ -1,0 +1,24 @@
+{
+  "status": "failed_no_paper_published",
+  "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+  "session_id": "d82391f1-956a-4546-adfd-20f030e33688",
+  "source_archive_sha256": "89ba5b8410735334622ce7e1fb36fbe0b6f50062cbf9aff94ab53178b783994f",
+  "frozen_snapshot_sha256": "5a75ad1bb249ed4da8a1b43ced21ed737e45c1e373cab5923f7443e0b55b732b",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider": {
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "started_at": "2026-11-02T06:03:47.042323+00:00",
+  "elapsed_seconds": 1061,
+  "provider_calls": 8,
+  "stage": "sections",
+  "stage_progress": {
+    "current": 6,
+    "total": 7
+  },
+  "failure_reason": "Long-paper stage exceeded its streamed-response bound. No paper was saved.",
+  "checkpoint_run_id": "e3b6a002724e42c2bde1b3418126c467",
+  "checkpoint_updated_at": "2026-11-02T06:21:28.839744+00:00"
+}

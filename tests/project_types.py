@@ -53,9 +53,7 @@ def main() -> None:
         for item in builtins
         for field in project_types.REFERENCE_FIELDS
         for ref in getattr(item, field)
-    }.isdisjoint(
-        {ref["url"] for field in project_types.REFERENCE_FIELDS for ref in common[field]}
-    )
+    }.isdisjoint({ref["url"] for field in project_types.REFERENCE_FIELDS for ref in common[field]})
     builtins_by_id = {item.id: item for item in builtins}
     # Regression checks for the compact methodology guides: no textbooks or
     # oversized handbooks, and no dead Army War College/Buffalo URLs.
@@ -66,8 +64,10 @@ def main() -> None:
     assert builtins_by_id["mathematical"].research_standards_references[0]["url"] == (
         "https://dummit.cos.northeastern.edu/teaching_fa19_1365/1365_problemsolving"
     )
-    assert builtins_by_id["military"].publication_standards_references[0]["url"].endswith(
-        "/VDF%20Decision%20Paper.pdf"
+    assert (
+        builtins_by_id["military"]
+        .publication_standards_references[0]["url"]
+        .endswith("/VDF%20Decision%20Paper.pdf")
     )
     # Plain, substantive HTML is acceptable along with compact PDFs and Markdown;
     # do not require PDF-only links when the source itself has a clean text body.
@@ -78,9 +78,7 @@ def main() -> None:
         assert effective is not None
         for field in project_types.REFERENCE_FIELDS:
             own = getattr(item, field)
-            assert all(
-                ref["name"].strip() and ref["url"].startswith("https://") for ref in own
-            )
+            assert all(ref["name"].strip() and ref["url"].startswith("https://") for ref in own)
             inherited = getattr(effective, field)
             assert len(inherited) == 3, (identifier, field)
             assert {ref["url"] for ref in common[field] + list(own)} == {

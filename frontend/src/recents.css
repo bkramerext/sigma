@@ -2,7 +2,7 @@
 .home-page .home-recents li { display: block; border-bottom: 1px solid #a965483d; }
 .home-page .home-recents .recent-entry { position: relative; min-width: 0; padding: 12px 0; }
 .home-page .home-recents .recent-title-row {
-  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px;
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px;
 }
 .home-page .home-recents .recent-open {
   flex: 0 1 auto; min-width: 0; width: auto; min-height: 0; padding: 0;
@@ -14,14 +14,22 @@
 }
 .home-page .home-recents .recent-open strong.is-current-project,
 .home-page .home-recents .recent-open strong.is-most-recent-project { font-weight: 700; }
-.home-page .home-recents .recent-meta-row { position: relative; display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; margin-top: 4px; }
+.home-page .home-recents .recent-meta-row { position: relative; display: flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; margin-top: 2px; }
 .home-page .home-recents .recent-meta-row > small { display: inline-flex; align-items: center; gap: 6px; margin-top: 0; color: #b6c2ce; font-size: 11px; font-weight: 400; }
 .home-page .home-recents .recent-open:hover:not(:disabled) {
   background: transparent; color: #f3d0a4; text-decoration: underline;
   text-underline-offset: 3px;
 }
 .home-page .home-recents .recent-open:disabled { color: #9aa6af; cursor: default; }
-.home-page .home-recents .recent-title-pin { flex: 0 0 auto; align-self: center; margin-right: -5px; color: #e0c4a0; }
+.home-page .home-recents .recent-title-annotation {
+  position: relative; display: inline-flex; flex: 0 0 auto; align-items: center;
+  align-self: center; width: auto; height: auto; min-height: 0;
+  border: 0; padding: 0; margin: 0; background: transparent; box-shadow: none;
+  color: #e0c4a0; line-height: 1; cursor: pointer;
+}
+.home-page .home-recents .recent-title-pin { display: block; }
+.home-page .home-recents .recent-title-star { color: #f4cc69; font-size: 16px; }
+.home-page .home-recents .recent-title-annotation:disabled { opacity: .6; cursor: wait; }
 .home-page .home-recents .recent-pin,
 .home-page .home-recents .recent-forget {
   flex: 0 0 auto; width: auto; height: auto; min-height: 0; margin: 0; padding: 0;
@@ -29,6 +37,15 @@
   color: #e0c4a0; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
+.home-page .home-recents .recent-pin {
+  display: inline-flex; align-items: center; justify-content: center;
+  align-self: center; line-height: 1; text-decoration: none;
+}
+.home-page .home-recents .recent-pin svg { display: block; width: 20px; height: 20px; }
+.home-page .home-recents .recent-forget { display: inline-flex; align-items: center; justify-content: center; align-self: center; line-height: 1; text-decoration: none; }
+.home-page .home-recents .recent-forget svg { display: block; width: 20px; height: 20px; }
+.home-page .home-recents .recent-forget:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.home-page .home-recents .recent-pin:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 /* Keep these adjacent actions the exact same color, including when the
    pointer stays over Pin after it changes into Unpin. */
 .home-page .home-recents .recent-pin:hover:not(:disabled),
@@ -378,3 +395,10 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .project-google-signin .google-identity-lines { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 0; line-height: 1.3; }
 .project-google-signin .google-identity-lines > span:first-child { color: #e0d0c8; font-weight: 600; }
 .project-google-signin .google-identity-lines > span:last-child { color: #c9b18f; font-size: 10px; }
+
+/* Sample showcase annotations reuse the Saved Projects star, never pin controls. */
+.home-page .home-samples .recent-title-star {
+  display: inline-flex; align-items: center; vertical-align: middle;
+  margin-right: 6px; padding: 0; border: 0; background: transparent;
+  color: #f4cc69; font-size: 16px; cursor: pointer;
+}

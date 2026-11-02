@@ -292,7 +292,19 @@
 .project-settings-dialog.ai-paper-dialog .settings-body button:disabled { opacity: .5; cursor: default; }
 .project-settings-dialog.ai-paper-dialog .settings-body button.text-copy-button { box-sizing: border-box; display: inline-flex; width: 28px; height: 28px; min-width: 28px; min-height: 28px; margin: 0 0 0 3px; padding: 4px; overflow: visible; vertical-align: -2px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #c7a16d; text-decoration: none; }
 .project-settings-dialog.ai-paper-dialog .settings-body .text-copy-button svg { display: block; width: 18px; height: 18px; flex: 0 0 18px; overflow: visible; }
-.project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-line button.text-copy-button { margin-left: -28px; }
+.project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-line button.text-copy-button {
+  box-sizing: border-box; display: inline-flex; flex: 0 0 28px;
+  width: 28px; height: 28px; min-width: 28px; min-height: 28px;
+  margin: 0; padding: 4px; vertical-align: middle;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-heading > p.settings-hint,
+.project-settings-dialog.ai-paper-dialog .saved-paper-heading > p.ai-paper-warning {
+  margin-left: 28px;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools {
+  display: inline-flex; align-items: center; gap: 12px;
+  margin-left: 12px; vertical-align: middle;
+}
 .ai-paper-body select { width: 100%; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-long-form,
 .project-settings-dialog.ai-paper-dialog .ai-paper-open-tab,
@@ -355,3 +367,60 @@
 .project-settings-dialog .project-preference-checkbox { display: flex; align-items: center; gap: 9px; color: #e3e8eb; font-weight: 500; }
 .project-settings-dialog .project-preference-checkbox input { width: 17px; height: 17px; accent-color: #bd8355; }
 .project-settings-dialog .project-preferences-panel .settings-hint { margin-top: 4px; }
+
+/* Saved-paper actions follow the title's copy button, not the title itself. */
+.project-settings-dialog.ai-paper-dialog .saved-paper-inline-actions {
+  display: inline-flex; align-items: center; gap: 12px;
+  margin: 0; vertical-align: middle;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-score-star {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #e5ba69; font-size: 20px; line-height: 1.1;
+  text-decoration: none; cursor: pointer;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-score-star:hover,
+.project-settings-dialog.ai-paper-dialog .saved-paper-score-star:focus-visible { color: #f5d593; }
+.project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:not(.saved-paper-expand) {
+  position: relative; display: inline-flex; flex: 0 0 22px;
+  align-items: center; justify-content: center;
+  width: 22px; min-width: 22px; height: 28px; min-height: 28px;
+  padding: 0; margin: 0; overflow: visible;
+  border: 0; background: transparent; box-shadow: none;
+  color: #e5ba69; line-height: 1; text-decoration: none; cursor: pointer;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:hover:not(:disabled),
+.project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:focus-visible {
+  color: #f5d593; text-decoration: none;
+}
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-explaining {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap; text-decoration: none; pointer-events: none;
+}
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-thanks { width: auto; padding: 0; margin: 0; font-size: 13px; }
+.ai-paper-eli5-output { max-width: 75ch; line-height: 1.65; }
+
+/* The paper preview is a nested scroll region. Leave a visible bottom inset
+   inside the saved-paper card instead of letting its border disappear under
+   the Generate Paper dialog's scrollport. The shorter viewport-relative
+   ceiling keeps the rounded bottom edge visible on ordinary laptop screens. */
+.project-settings-dialog.ai-paper-dialog > .settings-body.ai-paper-body {
+  scroll-padding-block-end: 24px;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-library {
+  padding-bottom: 24px;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-card .ai-paper-preview {
+  max-height: min(30dvh, 280px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Keep the ELI5 output comfortably inside the paper card at narrow widths. */
+.project-settings-dialog.ai-paper-dialog .saved-paper-card,
+.project-settings-dialog.ai-paper-dialog .saved-paper-card .ai-paper-eli5-output {
+  min-width: 0; max-width: 100%; overflow-wrap: anywhere;
+}
