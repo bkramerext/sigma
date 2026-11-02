@@ -4812,7 +4812,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   const projectActionBar = <div className="project-primary-actions">
     <div className="project-pane-actions">
-      <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title={`Generate a LaTeX research paper · ${paperCount(paperMetadata.count)} generated${paperMetadata.best === null ? '' : ` · Best score ${paperMetadata.best}/100`}`} data-tooltip={`Generate a LaTeX research paper · ${paperCount(paperMetadata.count)} generated${paperMetadata.best === null ? '' : ` · Best score ${paperMetadata.best}/100`}`} disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" data-tooltip={`Generate a LaTeX research paper · ${paperCount(paperMetadata.count)} generated${paperMetadata.best === null ? '' : ` · Best score ${paperMetadata.best}/100`}`} disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
         <span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span>
       </button>
       <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" title="Ask about saved research" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
