@@ -4437,9 +4437,10 @@ async def remove_session(path: str, session_id: str, expected_updated_at: str) -
         record = _read(path, session_id)
         if record.get("updated_at") != expected_updated_at:
             raise ProjectError("Session changed; refresh its status before removing it")
-        if record.get("status") == "paused":
-            raise ProjectError("Paused sessions must be resumed or stopped before removal")
-        active = record.get("status") in {"queued", "running"}
+        # A paused session is presented as stopped in the UI, but its saved
+        # lifecycle state is still "paused". Stop it first so removal uses the
+        # same worker-release checks as every other session.
+        active = record.get("status") in {"queued", "running", "paused"}
     if active:
         task = _tasks.get(session_id)
         if task is not None and not task.done():
