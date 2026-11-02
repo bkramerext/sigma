@@ -124,22 +124,22 @@
         {
           "source": "tasks",
           "target": "pair",
-          "label": "Same workload"
+          "label": "Same task"
         },
         {
           "source": "pair",
           "target": "outcomes",
-          "label": "Offered-demand denominator"
+          "label": "Count all offers"
         },
         {
           "source": "outcomes",
           "target": "cost",
-          "label": "Separate safety and economics"
+          "label": "Separate safety and cost"
         },
         {
           "source": "cost",
           "target": "decision",
-          "label": "No result yet"
+          "label": "Decision awaits data"
         }
       ]
     }

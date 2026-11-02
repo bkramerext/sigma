@@ -78,6 +78,11 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
                     continue
                 if "paragraphs" in edit:
                     section["paragraphs"] = edit["paragraphs"]
+                for number, replacement in edit.get("paragraph_replacements", {}).items():
+                    index = int(number) - 1
+                    if not 0 <= index < len(section["paragraphs"]):
+                        raise ValueError(f"Paragraph {number} not found in {edit['section']}")
+                    section["paragraphs"][index] = replacement
                 if "table" in edit:
                     table = edit["table"]
                     refs = list(
