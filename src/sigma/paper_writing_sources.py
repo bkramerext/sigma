@@ -1,140 +1,59 @@
-"""Select readable writing guidance for papers, separate from research evidence."""
+"""Read publication guidance exclusively from the project's resolved type references.
+
+Publication guides are editorial instructions, never scientific evidence. Fetching
+an untrusted reference URL must not expose loopback, private or metadata services.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import http.client
+import ipaddress
 import re
+import socket
+import ssl
 from collections.abc import Awaitable, Callable, Mapping
 from html.parser import HTMLParser
 from typing import Any
+from urllib.parse import quote, urlsplit
 
-import httpx
+import pypdfium2
 
-# Fixed, curated discovery pool. The input project NEVER supplies fetch URLs.
-# Add new disciplines and branches here; unavailable pages are skipped.
-CATALOG = (
-    (
-        "general",
-        "*",
-        "*",
-        "PLOS: Structuring Papers",
-        "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005619",
-    ),
-    (
-        "general",
-        "*",
-        "*",
-        "PLOS: Writing Research Papers",
-        "https://pmc.ncbi.nlm.nih.gov/articles/PMC3907284/",
-    ),
-    (
-        "discipline",
-        "mathematical",
-        "*",
-        "Tao: On Writing Mathematics",
-        "https://terrytao.wordpress.com/advice-on-writing-papers/",
-    ),
-    (
-        "discipline",
-        "mathematical",
-        "*",
-        "SIAM: Scientific Computing Author Instructions",
-        "https://epubs.siam.org/sisc/instructions-for-authors",
-    ),
-    (
-        "discipline",
-        "physics",
-        "*",
-        "APS: Physics Manuscript Style",
-        "https://journals.aps.org/authors/style-basics",
-    ),
-    (
-        "discipline",
-        "physics",
-        "*",
-        "IOP: Journal Article Structure",
-        "https://publishingsupport.iopscience.iop.org/questions/structure-and-format-of-your-journal-article/",
-    ),
-    (
-        "discipline",
-        "biology",
-        "*",
-        "ARRIVE: Animal Research Reporting",
-        "https://arriveguidelines.org/arrive-guidelines",
-    ),
-    (
-        "discipline",
-        "computer_science",
-        "*",
-        "ACM SIGSOFT: Empirical Standards",
-        "https://www2.sigsoft.org/EmpiricalStandards/docs/standards",
-    ),
-    (
-        "discipline",
-        "engineering",
-        "*",
-        "ACM SIGSOFT: Engineering Research Standards",
-        "https://www2.sigsoft.org/EmpiricalStandards/docs/standards",
-    ),
-    (
-        "discipline",
-        "law",
-        "*",
-        "Stanford Law: Scholarly Writing",
-        "https://guides.law.stanford.edu/c.php?g=1255722&p=9200577",
-    ),
-    (
-        "branch",
-        "mathematical",
-        "combinatorics",
-        "Electronic Journal of Combinatorics: Author Guide",
-        "https://www.combinatorics.org/ojs/index.php/eljc/about/submissions",
-    ),
-    (
-        "branch",
-        "physics",
-        "relativity",
-        "Classical and Quantum Gravity: Author Scope",
-        "https://publishingsupport.iopscience.iop.org/journals/classical-and-quantum-gravity/about-classical-quantum-gravity/",
-    ),
-    (
-        "branch",
-        "biology",
-        "developmental",
-        "ARRIVE: Animal Study Reporting",
-        "https://arriveguidelines.org/arrive-guidelines",
-    ),
-)
-_CACHE: dict[str, str | None] = {}
+MAX_HTML_BYTES = 256_000
+MAX_PDF_BYTES = 4_000_000
+MAX_SELECTED = 3
+MAX_EXCERPT_CHARS = 3_500
+_CACHE: dict[str, str] = {}
 
 
 class _Paragraphs(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.skip = 0
-        self.in_text = 0
         self.parts: list[str] = []
+        self.depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in {"script", "style", "nav", "footer", "header", "svg"}:
             self.skip += 1
         if tag in {"p", "li", "h1", "h2", "h3", "h4"} and not self.skip:
-            self.in_text += 1
+            self.depth += 1
             self.parts.append(" ")
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in {"p", "li", "h1", "h2", "h3", "h4"} and not self.skip:
-            self.in_text = max(0, self.in_text - 1)
         if tag in {"script", "style", "nav", "footer", "header", "svg"}:
             self.skip = max(0, self.skip - 1)
+        if tag in {"p", "li", "h1", "h2", "h3", "h4"} and not self.skip:
+            self.depth = max(0, self.depth - 1)
 
     def handle_data(self, data: str) -> None:
-        if self.in_text and not self.skip:
+        if self.depth and not self.skip:
             self.parts.append(data)
 
 
 def readable(text: str, *, html: bool = False) -> str | None:
+    """Return only substantial, readable manuscript-guidance text."""
     if html:
         parser = _Paragraphs()
         try:
@@ -144,78 +63,195 @@ def readable(text: str, *, html: bool = False) -> str | None:
         text = " ".join(parser.parts)
     result = re.sub(r"\s+", " ", text).strip()
     if len(result) < 450 or any(
-        marker in result[:700].lower()
+        marker in result[:700].casefold()
         for marker in ("access denied", "verify you are human", "captcha required")
     ):
         return None
-    return result[:3500]
+    return result[:MAX_EXCERPT_CHARS]
+
+
+def _pdf_excerpt(document: bytes) -> str | None:
+    """Extract real selectable text without executing content or interpreting links."""
+    try:
+        pdf = pypdfium2.PdfDocument(document)
+        try:
+            chunks: list[str] = []
+            for index in range(min(len(pdf), 12)):
+                page = pdf[index]
+                try:
+                    textpage = page.get_textpage()
+                    try:
+                        chunks.append(textpage.get_text_range())
+                    finally:
+                        textpage.close()
+                finally:
+                    page.close()
+                if sum(len(chunk) for chunk in chunks) > 6_000:
+                    break
+            return readable(" ".join(chunks))
+        finally:
+            pdf.close()
+    except (ValueError, RuntimeError, OSError):
+        return None
+
+
+def _valid_public_url(url: str) -> bool:
+    if len(url) > 2_048 or any(ord(char) < 33 for char in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in (None, 80, 443)
+        ):
+            return False
+        host = parsed.hostname.encode("idna").decode("ascii")
+        if not host or any(
+            char not in "abcdefghijklmnopqrstuvwxyz0123456789.-"
+            for char in host.casefold()
+        ):
+            return False
+        if ipaddress.ip_address(host).is_global is False:
+            return False
+    except ValueError:
+        # Hostnames, unlike IP literals, legitimately raise ValueError.
+        try:
+            if not parsed.hostname or not all(
+                part and len(part) <= 63 for part in parsed.hostname.split(".")
+            ):
+                return False
+        except (AttributeError, UnboundLocalError):
+            return False
+    except UnicodeError:
+        return False
+    return True
+
+
+def _fetch_blocking(url: str) -> str | None:
+    """Pin a verified public DNS address; reject redirects and oversized responses."""
+    if not _valid_public_url(url):
+        return None
+    parts = urlsplit(url)
+    host = (parts.hostname or "").encode("idna").decode("ascii")
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    if not addresses or any(
+        not ipaddress.ip_address(item[4][0]).is_global for item in addresses
+    ):
+        return None
+    family, socktype, proto, _, address = addresses[0]
+    path = quote(parts.path or "/", safe="/%:@!$&'()*+,;=-._~")
+    if parts.query:
+        path += "?" + quote(parts.query, safe="/?%:@!$&'()*+,;=-._~")
+    request = (
+        f"GET {path} HTTP/1.1\r\nHost: {host}\r\n"
+        "Accept: text/html, text/plain, application/pdf\r\n"
+        "Accept-Encoding: identity\r\n"
+        "User-Agent: SIGMA-PublicationMethods/1.0\r\n"
+        "Connection: close\r\n\r\n"
+    )
+    with socket.socket(family, socktype, proto) as raw:
+        raw.settimeout(2.5)
+        raw.connect(address)
+        connection = (
+            ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+            if parts.scheme == "https"
+            else raw
+        )
+        with connection:
+            connection.sendall(request.encode("ascii"))
+            response = http.client.HTTPResponse(connection)
+            response.begin()
+            if response.status != 200:
+                return None  # Never follow redirects, including to private networks.
+            kind = response.getheader("Content-Type", "").lower()
+            pdf_content = "application/pdf" in kind or parts.path.lower().endswith(".pdf")
+            max_bytes = MAX_PDF_BYTES if pdf_content else MAX_HTML_BYTES
+            body = response.read(max_bytes + 1)
+            if len(body) > max_bytes:
+                return None
+    if pdf_content:
+        return _pdf_excerpt(body)
+    if "text/html" in kind:
+        return readable(body.decode("utf-8", errors="replace"), html=True)
+    if "text/plain" in kind:
+        return readable(body.decode("utf-8", errors="replace"))
+    return None
 
 
 async def _fetch(url: str) -> str | None:
-    if url in _CACHE:
-        return _CACHE[url]
-    if url not in {item[4] for item in CATALOG}:
+    if not _valid_public_url(url):
         return None
-    value = None
+    cached = _CACHE.get(url)
+    if cached is not None:
+        return cached
     try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(4.0, connect=2.0), follow_redirects=False
-        ) as client:
-            response = await client.get(url, headers={"Accept": "text/html"})
-            if response.status_code == 200 and len(response.content) <= 220_000:
-                kind = response.headers.get("content-type", "")
-                if "text/html" in kind:
-                    value = readable(response.text, html=True)
-                elif "text/plain" in kind:
-                    value = readable(response.text)
-    except (httpx.HTTPError, UnicodeError, ValueError):
-        pass
-    _CACHE[url] = value
-    return value
-
-
-def branch_for(project: Mapping[str, Any]) -> str:
-    """Conservative branch detection; this classifies writing style, not truth."""
-    kind = str(project.get("investigation_type") or "default")
-    topic = " ".join(str(project.get(k) or "") for k in ("title", "problem")).lower()
-    markers = {
-        "mathematical": (
-            (
-                "combinatorics",
-                ("subset", "counting", "combinatoric", "generating function", "recurrence"),
-            ),
-        ),
-        "physics": (
-            ("relativity", ("warp drive", "spacetime", "gravity", "metric", "relativity")),
-        ),
-        "biology": (("developmental", ("tadpole", "xenopus", "regeneration", "developmental")),),
-    }
-    for branch, terms in markers.get(kind, ()):
-        if any(term in topic for term in terms):
-            return branch
-    return "general"
-
-
-def _reusable(items: list[dict[str, Any]], kind: str, branch: str) -> bool:
-    if len(items) not in (2, 3):
-        return False
-    if not all(
-        item.get("type") == kind
-        and item.get("branch") == branch
-        and isinstance(item.get("excerpt"), str)
-        and len(item["excerpt"]) >= 450
-        and hashlib.sha256(item["excerpt"].encode()).hexdigest() == item.get("sha256")
-        for item in items
+        result = await asyncio.wait_for(asyncio.to_thread(_fetch_blocking, url), timeout=3.0)
+    except (
+        OSError,
+        ValueError,
+        UnicodeError,
+        RuntimeError,
+        TimeoutError,
+        http.client.HTTPException,
     ):
+        return None
+    if result is not None:
+        _CACHE[url] = result  # Do not permanently cache missing/temporarily blocked material.
+    return result
+
+
+def _references(project: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Use the frozen effective type references, which already include common/ancestors."""
+    raw = project.get("publication_references", [])
+    if not isinstance(raw, list):
+        return []
+    output: list[dict[str, str]] = []
+    urls: set[str] = set()
+    for item in raw[:100]:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        name = item.get("name")
+        if not isinstance(url, str) or not _valid_public_url(url) or url in urls:
+            continue
+        if not isinstance(name, str) or not name.strip():
+            name = url
+        output.append({"title": name[:200], "url": url})
+        urls.add(url)
+    return output
+
+
+def _reusable(
+    previous: list[dict[str, Any]],
+    references: list[dict[str, str]],
+    kind: str,
+) -> bool:
+    if not previous or len(previous) != min(MAX_SELECTED, len(references)):
         return False
-    tiers = {item.get("tier") for item in items}
-    has_branch_catalog = any(
-        tier == "branch" and category == kind and topic == branch
-        for tier, category, topic, _, _ in CATALOG
-    )
-    return "general" in tiers and (
-        "branch" in tiers if has_branch_catalog else "discipline" in tiers
-    )
+    official = {item["url"]: item["title"] for item in references}
+    chosen_urls: set[str] = set()
+    for item in previous:
+        if not isinstance(item, dict):
+            return False
+        url = item.get("url")
+        excerpt = item.get("excerpt")
+        if (
+            not isinstance(url, str)
+            or url not in official
+            or url in chosen_urls
+            or item.get("title") != official[url]
+            or item.get("type") != kind
+            or not isinstance(excerpt, str)
+            or len(excerpt) < 450
+            or hashlib.sha256(excerpt.encode()).hexdigest() != item.get("sha256")
+        ):
+            return False
+        chosen_urls.add(url)
+    return True
 
 
 async def select(
@@ -224,74 +260,61 @@ async def select(
     *,
     fetch: Callable[[str], Awaitable[str | None]] = _fetch,
 ) -> tuple[list[dict[str, Any]], str]:
-    """Pick readable general / discipline / branch guidance, reusing prior text."""
+    """Select only readable official publication references; no catalog fallback."""
+    references = _references(project)
     kind = str(project.get("investigation_type") or "default")
-    branch = branch_for(project)
-    if previous and _reusable(previous, kind, branch):
+    if previous and _reusable(previous, references, kind):
         return previous, "reused"
-    items: list[dict[str, Any]] = []
-    urls: set[str] = set()
-    for tier in ("general", "discipline", "branch"):
-        candidates = [
-            candidate
-            for candidate in CATALOG
-            if candidate[0] == tier
-            and (tier == "general" or candidate[1] == kind)
-            and (tier != "branch" or candidate[2] == branch)
-            and candidate[4] not in urls
-        ]
-        for _, _, _, title, url in candidates[:2]:
-            try:
-                # Source selection is not permitted to stall paper planning.
-                body = await asyncio.wait_for(fetch(url), timeout=3.0)
-            except (httpx.HTTPError, TimeoutError, RuntimeError, UnicodeError, ValueError):
-                body = None
-            if not isinstance(body, str):
-                continue
-            excerpt = readable(body)
-            if excerpt is None:
-                continue
-            items.append(
-                {
-                    "title": title,
-                    "url": url,
-                    "tier": tier,
-                    "type": kind,
-                    "branch": branch,
-                    "excerpt": excerpt,
-                    "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
-                }
-            )
-            urls.add(url)
+    selected: list[dict[str, Any]] = []
+    # The resolved list includes common and specialized entries. Prefer one
+    # specialized reference when identifiable, retaining the full official set.
+    try:
+        from sigma import project_types
+
+        common_urls = {
+            ref["url"]
+            for ref in project_types.common_references()["publication_standards_references"]
+        }
+    except (KeyError, OSError, ValueError):
+        common_urls = set()
+    priority = sorted(
+        references,
+        key=lambda item: (item["url"] in common_urls, references.index(item)),
+    )
+    for item in priority:
+        if len(selected) == MAX_SELECTED:
             break
-    # A field without a specific source still receives a second general guide.
-    if len(items) < 2:
-        for tier, _, _, title, url in CATALOG:
-            if tier != "general" or url in urls:
-                continue
-            try:
-                body = await asyncio.wait_for(fetch(url), timeout=3.0)
-            except (httpx.HTTPError, TimeoutError, RuntimeError, UnicodeError, ValueError):
-                body = None
-            excerpt = readable(body) if isinstance(body, str) else None
-            if excerpt:
-                items.append(
-                    {
-                        "title": title,
-                        "url": url,
-                        "tier": "general",
-                        "type": kind,
-                        "branch": branch,
-                        "excerpt": excerpt,
-                        "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
-                    }
-                )
-                break
-    return items[:3], "selected" if items else "unavailable"
+        url = item["url"]
+        try:
+            body = await asyncio.wait_for(fetch(url), timeout=3.0)
+        except (
+            OSError,
+            ValueError,
+            UnicodeError,
+            RuntimeError,
+            TimeoutError,
+            http.client.HTTPException,
+        ):
+            continue
+        excerpt = readable(body) if isinstance(body, str) else None
+        if excerpt is None:
+            continue
+        selected.append(
+            {
+                "title": item["title"],
+                "url": url,
+                "tier": "general" if url in common_urls else "discipline",
+                "type": kind,
+                "branch": "project_type",
+                "excerpt": excerpt,
+                "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
+            }
+        )
+    return selected, "selected" if selected else "unavailable"
 
 
 def prompt_material(items: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """Untrusted source prose; usable as writing guidance, not research evidence."""
+    """Untrusted source prose may guide writing, never supply research evidence."""
     return [
         {
             "title": str(item["title"]),
@@ -299,5 +322,5 @@ def prompt_material(items: list[dict[str, Any]]) -> list[dict[str, str]]:
             "scope": str(item["tier"]),
             "writing_guidance_excerpt": str(item["excerpt"]),
         }
-        for item in items[:3]
+        for item in items[:MAX_SELECTED]
     ]
