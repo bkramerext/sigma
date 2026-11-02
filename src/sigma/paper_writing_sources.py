@@ -113,9 +113,7 @@ def _valid_public_url(url: str) -> bool:
         host = parsed.hostname.encode("idna").decode("ascii").casefold()
     except (ValueError, UnicodeError):
         return False
-    if not host or any(
-        char not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for char in host
-    ):
+    if not host or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for char in host):
         return False
     try:
         return ipaddress.ip_address(host).is_global
@@ -134,9 +132,7 @@ def _fetch_blocking(url: str) -> str | None:
     host = (parts.hostname or "").encode("idna").decode("ascii")
     port = parts.port or (443 if parts.scheme == "https" else 80)
     addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    if not addresses or any(
-        not ipaddress.ip_address(item[4][0]).is_global for item in addresses
-    ):
+    if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
         return None
     family, socktype, proto, _, address = addresses[0]
     path = quote(parts.path or "/", safe="/%:@!$&'()*+,;=-._~")
