@@ -813,14 +813,15 @@ def test_project_type_research_references_replace_keyword_catalog(monkeypatch):
         )
         assert selected["status"] == "selected"
         assert selected["branch"] is None
-        assert len(selected["sources"]) == 3
-        assert [item["tier"] for item in selected["sources"]] == [
-            "general",
-            "discipline",
-            "discipline",
-        ]
-        assert selected["sources"][0]["project_type_id"] == "common"
-        assert all(item["project_type_id"] == mode for item in selected["sources"][1:])
+        expected_count = 3 if mode in ("mathematical", "physics") else 2
+        assert len(selected["sources"]) == expected_count
+        assert [item["tier"] for item in selected["sources"]] == (
+            ["general", "general", "discipline"]
+            if expected_count == 3
+            else ["general", "general"]
+        )
+        assert all(item["project_type_id"] == "common" for item in selected["sources"][:2])
+        assert all(item["project_type_id"] == mode for item in selected["sources"][2:])
         assert selected["advisory"] is None
         assert research_method_sources.methodology_digest(selected)
         later = research_method_sources.select_method_sources(
@@ -855,7 +856,7 @@ def test_project_type_inheritance_more_than_three_is_advisory(monkeypatch):
     )
     assert [row["tier"] for row in selected["sources"]] == [
         "general",
-        "discipline",
+        "general",
         "discipline",
         "branch",
         "branch",
@@ -902,7 +903,7 @@ def test_project_type_reference_ancestry_missing_and_cyclic_parents(monkeypatch)
     resolved = research_method_sources.select_method_sources("custom-leaf", "", "", (), ())
     assert [r["project_type_id"] for r in resolved["sources"]] == [
         "common",
-        "physics",
+        "common",
         "physics",
         "custom-root",
         "custom-leaf",
@@ -911,13 +912,13 @@ def test_project_type_reference_ancestry_missing_and_cyclic_parents(monkeypatch)
     monkeypatch.setattr(project_types, "custom_types", lambda: [missing])
     assert (
         len(research_method_sources.select_method_sources("custom-leaf", "", "", (), ())["sources"])
-        == 2
+        == 3
     )
     cyclic_root = project_types.ProjectType(**{**root.__dict__, "based_on": "custom-leaf"})
     monkeypatch.setattr(project_types, "custom_types", lambda: [cyclic_root, leaf])
     assert (
         len(research_method_sources.select_method_sources("custom-root", "", "", (), ())["sources"])
-        == 3
+        == 4
     )
 
 
