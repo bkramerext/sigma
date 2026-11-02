@@ -4002,7 +4002,9 @@ def _tex(
                 [
                     r"\bottomrule",
                     r"\end{tabular}",
-                    r"\par\smallskip{\scriptsize Source-linked claims: "
+                    r"\par\smallskip{\scriptsize Evidence: "
+                    + esc(readable_refs(table.evidence_refs))
+                    + "; claims: "
                     + esc(", ".join(table.claim_ids))
                     + "}",
                     r"\end{table}",
