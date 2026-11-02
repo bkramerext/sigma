@@ -1,0 +1,59 @@
+{
+  "schema_version": 8,
+  "id": "e8211dc4-b70f-49d1-a514-671f44ed7e8c",
+  "title": "Warp Drive Design",
+  "problem": "Could any coherent physical framework allow effective faster-than-light travel through spacetime? Investigate the possibility without assuming that a warp-drive mechanism works. Do not constrain the investigation to technologies, materials, energy sources, or engineering methods available today. You may propose extensions, reinterpretations, or replacements of established physical theories, provided each proposal states its mathematical assumptions, internal consistency requirements, compatibility with existing observations, and potentially falsifiable consequences. Analyze the distinction between local motion faster than light and effective superluminal travel through spacetime geometry. Consider causality, horizons, energy conditions, quantum field effects, stability, backreaction, conservation laws, controllability, and the status of exotic stress-energy; do not assume any speculative mechanism works. Compare general-relativistic metric-engineering approaches with at least one fundamentally different conceptual framework. Identify concrete proof obligations, order-of-magnitude constraints where justified, decisive theoretical calculations or observations, and failure criteria. Separate established results, contested literature, hypotheses, and engineering conjectures. Produce a staged research program and a conditional conceptual design, not an unsupported claim of a working drive.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-22T20:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-25T16:45:41.428950+00:00",
+      "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-25T16:45:41.429371+00:00",
+      "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
+      "title": "Separate geometry from motion",
+      "approach": "Write a simple spacetime metric or thought experiment that distinguishes local motion through space from effective superluminal travel by geometry. Check the causal structure and state which assumptions are mathematical choices rather than observed physical mechanisms.",
+      "author_kind": "human",
+      "created_at": "2026-10-25T16:45:41.428950+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Separate geometry from motion",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
+      "title": "Audit the stress-energy claim",
+      "approach": "For one proposed geometry, calculate or cite only a traceable stress-energy requirement under explicit conventions. Test energy conditions and identify what stability or quantum-field result remains missing before the metric could count as a physical solution.",
+      "author_kind": "human",
+      "created_at": "2026-10-25T16:45:41.429371+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Audit the stress-energy claim",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "physics",
+  "active_order": [
+    "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
+    "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "hard"
+}
