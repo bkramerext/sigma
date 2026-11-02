@@ -395,7 +395,7 @@ def get_type(identifier: str) -> ProjectType | None:
     common = effective_common_references()
     combined = {}
     for field in REFERENCE_FIELDS:
-        combined[field] = tuple(dict.fromkeys([*common[field], *getattr(item, field)]))
+        combined[field] = tuple(sorted(set([*common[field], *getattr(item, field)]), key=str.casefold))
     return replace(item, **combined)
 
 
