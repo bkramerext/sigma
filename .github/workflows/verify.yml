@@ -3,7 +3,7 @@ name: SIGMA verification
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, phase2/green-iteration-1]
   workflow_dispatch:
 
 permissions:
