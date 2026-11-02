@@ -98,6 +98,22 @@ with sync_playwright() as playwright:
     expect(metadata).to_contain_text(" · Running · ", timeout=10000)
     running.clear()
     expect(metadata).to_have_text(initial, timeout=10000)
+
+    recent.get_by_role("button", name=f"Pin {project_title}").click()
+    pinned_group = recent.locator("details.pinned-type-group")
+    expect(pinned_group).to_be_visible()
+    expect(pinned_group.get_by_role("button", name=project_title, exact=True)).to_be_visible()
+    expect(pinned_group.get_by_role("button", name=f"Unpin {project_title}")).to_be_visible()
+    page.reload()
+    recent = page.get_by_role("tabpanel", name="Saved")
+    pinned_group = recent.locator("details.pinned-type-group")
+    expect(pinned_group.get_by_role("button", name=project_title, exact=True)).to_be_visible()
+    pinned_group.get_by_role("button", name=f"Unpin {project_title}").click()
+    expect(recent.locator("details.pinned-type-group")).to_have_count(0)
+    restored = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
+    if not restored.evaluate("group => group.open"):
+        restored.locator("summary").click()
+    expect(restored.get_by_role("button", name=project_title, exact=True)).to_be_visible()
     assert not errors, errors
     browser.close()
-    print("PASS T92 real Chrome: idle, active, live polling, reload, clear, 1280/390/320px")
+    print("PASS T92 real Chrome: live status, persisted pin/unpin, reload, 1280/390/320px")
