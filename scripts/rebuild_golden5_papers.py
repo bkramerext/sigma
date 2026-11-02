@@ -69,16 +69,19 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
             if section["heading"] != editorial["section"]:
                 continue
             section["paragraphs"] = editorial["paragraphs"]
-            table = editorial["table"]
-            refs = list(
-                dict.fromkeys(
-                    ref
-                    for claim_id in table["claim_ids"]
-                    for ref in claim_map[claim_id].evidence_refs
+            if "table" in editorial:
+                table = editorial["table"]
+                refs = list(
+                    dict.fromkeys(
+                        ref
+                        for claim_id in table["claim_ids"]
+                        for ref in claim_map[claim_id].evidence_refs
+                    )
                 )
-            )
-            section["tables"].append({**table, "evidence_refs": refs[:20]})
-            section["claim_ids"] = list(dict.fromkeys([*section["claim_ids"], *table["claim_ids"]]))
+                section["tables"].append({**table, "evidence_refs": refs[:20]})
+                section["claim_ids"] = list(
+                    dict.fromkeys([*section["claim_ids"], *table["claim_ids"]])
+                )
             break
         else:
             raise ValueError(f"Editorial section not found: {editorial['section']}")
