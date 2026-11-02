@@ -356,14 +356,28 @@
 .project-settings-dialog .project-preference-checkbox input { width: 17px; height: 17px; accent-color: #bd8355; }
 .project-settings-dialog .project-preferences-panel .settings-hint { margin-top: 4px; }
 
-/* Plain-language paper toggle: copper balloon beside the saved paper. */
-.ai-paper-eli5-balloon {
-  display: inline-flex; align-items: center; justify-content: center;
-  margin: 0 8px 0 0; padding: 2px 5px; border: 0;
-  background: transparent; box-shadow: none; color: #c88761;
-  font-size: 17px; line-height: 1.2; cursor: pointer;
+/* Saved-paper actions follow the title's copy button, not the title itself. */
+.project-settings-dialog.ai-paper-dialog .saved-paper-inline-actions {
+  display: inline-flex; align-items: center; gap: 13px;
+  margin-left: 16px; vertical-align: middle;
 }
-.ai-paper-eli5-balloon:hover:not(:disabled), .ai-paper-eli5-balloon:focus-visible { color: #e8a782; }
-.ai-paper-eli5-balloon:disabled { cursor: wait; opacity: .8; }
-.ai-paper-eli5-thanks { margin-right: 8px; }
+.project-settings-dialog.ai-paper-dialog .saved-paper-score-star {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #e5ba69; font-size: 20px; line-height: 1.1;
+  text-decoration: none; cursor: pointer;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-score-star:hover,
+.project-settings-dialog.ai-paper-dialog .saved-paper-score-star:focus-visible { color: #f5d593; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; min-height: 28px; padding: 0; margin: 0;
+  border: 0; background: transparent; box-shadow: none;
+  color: #c88761; line-height: 1; cursor: pointer;
+}
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:hover:not(:disabled),
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:focus-visible { color: #e8a782; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-explaining { font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-thanks { width: auto; padding: 0; margin: 0; font-size: 13px; }
 .ai-paper-eli5-output { max-width: 75ch; line-height: 1.65; }
