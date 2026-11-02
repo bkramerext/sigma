@@ -1843,6 +1843,7 @@ def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
         "f" * 64,
         math_style=True,
         include_research_details=True,
+        include_validation_notes=True,
         include_research_excerpts=True,
         integrity_records=integrity,
         integrity_excerpts=True,
