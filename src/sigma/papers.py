@@ -825,16 +825,15 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
     # source material and must never be cited as research evidence.
     from sigma import project_types
 
-    type_record = project_types.get_type(
-        str(project_data.get("investigation_type", "default"))
-    )
+    type_record = project_types.get_type(str(project_data.get("investigation_type", "default")))
     if type_record is not None:
         publication_references = list(type_record.publication_standards_references)
     else:
         saved_type = project_data.get("project_type_snapshot")
         publication_references = (
             saved_type.get("publication_standards_references", [])
-            if isinstance(saved_type, dict) else []
+            if isinstance(saved_type, dict)
+            else []
         )
     # Preserve the URL-only contract for older authoring paths and snapshots,
     # alongside the named records used by current agents and the UI.
@@ -846,9 +845,7 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
         if isinstance(item, str) or (isinstance(item, dict) and isinstance(item.get("url"), str))
     ]
     project_data["publication_references"] = publication_references
-    project_data["publication_reference_urls"] = [
-        item["url"] for item in publication_references
-    ]
+    project_data["publication_reference_urls"] = [item["url"] for item in publication_references]
     sources.append({"id": f"project:{project.get('id')}", "kind": "project", "data": project_data})
     for strategy in strategies:
         sources.append(
@@ -4704,7 +4701,7 @@ or document markup."""
             "project_question": str(project_data.get("problem", ""))[:3_000],
             "investigation_type": project_type,
             "publication_references": project_data.get("publication_references", []),
-        "publication_reference_urls": project_data.get("publication_reference_urls", []),
+            "publication_reference_urls": project_data.get("publication_reference_urls", []),
             "shared_claim_register": [
                 claim.model_dump() for claim in long_plan.claims if claim.id in section.claim_ids
             ],
