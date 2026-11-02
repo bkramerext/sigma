@@ -3283,8 +3283,7 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
         assert {item["tier"] for item in chosen} == {"general", "discipline", "branch"}
         assert all(len(item["excerpt"]) >= 450 for item in chosen)
         assert all(
-            item["type"] == "mathematical" and item["branch"] == "combinatorics"
-            for item in chosen
+            item["type"] == "mathematical" and item["branch"] == "combinatorics" for item in chosen
         )
         count = len(calls)
         reused, mode = await catalog.select(project, chosen, fetch=fetch)
@@ -3326,6 +3325,7 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
 
 def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
     """Each project type gets general, evidence-specific genre instructions."""
+
     def check_case(project_type: str, marker: str, second_marker: str, excluded: str) -> None:
         package, plan = fast_package()
         package["sources"][0]["data"]["investigation_type"] = project_type
