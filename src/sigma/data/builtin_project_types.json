@@ -447,8 +447,8 @@
   "common_references": {
     "research_standards_references": [
       {
-        "name": "National Academies — On Being a Scientist (4th ed.)",
-        "url": "https://nap.nationalacademies.org/pubs/29488/"
+        "name": "NASEM — Reproducibility and Replicability in Science (full report)",
+        "url": "https://www.nationalacademies.org/read/25303"
       },
       {
         "name": "Stanford Encyclopedia of Philosophy — Scientific Method",
@@ -457,12 +457,12 @@
     ],
     "publication_standards_references": [
       {
-        "name": "Nature Portfolio — Editorial Policies and Reporting Standards",
-        "url": "https://www.nature.com/nature-portfolio/editorial-policies"
+        "name": "PLOS ONE — Detailed Manuscript and Reporting Guidelines",
+        "url": "https://journals.plos.org/plosone/s/submission-guidelines"
       },
       {
-        "name": "COPE — Core Practices in Publication Ethics",
-        "url": "https://publicationethics.org/files/editable-bean/COPE_Core_Practices_0.pdf"
+        "name": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/"
       }
     ]
   }
