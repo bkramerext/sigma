@@ -3775,7 +3775,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     finally { pending.current = false; setOpening(''); }
   }
   const familyCounts = new Map<string, number>();
-  for (const project of projects) {
+  for (const project of projects.filter(project => project.available)) {
     const family = recentProjectFamilyKey(project);
     familyCounts.set(family, (familyCounts.get(family) ?? 0) + 1);
   }
