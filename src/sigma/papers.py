@@ -7450,6 +7450,8 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                             }
                         },
                         "pdf_available": _valid_pdf_file(path, value),
+                        "pdf_sha256": value.get("pdf_sha256"),
+                        "score": __import__("sigma.paper_scores", fromlist=["cached_score"]).cached_score(value),
                     }
                 )
         except (OSError, ValueError, KeyError, TypeError):
@@ -7468,6 +7470,9 @@ def get_paper(path: str, paper_id: str) -> dict[str, Any]:
     if record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Paper belongs to a different project")
     record["pdf_available"] = _valid_pdf_file(path, record)
+    from sigma.paper_scores import cached_score
+
+    record["score"] = cached_score(record) if record["pdf_available"] else None
     return record
 
 
