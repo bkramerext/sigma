@@ -9624,8 +9624,12 @@ async def test_remove_paused_session_stops_it_before_deleting(path: Path):
         assert paused["status"] == "paused"
 
         # The revision guard still protects against removing stale UI state.
-        with pytest.raises(ProjectError, match="changed"):
+        try:
             await research_sessions.remove_session(str(path), started["id"], "stale-revision")
+        except ProjectError as exc:
+            assert "changed" in str(exc)
+        else:
+            raise AssertionError("stale paused session removal was accepted")
         assert research_sessions.get_session(str(path), started["id"])["status"] == "paused"
 
         removed = await research_sessions.remove_session(
