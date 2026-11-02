@@ -31,7 +31,8 @@ def test_eli5_cache_requires_matching_pdf_sha_and_prompt_version() -> None:
 
 def test_eli5_cache_rejects_invalid_content() -> None:
     invalid = {"version": paper_eli5.ELI5_VERSION, "source_sha256": "abc"}
-    assert paper_eli5.cached({"pdf_sha256": "abc", "eli5": {**invalid, "markdown": "short"}}) is None
+    invalid_short = {"pdf_sha256": "abc", "eli5": {**invalid, "markdown": "short"}}
+    assert paper_eli5.cached(invalid_short) is None
     assert paper_eli5.cached({"pdf_sha256": "abc", "eli5": {**invalid, "markdown": 123}}) is None
     assert paper_eli5.cached({"pdf_sha256": "abc"}) is None
 
