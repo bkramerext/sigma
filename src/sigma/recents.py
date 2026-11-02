@@ -367,6 +367,7 @@ class RecentProject:
     accessed_at: str | None
     included_example: bool
     available: bool
+    pinned: bool = False
     pin_state: str = "remove"
     hidden_by_family_pin: bool = False
     error: str | None = None
@@ -416,6 +417,7 @@ def recent_projects() -> dict:
                         difficulty=view.project.difficulty,
                         research_running=has_active_session(view.path),
                         available=True,
+                        pinned=(view.project.id in pins.values()),
                         pin_state=(
                             "unpin"
                             if view.project.id in pins.values()
@@ -442,6 +444,7 @@ def recent_projects() -> dict:
                         difficulty=None,
                         research_running=False,
                         available=False,
+                        pinned=(entry["id"] in pins.values()),
                         pin_state="unpin" if entry["id"] in pins.values() else "remove",
                         error="Unavailable or changed identity. Restore the saved project file, or forget this entry.",
                     )

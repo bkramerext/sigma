@@ -1995,6 +1995,12 @@ def pin_project_view(body: ProjectPinRequest):
     return {"project_id": body.project_id, "pinned": body.pinned}
 
 
+@app.post("/api/projects/recent/pin")
+def pin_recent_project_view(body: ProjectPinRequest):
+    """Compatibility route for the in-category Saved Projects pin UI."""
+    return pin_project_view(body)
+
+
 @app.get("/api/projects/samples")
 def samples_view():
     from sigma.samples import sample_projects
