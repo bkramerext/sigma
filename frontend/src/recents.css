@@ -21,8 +21,7 @@
   text-underline-offset: 3px;
 }
 .home-page .home-recents .recent-open:disabled { color: #9aa6af; cursor: default; }
-.home-page .home-recents .recent-type-group.pinned-type-group > summary { grid-template-columns: 10px 16px 120px max-content; }
-.home-page .home-recents .recent-type-group .recent-pin-icon { color: #f1c58d; font-size: 15px; text-align: center; }
+.home-page .home-recents .recent-title-pin { flex: 0 0 auto; align-self: center; margin-right: -5px; color: #e0c4a0; }
 .home-page .home-recents .recent-pin,
 .home-page .home-recents .recent-forget {
   flex: 0 0 auto; width: auto; height: auto; min-height: 0; margin: 0; padding: 0;
