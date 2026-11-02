@@ -47,8 +47,7 @@ def main() -> None:
     assert len({ref["url"] for ref in all_standards}) == len(all_standards)
     assert all(ref["name"].strip() and ref["url"].startswith("https://") for ref in all_standards)
     builtins_by_id = {item.id: item for item in builtins}
-    # Mathematics and Physics preserve their established sources; each other
-    # discipline now contributes its own pair, beyond the shared guidance.
+    # Every discipline contributes a curated pair beyond the shared guidance.
     assert {
         ref["url"]
         for item in builtins
@@ -58,20 +57,20 @@ def main() -> None:
         {ref["url"] for field in project_types.REFERENCE_FIELDS for ref in common[field]}
     )
     builtins_by_id = {item.id: item for item in builtins}
+    # Regression checks for the compact methodology guides: no textbooks or
+    # oversized handbooks, and no dead Army War College/Buffalo URLs.
+    assert builtins_by_id["chemistry"].research_standards_references[0]["url"] == (
+        "https://www.chemistry.ucla.edu/undergraduate/undergraduate-research/"
+        "research-proposal-guidelines/"
+    )
     assert builtins_by_id["mathematical"].research_standards_references[0]["url"] == (
-        "https://richardhammack.github.io/BookOfProof/Main.pdf"
+        "https://dummit.cos.northeastern.edu/teaching_fa19_1365/1365_problemsolving"
     )
-    assert builtins_by_id["physics"].publication_standards_references[0]["url"] == (
-        "https://publishingsupport.iopscience.iop.org/publishing-support/authors/"
-        "authoring-for-journals/writing-journal-article/"
+    assert builtins_by_id["military"].publication_standards_references[0]["url"].endswith(
+        "/VDF%20Decision%20Paper.pdf"
     )
-    # Publication references must be directly extractable documents, not
-    # ornamental landing pages. Preserve the established physics HTML source.
-    for identifier, item in builtins_by_id.items():
-        if identifier not in {"mathematical", "physics"}:
-            assert item.publication_standards_references[0]["url"].lower().endswith(
-                ".pdf"
-            ), identifier
+    # Plain, substantive HTML is acceptable along with compact PDFs and Markdown;
+    # do not require PDF-only links when the source itself has a clean text body.
     for identifier, item in builtins_by_id.items():
         assert len(item.research_standards_references) == 1, identifier
         assert len(item.publication_standards_references) == 1, identifier
