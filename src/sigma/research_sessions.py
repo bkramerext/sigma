@@ -2897,6 +2897,18 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         )
         + " Use the session's methodology_source_material as optional, source-attributed research-method guidance, not as evidence about the project subject. Do not pretend those websites were inspected by this agent or cite them as domain findings. A failed or missing methodology reference never blocks the research task. "
         + (RESEARCH_SKEPTIC_METHOD_GUIDANCE if role == "skeptic" else "")
+        + (
+            " Review whether the Investigator's assumptions, measurements, "
+            "tests and inferences conform to the applicable project-type research "
+            "methods supplied in methodology_source_material. Challenge material "
+            "nonconformance and explain its effect on validity. Scientifically "
+            "justified departures are allowed; never assert the contents of an "
+            "uninspected linked reference. "
+            if role == "skeptic"
+            and context.get("methodology_source_catalog_version")
+            == "project-type-methods-v1"
+            else ""
+        )
         + _research_mode_guidance(context)
         + " "
         + AMBIENT_RESEARCH_RUBRIC
@@ -5156,7 +5168,7 @@ async def start_session(
             # Frozen in the saved session; reuse the last sufficiently
             # comprehensive set and never block on unavailable web material.
             record["research_method_sources"] = select_method_sources(
-                view.project.investigation_type.value,
+                getattr(view.project.investigation_type, "value", view.project.investigation_type),
                 view.project.title,
                 view.project.problem,
                 (item.approach for item in selected_strategies if item is not None),
@@ -6520,6 +6532,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "problem": record["problem"],
         "investigation_type": record.get("investigation_type"),
         "research_method_version": record.get("research_method_version") or "phase2-i2-v2",
+        "methodology_source_catalog_version": (
+            record.get("research_method_sources", {}).get("version")
+            if isinstance(record.get("research_method_sources"), dict)
+            else None
+        ),
         "methodology_source_material": (
             record.get("research_method_sources", {}).get("sources", [])
             if isinstance(record.get("research_method_sources"), dict)
