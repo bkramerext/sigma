@@ -6699,6 +6699,15 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
+    # A recovered role must receive its exact saved authorization and prior
+    # uncertain attempt IDs. Recovery text is operational context, not evidence.
+    protocol_recovery = record.get("protocol_completion_recovery")
+    if (
+        isinstance(protocol_recovery, dict)
+        and protocol_recovery.get("cycle") == cycle
+        and protocol_recovery.get("role") in {None, role}
+    ):
+        context["protocol_completion_recovery"] = dict(protocol_recovery)
     # Frozen at session start. URLs are methodological pointers, not externally
     # inspected evidence; never pretend a linked document was read.
     method_references = record.get("research_method_references")
