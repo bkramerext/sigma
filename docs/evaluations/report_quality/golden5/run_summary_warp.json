@@ -1,0 +1,14 @@
+{
+  "run_started_at": "2026-11-02T06:16:53.998158+00:00",
+  "run_finished_at": "2026-11-02T06:25:44.150653+00:00",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider_mode": "chatgpt",
+  "completed": 0,
+  "failed": [
+    {
+      "name": "warp-drive-design",
+      "type": "ProjectError",
+      "error": "A table in A local stability gate for nonlinear scalar sources cites claims outside its section outline"
+    }
+  ]
+}
