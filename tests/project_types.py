@@ -28,6 +28,62 @@ def main() -> None:
     assert literature.icon["key"] == "literature"
     assert [item.id for item in builtins if (item.behavior or {}).get("lean")] == ["mathematical"]
 
+    # Curated defaults are immutable, limited, and separate from custom types.
+    common = project_types.common_references()
+    assert len(common["research_standards_references"]) == 2
+    assert len(common["publication_standards_references"]) == 2
+    builtins_by_id = {item.id: item for item in builtins}
+    for identifier in ("mathematical", "physics"):
+        item = builtins_by_id[identifier]
+        assert len(item.research_standards_references) == 1
+        assert len(item.publication_standards_references) == 1
+        for field in project_types.REFERENCE_FIELDS:
+            assert all(ref["name"] and ref["url"].startswith("https://") for ref in getattr(item, field))
+        effective = project_types.get_type(identifier)
+        assert effective is not None
+        for field in project_types.REFERENCE_FIELDS:
+            assert len(getattr(effective, field)) == 3
+            assert set(ref["url"] for ref in common[field]) <= {
+                ref["url"] for ref in getattr(effective, field)
+            }
+    for identifier, item in builtins_by_id.items():
+        if identifier not in {"mathematical", "physics"}:
+            assert not item.research_standards_references
+            assert not item.publication_standards_references
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory).resolve()
+        with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root)}), TestClient(app) as client:
+            before = client.get("/api/project-types").json()
+            assert before["common_references"] == common
+            assert "reference_preferences" not in before
+            assert "builtin_references" not in before
+            # Even direct API requests cannot hide or replace standard references.
+            rejected = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": before["revision"],
+                    "reference_preferences": {"common": {"hidden_research": [
+                        common["research_standards_references"][0]["url"]
+                    ]}},
+                },
+            )
+            assert rejected.status_code == 422, rejected.text
+            assert client.get("/api/project-types").json()["revision"] == before["revision"]
+            assert client.get("/api/project-types").json()["common_references"] == common
+
+    from sigma.reference_titles import _TitleParser, resolve_title
+
+    parsed_title = _TitleParser()
+    parsed_title.feed(
+        '<html><head><title>Fallback</title><meta property="og:title" '
+        'content="Preferred &amp; Tested"></head></html>'
+    )
+    assert parsed_title.og_title == "Preferred & Tested"
+    assert resolve_title("http://127.0.0.1/secret") is None
+    assert resolve_title("file:///etc/passwd") is None
+
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
         first = root / "first"
@@ -142,20 +198,41 @@ def main() -> None:
                 for item in clean_response.json()["project_types"]
                 if item["id"] == "ref-cleanup"
             )
-            assert cleaned["research_standards_references"] == [
+            assert [item["url"] for item in cleaned["research_standards_references"]] == [
                 "http://example.org/style.html",
                 "http://example.org/STYLE.html",
             ]
             assert cleaned["publication_standards_references"] == [
-                "https://example.com/guide",
+                {"name": "https://example.com/guide", "url": "https://example.com/guide"},
             ]
-            revision = clean_response.json()["revision"]
+            # Named records survive normalization; old URL strings stay readable.
+            assert all(
+                reference["name"] == reference["url"]
+                for reference in cleaned["research_standards_references"]
+            )
+            named = _record("named-reference", "Named Reference", "Named tests", placeholder)
+            named["research_standards_references"] = [
+                {"name": "A Human-Readable Title", "url": "https://example.org/a-paper"}
+            ]
+            named_response = client.put(
+                "/api/project-types",
+                json={"project_types": [clean, named], "expected_revision": clean_response.json()["revision"]},
+            )
+            assert named_response.status_code == 200, named_response.text
+            saved_named = next(
+                item for item in named_response.json()["project_types"]
+                if item["id"] == "named-reference"
+            )
+            assert saved_named["research_standards_references"] == [
+                {"name": "A Human-Readable Title", "url": "https://example.org/a-paper"}
+            ]
+            revision = named_response.json()["revision"]
             clear_response = client.put(
                 "/api/project-types",
                 json={
                     "project_types": [],
                     "expected_revision": revision,
-                    "confirmed_removals": {"ref-cleanup": 0},
+                    "confirmed_removals": {"ref-cleanup": 0, "named-reference": 0},
                 },
             )
             assert clear_response.status_code == 200, clear_response.text

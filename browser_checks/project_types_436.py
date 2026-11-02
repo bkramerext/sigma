@@ -92,6 +92,16 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
+    # Standard Common and discipline guidance is visible but cannot be edited.
+    common_section = dialog.locator(".pt-common-references")
+    expect(common_section.locator(".pt-reference-link")).to_have_count(4)
+    expect(common_section.locator("input, button")).to_have_count(0)
+    expect(common_section.locator(".pt-reference-url")).to_have_count(4)
+    math_card = dialog.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
+    math_card.locator("summary").click()
+    expect(math_card.locator(".pt-reference-link")).to_have_count(2)
+    expect(math_card.locator("input:not([disabled]), button")).to_have_count(0)
+    math_card.locator("summary").click()
     expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_have_count(0)
     expect(dialog.get_by_text("(cannot be modified)", exact=True)).to_be_visible()
     page.set_viewport_size({"width": 1440, "height": 1000})
@@ -257,7 +267,7 @@ with sync_playwright() as playwright:
     assert child_type["icon"]["key"] == "placeholder"
     assert child_type["based_on"] == parent_type["id"]
     assert child_type["scope"] == "Independent copied scope"
-    assert child_type["research_standards_references"] == ["https://example.org/research-standard"]
+    assert child_type["research_standards_references"] == [{"name": "https://example.org/research-standard", "url": "https://example.org/research-standard"}]
     assert not [url for url, _ in api_requests if url.endswith("/project-types/icon")]
 
     # Edit/add/remove are all drafts. Cancel discards all three, and Remove

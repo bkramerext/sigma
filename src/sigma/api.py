@@ -139,8 +139,8 @@ class ProjectTypeBody(BaseModel):
     based_on: str | None = Field(default=None, max_length=100)
     user_defined: bool = True
     icon: dict[str, Any]
-    research_standards_references: list[str] = Field(default_factory=list, max_length=100)
-    publication_standards_references: list[str] = Field(default_factory=list, max_length=100)
+    research_standards_references: list[str | dict[str, str]] = Field(default_factory=list, max_length=100)
+    publication_standards_references: list[str | dict[str, str]] = Field(default_factory=list, max_length=100)
     origin: str | None = None
     behavior: dict[str, bool] = Field(default_factory=dict)
 
@@ -173,14 +173,23 @@ def list_project_types_view(request: Request):
         ).hexdigest()
         return {
             "project_types": builtins,
+            "common_references": project_types.common_references(),
             "icons": {"placeholder": project_types.placeholder_icon()},
             "revision": revision,
         }
     return {
         "project_types": [item.record() for item in project_types.all_types()],
+        "common_references": project_types.common_references(),
         "icons": {"placeholder": project_types.placeholder_icon()},
         "revision": project_types.catalog_revision(),
     }
+
+@app.get("/api/reference-title")
+def reference_title_view(url: str):
+    """Optional presentation metadata; never required for editing or saving."""
+    from sigma.reference_titles import resolve_title
+
+    return {"title": resolve_title(url)}
 
 
 @app.put("/api/project-types")

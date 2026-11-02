@@ -11,7 +11,7 @@ import re
 import stat
 import tempfile
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -20,6 +20,7 @@ from sigma.projects import ProjectError, projects_root
 
 MAX_ICON_BYTES = 512_000
 MAX_REFERENCES = 100
+REFERENCE_FIELDS = ("research_standards_references", "publication_standards_references")
 _BUILTIN_FILE = Path(__file__).with_name("data") / "builtin_project_types.json"
 _DATA_URI = re.compile(r"^data:(image/(?:png|webp));base64,([A-Za-z0-9+/]+=*)$")
 
@@ -42,8 +43,8 @@ class ProjectType:
     icon: dict[str, Any]
     based_on: str | None = None
     origin: str | None = None
-    research_standards_references: tuple[str, ...] = ()
-    publication_standards_references: tuple[str, ...] = ()
+    research_standards_references: tuple[dict[str, str], ...] = ()
+    publication_standards_references: tuple[dict[str, str], ...] = ()
     behavior: dict[str, bool] | None = None
 
     def record(self) -> dict[str, Any]:
@@ -55,45 +56,53 @@ class ProjectType:
         return result
 
 
-def _validate_references(value: Any, field: str) -> tuple[str, ...]:
+def _validate_references(value: Any, field: str) -> tuple[dict[str, str], ...]:
+    """Accept legacy URL strings or named records; persist canonical name + URL."""
     if not isinstance(value, list) or len(value) > MAX_REFERENCES:
-        raise ProjectError(f"{field} must be a list of at most {MAX_REFERENCES} URLs")
-    cleaned: list[str] = []
-    for item in value:
-        if not isinstance(item, str) or len(item) > 2048:
-            raise ProjectError(f"{field} contains an invalid URL")
-        # Blank draft rows are not references. Discard them on Save.
-        candidate = item.strip()
-        if not candidate:
-            continue
-        from urllib.parse import urlsplit, urlunsplit
+        raise ProjectError(f"{field} must be a list of at most {MAX_REFERENCES} references")
+    cleaned: dict[str, dict[str, str]] = {}
+    from urllib.parse import urlsplit, urlunsplit
 
+    for item in value:
+        if isinstance(item, str):
+            candidate, name = item.strip(), item.strip()
+        elif isinstance(item, dict) and set(item) <= {"name", "url"}:
+            candidate, name = item.get("url"), item.get("name")
+            if not isinstance(candidate, str) or (name is not None and not isinstance(name, str)):
+                raise ProjectError(f"{field} contains an invalid reference")
+            candidate = candidate.strip()
+            name = (name or candidate).strip()
+        else:
+            raise ProjectError(f"{field} contains an invalid reference")
+        if not candidate:
+            continue  # Blank editor rows disappear on Save.
+        if len(candidate) > 2048:
+            raise ProjectError(f"{field} contains an invalid URL")
         try:
             parsed = urlsplit(candidate)
-            hostname = parsed.hostname
-            port = parsed.port
+            hostname, port = parsed.hostname, parsed.port
         except ValueError as exc:
             raise ProjectError(f"{field} contains an invalid URL") from exc
-        if parsed.scheme not in {"http", "https"} or not hostname or parsed.username:
+        if parsed.scheme not in {"http", "https"} or not hostname or parsed.username or parsed.password:
             raise ProjectError(f"{field} URLs must use HTTP or HTTPS and include a host")
         host = hostname.casefold()
         if ":" in host and not host.startswith("["):
             host = f"[{host}]"
-        if (
-            port is not None
-            and not (parsed.scheme.casefold() == "https" and port == 443)
-            and not (parsed.scheme.casefold() == "http" and port == 80)
+        if port is not None and not (
+            (parsed.scheme.casefold() == "https" and port == 443)
+            or (parsed.scheme.casefold() == "http" and port == 80)
         ):
             host += f":{port}"
         normalized = urlunsplit(
             (parsed.scheme.casefold(), host, parsed.path or "/", parsed.query, "")
         )
-        # HTTP paths and query values may be case-sensitive. The scheme and
-        # hostname have already been canonicalized above.
-        if normalized in cleaned:
-            continue  # Keep first canonical occurrence; deduplicate on Save.
-        cleaned.append(normalized)
-    return tuple(sorted(cleaned, key=str.casefold))
+        # A URL may be longer than a human title; its fallback name is the URL.
+        label = (
+            normalized if not name or name == candidate
+            else _optional_text(name, "Reference name", 240)
+        )
+        cleaned.setdefault(normalized, {"name": label, "url": normalized})
+    return tuple(sorted(cleaned.values(), key=lambda ref: ref["url"].casefold()))
 
 
 def _validate_icon(value: Any) -> dict[str, Any]:
@@ -187,12 +196,12 @@ def _store_path() -> Path:
     return projects_root() / ".sigma-project-types.json"
 
 
-def custom_types() -> list[ProjectType]:
+def _read_catalog() -> dict[str, Any]:
     path = _store_path()
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
-        return []
+        return {"schema_version": 1, "project_types": []}
     except OSError as exc:
         raise ProjectError("Custom project type storage is unsafe or unavailable") from exc
     try:
@@ -210,11 +219,21 @@ def custom_types() -> list[ProjectType]:
         raise ProjectError("Custom project type storage could not be read") from exc
     if not isinstance(raw, dict) or raw.get("schema_version") != 1:
         raise ProjectError("Custom project type storage has an unsupported format")
-    records = raw.get("project_types")
-    if not isinstance(records, list):
+    if not isinstance(raw.get("project_types"), list):
         raise ProjectError("Custom project type storage is invalid")
+    return raw
+
+
+def custom_types() -> list[ProjectType]:
+    records = _read_catalog()["project_types"]
     result = [_from_record(item) for item in records if isinstance(item, dict)]
     return sorted(result, key=lambda item: item.name.casefold())
+
+
+def common_references() -> dict[str, list[dict[str, str]]]:
+    """Immutable curated defaults shared by every research discipline."""
+    raw = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))["common_references"]
+    return {field: list(_validate_references(raw[field], field)) for field in REFERENCE_FIELDS}
 
 
 def resolve_type_metadata(
@@ -227,8 +246,6 @@ def resolve_type_metadata(
     the closest available ancestor. Missing parents use the child's snapshot;
     cycles are bounded and never followed indefinitely.
     """
-    from dataclasses import replace
-
     if definitions is None:
         definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
     item = definitions.get(identifier)
@@ -236,8 +253,8 @@ def resolve_type_metadata(
         return None
     ancestry: set[str] = {identifier}
     icon = item.icon
-    research = item.research_standards_references
-    publication = item.publication_standards_references
+    research = list(item.research_standards_references)
+    publication = list(item.publication_standards_references)
     parent_id = item.based_on
     while parent_id and parent_id not in ancestry:
         ancestry.add(parent_id)
@@ -246,16 +263,18 @@ def resolve_type_metadata(
             break
         if icon.get("key") == "placeholder" and parent.icon.get("key") != "placeholder":
             icon = parent.icon
-        if not research:
-            research = parent.research_standards_references
-        if not publication:
-            publication = parent.publication_standards_references
+        for target, field in (
+            (research, parent.research_standards_references),
+            (publication, parent.publication_standards_references),
+        ):
+            seen = {ref["url"] for ref in target}
+            target.extend(ref for ref in field if ref["url"] not in seen)
         parent_id = parent.based_on
     return replace(
         item,
         icon=icon,
-        research_standards_references=research,
-        publication_standards_references=publication,
+        research_standards_references=tuple(research),
+        publication_standards_references=tuple(publication),
     )
 
 
@@ -311,7 +330,16 @@ def project_usage(identifier: str) -> int:
 
 
 def get_type(identifier: str) -> ProjectType | None:
-    return next((item for item in all_types() if item.id == identifier), None)
+    """Snapshots carry effective shared and discipline-specific guidance."""
+    item = next((row for row in all_types() if row.id == identifier), None)
+    if item is None:
+        return None
+    common = common_references()
+    combined = {}
+    for field in REFERENCE_FIELDS:
+        by_url = {ref["url"]: ref for ref in [*common[field], *getattr(item, field)]}
+        combined[field] = tuple(sorted(by_url.values(), key=lambda ref: ref["url"].casefold()))
+    return replace(item, **combined)
 
 
 def safe_project_snapshot(value: Any) -> bool:
@@ -367,10 +395,6 @@ def normalize_project_snapshot(value: Any, identifier: str) -> dict[str, Any] | 
 
 def _write_custom(items: list[ProjectType], *, expected_revision: str | None = None) -> None:
     path = _store_path()
-    document = {"schema_version": 1, "project_types": [item.record() for item in items]}
-    payload = json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-    if len(payload.encode("utf-8")) > 16_000_000:
-        raise ProjectError("Custom project type catalog exceeds the storage limit")
     lock_fd = os.open(
         path.parent / ".sigma-project-types.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600
     )
@@ -387,6 +411,10 @@ def _write_custom(items: list[ProjectType], *, expected_revision: str | None = N
             raise ProjectError(
                 "Project types changed in another window; reload and review before saving"
             )
+        document = {"schema_version": 1, "project_types": [item.record() for item in items]}
+        payload = json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+        if len(payload.encode("utf-8")) > 16_000_000:
+            raise ProjectError("Custom project type catalog exceeds the storage limit")
         descriptor, temporary = tempfile.mkstemp(prefix=".project-types-", dir=path.parent)
         try:
             os.fchmod(descriptor, 0o600)

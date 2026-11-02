@@ -8,13 +8,17 @@ export type ProjectTypeRecord = {
   based_on?: string | null;
   user_defined: boolean;
   icon: { kind: string; key?: string; data_uri?: string; view_box?: string; elements?: Array<{ tag: string; attrs?: Record<string, string | number>; text?: string; children?: Array<{ tag: string; attrs?: Record<string, string | number>; text?: string; children?: never }> }> };
-  research_standards_references: string[];
-  publication_standards_references: string[];
+  research_standards_references: Reference[];
+  publication_standards_references: Reference[];
   origin?: string | null;
   behavior?: Record<string, boolean>;
 };
 
 type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode };
+type Reference = { name: string; url: string };
+type ReferenceField = 'research_standards_references' | 'publication_standards_references';
+type ReferenceFields = Pick<ProjectTypeRecord, ReferenceField>;
+const titleCache = new Map<string, string | null>();
 const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
 const handledErrorHeaders = { 'X-Sigma-Error-Handled': 'true' };
 // Keep validation aligned with server-side _validate_references. Empty edit rows
@@ -35,6 +39,46 @@ function referenceUrlError(value: string): string | null {
   return null;
 }
 
+
+function ReferenceLink({ reference, onResolved }: { reference: Reference; onResolved?: (name: string) => void }) {
+  const candidate = reference.url.trim();
+  const knownName = reference.name.trim() || candidate;
+  const [resolvedTitle, setResolvedTitle] = useState<string | null>(() => titleCache.get(candidate) ?? null);
+  useEffect(() => {
+    if (!candidate || referenceUrlError(candidate) || knownName !== candidate) {
+      setResolvedTitle(null);
+      return;
+    }
+    if (titleCache.has(candidate)) {
+      const cached = titleCache.get(candidate) ?? null;
+      setResolvedTitle(cached);
+      if (cached) onResolved?.(cached);
+      return;
+    }
+    setResolvedTitle(null);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void fetch(`/api/reference-title?url=${encodeURIComponent(candidate)}`, { signal: controller.signal, headers: handledErrorHeaders })
+        .then(response => response.ok ? response.json() : Promise.reject())
+        .then((data: { title: string | null }) => {
+          const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : null;
+          titleCache.set(candidate, title);
+          if (!controller.signal.aborted) {
+            setResolvedTitle(title);
+            if (title) onResolved?.(title);
+          }
+        }).catch(() => {
+          if (!controller.signal.aborted) { titleCache.set(candidate, null); setResolvedTitle(null); }
+        });
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [candidate, knownName]);
+  if (!candidate || referenceUrlError(candidate)) return null;
+  return <div className="pt-reference-link">
+    <a href={candidate} target="_blank" rel="noopener noreferrer">{knownName === candidate ? resolvedTitle || candidate : knownName}</a>
+    <a className="pt-reference-url" href={candidate} target="_blank" rel="noopener noreferrer">{candidate}</a>
+  </div>;
+}
 
 function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   value: string | null | undefined;
@@ -85,6 +129,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const returnFocus = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
   const [drafts, setDrafts] = useState<ProjectTypeRecord[]>([]);
+  const [commonReferences, setCommonReferences] = useState<ReferenceFields | null>(null);
   const [placeholderIcon, setPlaceholderIcon] = useState<ProjectTypeRecord['icon'] | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -106,7 +151,13 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   async function load() {
     const response = await fetch('/api/project-types', { cache: 'no-store', headers: handledErrorHeaders });
     if (!response.ok) throw new Error('Project types could not be loaded.');
-    const data = await response.json() as { project_types: ProjectTypeRecord[]; icons: { placeholder: ProjectTypeRecord['icon'] }; revision: string };
+    const data = await response.json() as {
+      project_types: ProjectTypeRecord[];
+      icons: { placeholder: ProjectTypeRecord['icon'] };
+      revision: string;
+      common_references: ReferenceFields;
+    };
+    setCommonReferences(data.common_references);
     setBuiltins(data.project_types.filter(item => !item.user_defined));
     const savedCustomTypes = data.project_types.filter(item => item.user_defined);
     setSavedDrafts(structuredClone(savedCustomTypes));
@@ -147,8 +198,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       current = item.based_on;
     }
     const icon = chain.find(item => item.icon.kind === 'data' || item.icon.key !== 'placeholder')?.icon;
-    const research = chain.find(item => item.research_standards_references.length)?.research_standards_references ?? [];
-    const publication = chain.find(item => item.publication_standards_references.length)?.publication_standards_references ?? [];
+    const research = chain.flatMap(item => item.research_standards_references).filter((ref, index, refs) => refs.findIndex(other => other.url === ref.url) === index);
+    const publication = chain.flatMap(item => item.publication_standards_references).filter((ref, index, refs) => refs.findIndex(other => other.url === ref.url) === index);
     return { icon: structuredClone(icon ?? placeholderIcon!), research_standards_references: [...research], publication_standards_references: [...publication] };
   }
   function basedOn(id: string, parentId: string) {
@@ -207,28 +258,38 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
-  const listEditor = (item: ProjectTypeRecord, field: 'research_standards_references' | 'publication_standards_references', readonly: boolean) => {
-    const urls = item[field];
+  const listEditor = (item: ProjectTypeRecord, field: ReferenceField, readonly: boolean) => {
+    const references = item[field];
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
-    const setAt = (index: number, value: string) => edit(item.id, { [field]: urls.map((url, i) => i === index ? value : url) });
-    if (readonly && urls.length === 0) return null;
+    const setAt = (index: number, url: string) => edit(item.id, { [field]: references.map((reference, i) =>
+      i === index ? { name: url, url } : reference) });
+    if (readonly && references.length === 0) return null;
     return <table className="pt-reference-table"><tbody>
-      {urls.map((url, index) => {
-        const urlError = !readonly && referenceUrlError(url);
+      {references.map((reference, index) => {
+        const urlError = !readonly && referenceUrlError(reference.url);
         const errorId = `pt-reference-error-${item.id}-${field}-${index}`;
+        const setResolved = (name: string) => setDrafts(previous => previous.map(draft => draft.id !== item.id ? draft : {
+          ...draft,
+          [field]: draft[field].map((current, i) => (
+            i === index && current.url === reference.url && (!current.name || current.name === current.url)
+              ? { ...current, name } : current
+          )),
+        }));
         return <tr key={index}><td>
-          {readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <div className="pt-reference-entry">
+          {readonly ? <ReferenceLink reference={reference}/> : <div className="pt-reference-entry">
             <div className="pt-reference-field">
-              <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={url}
+              <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
                 onChange={event => setAt(index, event.target.value)}/>
+              <ReferenceLink reference={reference} onResolved={setResolved}/>
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
-            <button type="button" disabled={busy} onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>
+            <button type="button" disabled={busy} onClick={() => edit(item.id, { [field]: references.filter((_, i) => i !== index) })}>Remove</button>
           </div>}
         </td></tr>;
       })}
-      {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || urls.some(url => !url.trim())} onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td></tr>}
+      {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || references.some(reference => !reference.url.trim())}
+        onClick={() => edit(item.id, { [field]: [...references, { name: '', url: '' }] })}>New</button></td></tr>}
     </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" key={item.id} open={open === item.id}>
@@ -241,8 +302,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderEffectiveIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      {(!readonly || item.research_standards_references.length > 0) && <section><h3>Research standards references</h3>{listEditor(item, 'research_standards_references', readonly)}</section>}
-      {(!readonly || item.publication_standards_references.length > 0) && <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>}
+      {(!readonly || item.research_standards_references.length > 0) &&
+        <section><h3>Research standards references</h3>{listEditor(item, 'research_standards_references', readonly)}</section>}
+      {(!readonly || item.publication_standards_references.length > 0) &&
+        <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>}
     </div>
   </details>;
   const hasChanges = savedDrafts !== null && JSON.stringify(drafts) !== JSON.stringify(savedDrafts);
@@ -250,7 +313,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
     item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
-    [...item.research_standards_references, ...item.publication_standards_references].some(url => !!referenceUrlError(url))
+    [...item.research_standards_references, ...item.publication_standards_references].some(ref => !!referenceUrlError(ref.url))
   );
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); if (!busy) close(); }} onClick={event => { if (event.target === dialog.current && !busy) close(); }} onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
@@ -270,6 +333,18 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     <div className="project-types-body">
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
+      <section className="pt-common-references">
+        <div className="project-types-section-heading"><h3>Common References</h3><span>(built-in, cannot be modified)</span></div>
+        <p>Standard references inherited by every project type.</p>
+        <h4>Research standards references</h4>
+        <table className="pt-reference-table"><tbody>{commonReferences?.research_standards_references.map(ref =>
+          <tr key={ref.url}><td><ReferenceLink reference={ref}/></td></tr>
+        )}</tbody></table>
+        <h4>Publication standards references</h4>
+        <table className="pt-reference-table"><tbody>{commonReferences?.publication_standards_references.map(ref =>
+          <tr key={ref.url}><td><ReferenceLink reference={ref}/></td></tr>
+        )}</tbody></table>
+      </section>
     </div>
   </dialog>;
 }

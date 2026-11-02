@@ -251,8 +251,18 @@
         "mathematical": true,
         "lean": true
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Terence Tao — Solving Mathematical Problems",
+          "url": "https://terrytao.wordpress.com/career-advice/solving-mathematical-problems/"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Terence Tao — On Writing Mathematics",
+          "url": "https://terrytao.wordpress.com/advice-on-writing-papers/"
+        }
+      ]
     },
     {
       "id": "military",
@@ -370,8 +380,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "NASEM — Assessing the Reliability of Complex Models",
+          "url": "https://www.nationalacademies.org/read/13395/chapter/2"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "APS — Physics Manuscript Style Basics",
+          "url": "https://journals.aps.org/authors/style-basics"
+        }
+      ]
     },
     {
       "id": "religion",
@@ -423,5 +443,27 @@
       "research_standards_references": [],
       "publication_standards_references": []
     }
-  ]
+  ],
+  "common_references": {
+    "research_standards_references": [
+      {
+        "name": "NASEM — Reproducibility and Replicability in Science",
+        "url": "https://www.nationalacademies.org/read/25303/chapter/5"
+      },
+      {
+        "name": "Stanford Encyclopedia of Philosophy — Abduction",
+        "url": "https://plato.stanford.edu/entries/abduction/"
+      }
+    ],
+    "publication_standards_references": [
+      {
+        "name": "Ten Simple Rules for Structuring Papers",
+        "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005619"
+      },
+      {
+        "name": "UCI — Scientific Writing: Discussion and Conclusions",
+        "url": "https://guides.lib.uci.edu/scientificwriting/discussion"
+      }
+    ]
+  }
 }
