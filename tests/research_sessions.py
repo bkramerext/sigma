@@ -11651,9 +11651,9 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path)
         final_record = research_sessions._read(str(path), started["id"])
         assert len(final_record["call_limit_adjustments"]) == 1
         assert sum(
-            event.get("type") == "session.protocol_call_limit_extended"
+            event.get("kind") == "session.protocol_call_limit_extended"
             for event in final_record.get("events", [])
-        ) <= 1
+        ) == 1
         assert resumed["calls_used"] == 2
         assert resumed["call_limit"] == 7
         assert research_sessions._read(str(path), started["id"])["steps"] == original["steps"]
