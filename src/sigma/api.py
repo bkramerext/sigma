@@ -755,6 +755,18 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
     }
 
 
+@app.post("/api/projects/papers/{paper_id}/eli5")
+async def paper_eli5_view(paper_id: str, body: PaperScoreRequest):
+    from sigma.paper_eli5 import explain
+
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    return {"markdown": await explain(
+        body.path, paper_id, body.expected_binding, body.expected_project_id
+    )}
+
+
 @app.get("/api/projects/papers/{paper_id}/pdf")
 def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
     disposition = "inline" if open_in_browser else "attachment"
