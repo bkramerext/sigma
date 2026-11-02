@@ -3280,12 +3280,12 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
         chosen, status = await catalog.select(project, fetch=fetch)
         assert status == "selected"
         assert len(chosen) == 3
-        assert {item["tier"] for item in chosen} == {
-            "general", "discipline", "branch"
-        }
+        assert {item["tier"] for item in chosen} == {"general", "discipline", "branch"}
         assert all(len(item["excerpt"]) >= 450 for item in chosen)
-        assert all(item["type"] == "mathematical" and item["branch"] == "combinatorics"
-                   for item in chosen)
+        assert all(
+            item["type"] == "mathematical" and item["branch"] == "combinatorics"
+            for item in chosen
+        )
         count = len(calls)
         reused, mode = await catalog.select(project, chosen, fetch=fetch)
         assert mode == "reused" and reused == chosen and len(calls) == count
@@ -3326,21 +3326,9 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
 
 def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
     """Each project type gets general, evidence-specific genre instructions."""
-    cases = (
-        (
-            "mathematical",
-            "lemmas by logical dependency",
-            "a universal proof",
-            "chosen metric or field ansatz",
-        ),
-        (
-            "physics",
-            "theoretical derivation",
-            "A chosen metric or field ansatz",
-            "Finite enumeration or numerical pattern matching",
-        ),
-    )
-    for project_type, marker, second_marker, excluded in cases:
+    def check_case(
+        project_type: str, marker: str, second_marker: str, excluded: str
+    ) -> None:
         package, plan = fast_package()
         package["sources"][0]["data"]["investigation_type"] = project_type
         package["sources"][0]["data"]["problem"] = "Study the stated research question."
@@ -3415,6 +3403,19 @@ def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
         assert rf"\section{{{opening}}}" in tex
         assert rf"\section{{{methods}}}" in tex
         assert marker not in papers._paper_style("default")[3]
+
+    check_case(
+        "mathematical",
+        "lemmas by logical dependency",
+        "a universal proof",
+        "chosen metric or field ansatz",
+    )
+    check_case(
+        "physics",
+        "theoretical derivation",
+        "A chosen metric or field ansatz",
+        "Finite enumeration or numerical pattern matching",
+    )
 
 
 def test_military_style_guidance_reaches_all_authoring_paths() -> None:
