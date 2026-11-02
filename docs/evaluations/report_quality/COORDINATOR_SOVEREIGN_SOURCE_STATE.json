@@ -1,0 +1,69 @@
+{
+  "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+  "project_title": "Sovereign AI Federation v2",
+  "sessions": [
+    {
+      "file": "research-sessions/36e06a52-e138-48ee-9ccf-1519bb6faedc.json",
+      "session_id": "36e06a52-e138-48ee-9ccf-1519bb6faedc",
+      "status": "ended",
+      "termination_reason_code": "provider_or_strategy_failure",
+      "terminal_reason": "Research stopped early after 18 of 18 available turns (round 3 of 3). Fairness, reliability and pilot: provider response failed; 8 findings were preserved. Research is incomplete. Review the saved attempts before resuming or starting new work. The failed attempt used the final available turn; no further agent turn remained for recovery.",
+      "step_count": 18,
+      "artifact_count": 8,
+      "failed_or_incomplete_steps": [
+        {
+          "call_number": 18,
+          "id": "d9b6ed92-4d4a-4531-9adb-4e225169fed2",
+          "role": "skeptic",
+          "status": "failed",
+          "failure_kind": "provider_error",
+          "request_status": "call_failed_dispatch_unknown"
+        }
+      ],
+      "artifact_verification": [
+        {
+          "artifact_id": "bfcf812f-b3a9-46ff-862c-4d0b4cd76978",
+          "verification_status": "convincing_unverified",
+          "objective_status": "partial"
+        },
+        {
+          "artifact_id": "5c8fdc17-0ce8-4ea3-b8dc-79e05f97d0db",
+          "verification_status": "convincing_unverified",
+          "objective_status": "partial"
+        },
+        {
+          "artifact_id": "cc14dcfd-f2c0-41f7-92f4-768a1511e7f2",
+          "verification_status": "convincing_unverified",
+          "objective_status": "partial"
+        },
+        {
+          "artifact_id": "f5e8dea1-e0d1-4076-bf15-3ea3c2f345bc",
+          "verification_status": "convincing_unverified",
+          "objective_status": "partial"
+        },
+        {
+          "artifact_id": "1e89585c-2b17-49bd-bb1e-dc1df98ba8ca",
+          "verification_status": "incomplete",
+          "objective_status": "partial"
+        },
+        {
+          "artifact_id": "2fef1213-38ff-4acf-9af2-a0c28b89b0da",
+          "verification_status": "convincing_unverified",
+          "objective_status": "partial"
+        },
+        {
+          "artifact_id": "296ee708-59eb-4fac-afc4-0d5448ac2d1a",
+          "verification_status": "convincing_unverified",
+          "objective_status": "partial"
+        },
+        {
+          "artifact_id": "d802474b-5a2b-4061-867d-be22686d9ce4",
+          "verification_status": "convincing_unverified",
+          "objective_status": "partial"
+        }
+      ]
+    }
+  ],
+  "scope": "saved status metadata; not independent verification of research claims",
+  "source_bundle_sha": "a23aeb2aeea545caf3bebfa4bd497b4d977b94af"
+}

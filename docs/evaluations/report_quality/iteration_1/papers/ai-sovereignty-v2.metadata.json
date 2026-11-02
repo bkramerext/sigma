@@ -1,0 +1,171 @@
+{
+  "name": "sovereign",
+  "title": "Sovereign AI Federation v2",
+  "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+  "paper_id": "391e8f84540c4774af600ef95b47680f",
+  "started_at": "2026-11-01T07:54:31.921558+00:00",
+  "finished_at": "2026-11-01T08:05:26.154398+00:00",
+  "elapsed_seconds": 654.151,
+  "preflight_snapshot_sha256": "552f9458e600d3e7d0b3aa6c1dd105cc62dab4967db652123d2f134783b76f34",
+  "source_count": 13,
+  "maximum_provider_calls": 123,
+  "hashes": {
+    "txt": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/ai-sovereignty-v2.txt",
+      "bytes": 73436,
+      "sha256": "ce2b12a3a5ea99bff7aec41b8e511c7b77b8f41cbd8795b9b006a4187c9e60c8"
+    },
+    "tex": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/ai-sovereignty-v2.tex",
+      "bytes": 129058,
+      "sha256": "1cd86659a6b43cab3c69bbfbc1e304f34cf9f84e7ea1456c695ee3320378e3d1"
+    },
+    "pdf": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/ai-sovereignty-v2.pdf",
+      "bytes": 168007,
+      "sha256": "de6307894cf2a634cddf1e340bd9afab2341169e33fe6dfcd4b793736ea9fde3"
+    }
+  },
+  "generation": {
+    "provider": "openai",
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "provider_calls_attempted": 17,
+    "generation_elapsed_seconds": 653,
+    "long_form": true,
+    "include_research_details": true,
+    "include_claim_details": true,
+    "include_validation_notes": true,
+    "include_research_excerpts": false,
+    "include_diagrams": true,
+    "diagram_count": 1,
+    "snapshot_size_bytes": 4440922,
+    "source_count": 13,
+    "evidence_fields_omitted": 9718,
+    "research_integrity_record_count": 349,
+    "publication_status": "needs_review",
+    "pdf_check_final_pass": 3,
+    "layout_status": "needs_review",
+    "source_reference_map": [
+      {
+        "source_ref": "project:9175d73d-62aa-4523-a286-445f5390ae1d",
+        "label": "Project overview"
+      },
+      {
+        "source_ref": "strategy:e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+        "label": "Strategy 1: Sovereignty and trust boundaries"
+      },
+      {
+        "source_ref": "strategy:c5f7d857-b963-457c-895c-d35554cc97c2",
+        "label": "Strategy 2: Ownership cost and task quality"
+      },
+      {
+        "source_ref": "strategy:d08775d5-8907-48d6-bd6c-7039f07a2047",
+        "label": "Strategy 3: Fairness, reliability and pilot"
+      },
+      {
+        "source_ref": "session:36e06a52-e138-48ee-9ccf-1519bb6faedc",
+        "label": "Research session 1"
+      },
+      {
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:bfcf812f-b3a9-46ff-862c-4d0b4cd76978",
+        "label": "Research session 1, artifact 1"
+      },
+      {
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:5c8fdc17-0ce8-4ea3-b8dc-79e05f97d0db",
+        "label": "Research session 1, artifact 2"
+      },
+      {
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:cc14dcfd-f2c0-41f7-92f4-768a1511e7f2",
+        "label": "Research session 1, artifact 3"
+      },
+      {
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:f5e8dea1-e0d1-4076-bf15-3ea3c2f345bc",
+        "label": "Research session 1, artifact 4"
+      },
+      {
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:1e89585c-2b17-49bd-bb1e-dc1df98ba8ca",
+        "label": "Research session 1, artifact 5"
+      },
+      {
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:2fef1213-38ff-4acf-9af2-a0c28b89b0da",
+        "label": "Research session 1, artifact 6"
+      },
+      {
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:296ee708-59eb-4fac-afc4-0d5448ac2d1a",
+        "label": "Research session 1, artifact 7"
+      },
+      {
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:d802474b-5a2b-4061-867d-be22686d9ce4",
+        "label": "Research session 1, artifact 8"
+      }
+    ],
+    "omitted_evidence_ledger_sha256": "12ca63b809079ab1cbc4e4f5afc9d7264297a7dfb5d72f6b2d8afd161c6a2be6",
+    "proofreading": {
+      "attempted": true,
+      "ai_performed": true,
+      "status": "fallback",
+      "verification_status": "incomplete",
+      "accepted_correction_count": 0,
+      "provider_calls_attempted": 9,
+      "elapsed_seconds": 91,
+      "unresolved_diagnostic_count": 59
+    },
+    "layout_passes": [
+      {
+        "pass": 1,
+        "page_count": 42,
+        "diagnostic_count": 3
+      },
+      {
+        "pass": 2,
+        "page_count": 42,
+        "diagnostic_count": 3
+      },
+      {
+        "pass": 3,
+        "page_count": 42,
+        "diagnostic_count": 5
+      }
+    ],
+    "layout_warnings": [
+      "warning: report.tex:60: Underfull \\hbox (badness 10000) in paragraph at lines 59--60",
+      "warning: report.tex:60: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 59--60",
+      "warning: report.tex:104: Underfull \\hbox (badness 10000) in paragraph at lines 103--104",
+      "warning: report.tex:526: Overfull \\hbox (100.03801pt too wide) in paragraph at lines 525--526",
+      "Text on PDF page 31 extends beyond horizontal page bounds."
+    ]
+  },
+  "validation_warnings": [
+    "Evidence indexing omitted 9718 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Author self-review: the claim identifiers referenced in narrative linkage fields use zero-padded forms such as C02, whereas the claim register uses forms such as C2. These links require normalization before downstream drafting.",
+    "Author self-review: several section-purpose strings in this plan are incomplete and must be completed before the plan is used for drafting.",
+    "Published MindRouter capability claims remain unsupported by direct inspection of the requested primary sources. No current access date, changed feature claim or independent performance verification can be supplied.",
+    "The original aggregate-to-sensitive feasibility inference is contradicted by a concrete stratum counterexample. Only the repaired conditional expectation calculation should enter the findings.",
+    "The fresh-namespace recovery shortcut is contradicted by the stale-ledger liability example. Replay prevention cannot substitute for preserving prior financial exposure.",
+    "The earlier approximate sample-size calculation is not a power calculation for the conservative final gate. The later sufficient certificate is preserved as unverified because its complete derivation is absent from the bounded preview.",
+    "No result establishes exactly-once provider execution, immediate post-revocation non-delivery, remote retention compliance, unconditional WDRR latency or starvation freedom, or deployment-scale routing complexity.",
+    "The USD 4,000 monthly cap and USD 2,000/USD 8,000 sensitivities are requested scenarios, not observed campus expenditure. Reservation limits must not be reported as API prices or actual charges.",
+    "The evidence index explicitly omitted 9718 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 372 source-linked text fragments from 13 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "C2 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C2 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C3 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C3 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C7 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C7 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C9 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C9 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C11 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout.",
+    "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+  ],
+  "full_generator_metadata": {
+    "path": "docs/evaluations/report_quality/iteration_1/papers/ai-sovereignty-v2.metadata.full.json.gz",
+    "bytes": 844909,
+    "sha256": "3e7985401dce791ab04055579eefb0ff96cbe7ff3895278aa3a87cff6578d87b",
+    "original_uncompressed_bytes": 6876165
+  }
+}

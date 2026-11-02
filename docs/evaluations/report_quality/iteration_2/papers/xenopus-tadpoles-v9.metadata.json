@@ -1,0 +1,326 @@
+{
+  "author_review_warnings": [
+    "Evidence indexing omitted 3390 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Several top-level claim-reference arrays use zero-padded identifiers, whereas the claim register uses unpadded identifiers. These links require correction before this plan is used to generate an article.",
+    "Section-purpose text is incomplete in this draft and must be completed before article generation; the intended proof explanations, control comparisons, and validation discussion must not be inferred from truncated sentences.",
+    "The index is a bounded preview with substantial omitted material, not an exhaustive semantic review. No unseen fragment has been treated as inspected evidence.",
+    "The analytical counterexamples are illustrative mathematical constructions, not observed expression values or biological experiments. They have not undergone independent formal verification.",
+    "The evidence does not establish whether the actual GEO collections satisfy the unlinked-sampling premise.",
+    "The prior-art ledger is provisional. The named DOI pointers do not support detailed literature conclusions without inspection.",
+    "The fixed-endpoint timing objection remains material; the present record does not contain a complete corrected sampling schedule.",
+    "An archived redox-persistence proposal had an additional identifiability objection: its persistence statistic was proportional to the exposure integral, so integral matching fixed the proposed statistic. That proposal is not used as corroboration of the ERK timing model.",
+    "The evidence index explicitly omitted 3390 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 447 source-linked text fragments from 15 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field."
+  ],
+  "baseline_paper_id": "880b802fdc534200807047b107aebaaf",
+  "baseline_snapshot_sha256": "3236a8c66a96d713f28726271169e67c88c8a768f398ab3b9b504fee3cdcc74e",
+  "finished_at": "2026-11-01T14:22:20.212671+00:00",
+  "full_record": {
+    "bytes": 744366,
+    "path": "docs/evaluations/report_quality/iteration_2/papers/xenopus-tadpoles-v9.metadata.full.json.gz",
+    "sha256": "f47f3092d55ce708e2cd3d7b03bfebbe56cb66e7acf65d371a4e56af44bff42a"
+  },
+  "generation": {
+    "diagram_count": 1,
+    "evidence_batch_count": 0,
+    "evidence_conflict_note_count": 0,
+    "evidence_fields_omitted": 3390,
+    "generation_elapsed_seconds": 504,
+    "include_claim_details": true,
+    "include_diagrams": true,
+    "include_research_details": true,
+    "include_research_excerpts": false,
+    "include_validation_notes": true,
+    "layout_repairs": [
+      "Increased TeX emergency line-breaking stretch from 2em to 4em.",
+      "Increased TeX emergency line-breaking stretch from 4em to 8em."
+    ],
+    "layout_status": "needs_review",
+    "layout_warnings": [
+      "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+      "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+      "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+      "Text on PDF page 22 extends beyond horizontal page bounds."
+    ],
+    "long_form": true,
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "pdf_check_final_pass": 3,
+    "pdf_check_passes": [
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:225: Underfull \\hbox (badness 1199) in paragraph at lines 222--225",
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:357: Overfull \\hbox (10.11836pt too wide) in paragraph at lines 356--357",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "warning: report.tex:225: Underfull \\hbox (badness 1199) in paragraph at lines 222--225",
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:357: Overfull \\hbox (10.11836pt too wide) in paragraph at lines 356--357",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:357: Overfull \\hbox (10.11836pt too wide) in paragraph at lines 356--357",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "Text on PDF page 22 extends beyond horizontal page bounds."
+        ],
+        "page_count": 25,
+        "pass": 1,
+        "tex_repair": "Increased TeX emergency line-breaking stretch from 2em to 4em."
+      },
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:225: Underfull \\hbox (badness 1199) in paragraph at lines 222--225",
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:357: Underfull \\hbox (badness 2818) in paragraph at lines 356--357",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "warning: report.tex:225: Underfull \\hbox (badness 1199) in paragraph at lines 222--225",
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:357: Underfull \\hbox (badness 2818) in paragraph at lines 356--357",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "Text on PDF page 22 extends beyond horizontal page bounds."
+        ],
+        "page_count": 25,
+        "pass": 2,
+        "tex_repair": "Increased TeX emergency line-breaking stretch from 4em to 8em."
+      },
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:148: Underfull \\hbox (badness 2547) in paragraph at lines 147--148",
+          "warning: report.tex:176: Underfull \\hbox (badness 6063) in paragraph at lines 175--176",
+          "warning: report.tex:176: Underfull \\hbox (badness 1394) in paragraph at lines 175--176",
+          "warning: report.tex:225: Underfull \\hbox (badness 1199) in paragraph at lines 222--225",
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:327: Underfull \\hbox (badness 4181) in paragraph at lines 326--327",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:357: Underfull \\hbox (badness 2818) in paragraph at lines 356--357",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "warning: report.tex:381: Underfull \\hbox (badness 4181) in paragraph at lines 380--381",
+          "warning: report.tex:148: Underfull \\hbox (badness 2547) in paragraph at lines 147--148",
+          "warning: report.tex:176: Underfull \\hbox (badness 6063) in paragraph at lines 175--176",
+          "warning: report.tex:176: Underfull \\hbox (badness 1394) in paragraph at lines 175--176",
+          "warning: report.tex:225: Underfull \\hbox (badness 1199) in paragraph at lines 222--225",
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:327: Underfull \\hbox (badness 4181) in paragraph at lines 326--327",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:357: Underfull \\hbox (badness 2818) in paragraph at lines 356--357",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "warning: report.tex:381: Underfull \\hbox (badness 4181) in paragraph at lines 380--381",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+          "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+          "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+          "Text on PDF page 22 extends beyond horizontal page bounds."
+        ],
+        "page_count": 25,
+        "pass": 3
+      }
+    ],
+    "proofreading": {
+      "accepted_correction_count": 0,
+      "ai_performed": true,
+      "attempted": true,
+      "corrected_tex_sha256": "d3bcf8c76e6c33df76b2120b422be62a38192f7cde432e38ef5410b8075eaf45",
+      "correction_categories": [],
+      "elapsed_seconds": 102,
+      "fallback_reason": "Proofreading chunk 6 was not applied: A proposed correction changed protected scientific or reference content.",
+      "final_tex_sha256": "d88c180fe1f506bc219e1f50051c17311e14f1419339d3d4e20343fb9296af9c",
+      "model": "gpt-6.1-sol",
+      "original_tex_sha256": "d3bcf8c76e6c33df76b2120b422be62a38192f7cde432e38ef5410b8075eaf45",
+      "prior_render_provider_calls": 0,
+      "provider_calls_attempted": 7,
+      "provider_calls_current_render": 7,
+      "reasoning_effort": "high",
+      "review_reason": "Layout warnings remained after the bounded TeX correction passes.",
+      "status": "fallback",
+      "unresolved_diagnostics": [
+        "Potentially wide diagram or table line 209 (270 characters).",
+        "Potentially wide diagram or table line 210 (363 characters).",
+        "Potentially wide diagram or table line 211 (395 characters).",
+        "warning: report.tex:224: Underfull \\hbox (badness 1199) in paragraph at lines 221--224",
+        "warning: report.tex:287: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 286--287",
+        "warning: report.tex:328: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 328--328",
+        "warning: report.tex:356: Overfull \\hbox (10.11836pt too wide) in paragraph at lines 355--356",
+        "warning: report.tex:368: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 368--368",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details.",
+        "Proofreading chunk 6 was not applied: A proposed correction changed protected scientific or reference content.",
+        "Proofreading chunk 7 was not applied: A proposed correction changed protected scientific or reference content.",
+        "warning: report.tex:148: Underfull \\hbox (badness 2547) in paragraph at lines 147--148",
+        "warning: report.tex:176: Underfull \\hbox (badness 6063) in paragraph at lines 175--176",
+        "warning: report.tex:176: Underfull \\hbox (badness 1394) in paragraph at lines 175--176",
+        "warning: report.tex:225: Underfull \\hbox (badness 1199) in paragraph at lines 222--225",
+        "warning: report.tex:288: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 287--288",
+        "warning: report.tex:327: Underfull \\hbox (badness 4181) in paragraph at lines 326--327",
+        "warning: report.tex:329: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 329--329",
+        "warning: report.tex:357: Underfull \\hbox (badness 2818) in paragraph at lines 356--357",
+        "warning: report.tex:369: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 369--369",
+        "warning: report.tex:381: Underfull \\hbox (badness 4181) in paragraph at lines 380--381"
+      ],
+      "verification_status": "incomplete"
+    },
+    "provider": "openai",
+    "provider_calls_attempted": 13,
+    "provider_calls_lifetime_total": 13,
+    "provider_calls_prior_runs": 0,
+    "publication_status": "needs_review",
+    "reasoning_effort": "high",
+    "reduction_source_refs_omitted": [],
+    "research_integrity_record_count": 349,
+    "snapshot_size_bytes": 1834568,
+    "source_count": 15,
+    "source_reference_map": [
+      {
+        "label": "Project overview",
+        "source_ref": "project:01de54c9-9593-413a-9577-1a952d28da70"
+      },
+      {
+        "label": "Strategy 1: Establish the known-mechanism frontier",
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000001"
+      },
+      {
+        "label": "Strategy 2: Find a novel temporal coupling, not another marker",
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000002"
+      },
+      {
+        "label": "Strategy 3: Test a spatial or cell-composition alternative",
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000003"
+      },
+      {
+        "label": "Strategy 4: Design a decisive rescue-versus-block perturbation",
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000004"
+      },
+      {
+        "label": "Strategy 5: Adversarial novelty and external validation",
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000005"
+      },
+      {
+        "label": "Research session 8",
+        "source_ref": "session:084edf65-b9bb-45f4-9eec-8d55d0fc151c"
+      },
+      {
+        "label": "Research session 9",
+        "source_ref": "session:757e88e6-270c-47f4-b0df-0c2acecc2fee"
+      },
+      {
+        "label": "Research session 20",
+        "source_ref": "session:cf2b7181-d4e3-4833-af48-52c9475d1e1c"
+      },
+      {
+        "label": "Research session 21",
+        "source_ref": "session:4847f3f9-7873-4688-a8c0-30d601f5d3a3"
+      },
+      {
+        "label": "Research session 21, artifact 1",
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:93b351c3-bd06-488a-8d6e-0d6c2be5a6a7"
+      },
+      {
+        "label": "Research session 21, artifact 2",
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:f4eaeebc-8aa7-4369-8d70-8e1577b596d0"
+      },
+      {
+        "label": "Research session 21, artifact 3",
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:d3bff1c1-5559-4047-8576-dc86a08c720a"
+      },
+      {
+        "label": "Research session 21, artifact 4",
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:21519596-9653-4752-a867-21892e17e040"
+      },
+      {
+        "label": "Research session 21, artifact 5",
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:2f1e538a-a749-4ed3-9863-37bd95ca9405"
+      }
+    ]
+  },
+  "hashes": {
+    "pdf": {
+      "bytes": 116550,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/xenopus-tadpoles-v9.pdf",
+      "sha256": "3438962e178f8578fd22d0895da6a287adeba59e64b088e00a4643f56ffb507e"
+    },
+    "tex": {
+      "bytes": 75527,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/xenopus-tadpoles-v9.tex",
+      "sha256": "d88c180fe1f506bc219e1f50051c17311e14f1419339d3d4e20343fb9296af9c"
+    },
+    "txt": {
+      "bytes": 43999,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/xenopus-tadpoles-v9.txt",
+      "sha256": "30eb55a87ed0ce474aac9ff1ff0ac144b797e9023f29e7f757dee7d5dba7569f"
+    }
+  },
+  "manuscript": {
+    "characters": 43972,
+    "claims": 11,
+    "claims_by_status": {
+      "conjecture": 1,
+      "established": 3,
+      "limitation": 4,
+      "unresolved": 3
+    },
+    "conclusion_paragraphs": 3,
+    "pdf_pages": 25,
+    "sections": 5,
+    "words": 5765
+  },
+  "name": "xenopus-tadpoles-v9",
+  "paper_id": "a3018f3f7d234a3baec8ecd038fb74aa",
+  "preflight_snapshot_sha256": "3236a8c66a96d713f28726271169e67c88c8a768f398ab3b9b504fee3cdcc74e",
+  "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+  "source_count": 15,
+  "source_ids": [
+    "project:01de54c9-9593-413a-9577-1a952d28da70",
+    "strategy:b1010c01-7a62-4b61-912a-4560b0000001",
+    "strategy:b1010c01-7a62-4b61-912a-4560b0000002",
+    "strategy:b1010c01-7a62-4b61-912a-4560b0000003",
+    "strategy:b1010c01-7a62-4b61-912a-4560b0000004",
+    "strategy:b1010c01-7a62-4b61-912a-4560b0000005",
+    "session:084edf65-b9bb-45f4-9eec-8d55d0fc151c",
+    "session:757e88e6-270c-47f4-b0df-0c2acecc2fee",
+    "session:cf2b7181-d4e3-4833-af48-52c9475d1e1c",
+    "session:4847f3f9-7873-4688-a8c0-30d601f5d3a3",
+    "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:93b351c3-bd06-488a-8d6e-0d6c2be5a6a7",
+    "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:f4eaeebc-8aa7-4369-8d70-8e1577b596d0",
+    "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:d3bff1c1-5559-4047-8576-dc86a08c720a",
+    "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:21519596-9653-4752-a867-21892e17e040",
+    "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:2f1e538a-a749-4ed3-9863-37bd95ca9405"
+  ],
+  "title": "A Temporal Receptivity Gate for Xenopus Tail Regeneration: Identifiability Limits and a Falsifiable Mechanistic Hypothesis",
+  "validation_warnings": [
+    "Evidence indexing omitted 3390 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Several top-level claim-reference arrays use zero-padded identifiers, whereas the claim register uses unpadded identifiers. These links require correction before this plan is used to generate an article.",
+    "Section-purpose text is incomplete in this draft and must be completed before article generation; the intended proof explanations, control comparisons, and validation discussion must not be inferred from truncated sentences.",
+    "The index is a bounded preview with substantial omitted material, not an exhaustive semantic review. No unseen fragment has been treated as inspected evidence.",
+    "The analytical counterexamples are illustrative mathematical constructions, not observed expression values or biological experiments. They have not undergone independent formal verification.",
+    "The evidence does not establish whether the actual GEO collections satisfy the unlinked-sampling premise.",
+    "The prior-art ledger is provisional. The named DOI pointers do not support detailed literature conclusions without inspection.",
+    "The fixed-endpoint timing objection remains material; the present record does not contain a complete corrected sampling schedule.",
+    "An archived redox-persistence proposal had an additional identifiability objection: its persistence statistic was proportional to the exposure integral, so integral matching fixed the proposed statistic. That proposal is not used as corroboration of the ERK timing model.",
+    "The evidence index explicitly omitted 3390 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 447 source-linked text fragments from 15 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "C3 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C3 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C4 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C4 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C6 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C6 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "The frozen evidence contains open proof/research obligation(s) requiring reconciliation: 121 item(s) are not listed by the author and are not presumed resolved; 10 author-listed item(s) have no exact frozen-record match. See the obligation reconciliation.",
+    "The methods narrative has no linked claim IDs; check it for unsupported factual statements.",
+    "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout.",
+    "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+  ]
+}
