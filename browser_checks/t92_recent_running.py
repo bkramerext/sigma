@@ -16,6 +16,7 @@ API = os.environ.get("SIGMA_RECENTS_API_ORIGIN", "http://127.0.0.1:8001").rstrip
 REQUEST_ORIGIN = os.environ.get("SIGMA_BROWSER_REQUEST_ORIGIN", UI)
 running: set[str] = set()
 siblings = {"enabled": False, "project_id": "", "sibling_title": ""}
+unavailable_fixture = {"enabled": False}
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -37,6 +38,19 @@ with sync_playwright() as playwright:
             data = response.json()
             for entry in data["projects"]:
                 entry["research_running"] = entry["id"] in running
+            if unavailable_fixture["enabled"]:
+                data["projects"].append({
+                    "id": "00000000-0000-4000-8000-000000000124",
+                    "path": "/unavailable-placeholder.sigma",
+                    "title": "Unfindable Ghost Project",
+                    "investigation_type": None,
+                    "strategy_count": None,
+                    "difficulty": None,
+                    "research_running": False,
+                    "available": False,
+                    "pinned": False,
+                    "error": "Unavailable or changed identity",
+                })
             if siblings["enabled"]:
                 original = next(
                     (entry for entry in data["projects"] if entry["id"] == siblings["project_id"]),
@@ -114,6 +128,14 @@ with sync_playwright() as playwright:
     expect(metadata).to_contain_text(" · Running · ", timeout=10000)
     running.clear()
     expect(metadata).to_have_text(initial, timeout=10000)
+
+    # Unavailable records remain in storage but never reach the Saved UI.
+    unavailable_fixture["enabled"] = True
+    page.reload()
+    recent = page.get_by_role("tabpanel", name="Saved")
+    expect(recent.get_by_text("Unfindable Ghost Project")).to_have_count(0)
+    expect(recent.locator("details.recent-type-group").filter(has_text="Unavailable")).to_have_count(0)
+    unavailable_fixture["enabled"] = False
 
     # A singleton family needs neither Pin nor Unpin.
     singleton_row = entry.locator("xpath=../..")
