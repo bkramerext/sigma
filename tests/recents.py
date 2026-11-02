@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -434,10 +435,41 @@ def check(root: Path, base: Path) -> None:
     legacy["version"] = 1
     del legacy["pins"]
     del legacy["dismissed_default_pins"]
+    for entry in legacy["entries"]:
+        entry["pinned"] = entry["id"] == first.project.id
+    rejected = json.loads(json.dumps(legacy))
+    rejected_entry = next(entry for entry in rejected["entries"] if entry["pinned"])
+    rejected_entry["id"] = str(uuid4())
+    rejected_bytes = json.dumps(rejected).encode()
+    index_path.write_bytes(rejected_bytes)
+    try:
+        recent_projects()
+        raise AssertionError("Legacy pin with mismatched project identity was migrated")
+    except ProjectError:
+        pass
+    assert index_path.read_bytes() == rejected_bytes
     index_path.write_text(json.dumps(legacy))
     previous_ids = [item["id"] for item in legacy["entries"]]
     assert [item["id"] for item in recent_projects()["projects"]] == previous_ids
-    assert json.loads(index_path.read_text())["version"] == 2
+    migrated = json.loads(index_path.read_text())
+    assert migrated["version"] == 2
+    assert migrated["pins"][project_family(first.project.title)] == first.project.id
+    assert all("pinned" not in entry for entry in migrated["entries"])
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from sigma.recents import pinned_projects; "
+                "projects = pinned_projects()['projects']; "
+                "assert len(projects) == 1"
+            ),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+    )
     index = json.loads(index_path.read_text())
     index["entries"] = [
         {"id": first.project.id, "path": first.path, "accessed_at": None, "included_example": True},
