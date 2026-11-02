@@ -99,21 +99,36 @@ with sync_playwright() as playwright:
     running.clear()
     expect(metadata).to_have_text(initial, timeout=10000)
 
-    recent.get_by_role("button", name=f"Pin {project_title}").click()
-    pinned_group = recent.locator("details.pinned-type-group")
-    expect(pinned_group).to_be_visible()
-    expect(pinned_group.get_by_role("button", name=project_title, exact=True)).to_be_visible()
-    expect(pinned_group.get_by_role("button", name=f"Unpin {project_title}")).to_be_visible()
+    pin = recent.get_by_role("button", name=f"Pin {project_title}")
+    remove = recent.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
+    pin_color = pin.evaluate("node => getComputedStyle(node).color")
+    assert pin_color == remove.evaluate("node => getComputedStyle(node).color")
+    pin.click()
+
+    # Stay in the same category and retain the same order after pinning.
+    expect(recent.locator("details.pinned-type-group")).to_have_count(0)
+    pinned = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
+    expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
+    expect(pinned.locator(".recent-title-pin")).to_be_visible()
+    expect(pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")).to_have_count(0)
+    unpin = pinned.get_by_role("button", name=f"Unpin {project_title}")
+    expect(unpin).to_be_visible()
+    assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
+    unpin.hover()
+    assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
+
     page.reload()
     recent = page.get_by_role("tabpanel", name="Saved")
-    pinned_group = recent.locator("details.pinned-type-group")
-    expect(pinned_group.get_by_role("button", name=project_title, exact=True)).to_be_visible()
-    pinned_group.get_by_role("button", name=f"Unpin {project_title}").click()
-    expect(recent.locator("details.pinned-type-group")).to_have_count(0)
-    restored = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
-    if not restored.evaluate("group => group.open"):
-        restored.locator("summary").click()
-    expect(restored.get_by_role("button", name=project_title, exact=True)).to_be_visible()
+    pinned = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
+    if not pinned.evaluate("group => group.open"):
+        pinned.locator("summary").click()
+    expect(pinned.locator(".recent-title-pin")).to_be_visible()
+    expect(pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")).to_have_count(0)
+    pinned.get_by_role("button", name=f"Unpin {project_title}").click()
+    expect(pinned.locator(".recent-title-pin")).to_have_count(0)
+    expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
+    expect(pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")).to_be_visible()
+    expect(pinned.locator("details.pinned-type-group")).to_have_count(0)
     assert not errors, errors
     browser.close()
-    print("PASS T92 real Chrome: live status, persisted pin/unpin, reload, 1280/390/320px")
+    print("PASS T92 real Chrome: live status, in-category pins, hidden Remove, reload, 1280/390/320px")
