@@ -3850,6 +3850,48 @@ async def test_pause_counts_interrupted_call(path: Path):
     assert rejected["message"] == rejection_message
 
 
+def test_protocol_completion_label_requires_every_configured_role_turn():
+    strategy_ids = ["strategy-a", "strategy-b"]
+    steps = [
+        {
+            "strategy_id": strategy_id,
+            "role": role,
+            "cycle": cycle,
+            "status": "completed",
+        }
+        for strategy_id in strategy_ids
+        for cycle in (1, 2, 3)
+        for role in ("investigator", "skeptic")
+    ]
+    record = {
+        "id": str(uuid4()),
+        "status": "ended",
+        "strategy_ids": strategy_ids,
+        "cycle_limit": 3,
+        "steps": steps,
+        "artifacts": [{}, {}, {}],
+        "events": [],
+        "message": "The research is incomplete.",
+        "current_action": "Ended · research incomplete",
+    }
+    assert research_sessions._mark_protocol_complete(record)
+    assert record["status"] == "ended"
+    assert record["termination_reason_code"] == "protocol_complete"
+    assert record["current_action"] == "Completed · configured protocol"
+    assert "All 12 configured" in record["message"]
+    assert "unverified research notes" in record["message"]
+    assert record["events"][-1]["kind"] == "session.protocol_complete"
+
+    incomplete = dict(record)
+    incomplete["events"] = []
+    incomplete["steps"] = steps[:-1]
+    incomplete["termination_reason_code"] = "round_limit_reached"
+    incomplete["current_action"] = "Ended · research incomplete"
+    assert not research_sessions._mark_protocol_complete(incomplete)
+    assert incomplete["current_action"] == "Ended · research incomplete"
+    assert incomplete["termination_reason_code"] == "round_limit_reached"
+
+
 def test_worker_cancel_before_dispatch_does_not_claim_provider_call():
     record = {"id": str(uuid4()), "status": "running", "steps": [], "events": []}
     research_sessions._record_worker_cancellation(record)
@@ -11999,6 +12041,7 @@ def main():
         test_t37_obligation_identity_lifecycle_and_history(root / "t37-obligation-review.sigma")
         asyncio.run(test_t37_mandatory_context_blocks_before_provider(root / "t37-blocked.sigma"))
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
+        test_protocol_completion_label_requires_every_configured_role_turn()
         test_worker_cancel_before_dispatch_does_not_claim_provider_call()
         test_worker_cancel_with_running_call_preserves_dispatch_uncertainty()
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))

@@ -12133,6 +12133,49 @@ def _record_worker_cancellation(record: dict[str, Any]) -> None:
         record["portfolio_decision"] = _portfolio_decision(record)
 
 
+def _mark_protocol_complete(record: dict[str, Any]) -> bool:
+    """Label a normally ended session complete only when every configured role slot is accepted."""
+    if record.get("status") != "ended":
+        return False
+    strategy_ids = record.get("strategy_ids")
+    cycle_limit = record.get("cycle_limit")
+    if (
+        not isinstance(strategy_ids, list)
+        or not strategy_ids
+        or any(not isinstance(item, str) or not item for item in strategy_ids)
+        or len(strategy_ids) != len(set(strategy_ids))
+        or type(cycle_limit) is not int
+        or cycle_limit < 1
+    ):
+        return False
+    completed = {
+        (step.get("strategy_id"), step.get("role"), step.get("cycle"))
+        for step in record.get("steps", [])
+        if isinstance(step, dict)
+        and step.get("status") == "completed"
+        and step.get("role") in {"investigator", "skeptic"}
+    }
+    expected = {
+        (strategy_id, role, cycle)
+        for strategy_id in strategy_ids
+        for cycle in range(1, cycle_limit + 1)
+        for role in ("investigator", "skeptic")
+    }
+    if not expected or not expected.issubset(completed):
+        return False
+    if record.get("termination_reason_code") == "protocol_complete":
+        return True
+    record["termination_reason_code"] = "protocol_complete"
+    record["current_action"] = "Completed · configured protocol"
+    turn_count = len(expected)
+    record["message"] = (
+        f"All {turn_count} configured Investigator/Skeptic role turns were accepted. "
+        f"{len(record.get('artifacts', []))} saved findings remain unverified research notes."
+    )
+    _event(record, "session.protocol_complete", record["message"])
+    return True
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -12613,6 +12656,7 @@ async def _worker(session_id: str, path: str) -> None:
                 record["message"] = (
                     f"Research round {cycle_num} saved; coordinator selected the next question."
                 )
+            _mark_protocol_complete(record)
             record["outcome"] = _outcome(record)
             if record["status"] == "ended":
                 record["terminal_reason"] = decision
