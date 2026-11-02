@@ -18,16 +18,21 @@ from pydantic import BaseModel, ConfigDict, Field
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 
 RUBRIC_ID = "sigma-paper-quality"
-RUBRIC_VERSION = 2
+RUBRIC_VERSION = 3
+# Integer percentage weights avoid floating-point rounding of weighted totals.
+# Displayed weights are WEIGHTS[key] / 100 and sum to exactly 1.00.
 WEIGHTS = {
-    "tex_correctness": 5,
-    "readability": 25,
-    "sustained_answer": 20,
+    "tex_correctness": 10,
+    "readability": 20,
+    "sustained_answer": 15,
     "research_rigor": 30,
     "evidence": 15,
-    "visuals": 5,
+    "visuals": 10,
 }
+CATEGORY_MAX = 100
+CATEGORY_MIN = 1
 assert sum(WEIGHTS.values()) == 100
+assert all(weight >= 10 for weight in WEIGHTS.values())
 
 def normalize_total(earned: int, possible: int) -> int:
     """Round half up onto a 0–100 scale; reject invalid or fractional raw scores."""
@@ -46,7 +51,7 @@ DESCRIPTION = {
 
 class CategoryJudgment(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    earned: int = Field(ge=0, le=100, strict=True)
+    earned: int = Field(ge=CATEGORY_MIN, le=CATEGORY_MAX, strict=True)
     explanation: str = Field(min_length=8, max_length=1500)
 
 class PaperJudgment(BaseModel):
@@ -69,18 +74,23 @@ def validate_score(score: Any, pdf_sha: str) -> dict[str, Any] | None:
     rows = score.get("categories")
     if not isinstance(rows, dict) or set(rows) != set(WEIGHTS):
         return None
-    total = 0
-    for key, maximum in WEIGHTS.items():
+    weighted_sum = 0
+    for key, weight in WEIGHTS.items():
         row = rows[key]
-        if not isinstance(row, dict) or set(row) != {"earned", "max", "explanation"}:
+        if not isinstance(row, dict) or set(row) != {"earned", "max", "weight", "explanation"}:
             return None
         earned = row["earned"]
-        if type(earned) is not int or not 0 <= earned <= maximum or row["max"] != maximum:
+        if type(earned) is not int or not CATEGORY_MIN <= earned <= CATEGORY_MAX:
+            return None
+        if type(row["max"]) is not int or row["max"] != CATEGORY_MAX:
+            return None
+        if type(row["weight"]) is not float or row["weight"] != weight / 100:
             return None
         if not isinstance(row["explanation"], str) or not row["explanation"].strip():
             return None
-        total += earned
-    if type(score.get("total")) is not int or score["total"] != normalize_total(total, sum(WEIGHTS.values())):
+        weighted_sum += earned * weight
+    expected_total = normalize_total(weighted_sum, CATEGORY_MAX * sum(WEIGHTS.values()))
+    if type(score.get("total")) is not int or score["total"] != expected_total:
         return None
     return score
 
@@ -201,29 +211,39 @@ Evidence inventories and citations are pointers, not proof their underlying cont
 Give conservative credit when PDF excerpts are truncated or external material is unavailable,
 and explicitly mention such limitations. Never claim a human cold read happened; reserve
 full readability credit for validated cold reading.
-Exactly six categories and maxima: tex_correctness 5, readability 25, sustained_answer 20,
-research_rigor 30, evidence 15, visuals 5. Return integer earned scores, concrete
-explanations that identify weaknesses as well as strengths, and no invented observations.
+Score each of the six categories independently on the same integer 1–100 scale (not
+weighted points). These category weights apply only when SIGMA computes the overall score:
+tex_correctness 0.10; readability 0.20; sustained_answer 0.15;
+research_rigor 0.30; evidence 0.15; visuals 0.10. Weights sum to 1.00.
+Do not pre-apply weights to category earned scores. Return integer 1–100 scores,
+concrete explanations identifying weaknesses and strengths, and no invented observations.
 Scores reflect what is substantiated, not the ambition of the topic."""
 
 def _make_score(judgment: PaperJudgment, sha: str) -> dict[str, Any]:
     categories: dict[str, dict[str, Any]] = {}
-    for key, maximum in WEIGHTS.items():
+    weighted_sum = 0
+    for key, weight in WEIGHTS.items():
         value = getattr(judgment, key)
-        if type(value.earned) is not int or not 0 <= value.earned <= maximum:
-            raise ProjectError(f"Paper score for {key} is outside its rubric maximum")
+        if type(value.earned) is not int or not CATEGORY_MIN <= value.earned <= CATEGORY_MAX:
+            raise ProjectError(f"Paper score for {key} is outside the 1–100 category scale")
         categories[key] = {
-            "earned": value.earned, "max": maximum,
+            "earned": value.earned,
+            "max": CATEGORY_MAX,
+            "weight": weight / 100,
             "explanation": value.explanation.strip(),
         }
+        weighted_sum += value.earned * weight
     score = {
-        "rubric_id": RUBRIC_ID, "rubric_version": RUBRIC_VERSION,
-        "pdf_sha256": sha, "categories": categories,
-        "total": normalize_total(sum(row["earned"] for row in categories.values()), sum(WEIGHTS.values())),
+        "rubric_id": RUBRIC_ID,
+        "rubric_version": RUBRIC_VERSION,
+        "pdf_sha256": sha,
+        "categories": categories,
+        "total": normalize_total(weighted_sum, CATEGORY_MAX * sum(WEIGHTS.values())),
         "provisional": True,
     }
     assert validate_score(score, sha) is not None
     return score
+
 
 def _save_score(path: str, paper_id: str, score: dict[str, Any]) -> dict[str, Any]:
     """Atomic update of the paper record with its immutable PDF unchanged."""
@@ -291,7 +311,7 @@ async def score_paper(path: str, paper_id: str, expected_binding: str,
                 payload = _context(record, papers.get_pdf(path, paper_id))
                 result, _ = await papers._provider_structured(
                     payload, auth, config, instructions=INSTRUCTIONS,
-                    schema_name="sigma_paper_score_v2", response_model=PaperJudgment,
+                    schema_name="sigma_paper_score_v3", response_model=PaperJudgment,
                     max_input_bytes=180000, project_id=expected_project_id,
                     project_path_value=path,
                 )
