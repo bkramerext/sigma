@@ -355,3 +355,15 @@
 .project-settings-dialog .project-preference-checkbox { display: flex; align-items: center; gap: 9px; color: #e3e8eb; font-weight: 500; }
 .project-settings-dialog .project-preference-checkbox input { width: 17px; height: 17px; accent-color: #bd8355; }
 .project-settings-dialog .project-preferences-panel .settings-hint { margin-top: 4px; }
+
+/* Plain-language paper toggle: copper balloon beside the saved paper. */
+.ai-paper-eli5-balloon {
+  display: inline-flex; align-items: center; justify-content: center;
+  margin: 0 8px 0 0; padding: 2px 5px; border: 0;
+  background: transparent; box-shadow: none; color: #c88761;
+  font-size: 17px; line-height: 1.2; cursor: pointer;
+}
+.ai-paper-eli5-balloon:hover:not(:disabled), .ai-paper-eli5-balloon:focus-visible { color: #e8a782; }
+.ai-paper-eli5-balloon:disabled { cursor: wait; opacity: .8; }
+.ai-paper-eli5-thanks { margin-right: 8px; }
+.ai-paper-eli5-output { max-width: 75ch; line-height: 1.65; }
