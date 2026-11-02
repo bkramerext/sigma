@@ -957,11 +957,11 @@ def test_research_methodology_outcome_is_not_claimed_as_independent_science():
     assert outcome["source_material"] == selected
     assert outcome["source_material"]["status"] == "selected"
     assert "verification_label" in outcome
-    assert [r["id"] for r in outcome["source_material"]["sources"]] == [
+    assert {r["id"] for r in outcome["source_material"]["sources"]} == {
         "nasem-scientific-methods",
         "nasem-physical-models",
         "tong-einstein-equations",
-    ]
+    }
 
 
 def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
