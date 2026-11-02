@@ -25,8 +25,8 @@ from sigma import (
     cloud_demo,
     cloud_research,
     cloud_workspaces,
-    papers,
     paper_scores,
+    papers,
     project_types,
     proposals,
     python_sandbox,
@@ -747,9 +747,11 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    return {"score": await paper_scores.score_paper(
-        body.path, paper_id, body.expected_binding, body.expected_project_id
-    )}
+    return {
+        "score": await paper_scores.score_paper(
+            body.path, paper_id, body.expected_binding, body.expected_project_id
+        )
+    }
 
 
 @app.get("/api/projects/papers/{paper_id}/pdf")
