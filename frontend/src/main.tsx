@@ -3775,11 +3775,11 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     finally { pending.current = false; setOpening(''); }
   }
   const familyCounts = new Map<string, number>();
-  for (const project of projects.filter(project => project.available)) {
+  for (const project of projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable'))) {
     const family = recentProjectFamilyKey(project);
     familyCounts.set(family, (familyCounts.get(family) ?? 0) + 1);
   }
-  const visibleProjects = visibleRecentProjects(projects.filter(project => project.available));
+  const visibleProjects = visibleRecentProjects(projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable')));
   const recentGroups = visibleProjects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
