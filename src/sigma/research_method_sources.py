@@ -193,7 +193,15 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
     seen: set[str] = set()
     sources: list[dict[str, str]] = []
 
-    def add(url: str, tier: str, owner_id: str, owner_name: str) -> None:
+    def add(
+        reference: Mapping[str, str] | str,
+        tier: str,
+        owner_id: str,
+        owner_name: str,
+    ) -> None:
+        """Keep named reference records from the Project Types model intact."""
+        url = reference if isinstance(reference, str) else reference["url"]
+        configured_name = None if isinstance(reference, str) else reference.get("name")
         canonical = _canonical_url(url)
         if canonical in seen:
             return
@@ -202,9 +210,9 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
         from urllib.parse import urlsplit
 
         title = (
-            known["title"]
-            if known
-            else (f"{owner_name} — {urlsplit(canonical).hostname or 'Research method'}")
+            configured_name
+            or (known["title"] if known else None)
+            or f"{owner_name} — {urlsplit(canonical).hostname or 'Research method'}"
         )
         notes = (
             known["notes"]
@@ -229,12 +237,12 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
             row["branch"] = owner_id
         sources.append(row)
 
-    for url in common_research_references():
-        add(url, "general", "common", "Common scientific methods")
+    for reference in common_research_references():
+        add(reference, "general", "common", "Common scientific methods")
     for index, item in enumerate(chain):
         tier = "discipline" if index == 0 else "branch"
-        for url in item.research_standards_references:
-            add(url, tier, item.id, item.name)
+        for reference in item.research_standards_references:
+            add(reference, tier, item.id, item.name)
     return sources, (chain[-1].id if len(chain) > 1 else None)
 
 
