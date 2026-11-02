@@ -5353,178 +5353,183 @@ async def control_session(
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         return _public(_read(record["project_path"], session_id))
-    record = _recover(_read(path, session_id))
-    if (
-        action == "resume"
-        and (
-            record.get("status") in {"ended", "failed"}
-            or (additional_calls > 0 and record.get("status") == "paused")
-        )
-        and not _public(record).get("recoverable_clipped_response")
-    ):
-        plan, plan_error = _protocol_completion_recovery_plan(record)
-        if plan is None:
-            # Keep the existing, stricter usage-limit recovery path for states
-            # whose rejected attempts already fit their frozen call ceiling.
-            if record.get("provider_usage_limited") is not True or additional_calls:
-                raise ProjectError(
-                    plan_error or "This terminal session has no safe missing-role continuation."
+    # Recovery planning changes budgets and protocol slots. Hold both the
+    # per-session state lock and the cross-process admission lock across the
+    # read/validate/save transaction so concurrent resumes cannot overwrite it.
+    async with state_lock:
+        with _project_manager_lock(path):
+            record = _recover(_read(path, session_id))
+            if (
+                action == "resume"
+                and (
+                    record.get("status") in {"ended", "failed"}
+                    or (additional_calls > 0 and record.get("status") == "paused")
                 )
-        else:
-            available_calls = max(
-                0, int(record.get("call_limit", 0)) - int(record.get("calls_used", 0))
-            )
-            required_extension = max(0, int(plan["required_calls"]) - available_calls)
-            if additional_calls != required_extension:
-                raise ProjectError(
-                    f"Completing the saved protocol needs {plan['required_calls']} new valid role turns, "
-                    f"but only {available_calls} attempts remain. Resume with exactly "
-                    f"{required_extension} explicitly authorized additional attempts; no counters were changed."
-                )
-            if additional_calls and isinstance(record.get("hard_budget_ledger"), dict):
-                try:
-                    increase_call_limit(
-                        record["hard_budget_ledger"],
-                        int(record["hard_budget_ledger"].get("call_limit", 0)) + additional_calls,
-                    )
-                except BudgetExceeded as exc:
-                    raise ProjectError(str(exc)) from exc
-            old_call_limit = int(record.get("call_limit", 0))
-            if additional_calls:
-                record["call_limit"] = old_call_limit + additional_calls
-                record["total_token_limit"] = int(record.get("total_token_limit", 0)) + (
-                    additional_calls
-                    * (MAX_AGENT_CONTEXT_BYTES + 65_536 + int(record.get("output_token_limit", 0)))
-                )
-                record.setdefault("call_limit_adjustments", []).append(
-                    {
-                        "at": _now(),
-                        "from": old_call_limit,
-                        "to": record["call_limit"],
-                        "additional_calls": additional_calls,
-                        "purpose": "complete the original configured Investigator/Skeptic round protocol",
-                        "accepted_turns_before_resume": plan["completed_turns"],
-                        "required_turns": plan["required_calls"],
-                    }
-                )
-                _event(
-                    record,
-                    "session.protocol_call_limit_extended",
-                    f"The attempt ceiling increased from {old_call_limit} to {record['call_limit']} "
-                    "to complete the original configured research protocol. Existing attempt counters and limits on cost/input usage were preserved.",
-                )
-            for item in plan["branches"]:
-                branch = next(
-                    run
-                    for run in record["strategy_runs"]
-                    if run.get("strategy_id") == item["strategy_id"]
-                )
-                previous_decision = branch.get("last_decision")
-                if item["role"] == "investigator":
-                    branch["cycle"] = max(0, int(item["cycle"]) - 1)
-                    if not str(branch.get("current_question") or "").strip():
-                        branch["current_question"] = (
-                            "Complete the configured final research round. Independently inspect the latest saved finding, "
-                            "check its important derivation or evidence against the project objective, and test one concrete "
-                            "remaining objection or counterexample. Treat saved conclusions as unverified, and report what "
-                            "the final round adds, revises, or leaves unresolved."
+                and not _public(record).get("recoverable_clipped_response")
+            ):
+                plan, plan_error = _protocol_completion_recovery_plan(record)
+                if plan is None:
+                    # Keep the existing, stricter usage-limit recovery path for states
+                    # whose rejected attempts already fit their frozen call ceiling.
+                    if record.get("provider_usage_limited") is not True or additional_calls:
+                        raise ProjectError(
+                            plan_error or "This terminal session has no safe missing-role continuation."
                         )
                 else:
-                    branch["cycle"] = int(item["cycle"])
-                branch["protocol_completion_recovery"] = item["recovery_context"]
-                branch["protocol_completion_history"] = branch.get(
-                    "protocol_completion_history", []
-                ) + [
-                    {
-                        "at": _now(),
-                        "cycle": item["cycle"],
-                        "role": item["role"],
-                        "reason": item["recovery_context"]["reason"],
-                        "prior_decision": previous_decision,
-                    }
-                ]
-                branch["status"] = "paused"
-                branch["current_action"] = "Paused · protocol completion"
-                branch["reason"] = (
-                    "A new, separately identified role request is needed to complete the configured research rounds."
+                    available_calls = max(
+                        0, int(record.get("call_limit", 0)) - int(record.get("calls_used", 0))
+                    )
+                    required_extension = max(0, int(plan["required_calls"]) - available_calls)
+                    if additional_calls != required_extension:
+                        raise ProjectError(
+                            f"Completing the saved protocol needs {plan['required_calls']} new valid role turns, "
+                            f"but only {available_calls} attempts remain. Resume with exactly "
+                            f"{required_extension} explicitly authorized additional attempts; no counters were changed."
+                        )
+                    if additional_calls and isinstance(record.get("hard_budget_ledger"), dict):
+                        try:
+                            increase_call_limit(
+                                record["hard_budget_ledger"],
+                                int(record["hard_budget_ledger"].get("call_limit", 0)) + additional_calls,
+                            )
+                        except BudgetExceeded as exc:
+                            raise ProjectError(str(exc)) from exc
+                    old_call_limit = int(record.get("call_limit", 0))
+                    if additional_calls:
+                        record["call_limit"] = old_call_limit + additional_calls
+                        record["total_token_limit"] = int(record.get("total_token_limit", 0)) + (
+                            additional_calls
+                            * (MAX_AGENT_CONTEXT_BYTES + 65_536 + int(record.get("output_token_limit", 0)))
+                        )
+                        record.setdefault("call_limit_adjustments", []).append(
+                            {
+                                "at": _now(),
+                                "from": old_call_limit,
+                                "to": record["call_limit"],
+                                "additional_calls": additional_calls,
+                                "purpose": "complete the original configured Investigator/Skeptic round protocol",
+                                "accepted_turns_before_resume": plan["completed_turns"],
+                                "required_turns": plan["required_calls"],
+                            }
+                        )
+                        _event(
+                            record,
+                            "session.protocol_call_limit_extended",
+                            f"The attempt ceiling increased from {old_call_limit} to {record['call_limit']} "
+                            "to complete the original configured research protocol. Existing attempt counters and limits on cost/input usage were preserved.",
+                        )
+                    for item in plan["branches"]:
+                        branch = next(
+                            run
+                            for run in record["strategy_runs"]
+                            if run.get("strategy_id") == item["strategy_id"]
+                        )
+                        previous_decision = branch.get("last_decision")
+                        if item["role"] == "investigator":
+                            branch["cycle"] = max(0, int(item["cycle"]) - 1)
+                            if not str(branch.get("current_question") or "").strip():
+                                branch["current_question"] = (
+                                    "Complete the configured final research round. Independently inspect the latest saved finding, "
+                                    "check its important derivation or evidence against the project objective, and test one concrete "
+                                    "remaining objection or counterexample. Treat saved conclusions as unverified, and report what "
+                                    "the final round adds, revises, or leaves unresolved."
+                                )
+                        else:
+                            branch["cycle"] = int(item["cycle"])
+                        branch["protocol_completion_recovery"] = item["recovery_context"]
+                        branch["protocol_completion_history"] = branch.get(
+                            "protocol_completion_history", []
+                        ) + [
+                            {
+                                "at": _now(),
+                                "cycle": item["cycle"],
+                                "role": item["role"],
+                                "reason": item["recovery_context"]["reason"],
+                                "prior_decision": previous_decision,
+                            }
+                        ]
+                        branch["status"] = "paused"
+                        branch["current_action"] = "Paused · protocol completion"
+                        branch["reason"] = (
+                            "A new, separately identified role request is needed to complete the configured research rounds."
+                        )
+                    record["status"] = "paused"
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["provider_usage_limited"] = bool(
+                        record.get("provider_usage_limited") or plan.get("had_provider_limit_rejection")
+                    )
+                    record["provider_limit_recovery_ready"] = bool(record.get("provider_usage_limited"))
+                    record["protocol_completion_recovery_active"] = True
+                    record["protocol_completion_required_calls"] = int(plan["required_calls"])
+                    record["current_action"] = "Paused · protocol completion"
+                    record["message"] = (
+                        "The saved terminal session is eligible for explicit protocol completion. "
+                        "All previous completed, invalid, rejected and uncertain attempts remain recorded; "
+                        "new roles use new request IDs and the saved method version. Verify current provider-plan availability before resuming."
+                    )
+                    record.pop("terminal_reason", None)
+                    record["termination_reason_code"] = "protocol_completion_available"
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
+                    _event(record, "session.protocol_completion_available", record["message"])
+                    _save(path, record)
+            if (
+                action == "resume"
+                and record.get("status") in {"ended", "failed"}
+                and record.get("provider_usage_limited") is True
+            ):
+                recovery_branches, recovery_error = _provider_limit_recovery_plan(record)
+                if recovery_branches is None:
+                    raise ProjectError(
+                        recovery_error
+                        or "This provider-limited session cannot be resumed safely from its saved state."
+                    )
+                pause_message = (
+                    "A confirmed provider usage-limit stop is recoverable. Completed turns and rejected "
+                    "attempts remain saved. Confirm the provider limit has reset before explicitly "
+                    "resuming; SIGMA will not automatically retry rejected calls."
                 )
-            record["status"] = "paused"
-            record["stopped_at"] = record.get("stopped_at") or _now()
-            record["provider_usage_limited"] = bool(
-                record.get("provider_usage_limited") or plan.get("had_provider_limit_rejection")
-            )
-            record["provider_limit_recovery_ready"] = bool(record.get("provider_usage_limited"))
-            record["protocol_completion_recovery_active"] = True
-            record["protocol_completion_required_calls"] = int(plan["required_calls"])
-            record["current_action"] = "Paused · protocol completion"
-            record["message"] = (
-                "The saved terminal session is eligible for explicit protocol completion. "
-                "All previous completed, invalid, rejected and uncertain attempts remain recorded; "
-                "new roles use new request IDs and the saved method version. Verify current provider-plan availability before resuming."
-            )
-            record.pop("terminal_reason", None)
-            record["termination_reason_code"] = "protocol_completion_available"
-            record["outcome"] = _outcome(record)
-            record["strategy_assessments"] = _strategy_assessments(record)
-            record["portfolio_decision"] = _portfolio_decision(record)
-            _event(record, "session.protocol_completion_available", record["message"])
-            _save(path, record)
-    if (
-        action == "resume"
-        and record.get("status") in {"ended", "failed"}
-        and record.get("provider_usage_limited") is True
-    ):
-        recovery_branches, recovery_error = _provider_limit_recovery_plan(record)
-        if recovery_branches is None:
-            raise ProjectError(
-                recovery_error
-                or "This provider-limited session cannot be resumed safely from its saved state."
-            )
-        pause_message = (
-            "A confirmed provider usage-limit stop is recoverable. Completed turns and rejected "
-            "attempts remain saved. Confirm the provider limit has reset before explicitly "
-            "resuming; SIGMA will not automatically retry rejected calls."
-        )
-        for branch in recovery_branches:
-            branch["status"] = "paused"
-            branch["current_action"] = "Paused · provider usage limit"
-            branch["reason"] = pause_message
-        record["status"] = "paused"
-        record["current_action"] = "Paused · provider usage limit"
-        record["provider_limit_recovery_ready"] = True
-        # A rejected provider request begins the pause interval. Preserve its
-        # timestamp when this ended session is first explicitly reopened.
-        record.setdefault("stopped_at", _now())
-        record["message"] = pause_message
-        record["terminal_reason"] = pause_message
-        record["termination_reason_code"] = "provider_usage_limit_recovery_available"
-        _event(record, "provider.usage_limit_recovery_enabled", pause_message)
-        _save(path, record)
-    # Legacy sessions ended after a known clipped response even with unused turns.
-    # Convert only this exact terminal state to a paused, resumable session.
-    if action == "resume" and _public(record).get("recoverable_clipped_response"):
-        clipped = next(
-            step
-            for step in reversed(record["steps"])
-            if step.get("status") == "incomplete"
-            and step.get("incomplete_reason") == "max_output_tokens"
-        )
-        record["status"] = "paused"
-        record["stopped_at"] = clipped.get("finished_at") or record["updated_at"]
-        # The old terminal reason must not survive successful resumed research.
-        record.pop("terminal_reason", None)
-        for branch in record.get("strategy_runs", []):
-            if branch.get("current_action") == "Incomplete · output limit":
-                branch["status"] = "paused"
-                branch["current_action"] = "Paused · clipped response"
-        record["message"] = (
-            "Previously ended clipped response is now recoverable. Saved partial "
-            "output and usage remain recorded; resuming requires a new provider call."
-        )
-        _event(record, "call.recovery_enabled", record["message"])
-        _save(path, record)
-    if record["status"] not in {"paused", "stopped"}:
-        return _public(record)
+                for branch in recovery_branches:
+                    branch["status"] = "paused"
+                    branch["current_action"] = "Paused · provider usage limit"
+                    branch["reason"] = pause_message
+                record["status"] = "paused"
+                record["current_action"] = "Paused · provider usage limit"
+                record["provider_limit_recovery_ready"] = True
+                # A rejected provider request begins the pause interval. Preserve its
+                # timestamp when this ended session is first explicitly reopened.
+                record.setdefault("stopped_at", _now())
+                record["message"] = pause_message
+                record["terminal_reason"] = pause_message
+                record["termination_reason_code"] = "provider_usage_limit_recovery_available"
+                _event(record, "provider.usage_limit_recovery_enabled", pause_message)
+                _save(path, record)
+            # Legacy sessions ended after a known clipped response even with unused turns.
+            # Convert only this exact terminal state to a paused, resumable session.
+            if action == "resume" and _public(record).get("recoverable_clipped_response"):
+                clipped = next(
+                    step
+                    for step in reversed(record["steps"])
+                    if step.get("status") == "incomplete"
+                    and step.get("incomplete_reason") == "max_output_tokens"
+                )
+                record["status"] = "paused"
+                record["stopped_at"] = clipped.get("finished_at") or record["updated_at"]
+                # The old terminal reason must not survive successful resumed research.
+                record.pop("terminal_reason", None)
+                for branch in record.get("strategy_runs", []):
+                    if branch.get("current_action") == "Incomplete · output limit":
+                        branch["status"] = "paused"
+                        branch["current_action"] = "Paused · clipped response"
+                record["message"] = (
+                    "Previously ended clipped response is now recoverable. Saved partial "
+                    "output and usage remain recorded; resuming requires a new provider call."
+                )
+                _event(record, "call.recovery_enabled", record["message"])
+                _save(path, record)
+            if record["status"] not in {"paused", "stopped"}:
+                return _public(record)
     # Resume uses the frozen accepted strategy snapshot. New edits, removals,
     # eligibility changes and reordering affect future sessions only.
     protocol_completion_resume = record.get("protocol_completion_recovery_active") is True
