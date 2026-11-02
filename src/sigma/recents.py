@@ -80,15 +80,16 @@ def project_family(title: str) -> str:
     return base or normalized
 
 
-
 def _paper_test_defaults() -> dict[str, str]:
     """Reviewed project choices checked into source control; never modify archived projects."""
     manifest_path = ROOT / "projects" / "paper-test-pins.json"
     if not manifest_path.exists():
         return {}
     value = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict) or value.get("schema_version") != 1 or not isinstance(
-        value.get("projects"), list
+    if (
+        not isinstance(value, dict)
+        or value.get("schema_version") != 1
+        or not isinstance(value.get("projects"), list)
     ):
         raise ValueError("Invalid paper-test pin manifest")
     selected: dict[str, str] = {}
@@ -99,7 +100,7 @@ def _paper_test_defaults() -> dict[str, str]:
             or not isinstance(record.get("id"), str)
             or not isinstance(record.get("source"), str)
         ):
-            raise ValueError("Invalid paper-test pin record")
+            raise TypeError("Invalid paper-test pin record")
         family = project_family(record["title"])
         project_id = str(UUID(record["id"]))
         if project_id != record["id"] or not family or family in selected:
