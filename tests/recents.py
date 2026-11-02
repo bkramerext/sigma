@@ -136,6 +136,34 @@ def check(root: Path, base: Path) -> None:
     assert catalog[-1]["title"] == "Did Jesus Use Cannabis?"
     assert home_projects()["projects"] == [] and not list(root.iterdir())
 
+    # Three source-controlled defaults activate only when their exact project IDs
+    # enter the workspace. They never mark unrelated local versions as pinned.
+    from sigma.recents import _effective_pins, _paper_test_defaults
+
+    defaults = _paper_test_defaults()
+    assert defaults == {
+        "ai agent reliability and evaluation": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+        "sovereign ai federation": "9175d73d-62aa-4523-a286-445f5390ae1d",
+        "why do xenopus tadpoles temporarily lose tail regeneration?": (
+            "01de54c9-9593-413a-9577-1a952d28da70"
+        ),
+    }
+    empty = {"entries": [], "pins": {}, "dismissed_default_pins": []}
+    assert _effective_pins(empty) == {}
+    agent_id = defaults["ai agent reliability and evaluation"]
+    open_index = {
+        "entries": [{"id": agent_id}],
+        "pins": {},
+        "dismissed_default_pins": [],
+    }
+    assert _effective_pins(open_index) == {
+        "ai agent reliability and evaluation": agent_id
+    }
+    open_index["dismissed_default_pins"] = ["ai agent reliability and evaluation"]
+    assert _effective_pins(open_index) == {}
+    open_index["pins"]["ai agent reliability and evaluation"] = str(uuid4())
+    assert _effective_pins(open_index) == open_index["pins"]
+
     expanded = base / "extra-samples"
     expanded.mkdir()
     for number in range(6):
