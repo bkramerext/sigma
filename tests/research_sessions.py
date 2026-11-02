@@ -58,8 +58,12 @@ def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
     assert current["cost_usd_used_or_reserved"] == 0
     reserve_before_dispatch(ledger, call_id="next", request_body=b"another")
     assert totals(ledger)["calls_including_unknown"] == 2
+    preserved_input_limit = ledger["input_token_limit"]
+    preserved_cost_limit = ledger["cost_limit_usd"]
     assert increase_call_limit(ledger, 4) == (3, 4)
     assert ledger["call_limit"] == 4
+    assert ledger["input_token_limit"] == preserved_input_limit
+    assert ledger["cost_limit_usd"] == preserved_cost_limit
     try:
         increase_call_limit(ledger, 3)
     except BudgetExceeded as exc:
