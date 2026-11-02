@@ -206,6 +206,7 @@ async def _watch(
     interrupted = False
     while True:
         current = [_snapshot(entry) for entry in entries]
+        continuation_queued = False
         for item in current:
             if (
                 item["status"] not in {"ended", "failed", "paused"}
@@ -237,6 +238,7 @@ async def _watch(
                     "resume",
                     additional_calls=additional_calls,
                 )
+                continuation_queued = True
                 recovery_resumes[item["session_id"]] += 1
                 print(
                     json.dumps(
@@ -286,7 +288,9 @@ async def _watch(
                 return_exceptions=True,
             )
             break
-        if all(item["status"] in TERMINAL for item in current):
+        # A targeted continuation may have just moved a terminal snapshot to
+        # queued. Do not exit on the stale snapshot from the top of this loop.
+        if not continuation_queued and all(item["status"] in TERMINAL for item in current):
             break
         await asyncio.sleep(poll_seconds)
 

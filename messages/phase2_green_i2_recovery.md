@@ -35,3 +35,11 @@ After tests, the existing five-project batch supervisor was launched against `me
 | Focused and full repository tests | MET, with documented graph-present sandbox skip |
 | Xenopus complete at 12/12 | UNMET; same-session continuation is in progress |
 | Scientific validity / independent source review | UNVERIFIED |
+
+## Follow-up: supervisor exited on a stale terminal snapshot
+
+The first post-fix resume correctly preserved call 14 as a locally invalid Investigator response, then the supervisor granted exactly one additional attempt because four role turns remained with only three budgeted attempts left. `control_session` queued the targeted continuation, but `_watch` then inspected the pre-resume terminal snapshot and exited before the queued worker dispatched. On process shutdown, the session was safely paused before dispatch; no call was lost or replayed. This was a second orchestration defect, separate from cancellation classification.
+
+The supervisor now records that it queued a targeted continuation and will not terminate on that iteration's stale snapshot. `tests/research_batch.py` reproduces an invalid-response terminal state followed by a queued continuation and asserts the watcher remains alive through completion; it is part of `./sigma test`. The focused test, Ruff, formatting, and Pyright checks passed. The original invalid output and call history remain unchanged.
+
+Post-fix, the same batch supervisor resumed only Xenopus again. The latest checkpoint is 8/12 accepted turns, with a distinct retry for the same missing Round 2 Investigator slot dispatched as call 15/18. That call is in flight; no other project was resumed.
