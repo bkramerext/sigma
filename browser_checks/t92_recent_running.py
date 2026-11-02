@@ -112,7 +112,8 @@ with sync_playwright() as playwright:
     expect(entry).to_be_visible()
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
     initial = metadata.inner_text()
-    assert "Running" not in initial and initial.count(" · ") == 1, initial
+    assert "Running" not in initial and initial.count(" · ") == 2, initial
+    assert "0 papers" in initial, initial
 
     running.add(project_id)
     expect(metadata).to_contain_text(" · Running · ", timeout=10000)

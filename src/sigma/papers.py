@@ -3712,6 +3712,65 @@ def _diagram_layout(
     return positions, node_heights
 
 
+def _frozen_research_diagnostics(package: dict[str, Any]) -> list[dict[str, str]]:
+    """Bounded, source-attributed diagnostic excerpts from the frozen research.
+
+    Never invent issue descriptions: only existing fields of archived records
+    are eligible. Avoid serializing entire session transcripts into the paper.
+    """
+    keys = {
+        "issues_found",
+        "diagnostics",
+        "validation_warnings",
+        "warnings",
+        "contradictions",
+        "failures",
+        "errors",
+        "unresolved_issues",
+    }
+    found: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for source in package.get("sources", []):
+        if not isinstance(source, dict):
+            continue
+        source_id = str(source.get("id", "unknown"))
+        stack: list[tuple[Any, int]] = [(source.get("data"), 0)]
+        visited = 0
+        while stack and visited < 1600 and len(found) < 60:
+            node, depth = stack.pop()
+            visited += 1
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key in keys and value:
+                        entries = value if isinstance(value, list) else [value]
+                        for item in entries[:12]:
+                            description = (
+                                item
+                                if isinstance(item, str)
+                                else json.dumps(item, ensure_ascii=False, default=str)
+                            )
+                            description = description.strip()
+                            fingerprint = (source_id, description)
+                            if description and fingerprint not in seen:
+                                seen.add(fingerprint)
+                                found.append(
+                                    {
+                                        "source_ref": source_id,
+                                        "kind": str(key),
+                                        "detail": description[:700],
+                                    }
+                                )
+                            if len(found) >= 60:
+                                break
+                    elif depth < 3 and isinstance(value, (dict, list)):
+                        stack.append((value, depth + 1))
+            elif isinstance(node, list) and depth < 3:
+                stack.extend((item, depth + 1) for item in node[:100])
+        if len(found) >= 60:
+            break
+    return found
+
+
 def _tex(
     draft: PaperDraft,
     warnings: list[str],
@@ -3727,6 +3786,7 @@ def _tex(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
+    research_diagnostics: list[dict[str, str]] | None = None,
     source_reference_map: Mapping[str, str] | None = None,
     writing_sources: list[dict[str, Any]] | None = None,
 ) -> str:
@@ -4086,40 +4146,6 @@ def _tex(
             + [r"\item " + prose_text(item) for item in draft.open_obligations]
             + [r"\end{itemize}"]
         )
-    if include_validation_notes and obligation_reconciliation:
-        parts.append(r"\section{Frozen obligation reconciliation}")
-        parts.append(
-            prose_text(
-                "Unlisted obligations are not presumed resolved. The archived research "
-                "snapshot retains complete source references and the full reconciliation."
-            )
-        )
-        # The reconciliation often repeats the same outstanding question across
-        # sessions and artifacts. The paper is a readable selection, not a raw
-        # database listing; the complete ledger stays in saved paper metadata.
-        distinct_obligations: list[dict[str, Any]] = []
-        seen_obligations: set[str] = set()
-        for item in obligation_reconciliation:
-            normalized = " ".join(item["text"].split()).casefold()
-            if normalized in seen_obligations:
-                continue
-            seen_obligations.add(normalized)
-            distinct_obligations.append(item)
-        parts.append(r"\begin{itemize}")
-        for item in distinct_obligations[:18]:
-            source_count = len(item["source_refs"])
-            annotation = f" ({item['status']}; {source_count} saved source reference(s))"
-            parts.append(
-                r"\item " + prose_text(item["text"]) + r" \textit{" + esc(annotation) + "}"
-            )
-        parts.append(r"\end{itemize}")
-        if len(distinct_obligations) > 18:
-            parts.append(
-                prose_text(
-                    f"{len(distinct_obligations) - 18} further distinct obligations "
-                    "are retained in the archived reconciliation."
-                )
-            )
     parts.append(r"\section{Conclusion}" if math_style else r"\section{Conclusions}")
     parts += [article_paragraph(item) + "\n" for item in draft.conclusions]
     if include_claim_details and draft.conclusion_claim_ids:
@@ -4203,19 +4229,83 @@ def _tex(
                 )
             )
     if include_validation_notes:
+        if not include_research_excerpts or not integrity_records:
+            parts.append(r"\appendix")
+        parts.append(r"\section{Issues found (diagnostic data)}")
+        parts.append(
+            prose_text(
+                "These are recorded research and authoring diagnostics, not independently verified conclusions. "
+                "The appendix is a bounded extract of archived issues, uncertainties, and outstanding checks."
+            )
+        )
+        items: list[str] = []
+        for warning in warnings[:40]:
+            items.append("Validation: " + warning)
+        for warning in draft.validation_warnings[:30]:
+            items.append("Author self-review: " + warning)
+        for item in (research_diagnostics or [])[:60]:
+            items.append(
+                "Saved research ["
+                + str(item.get("source_ref", "unknown"))
+                + "] "
+                + str(item.get("kind", "diagnostic"))
+                + ": "
+                + str(item.get("detail", ""))
+            )
+        if obligation_reconciliation:
+            distinct_obligations = list(
+                {
+                    str(item.get("text", "")).strip().casefold(): item
+                    for item in obligation_reconciliation
+                }.values()
+            )
+            for item in distinct_obligations[:18]:
+                items.append(
+                    "Open obligation ["
+                    + str(item.get("status", "unresolved"))
+                    + "]: "
+                    + str(item.get("text", ""))
+                    + " [Sources: "
+                    + ", ".join(str(ref) for ref in item.get("source_refs", [])[:8])
+                    + "]"
+                )
+            if len(distinct_obligations) > 18:
+                items.append(
+                    f"{len(distinct_obligations) - 18} further distinct obligations "
+                    "remain in the saved reconciliation."
+                )
+        if material_omissions:
+            for item in material_omissions[:40]:
+                items.append(
+                    "Evidence omission: "
+                    + str(item.get("source_ref", "unknown"))
+                    + " ("
+                    + str(item.get("reason", "unavailable"))
+                    + ")"
+                )
+        items = list(dict.fromkeys(item for item in items if item.strip()))
+        if items:
+            parts.append(r"\begin{itemize}")
+            parts.extend(r"\item " + prose_text(item[:1000]) for item in items[:120])
+            parts.append(r"\end{itemize}")
+            if len(items) > 120:
+                parts.append(
+                    prose_text(
+                        f"{len(items) - 120} additional diagnostics remain in the saved paper archive."
+                    )
+                )
+        else:
+            parts.append(
+                prose_text("No recorded issues were found in the available diagnostic fields.")
+            )
         parts += [
             r"\section*{Evidence and authorship note}",
             esc("Snapshot SHA-256: " + snapshot_hash),
             esc(
-                "Generated by an AI author from the cited saved research snapshot. This document is not independent verification. No external bibliography was added."
+                "Generated by an AI author from the cited saved research snapshot. "
+                "This document is not independent verification. No external bibliography was added."
             ),
         ]
-        if warnings:
-            parts += (
-                [r"\section*{Validation warnings}", r"\begin{itemize}"]
-                + [r"\item " + prose_text(item) for item in warnings]
-                + [r"\end{itemize}"]
-            )
     else:
         parts += [
             r"\section*{Authorship note}",
@@ -6808,6 +6898,9 @@ async def _generate_impl(
                 "include_claim_details": include_claim_details,
                 "include_validation_notes": include_validation_notes,
                 "include_research_excerpts": include_research_excerpts,
+                "research_diagnostics": (
+                    _frozen_research_diagnostics(package) if include_validation_notes else None
+                ),
                 "source_reference_map": source_reference_map,
                 "writing_sources": writing_sources,
             }
@@ -7450,6 +7543,10 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                             }
                         },
                         "pdf_available": _valid_pdf_file(path, value),
+                        "pdf_sha256": value.get("pdf_sha256"),
+                        "score": __import__(
+                            "sigma.paper_scores", fromlist=["cached_score"]
+                        ).cached_score(value),
                     }
                 )
         except (OSError, ValueError, KeyError, TypeError):
@@ -7468,6 +7565,9 @@ def get_paper(path: str, paper_id: str) -> dict[str, Any]:
     if record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Paper belongs to a different project")
     record["pdf_available"] = _valid_pdf_file(path, record)
+    from sigma.paper_scores import cached_score
+
+    record["score"] = cached_score(record) if record["pdf_available"] else None
     return record
 
 

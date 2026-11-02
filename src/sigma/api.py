@@ -25,6 +25,7 @@ from sigma import (
     cloud_demo,
     cloud_research,
     cloud_workspaces,
+    paper_scores,
     papers,
     project_types,
     proposals,
@@ -676,7 +677,13 @@ def research_qa_markdown(qa_id: str, path: str):
 
 @app.get("/api/projects/papers")
 def papers_view(path: str):
-    return {"papers": papers.list_papers(path)}
+    saved = papers.list_papers(path)
+    available = [paper for paper in saved if paper.get("pdf_available")]
+    return {
+        "papers": saved,
+        "paper_count": len(available),
+        "best_paper_score": paper_scores.best_score(available),
+    }
 
 
 @app.get("/api/projects/papers/preflight")
@@ -728,6 +735,23 @@ async def papers_restart_view(body: PaperRestartRequest):
 @app.get("/api/projects/papers/{paper_id}")
 def paper_view(paper_id: str, path: str):
     return papers.get_paper(path, paper_id)
+
+
+class PaperScoreRequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+
+
+@app.post("/api/projects/papers/{paper_id}/score")
+async def paper_score_view(paper_id: str, body: PaperScoreRequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    return {
+        "score": await paper_scores.score_paper(
+            body.path, paper_id, body.expected_binding, body.expected_project_id
+        )
+    }
 
 
 @app.get("/api/projects/papers/{paper_id}/pdf")
