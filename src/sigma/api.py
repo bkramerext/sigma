@@ -1710,6 +1710,8 @@ async def delete_project_view(body: DeleteProjectRequest):
         view = inspect_project(str(authorized))
         if view.project.id != body.expected_project_id:
             raise ProjectError("Project changed; refresh before deleting it")
+        from sigma.recents import assert_project_unpinned
+        assert_project_unpinned(body.expected_project_id)
         # Admission holds the same manager lock until its worker is published.
         # Keep it across deletion; prove every saved session's original worker
         # has exited before removing its project, including foreign-process
@@ -1720,6 +1722,7 @@ async def delete_project_view(body: DeleteProjectRequest):
             view = inspect_project(str(authorized))
             if view.project.id != body.expected_project_id:
                 raise ProjectError("Project changed; refresh before deleting it")
+            assert_project_unpinned(body.expected_project_id)
             await research_sessions.stop_project_sessions(str(authorized))
             with ExitStack() as worker_fences:
                 for session in research_sessions._all(str(authorized)):
@@ -1966,6 +1969,29 @@ def recent_view():
     from sigma.recents import home_projects
 
     return home_projects()
+
+
+@app.get("/api/projects/pinned")
+def pinned_paper_projects_view():
+    """Per-workspace preferred projects for manual paper-generation testing."""
+    from sigma.recents import pinned_projects
+
+    return pinned_projects()
+
+
+class ProjectPinRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_id: str
+    path: str
+    pinned: bool
+
+
+@app.post("/api/projects/pin")
+def pin_project_view(body: ProjectPinRequest):
+    from sigma.recents import set_project_pin
+
+    set_project_pin(body.project_id, body.path, body.pinned)
+    return {"project_id": body.project_id, "pinned": body.pinned}
 
 
 @app.get("/api/projects/samples")
