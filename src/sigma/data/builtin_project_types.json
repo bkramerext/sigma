@@ -447,22 +447,22 @@
   "common_references": {
     "research_standards_references": [
       {
-        "name": "NASEM — Reproducibility and Replicability in Science",
-        "url": "https://www.nationalacademies.org/read/25303/chapter/5"
+        "name": "National Academies — On Being a Scientist (4th ed.)",
+        "url": "https://nap.nationalacademies.org/pubs/29488/"
       },
       {
-        "name": "Stanford Encyclopedia of Philosophy — Abduction",
-        "url": "https://plato.stanford.edu/entries/abduction/"
+        "name": "Stanford Encyclopedia of Philosophy — Scientific Method",
+        "url": "https://plato.stanford.edu/entries/scientific-method/"
       }
     ],
     "publication_standards_references": [
       {
-        "name": "Ten Simple Rules for Structuring Papers",
-        "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005619"
+        "name": "Nature Portfolio — Editorial Policies and Reporting Standards",
+        "url": "https://www.nature.com/nature-portfolio/editorial-policies"
       },
       {
-        "name": "UCI — Scientific Writing: Discussion and Conclusions",
-        "url": "https://guides.lib.uci.edu/scientificwriting/discussion"
+        "name": "COPE — Core Practices in Publication Ethics",
+        "url": "https://publicationethics.org/files/editable-bean/COPE_Core_Practices_0.pdf"
       }
     ]
   }
