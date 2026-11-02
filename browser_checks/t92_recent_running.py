@@ -126,8 +126,8 @@ with sync_playwright() as playwright:
         recent_group.locator("summary").click()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
 
-    pin = recent.get_by_role("button", name=f"Pin {project_title}")
-    remove = recent.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
+    pin = recent.get_by_role("button", name="Just show this version of the project")
+    remove = recent.get_by_role("button", name="Remove this project")
     pin_color = pin.evaluate("node => getComputedStyle(node).color")
     assert pin_color == remove.evaluate("node => getComputedStyle(node).color")
     pin.click()
@@ -139,9 +139,9 @@ with sync_playwright() as playwright:
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_have_count(0)
     expect(pinned.locator(".recent-title-pin")).to_be_visible()
     expect(
-        pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
+        pinned.get_by_role("button", name="Remove this project")
     ).to_have_count(0)
-    unpin = pinned.get_by_role("button", name=f"Unpin {project_title}")
+    unpin = pinned.get_by_role("button", name="Show all versions of this project")
     expect(unpin).to_be_visible()
     assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
     unpin.hover()
@@ -154,14 +154,14 @@ with sync_playwright() as playwright:
         pinned.locator("summary").click()
     expect(pinned.locator(".recent-title-pin")).to_be_visible()
     expect(
-        pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
+        pinned.get_by_role("button", name="Remove this project")
     ).to_have_count(0)
-    pinned.get_by_role("button", name=f"Unpin {project_title}").click()
+    pinned.get_by_role("button", name="Show all versions of this project").click()
     expect(pinned.locator(".recent-title-pin")).to_have_count(0)
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
     expect(
-        pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
+        pinned.get_by_role("button", name="Remove this project")
     ).to_be_visible()
     expect(pinned.locator("details.pinned-type-group")).to_have_count(0)
     assert not errors, errors
