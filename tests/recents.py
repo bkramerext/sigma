@@ -156,9 +156,7 @@ def check(root: Path, base: Path) -> None:
         "pins": {},
         "dismissed_default_pins": [],
     }
-    assert _effective_pins(open_index) == {
-        "ai agent reliability and evaluation": agent_id
-    }
+    assert _effective_pins(open_index) == {"ai agent reliability and evaluation": agent_id}
     open_index["dismissed_default_pins"] = ["ai agent reliability and evaluation"]
     assert _effective_pins(open_index) == {}
     open_index["pins"]["ai agent reliability and evaluation"] = str(uuid4())
@@ -242,11 +240,11 @@ def check(root: Path, base: Path) -> None:
             json={"project_id": first.project.id, "path": first.path, "pinned": False},
         )
         assert unpin.status_code == 200
-        selected = api.post(
+        selected_pin_response = api.post(
             "/api/projects/pin",
             json={"project_id": second.project.id, "path": second.path, "pinned": True},
         )
-        assert selected.status_code == 200
+        assert selected_pin_response.status_code == 200
         assert api.get("/api/projects/pinned").json()["projects"][0]["id"] == second.project.id
         assert (
             api.post(
