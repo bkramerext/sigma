@@ -3779,7 +3779,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     const family = recentProjectFamilyKey(project);
     familyCounts.set(family, (familyCounts.get(family) ?? 0) + 1);
   }
-  const visibleProjects = visibleRecentProjects(projects);
+  const visibleProjects = visibleRecentProjects(projects.filter(project => project.available));
   const recentGroups = visibleProjects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
