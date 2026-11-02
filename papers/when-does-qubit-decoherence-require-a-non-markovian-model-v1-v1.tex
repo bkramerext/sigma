@@ -8,11 +8,11 @@
 \usepackage{amsmath,amssymb,array,booktabs,longtable,pdflscape}
 \usepackage{microtype}
 \usepackage[hyphens]{url}
+\usepackage{xurl}
 \usepackage{titlesec}
 \usepackage{tikz}
-\usepackage{tikz}
 \usetikzlibrary{fit}
-\emergencystretch=8em
+\emergencystretch=2em
 \raggedbottom
 \linespread{1.07}
 \usepackage{xcolor}
@@ -24,13 +24,19 @@
 \begin{document}
 \maketitle
 
-
 \begin{abstract}
 When do finite, noisy qubit observations justify rejecting a CP-divisible dynamical model? We examine this question for invertible, positive-real, fixed-axis dephasing, where increasing coherence witnesses both CP indivisibility and trace-distance backflow. Exact preparation and readout countermodels show why an apparent revival, even with improved predictive fitting, need not identify the system dynamics. Under independent shots and transferable reference calibration, an explicit contrast-increase test controls false rejection of the restricted null. A copied-shot counterexample demonstrates why that guarantee cannot be extended to correlated acquisition records.
 
 A finite-gap construction supplies a proof candidate for unrestricted sampling non-identifiability; conversely, a quantitative rate-regularity assumption supports conditional between-sample certification. The contribution is an assumption-dependent account of what the observations can exclude, not evidence for a uniquely quantum environment or process-tensor memory. Synthetic predictive comparisons remain unexecuted, and a support defect in their proposed scoring protocol requires repair.
 \end{abstract}
-\begingroup\setlength{\fboxsep}{10pt}\noindent\fcolorbox{blue!55}{blue!5}{\begin{minipage}{0.90\linewidth}\small\sffamily{\large\bfseries\color{blue}In brief}\par\smallskip\textbf{Question.} When do finite, noisy qubit measurements justify rejecting a CP-divisible dephasing model?\par\smallskip\textbf{Answer.} A calibrated increase in the same system's coherence can reject the stated null. Apparent revival alone cannot distinguish dynamics from preparation or readout drift.\par\smallskip\textbf{Route.} Define the model, expose sampling and calibration ambiguities, then state the conditional test and its limits.\par\smallskip\textbf{Limit.} No experiment, simulation, or primary-literature benchmark was completed.\end{minipage}}\endgroup\par\medskip
+\begingroup\setlength{\fboxsep}{10pt}
+\noindent\fcolorbox{blue!55}{blue!5}{\begin{minipage}{0.90\linewidth}\small\sffamily
+{\large\bfseries\color{blue}In brief}\par\smallskip
+\textbf{The question.} When do finite, noisy measurements justify rejecting a CP-divisible model of qubit dephasing?\par\smallskip
+\textbf{The answer.} Within a specified fixed-axis model, a calibrated increase in coherence can reject that null. A visible revival alone can also arise from preparation or readout drift.\par\smallskip
+\textbf{The route.} First define the physical model; then examine what sparse sampling and calibration can hide; finally state the rejection rule and the assumptions it needs.\par\smallskip
+\textbf{The limit.} No experiment or simulation was run, and the primary literature was not independently benchmarked.
+\end{minipage}}\endgroup\par\medskip
 \section{Introduction and physical framework}
 The answerable question is whether specified finite observations exclude every nonincreasing coherence function within a positive-real, fixed-axis dephasing model, after allowing the stipulated preparation and measurement uncertainty. This null is broader than exponential decay: time-dependent nonnegative rates remain admissible. Rejecting it is therefore a statement about CP divisibility within a defined reduced-system model, not a rejection of every possible Markovian qubit explanation.
 
@@ -45,7 +51,7 @@ Finite-sample analysis propagated reference-calibration uncertainty into a presp
 
 Between-sample inference was analyzed through a Lipschitz bound on the local dephasing rate and a physical counterexample with equal endpoint channels. Prospective predictive comparisons were assessed analytically for design arithmetic and probability-support failures. No simulation, experimental measurement, numerical performance comparison, or primary-source literature inspection was performed.
 
-This synthesis uses a bounded selection of archived research; unreviewed records may affect its conclusions.
+This synthesis uses a bounded selection of the archived research. Unreviewed records could affect its conclusions; the full omission ledger remains available with the generation record.
 \section{The operational question and a physical dephasing model}
 The operational target is rejection of every nonincreasing positive coherence function within a specified qubit-dephasing model, rather than rejection of exponential decay alone. This restriction makes the dynamical question precise: within the selected family, increasing coherence is incompatible with complete-positive divisibility and also increases the distinguishability of a fixed pair of transverse preparations. These are conditional statements about reduced-system maps, not an identification of the microscopic environment.
 
@@ -53,12 +59,12 @@ Consider a qubit in the known rotating frame of the bare Hamiltonian $H_0=\hbar\
 \[\Lambda_t(\rho)=\begin{pmatrix}\rho_{00}&g(t)\rho_{01}\\g(t)\rho_{10}&\rho_{11}\end{pmatrix},\qquad g(0)=1,\qquad 0<g(t)\leq1.\]
 The dimensionless, real multiplier $g(t)$ changes only transverse coherence; the populations and the expectation of $H_0$ remain unchanged between controls. Thus the governing model describes longitudinal pure dephasing and excludes energy relaxation.
 
-The map description assumes fresh, initially factorized system\textendash{}environment preparations, with the same environment distribution independent of the selected qubit input. It also assumes a fixed known dephasing axis, reproducible controls, and a common channel for all preparations at each delay. Reproducibility at a fixed delay does not require time-homogeneous evolution or a constant decay rate. Positivity and reality of the coherence multiplier, preparation independence, and exclusion of uncontrolled rotations are premises of this analysis, not properties established by measuring a single transverse component.
+The map description assumes fresh, initially factorized system\textendash{}\allowbreak{}environment preparations, with the same environment distribution independent of the selected qubit input. It also assumes a fixed known dephasing axis, reproducible controls, and a common channel for all preparations at each delay. Reproducibility at a fixed delay does not require time-homogeneous evolution or a constant decay rate. Positivity and reality of the coherence multiplier, preparation independence, and exclusion of uncontrolled rotations are premises of this analysis, not properties established by measuring a single transverse component.
 
 Complete-positive divisibility means that, for every $0\leq s\leq t\leq T$, there exists a completely positive, trace-preserving map $V_{t,s}$ satisfying $\Lambda_t=V_{t,s}\Lambda_s$. A distinct operational definition, trace-distance information backflow, asks whether the distinguishability of a fixed pair of initial preparations increases during their evolution. Process-tensor memory instead concerns intervention-conditioned multi-time statistics, including dependence of future outcomes on the past after a suitable causal break; single-time maps do not specify those statistics. Classical colored noise is a possible mechanism for reduced dynamics, not an operational category mutually exclusive with failure of complete-positive divisibility.
 
 Physical admissibility of each map follows directly from its Kraus representation. With $I$ denoting the identity operator, define
-$K_0(t)=\sqrt{\frac{1+g(t)}{2}}\,I,\qquad K_1(t)=\sqrt{\frac{1-g(t)}{2}}\,\sigma_z.$
+\[K_0(t)=\sqrt{\frac{1+g(t)}{2}}\,I,\qquad K_1(t)=\sqrt{\frac{1-g(t)}{2}}\,\sigma_z.\]
 The nonnegative weights sum to one, so \[\Lambda_t(\rho)=K_0(t)\rho K_0(t)^\dagger+K_1(t)\rho K_1(t)^\dagger\] is completely positive and trace preserving. Strict positivity of $g(t)$ additionally makes $\Lambda_t$ invertible as a linear map; this algebraic invertibility does not assert that its inverse is a physical channel.
 
 Invertibility fixes the intermediate map uniquely: $V_{t,s}=\Lambda_t\Lambda_s^{-1}$ preserves populations and multiplies coherence by $g(t)/g(s)$. Applying the same dephasing-channel positivity condition to this positive ratio gives
@@ -66,7 +72,7 @@ Invertibility fixes the intermediate map uniquely: $V_{t,s}=\Lambda_t\Lambda_s^{
 Consequently, complete-positive divisibility is exactly equivalent to nonincreasing coherence in this family. The relevant null therefore includes every admissible nonincreasing positive function, not just a particular parametric decay law.
 
 Where the logarithmic derivative exists, define the local dephasing rate $\kappa(t)=-d\log g(t)/dt$, with units of inverse time. Its purpose is to express the same dynamics through the time-local equation and the corresponding intermediate multiplier:
-$\frac{d\rho}{dt}=\frac{\kappa(t)}{2}\bigl(\sigma_z\rho\sigma_z-\rho\bigr),\qquad \frac{g(t)}{g(s)}=\exp\!\left[-\int_s^t\kappa(\tau)\,d\tau\right].$
+\[\begin{gathered}\frac{d\rho}{dt}=\frac{\kappa(t)}{2}\bigl(\sigma_z\rho\sigma_z-\rho\bigr), \\ \frac{g(t)}{g(s)}=\exp\!\left[-\int_s^t\kappa(\tau)\,d\tau\right].\end{gathered}\]
 For continuous $\kappa$, divisibility is equivalent to $\kappa(t)\geq0$ throughout the window: a negative value persists over a neighborhood and produces an increasing coherence interval. A temporarily negative rate can therefore coexist with physically admissible maps from the initial time, while preventing a completely positive intermediate map.
 
 The distinguishability calculation identifies a concrete state pair that witnesses every such increase. Define trace distance by $D(\rho,\sigma)=\|\rho-\sigma\|_1/2$, where $\|\cdot\|_1$ is the trace norm, and prepare the antipodal transverse states $\rho_\pm(0)=(I\pm\sigma_x)/2$. Their outputs are $\rho_\pm(t)=(I\pm g(t)\sigma_x)/2$, hence
@@ -74,7 +80,7 @@ $D\bigl(\rho_+(t),\rho_-(t)\bigr)=g(t).$
 Thus an increase of the stipulated coherence multiplier witnesses both trace-distance backflow for this fixed pair and failure of complete-positive divisibility. This equivalence is specific to the positive-real, fixed-axis dephasing family and does not equate the operational definitions for arbitrary qubit dynamics.
 
 An admissible semigroup and a modulated alternative make the distinction explicit. Let $\Delta>0$ be a time scale, introduce dimensionless time $u=t/\Delta$, and write
-$g_M(u)=e^{-\lambda u},\qquad g_N(u)=e^{-\lambda u}\bigl[1-a\sin^2(\pi u)\bigr],\qquad \lambda\geq0,\quad 0\leq a<1.$
+\[g_M(u)=e^{-\lambda u},\qquad g_N(u)=e^{-\lambda u}\bigl[1-a\sin^2(\pi u)\bigr],\qquad \lambda\geq0,\quad 0\leq a<1.\]
 Here $\lambda$ and $a$ are dimensionless. Both multipliers begin at one, remain positive and no greater than one at finite times, and therefore define completely positive, trace-preserving, invertible maps. The baseline has constant physical rate $\lambda/\Delta$, whereas the admissibility of the modulated family alone does not establish its indivisibility.
 
 For the explicit alternative $\lambda=1$ and $a=1/2$, the two-time contrast is
@@ -92,13 +98,13 @@ The modification preserves both channel physicality and every sampled map. Its b
 
 The fourth power also addresses a substantive regularity objection to the construction. A squared-sine patch gives continuously differentiable coherence but generally only a continuous decay rate at the joins. For the fourth-power patch, the modulation and its first three derivatives vanish at each boundary, so the patched coherence is three times continuously differentiable and its time-local rate $\kappa_B(t)=-d\log g_B(t)/dt$ is twice continuously differentiable. Thus the proposed obstruction is not removed merely by requiring a continuously differentiable rate; it relies instead on allowing rapid variation without a specified quantitative bound.
 
-To see how the modification produces recovery, evaluate the logarithmic derivative at the interior time $t_*=u+3L/(4m)$. The supplied construction gives $\left.\frac{d\log g_B(t)}{dt}\right|_{t=t_*}=-\gamma+\frac{am\pi}{L(1-a/4)}.$ This expression is positive whenever $m>\gamma L(1-a/4)/(a\pi)$, a condition attainable for any positive gap length by increasing the integer frequency parameter. Continuity then gives a neighborhood on which coherence increases and the local rate is negative. In this invertible positive-real dephasing class, an increasing coherence makes the unique intermediate multiplier $g_B(t)/g_B(s)$ exceed unity for some $s<t$, violating complete positivity of that intermediate map.
+To see how the modification produces recovery, evaluate the logarithmic derivative at the interior time $t_*=u+3L/(4m)$. The supplied construction gives \[\left.\frac{d\log g_B(t)}{dt}\right|_{t=t_*}=-\gamma+\frac{am\pi}{L(1-a/4)}.\] This expression is positive whenever $m>\gamma L(1-a/4)/(a\pi)$, a condition attainable for any positive gap length by increasing the integer frequency parameter. Continuity then gives a neighborhood on which coherence increases and the local rate is negative. In this invertible positive-real dephasing class, an increasing coherence makes the unique intermediate multiplier $g_B(t)/g_B(s)$ exceed unity for some $s<t$, violating complete positivity of that intermediate map.
 
 The same increase raises the trace distance of the fixed pair of opposite $X$ eigenstates, whose distance equals $g_B(t)$; this equivalence is specific to the stipulated dephasing family.
 
 The observational consequence is stronger than agreement between fitted decay curves. Let $\Lambda_{B,t}$ and $\Lambda_{M,t}$ denote the channels defined by the two coherence functions, let $\rho$ be any prepared qubit state, and let $\{E_k\}$ be any final positive-operator-valued measurement. Equality of the sampled channels gives \[\operatorname{Tr}[E_k\Lambda_{B,t_i}(\rho)]=\operatorname{Tr}[E_k\Lambda_{M,t_i}(\rho)]\] for every outcome, preparation, and scheduled time. Under fresh, independently reset repetitions with identical preparation and measurement procedures, the corresponding joint likelihoods therefore coincide.
 
-This scope presumes a common reproducible map for all inputs, initially uncorrelated system\textendash{}environment preparation, and a preparation-independent environment distribution; it does not cover within-run interventions or uncontrolled correlations between repetitions.
+This scope presumes a common reproducible map for all inputs, initially uncorrelated system\textendash{}\allowbreak{}environment preparation, and a preparation-independent environment distribution; it does not cover within-run interventions or uncontrolled correlations between repetitions.
 
 Consequently, for the constructed pair, additional shots or more complete tomography at the same times cannot resolve the ambiguity. If a decision rule rejects the semigroup with probability at most $\alpha$, where $0<\alpha<1$, identical likelihoods imply power at most $\alpha$ against this particular aliased alternative. The limitation persists even in the ideal limit of exact sampled-channel knowledge. It therefore concerns identifiability of continuous-time divisibility, not merely statistical uncertainty in estimating the observed channels.
 
@@ -107,22 +113,25 @@ The qualification is important: this argument does not prevent rejection of the 
 \section{Calibration transfer sets an identifiability boundary}
 Calibration transfer determines whether a measured coherence modulation can be attributed to system evolution rather than preparation or readout. The ambiguity is exact for the construction below: a physical dephasing factor can be moved from the dynamical map into delay-labelled preparation without changing any corresponding single-time output state. Independent preparation information can separate these explanations, but only if its relation to the delayed experiment is independently constrained. This establishes an identifiability boundary, not merely a finite-shot loss of precision.
 
+\begingroup\setlength{\fboxsep}{9pt}
+\noindent\fcolorbox{blue!45}{blue!4}{\begin{minipage}{0.91\linewidth}\small
+{\sffamily\bfseries\color{blue}Example: An apparent revival from preparation drift}\par\smallskip
+Imagine a qubit whose true coherence keeps decreasing. If the preparation contrast is lower at the earlier delay and higher at the later delay, the measured contrast can rise anyway. More shots narrow random error but cannot tell whether that change came from the qubit or the apparatus. A context-matched preparation monitor can separate the paper\textquoteright{}s constructed alternatives only when its calibration carries over to the delayed run.
+\end{minipage}}\endgroup\par\medskip
 Let $u=t/\tau$ denote dimensionless delay, where $\tau$ is a fixed time scale, and consider $0\leq u\leq2$. Write $\mathcal D_h$ for the fixed-axis dephasing channel that preserves diagonal density-matrix entries and multiplies off-diagonal entries by the real factor $h$. The preparation modulation is $c_a(u)=1-a\sin^2(\pi u/2)$, with $0\leq a<1$. Because $1-a\leq c_a(u)\leq1$, this factor defines a completely positive, trace-preserving, invertible dephasing channel at every delay. The semigroup factor $e^{-ru}$ is likewise admissible for dimensionless $r\geq0$, with physical decay rate $r/\tau$.
 
 Compare an explanation R, in which the intended preparation is followed by physical evolution $\mathcal D_{e^{-ru}c_a(u)}$, with an explanation D, in which preparation first applies $\mathcal D_{c_a(u)}$ and physical evolution is the semigroup $\mathcal D_{e^{-ru}}$. Dephasing factors multiply under composition, so for every intended input state $\rho$,
-$\mathcal D_{e^{-ru}c_a(u)}(\rho)=\mathcal D_{e^{-ru}}\!\left(\mathcal D_{c_a(u)}(\rho)\right).$
+\[\mathcal D_{e^{-ru}c_a(u)}(\rho)=\mathcal D_{e^{-ru}}\!\left(\mathcal D_{c_a(u)}(\rho)\right).\]
 Thus R and D predict identical delayed states, including both populations and coherence, despite assigning the modulation to different parts of the experiment.
 
 With the same readout and independent repetitions, their single-time likelihoods are identical at every sampled delay; additional unmonitored shots or held-out delays cannot distinguish them.
 
 The equivalence includes cases in which R is genuinely non-CP-divisible within the stipulated positive-real dephasing family, whereas D has semigroup post-preparation dynamics. For example, take $r=0.3$ and $a=0.2$. The logarithmic slope of R's coherence at $u=3/2$ is
-$\left.\frac{d}{du}\log\!\left[e^{-ru}c_a(u)\right]\right|_{u=3/2}=-r+\frac{a\pi}{2(1-a/2)}=\frac{\pi}{9}-0.3>0.$
-An increase contradicts CP divisibility here because the unique intermediate dephasing multiplier would exceed one. Nevertheless, the same output trajectory is produced by D through delay-labelled preparation changes.
-
-The label R alone is not a divisibility verdict for arbitrary parameter values; the positive-slope condition supplies that conclusion in this example.
+\[\left.\frac{d}{du}\log\!\left[e^{-ru}c_a(u)\right]\right|_{u=3/2}=-r+\frac{a\pi}{2(1-a/2)}=\frac{\pi}{9}-0.3>0.\]
+An increase contradicts CP divisibility here because the unique intermediate dephasing multiplier would exceed one. Nevertheless, the same output trajectory is produced by D through delay-labelled preparation changes. The label R alone is not a divisibility verdict for arbitrary parameter values; the positive-slope condition supplies that conclusion in this example.
 
 A preparation monitor must therefore interrogate the state associated with the same nominal delay label while bypassing subsequent system evolution. To make its discriminating content explicit, let $s(u)$ be the baseline transverse preparation contrast, $v(u)$ the readout visibility, and $d(u)$ an offset common to the two preparation labels. Assume $0<s(u)\leq1$, $0<v(u)\leq1$, and $|d(u)|+v(u)\leq1$. For preparation label $\ell\in\{-1,+1\}$, both explanations give the delayed probability
-$p_{\ell,u}^{\mathrm{main}}=\frac{1+d(u)+\ell v(u)s(u)e^{-ru}c_a(u)}{2}.$
+\[p_{\ell,u}^{\mathrm{main}}=\frac{1+d(u)+\ell v(u)s(u)e^{-ru}c_a(u)}{2}.\]
 Trusted readout references have probabilities $[1+d(u)+\ell v(u)]/2$ in both explanations.
 
 Such references constrain readout but do not by themselves locate the factor $c_a(u)$ in preparation or evolution.
@@ -133,9 +142,7 @@ The qualification \textquotedblleft{}matched\textquotedblright{} is substantive.
 
 A bounded transfer error is a different situation from unrestricted transfer failure. At two physical times $s<t$, let $k_s$ and $k_t$ be reference effective contrasts, and let the corresponding delayed effective contrasts be $\widetilde k_s$ and $\widetilde k_t$. If an independently justified tolerance satisfies $|\widetilde k_i-k_i|\leq e$ at each time $i\in\{s,t\}$, the triangle inequality gives
 $|\widetilde k_t-\widetilde k_s|\leq|k_t-k_s|+2e.$
-Thus a two-time contrast-increase threshold must allow an additional systematic contribution $2e$, beyond the uncertainty assigned to estimating the reference contrasts.
-
-Increasing calibration shots can reduce reference-estimation uncertainty, but cannot reduce the stipulated transfer tolerance.
+Thus a two-time contrast-increase threshold must allow an additional systematic contribution $2e$, beyond the uncertainty assigned to estimating the reference contrasts. Increasing calibration shots can reduce reference-estimation uncertainty, but cannot reduce the stipulated transfer tolerance.
 
 The additional allowance is sharp for this transfer-error class. Let the system evolution be the identity semigroup and both reference contrasts equal $k$. Choose delayed contrasts $k-e$ and $k+e$, with $0\leq e\leq\min(k,1-k)$, so that both remain physical. The delayed contrast then increases by exactly $2e$ although the system coherence is constant. Any smaller universal allowance would exclude this admissible CP-divisible explanation even with exact mean observations. This counterexample isolates a systematic ambiguity that persists in the unlimited-shot limit.
 
@@ -143,21 +150,20 @@ A separate reported two-time benchmark suggests a compatibility boundary near a 
 
 The established boundary is therefore structural rather than benchmark-specific: single-time output equality prevents dynamical attribution, a matched monitor separates the constructed preparation-drift pair, and a bounded transfer mismatch imposes an irreducible systematic allowance. Rejection of the restricted CP-divisible explanation must be conditional on that independently supported transfer bound; improved prediction of the unmonitored trajectory cannot replace it.
 
-
 \begin{figure}[!htbp]
 \centering
-\begin{tikzpicture}[>=stealth, every node/.style={draw=blue!65,rounded corners=4pt,fill=blue!5,align=center,text width=5.1cm,font=\small\sffamily,inner sep=6pt}]
-\node (dynamic) at (-3.1,0) {Coherence change in the dynamical channel};
-\node (preparation) at (3.1,0) {Delay-dependent preparation drift};
-\node (same) at (0,-2.5) {Identical unmonitored single-time outputs};
-\node (monitor) at (0,-5.0) {Context-matched preparation monitor may separate them};
-\draw[->,thick,blue!65] (dynamic) -- (same);
-\draw[->,thick,blue!65] (preparation) -- (same);
-\draw[->,thick,blue!65] (same) -- (monitor);
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (outputs) at (0,0.00) {Observed coherence contrast rises};
+\node[story node] (alternatives) at (0,-2.15) {Dynamics or preparation and readout may change};
+\node[story node] (monitor) at (0,-4.30) {Matched monitor tests preparation contrast};
+\node[story node] (limit) at (0,-6.45) {Inference remains conditional on calibration transfer};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (outputs) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Multiple explanations} (alternatives);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (alternatives) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Additional measurement} (monitor);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (monitor) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Transfer assumption} (limit);
 \end{tikzpicture}
-\caption{Two physically admissible explanations can produce the same unmonitored outputs. A preparation monitor distinguishes this constructed pair only when its calibration transfers to the delayed experiment. The arrows summarize the conditional identifiability argument, not experimental observations.}
+\caption{The same sampled qubit outputs can follow from a change in the dynamical map or from delay-dependent preparation. The observation alone does not locate the change; a matched preparation monitor helps only under a justified calibration-transfer assumption.}
+\par\smallskip{\scriptsize Source-linked claims: C23, C24; evidence links appear in the claim notes.}
 \end{figure}
-
 \section{A calibrated rejection rule and the independent sampling unit}
 A calibrated contrast increase can reject the entire nonincreasing-coherence null, rather than merely a particular exponential fit, but its error guarantee depends on what constitutes an independent observation. For the stipulated invertible, positive-real, fixed-axis dephasing model, let $g_i=g(i)$ denote the dimensionless coherence multiplier at each of two prespecified elapsed times $s<t$. The completely positive (CP)-divisible null requires $0<g_t\leq g_s\leq1$. The statistical task is therefore to distinguish a system-coherence increase from changes in preparation and readout contrast, while accounting separately for calibration uncertainty and sampling fluctuations.
 
@@ -171,13 +177,13 @@ Second, nonincreasing system coherence bounds the mean contrast increase by visi
 
 Third, reference concentration supplies an observable upper bound on that drift. For a chosen calibration failure budget $\zeta\in(0,1)$, define $\epsilon=\sqrt{\log(4/\zeta)/m}$. Each reference contrast is a sum of $2m$ independent weighted outcomes whose squared range lengths sum to $2/m$, giving $\Pr(|\widehat v_i-v_i|>\epsilon)\leq2\exp(-m\epsilon^2)$. A union bound over the two prespecified times therefore gives simultaneous coverage with probability at least $1-\zeta$.
 
-On this reference-coverage event, the triangle inequality yields $\eta\leq U=|\widehat v_t-\widehat v_s|+2\epsilon\leq\eta+4\epsilon$. The quantity $U$ is therefore a conservative upper bound on visibility drift, not an estimate of system memory. Its construction uses the raw reference contrasts; replacing them by fitted or optimistically clipped values would require a separate coverage argument. This calibration allocation covers the specified pair, not an unrestricted search across additional times.
+On this reference-coverage event, the triangle inequality yields \[\eta\leq U=|\widehat v_t-\widehat v_s|+2\epsilon\leq\eta+4\epsilon.\] The quantity $U$ is therefore a conservative upper bound on visibility drift, not an estimate of system memory. Its construction uses the raw reference contrasts; replacing them by fitted or optimistically clipped values would require a separate coverage argument. This calibration allocation covers the specified pair, not an unrestricted search across additional times.
 
-For the delayed measurements, define $\widehat\Delta=\widehat C_t-\widehat C_s$ and choose a one-sided failure budget $\alpha\in(0,1)$. The squared range lengths of the $4n$ weighted outcomes in this difference sum to $4/n$, so the independent bounded-outcome inequality gives $\Pr(\widehat\Delta-\Delta>q_\alpha)\leq\alpha$, where $q_\alpha=\sqrt{2\log(1/\alpha)/n}$. The resulting rejection rule is $\widehat C_t-\widehat C_s>|\widehat v_t-\widehat v_s|+2\epsilon+\sqrt{2\log(1/\alpha)/n}$. Under the null, rejection requires either failed reference coverage or an excessive upward delayed-data fluctuation; hence its probability is at most $\alpha+\zeta$.
+For the delayed measurements, define $\widehat\Delta=\widehat C_t-\widehat C_s$ and choose a one-sided failure budget $\alpha\in(0,1)$. The squared range lengths of the $4n$ weighted outcomes in this difference sum to $4/n$, so the independent bounded-outcome inequality gives $\Pr(\widehat\Delta-\Delta>q_\alpha)\leq\alpha$, where $q_\alpha=\sqrt{2\log(1/\alpha)/n}$. The resulting rejection rule is \[\widehat C_t-\widehat C_s>|\widehat v_t-\widehat v_s|+2\epsilon+\sqrt{2\log(1/\alpha)/n}.\] Under the null, rejection requires either failed reference coverage or an excessive upward delayed-data fluctuation; hence its probability is at most $\alpha+\zeta$.
 
 This error budget separates two statistical costs: increasing $m$ tightens reference calibration, whereas increasing $n$ reduces delayed-data uncertainty. A deterministic transfer tolerance introduces a third, systematic cost. If the delayed and reference visibilities satisfy $|v_i^{D}-v_i^{R}|\leq e$ at both times, with all visibilities nonnegative, then the null permits $C_t-C_s\leq|v_t^{R}-v_s^{R}|+e(g_t+g_s)\leq|v_t^{R}-v_s^{R}|+2e$. Adding $2e$ to the rejection threshold preserves the same statistical error allocation. This allowance is sharp for the stated transfer-error class, including identity system evolution, and cannot be removed by increasing shot counts.
 
-In contrast, dependence within a nominal batch can invalidate the shot-level concentration argument even when every individual outcome has the correct marginal mean. Consider a CP-divisible family that reaches coherence $g=1/2$ before both observation times and remains constant, with exactly known visibility $v=1$ and zero offset. At each preparation\textendash{}time setting, draw one outcome with the stipulated mean and copy it across all $n$ recorded shots, keeping the four setting-level draws independent. Each estimated contrast then takes values $1$, $0$, and $-1$ with probabilities $9/16$, $6/16$, and $1/16$, respectively, regardless of the recorded shot count.
+In contrast, dependence within a nominal batch can invalidate the shot-level concentration argument even when every individual outcome has the correct marginal mean. Consider a CP-divisible family that reaches coherence $g=1/2$ before both observation times and remains constant, with exactly known visibility $v=1$ and zero offset. At each preparation\textendash{}\allowbreak{}time setting, draw one outcome with the stipulated mean and copy it across all $n$ recorded shots, keeping the four setting-level draws independent. Each estimated contrast then takes values $1$, $0$, and $-1$ with probabilities $9/16$, $6/16$, and $1/16$, respectively, regardless of the recorded shot count.
 
 The event that the early contrast is nonpositive and the late contrast equals one has probability $(7/16)(9/16)=63/256$. Once the nominal shot-based radius is below $1/2$, this event causes false rejection despite the constant system coherence. Its probability exceeds a nominal level of $0.05$ and does not decrease as more copies are recorded. The counterexample does not contradict the independent-shot theorem; it shows that the number of recorded outcomes cannot replace the number of independent random draws.
 
@@ -193,7 +199,7 @@ An independently justified bound on rate variation permits finite coherence meas
 Time has physical time units, $\kappa$ has inverse-time units, and $K$ has inverse-time-squared units; a continuously differentiable rate satisfying $|\kappa'(t)|\leq K$ is sufficient, but differentiability without a numerical bound is not the required premise.
 
 The interpolation argument bounds how far an instantaneous rate can lie below its interval average. Fix sampling times $0=t_0<t_1<\cdots<t_m=T$, and define the interval length $h_i=t_{i+1}-t_i$ and average rate $\overline\kappa_i=h_i^{-1}\int_{t_i}^{t_{i+1}}\kappa(s)\,ds$. For any fixed $t\in[t_i,t_{i+1}]$, Lipschitz continuity gives $\kappa(t)\geq\kappa(s)-K|t-s|$ for every $s$ in the same interval. Integrating this comparison over $s$ yields
-$\kappa(t)\geq\overline\kappa_i-Kd_i(t),\qquad d_i(t)=\frac{(t-t_i)^2+(t_{i+1}-t)^2}{2h_i}.$
+\[\kappa(t)\geq\overline\kappa_i-Kd_i(t),\qquad d_i(t)=\frac{(t-t_i)^2+(t_{i+1}-t)^2}{2h_i}.\]
 
 The quantity $d_i(t)$ is the mean distance from $t$ to points in its sampling interval. It equals $h_i/4$ at the midpoint and reaches $h_i/2$ at either endpoint, so the interval-wide lower bound is
 $\kappa(t)\geq\overline\kappa_i-\frac{Kh_i}{2}.$
@@ -204,7 +210,7 @@ The measured quantities enter through simultaneous bounds on endpoint coherences
 Positive endpoint bounds yield interval-average rate bounds because integrating the definition of the local rate gives
 $\overline\kappa_i=\frac{\log g_i-\log g_{i+1}}{h_i}.$
 The logarithmic ratio increases with its numerator and decreases with its denominator. Consequently, on $\mathcal E$,
-$A_i^-\leq\overline\kappa_i\leq A_i^+,\qquad A_i^-=\frac{\log L_i-\log U_{i+1}}{h_i},\qquad A_i^+=\frac{\log U_i-\log L_{i+1}}{h_i}.$
+\[A_i^-\leq\overline\kappa_i\leq A_i^+,\qquad A_i^-=\frac{\log L_i-\log U_{i+1}}{h_i},\qquad A_i^+=\frac{\log U_i-\log L_{i+1}}{h_i}.\]
 These bounds remain simultaneous across all sampling intervals, despite their shared endpoints.
 
 Positivity is consequential here, rather than a numerical convenience. Finite logarithmic bounds require the corresponding lower endpoints to be strictly positive; a zero lower endpoint is handled by the extended convention $\log0=-\infty$, leaving the affected rate bound uninformative. It must not be replaced by an arbitrary positive floor to obtain a certificate. An empty interval with $L_i>U_i$, or one with $U_i\leq0$, instead signals incompatibility with the assumed positive-dephasing and calibration description.
@@ -218,7 +224,7 @@ On $\mathcal E$, this margin makes $\kappa(t)$ nonnegative at every observed and
 The error guarantee follows directly from that implication. For any fixed non-CP-divisible trajectory satisfying the model and regularity premises, a whole-window certificate can be reported only outside $\mathcal E$, so its false-certification probability is at most $\alpha_s+\beta$. This is a frequentist error bound, not a posterior probability that the dynamics are Markovian. If the supplied bound on $K$ itself has a nonzero confidence-failure probability, that probability must also enter the error budget. Failure to meet the margin is inconclusive: a sufficient certificate need not hold for every genuinely CP-divisible trajectory.
 
 A physical counterexample shows why a finite regularity bound and nonnegative average rate cannot replace the margin. For $K>0$ and $0\leq t\leq h$, consider
-$g(t)=\exp\!\left[-\frac{K}{2}t(h-t)\right],\qquad\kappa(t)=K\left(\frac h2-t\right).$
+\[g(t)=\exp\!\left[-\frac{K}{2}t(h-t)\right],\qquad\kappa(t)=K\left(\frac h2-t\right).\]
 Because $t(h-t)\geq0$, the coherence remains in $0<g(t)\leq1$, so every map is an invertible, completely positive and trace-preserving dephasing channel. Nevertheless, the rate is $K$-Lipschitz and negative for $t>h/2$, while its interval average is zero and both endpoint channels are the identity. Exact endpoint agreement thus conceals an interval of coherence recovery even when the finite rate-variation bound is known.
 
 The certificate remains conditional on physical premises not established by these endpoint contrasts. No independent experimental validation is supplied for the positive-real fixed-axis model, matched preparations and preparation-label symmetry, calibration transfer, independent acquisition units, or a numerical physical bound on $K$; the assumed reproducible, input-independent environmental preparation likewise cannot be inferred from those contrasts. In particular, selecting a convenient $K$ from the same fitted trajectory does not supply the external restriction used in the proof.
@@ -226,7 +232,7 @@ The certificate remains conditional on physical premises not established by thes
 The resulting distinction is precise: the observations bound integrated decay, while an independently justified $K$, together with the margin $A_i^-\geq Kh_i/2$, excludes hidden negative-rate excursions throughout each sampling gap.
 
 \section{Prospective predictive comparison and its support requirement}
-Predictive comparison adds a distinct requirement to calibrated rejection of completely positive (CP)-divisible dephasing: a fitted explanation must assign meaningful probabilities to observations not used in fitting. The proposed synthetic study compares semigroup dynamics, a revival-capable dephasing family, and semigroup dynamics combined with preparation or readout variation. Its performance remains unmeasured; the substantive result developed here is an analytical support defect in the proposed predictive likelihood and a conditional repair, not a numerical ranking of these explanations. [C32\textendash{}C34]
+Predictive comparison adds a distinct requirement to calibrated rejection of completely positive (CP)-divisible dephasing: a fitted explanation must assign meaningful probabilities to observations not used in fitting. The proposed synthetic study compares semigroup dynamics, a revival-capable dephasing family, and semigroup dynamics combined with preparation or readout variation. Its performance remains unmeasured; the substantive result developed here is an analytical support defect in the proposed predictive likelihood and a conditional repair, not a numerical ranking of these explanations. [C32\textendash{}\allowbreak{}C34]
 
 The comparison is designed to separate dynamical modulation from apparatus modulation rather than to reward a more flexible decay curve alone. Calibration observations enter alongside delayed measurements, so uncertainty in preparation and readout is part of the inference rather than an exact correction imposed before fitting. The proposed primary acquisition model uses independent binomial counts, prespecified training and held-out times, physically constrained finite-grid likelihood fitting, and a finite-model complexity penalty. Selecting the revival-capable family would still require a separate divisibility classification: its fitted parameter space includes divisible as well as indivisible dynamics.
 
@@ -246,7 +252,7 @@ A prespecified full-support predictive mixture repairs this particular failure. 
 
 The resulting score bound follows directly from the count probabilities. For a block count vector $\mathbf{k}=(k_1,\ldots,k_8)$ with each $k_c\in\{0,\ldots,n\}$, the reference probability is $Q(\mathbf{k})=\prod_{c=1}^{8}\binom{n}{k_c}2^{-n}\geq2^{-8n}$. Consequently $\widetilde P(\mathbf{k})\geq\lambda2^{-8n}$, and its natural-log score satisfies $\log\widetilde P(\mathbf{k})\geq\log\lambda-8n\log2$. For fixed $n$ and positive fixed $\lambda$, this prevents the zero-support counterexample and makes the block log score finite. It establishes a property of the proposed predictive distribution, not evidence of improved discrimination.
 
-The repair also changes what is being compared: held-out scores would evaluate the smoothed predictive laws rather than the unsmoothed maximum-likelihood fits. The smoothing weight and its sensitivity analysis therefore remain to be fixed, together with the score estimand and the associated complexity comparison; the reference-withheld analysis also needs an explicit support-preserving specification. Predictive evidence can complement the calibrated rejection argument only after these choices make the comparison mathematically well-defined. Better fitting alone cannot supply that requirement, and repairing predictive support does not alter the assumptions needed to reject the CP-divisible null. [C32\textendash{}C34]
+The repair also changes what is being compared: held-out scores would evaluate the smoothed predictive laws rather than the unsmoothed maximum-likelihood fits. The smoothing weight and its sensitivity analysis therefore remain to be fixed, together with the score estimand and the associated complexity comparison; the reference-withheld analysis also needs an explicit support-preserving specification. Predictive evidence can complement the calibrated rejection argument only after these choices make the comparison mathematically well-defined. Better fitting alone cannot supply that requirement, and repairing predictive support does not alter the assumptions needed to reject the CP-divisible null. [C32\textendash{}\allowbreak{}C34]
 
 \section{Operational interpretation and validation limits}
 A calibrated coherence increase can exclude the stipulated completely positive (CP)-divisible dephasing null, but it cannot by itself select a unique dynamical model or identify an environmental mechanism. The relevant null comprises all nonincreasing positive-real coherence functions within the common, invertible, fixed-axis dephasing description, not merely exponential decay. Consequently, rejecting this null is stronger than finding that a revival model fits better than a semigroup, yet narrower than rejecting every CP-divisible qubit evolution.
@@ -265,7 +271,7 @@ Randomized interleaving and no-wait references can challenge particular confound
 
 The operational meaning of a successful rejection is correspondingly restricted. In positive-real scalar dephasing, increasing coherence also increases the trace distance of the fixed pair of ideal antipodal transverse preparations, so CP indivisibility and this information-backflow witness coincide within the selected family. That restricted agreement does not turn either diagnostic into a process-tensor memory test. Nor does it distinguish a quantum environment from classical colored noise: the latter is a possible mechanism for reduced dynamics, not an operational category mutually exclusive with CP indivisibility.
 
-A process-memory investigation would instead require intervention-conditioned records testing whether future outcomes retain dependence on the earlier history after an appropriate causal break. Such an investigation needs independently validated resets and quantified reset errors, control cross-talk, and apparatus memory before residual dependence can be attributed to the system\textendash{}environment process. Controlled-model discrimination, including an echo comparison, addresses a different question unless its intervention-conditioned statistics and causal-break assumptions support the stronger claim. No such empirical process-tensor evidence has been obtained here.
+A process-memory investigation would instead require intervention-conditioned records testing whether future outcomes retain dependence on the earlier history after an appropriate causal break. Such an investigation needs independently validated resets and quantified reset errors, control cross-talk, and apparatus memory before residual dependence can be attributed to the system\textendash{}\allowbreak{}environment process. Controlled-model discrimination, including an echo comparison, addresses a different question unless its intervention-conditioned statistics and causal-break assumptions support the stronger claim. No such empirical process-tensor evidence has been obtained here.
 
 The remaining validation limits concern distinct extensions of the argument. Failure to reject at sampled times does not certify continuous-time divisibility; a between-sample certificate additionally requires an independently defensible physical rate-regularity bound, which is not supplied for an apparatus. Predictive performance and implementation robustness remain unmeasured because the synthetic comparison has not been executed, and its identified predictive-support defect requires repair before the proposed score summaries can be used.
 
@@ -281,7 +287,7 @@ The resulting evidential boundary separates exclusion from attribution. When the
 \item No experimental data or executed simulations support performance claims. Analytical coverage or power statements must not be described as measured rejection rates or predictive accuracy.
 \item Process-tensor memory and uniquely quantum microscopic mechanisms are outside the established conclusions. The complete reported classical-noise and control-response derivations are not available in the preview.
 \item Primary research texts were not inspected, so the article cannot claim literature novelty or completed benchmarking against published criteria.
-\item Saved research session [Research session 1] ended with an incomplete review; call 18 (skeptic) was not successfully completed. Earlier findings remain available, but this process limitation prevents claiming that the planned adversarial review was fully performed.
+\item Saved research session 3ccb94e1-eafe-4040-9c6b-4fc183bc6a30 ended with an incomplete review; call 18 (skeptic) was not successfully completed. Earlier findings remain available, but this process limitation prevents claiming that the planned adversarial review was fully performed.
 \end{itemize}
 \section{Open obligations}
 \begin{itemize}
@@ -304,7 +310,8 @@ Between-sample certification requires an additional quantitative regularity prem
 
 The defensible outcome is a bounded theoretical account and a prospective evaluation design, not an executed computational study, a verified physical memory effect, or a novelty claim.
 
-\section*{Claim and source notes}
+\appendix
+\section{Claim and source notes}
 These notes identify the saved evidence for claims used in the article. The complete claim register and reasoning are retained in the paper record.
 \begin{sloppypar}
 \small
@@ -347,7 +354,7 @@ These notes identify the saved evidence for claims used in the article. The comp
 \textit{Evidence: }[Research session 1], [Research session 1, artifact 2], [Research session 1, artifact 6]
 \end{description}
 \end{sloppypar}
-\section*{Paper writing source material used}
+\section{Editorial writing sources}
 These sources informed manuscript organization and writing methods, not the scientific evidence or findings.
 \begin{itemize}
 \item IOP \textemdash{} Writing Your Journal Article (discipline): \url{https://publishingsupport.iopscience.iop.org/publishing-support/authors/authoring-for-journals/writing-journal-article/}

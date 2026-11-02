@@ -3,17 +3,45 @@
     {
       "caption": "An ambiguous acknowledgment leaves two externally different outcomes with the same local observation. A safe recovery claim therefore depends on a service contract that can prevent or identify a duplicate effect; the diagram is an analytical model, not a verified implementation.",
       "placement_after_section": "Information limits after ambiguous commitment",
-      "claim_ids": ["C8", "C9", "C10"],
+      "claim_ids": [
+        "C8",
+        "C9",
+        "C10"
+      ],
       "nodes": [
-        {"id": "request", "label": "One logical request is sent"},
-        {"id": "unknown", "label": "Acknowledgment is lost; commit status is unknown"},
-        {"id": "retry", "label": "A blind retry may duplicate the effect"},
-        {"id": "contract", "label": "Recovery needs atomic deduplication or authoritative status"}
+        {
+          "id": "request",
+          "label": "One logical request is sent"
+        },
+        {
+          "id": "unknown",
+          "label": "Acknowledgment is lost; commit status is unknown"
+        },
+        {
+          "id": "retry",
+          "label": "A blind retry may duplicate the effect"
+        },
+        {
+          "id": "contract",
+          "label": "Recovery needs atomic deduplication or authoritative status"
+        }
       ],
       "edges": [
-        {"source": "request", "target": "unknown", "label": "Ambiguous outcome"},
-        {"source": "unknown", "target": "retry", "label": "Local history cannot decide"},
-        {"source": "retry", "target": "contract", "label": "Stronger boundary required"}
+        {
+          "source": "request",
+          "target": "unknown",
+          "label": "Ambiguous outcome"
+        },
+        {
+          "source": "unknown",
+          "target": "retry",
+          "label": "Local history cannot decide"
+        },
+        {
+          "source": "retry",
+          "target": "contract",
+          "label": "Stronger boundary required"
+        }
       ]
     }
   ],
@@ -21,35 +49,98 @@
     {
       "caption": "Proposed campus-controlled release path. Authorization and budget reservation must precede the operating-system send boundary; later receipt and charge reconciliation do not retroactively authorize a forbidden submission. This is a conditional design, not a deployed system.",
       "placement_after_section": "The proposed controlled release boundary",
-      "claim_ids": ["C10", "C11", "C12"],
+      "claim_ids": [
+        "C10",
+        "C11",
+        "C12"
+      ],
       "nodes": [
-        {"id": "policy", "label": "Campus policy and approval state"},
-        {"id": "admission", "label": "Authorization and liability reservation"},
-        {"id": "send", "label": "Operating-system transport submission"},
-        {"id": "reconcile", "label": "Receipt and uncertain-charge reconciliation"}
+        {
+          "id": "policy",
+          "label": "Campus policy and approval state"
+        },
+        {
+          "id": "admission",
+          "label": "Authorization and liability reservation"
+        },
+        {
+          "id": "send",
+          "label": "Operating-system transport submission"
+        },
+        {
+          "id": "reconcile",
+          "label": "Receipt and uncertain-charge reconciliation"
+        }
       ],
       "edges": [
-        {"source": "policy", "target": "admission", "label": "Current authority"},
-        {"source": "admission", "target": "send", "label": "Commit before release"},
-        {"source": "send", "target": "reconcile", "label": "Retain outstanding holds"}
+        {
+          "source": "policy",
+          "target": "admission",
+          "label": "Current authority"
+        },
+        {
+          "source": "admission",
+          "target": "send",
+          "label": "Commit before release"
+        },
+        {
+          "source": "send",
+          "target": "reconcile",
+          "label": "Retain outstanding holds"
+        }
       ]
     },
     {
       "caption": "The proposed 90-day comparison asks whether federation adds useful, policy-permitted service beyond a gateway that already permits separately approved external access. Paired task quality, safety, and actual cost must be evaluated separately; no pilot result is available.",
       "placement_after_section": "A falsifiable 90-day evaluation",
-      "claim_ids": ["C18", "C19", "C23"],
+      "claim_ids": [
+        "C18",
+        "C19",
+        "C23"
+      ],
       "nodes": [
-        {"id": "tasks", "label": "Prespecified offered task episodes"},
-        {"id": "pair", "label": "Paired gateway and federation runs"},
-        {"id": "outcomes", "label": "Quality, policy, latency and provenance"},
-        {"id": "cost", "label": "Actual costs and uncertain charges"},
-        {"id": "decision", "label": "Incremental-benefit decision"}
+        {
+          "id": "tasks",
+          "label": "Prespecified offered task episodes"
+        },
+        {
+          "id": "pair",
+          "label": "Paired gateway and federation runs"
+        },
+        {
+          "id": "outcomes",
+          "label": "Quality, policy, latency and provenance"
+        },
+        {
+          "id": "cost",
+          "label": "Actual costs and uncertain charges"
+        },
+        {
+          "id": "decision",
+          "label": "Incremental-benefit decision"
+        }
       ],
       "edges": [
-        {"source": "tasks", "target": "pair", "label": "Same workload"},
-        {"source": "pair", "target": "outcomes", "label": "Offered-demand denominator"},
-        {"source": "outcomes", "target": "cost", "label": "Separate safety and economics"},
-        {"source": "cost", "target": "decision", "label": "No result yet"}
+        {
+          "source": "tasks",
+          "target": "pair",
+          "label": "Same workload"
+        },
+        {
+          "source": "pair",
+          "target": "outcomes",
+          "label": "Offered-demand denominator"
+        },
+        {
+          "source": "outcomes",
+          "target": "cost",
+          "label": "Separate safety and economics"
+        },
+        {
+          "source": "cost",
+          "target": "decision",
+          "label": "No result yet"
+        }
       ]
     }
   ],
@@ -57,33 +148,89 @@
     {
       "caption": "Unlinked early and late samples reveal marginal distributions, but those same marginals can be paired into opposite within-animal associations. Identifying a coupling slope therefore requires verified specimen linkage; this is an identifiability argument, not a measured biological effect.",
       "placement_after_section": "Why stage-by-time distributions do not identify animal-level coupling",
-      "claim_ids": ["C3", "C4"],
+      "claim_ids": [
+        "C3",
+        "C4"
+      ],
       "nodes": [
-        {"id": "unlinked", "label": "Early and late measurements lack specimen links"},
-        {"id": "marginals", "label": "Separate stage-by-time distributions remain known"},
-        {"id": "couplings", "label": "Opposite animal-level couplings fit the same marginals"},
-        {"id": "linkage", "label": "Verified paired specimens are needed"}
+        {
+          "id": "unlinked",
+          "label": "Early and late measurements lack specimen links"
+        },
+        {
+          "id": "marginals",
+          "label": "Separate stage-by-time distributions remain known"
+        },
+        {
+          "id": "couplings",
+          "label": "Opposite animal-level couplings fit the same marginals"
+        },
+        {
+          "id": "linkage",
+          "label": "Verified paired specimens are needed"
+        }
       ],
       "edges": [
-        {"source": "unlinked", "target": "marginals", "label": "What is observed"},
-        {"source": "marginals", "target": "couplings", "label": "Joint relation unresolved"},
-        {"source": "couplings", "target": "linkage", "label": "Identifiability requirement"}
+        {
+          "source": "unlinked",
+          "target": "marginals",
+          "label": "What is observed"
+        },
+        {
+          "source": "marginals",
+          "target": "couplings",
+          "label": "Joint relation unresolved"
+        },
+        {
+          "source": "couplings",
+          "target": "linkage",
+          "label": "Identifiability requirement"
+        }
       ]
     },
     {
       "caption": "The proposed signal-memory mechanism links injury input to a later regenerative program through an unnamed intervening state. The state and its stage-dependent decay are hypotheses; reporter filtering, wound-age gating, and output turnover can imitate parts of the same observation pattern.",
       "placement_after_section": "What pulse timing can distinguish from signal memory",
-      "claim_ids": ["C5", "C6", "C7", "C9"],
+      "claim_ids": [
+        "C5",
+        "C6",
+        "C7",
+        "C9"
+      ],
       "nodes": [
-        {"id": "injury", "label": "Injury input"},
-        {"id": "state", "label": "Hypothesized intervening state"},
-        {"id": "program", "label": "Later regenerative transcription"},
-        {"id": "readout", "label": "Measured reporter or output"}
+        {
+          "id": "injury",
+          "label": "Injury input"
+        },
+        {
+          "id": "state",
+          "label": "Hypothesized intervening state"
+        },
+        {
+          "id": "program",
+          "label": "Later regenerative transcription"
+        },
+        {
+          "id": "readout",
+          "label": "Measured reporter or output"
+        }
       ],
       "edges": [
-        {"source": "injury", "target": "state", "label": "Candidate memory"},
-        {"source": "state", "target": "program", "label": "Hypothesized coupling"},
-        {"source": "program", "target": "readout", "label": "Filtering and turnover matter"}
+        {
+          "source": "injury",
+          "target": "state",
+          "label": "Candidate memory"
+        },
+        {
+          "source": "state",
+          "target": "program",
+          "label": "Hypothesized coupling"
+        },
+        {
+          "source": "program",
+          "target": "readout",
+          "label": "Filtering and turnover matter"
+        }
       ]
     }
   ],
@@ -91,19 +238,57 @@
     {
       "caption": "Proof map for the exact count. The select-or-omit partition gives the weighted recurrence; the cube-root filter isolates sums divisible by three; the three index phases yield Fibonacci correction formulas, from which the order-eight recurrence and limiting proportion follow. The diagram summarizes the proof dependencies rather than replacing them.",
       "placement_after_section": "Admissible subsets and the residue filter",
-      "claim_ids": ["C1", "C2", "C3", "C4", "C5", "C9"],
+      "claim_ids": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C9"
+      ],
       "nodes": [
-        {"id": "partition", "label": "Select or omit the final integer"},
-        {"id": "polynomial", "label": "Weighted subset recurrence"},
-        {"id": "filter", "label": "Cube-root filter for sums modulo three"},
-        {"id": "correction", "label": "Three Fibonacci correction formulas"},
-        {"id": "results", "label": "Exact recurrence and limiting proportion"}
+        {
+          "id": "partition",
+          "label": "Select or omit the final integer"
+        },
+        {
+          "id": "polynomial",
+          "label": "Weighted subset recurrence"
+        },
+        {
+          "id": "filter",
+          "label": "Cube-root filter for sums modulo three"
+        },
+        {
+          "id": "correction",
+          "label": "Three Fibonacci correction formulas"
+        },
+        {
+          "id": "results",
+          "label": "Exact recurrence and limiting proportion"
+        }
       ],
       "edges": [
-        {"source": "partition", "target": "polynomial", "label": "Reversible partition"},
-        {"source": "polynomial", "target": "filter", "label": "Evaluate at roots of unity"},
-        {"source": "filter", "target": "correction", "label": "Index phases"},
-        {"source": "correction", "target": "results", "label": "Symbolic deduction"}
+        {
+          "source": "partition",
+          "target": "polynomial",
+          "label": "Reversible partition"
+        },
+        {
+          "source": "polynomial",
+          "target": "filter",
+          "label": "Evaluate at roots of unity"
+        },
+        {
+          "source": "filter",
+          "target": "correction",
+          "label": "Index phases"
+        },
+        {
+          "source": "correction",
+          "target": "results",
+          "label": "Symbolic deduction"
+        }
       ]
     }
   ],
@@ -111,33 +296,137 @@
     {
       "caption": "A prescribed finite-duration metric separates local motion from an exterior-clock shortcut. A central carrier remains timelike while the chosen distant-clock comparison can register an earlier arrival; this geometric result does not provide a material source or a working drive.",
       "placement_after_section": "An operational shortcut without local superluminal motion",
-      "claim_ids": ["C31", "C32"],
+      "claim_ids": [
+        "C31",
+        "C32"
+      ],
       "nodes": [
-        {"id": "metric", "label": "Prescribed finite-duration geometry"},
-        {"id": "carrier", "label": "Carrier stays locally timelike"},
-        {"id": "clocks", "label": "Matched exterior clocks compare arrivals"},
-        {"id": "shortcut", "label": "Conditional effective shortcut"}
+        {
+          "id": "metric",
+          "label": "Prescribed finite-duration geometry"
+        },
+        {
+          "id": "carrier",
+          "label": "Carrier stays locally timelike"
+        },
+        {
+          "id": "clocks",
+          "label": "Matched exterior clocks compare arrivals"
+        },
+        {
+          "id": "shortcut",
+          "label": "Conditional effective shortcut"
+        }
       ],
       "edges": [
-        {"source": "metric", "target": "carrier", "label": "Local causal test"},
-        {"source": "carrier", "target": "clocks", "label": "Distinct comparison"},
-        {"source": "clocks", "target": "shortcut", "label": "Earlier exterior arrival"}
+        {
+          "source": "metric",
+          "target": "carrier",
+          "label": "Local causal test"
+        },
+        {
+          "source": "carrier",
+          "target": "clocks",
+          "label": "Distinct comparison"
+        },
+        {
+          "source": "clocks",
+          "target": "shortcut",
+          "label": "Earlier exterior arrival"
+        }
       ]
     },
     {
       "caption": "The physical-feasibility chain remains open. The chosen geometry requires negative energy and null-energy violation under Einstein gravity; the examined canonical and regular single-scalar sources fail the needed conditions. Unexamined sources, finite-duration propagation, quantum behavior, stability, and control remain gates rather than achieved engineering steps.",
       "placement_after_section": "A conditional corridor and decisive research gates",
-      "claim_ids": ["C14", "C15", "C16", "C33", "C35", "C38", "C39"],
+      "claim_ids": [
+        "C14",
+        "C15",
+        "C16",
+        "C33",
+        "C35",
+        "C38",
+        "C39"
+      ],
       "nodes": [
-        {"id": "target", "label": "Target shortcut geometry"},
-        {"id": "stress", "label": "Negative energy and null-energy violation"},
-        {"id": "sources", "label": "Examined scalar sources excluded"},
-        {"id": "gates", "label": "Other sources, stability, quantum and control tests open"}
+        {
+          "id": "target",
+          "label": "Target shortcut geometry"
+        },
+        {
+          "id": "stress",
+          "label": "Negative energy and null-energy violation"
+        },
+        {
+          "id": "sources",
+          "label": "Examined scalar sources excluded"
+        },
+        {
+          "id": "gates",
+          "label": "Other sources, stability, quantum and control tests open"
+        }
       ],
       "edges": [
-        {"source": "target", "target": "stress", "label": "Einstein-source requirement"},
-        {"source": "stress", "target": "sources", "label": "Model-specific exclusions"},
-        {"source": "sources", "target": "gates", "label": "No viability inference"}
+        {
+          "source": "target",
+          "target": "stress",
+          "label": "Einstein-source requirement"
+        },
+        {
+          "source": "stress",
+          "target": "sources",
+          "label": "Model-specific exclusions"
+        },
+        {
+          "source": "sources",
+          "target": "gates",
+          "label": "No viability inference"
+        }
+      ]
+    }
+  ],
+  "qubit-non-markovian-v1": [
+    {
+      "caption": "The same sampled qubit outputs can follow from a change in the dynamical map or from delay-dependent preparation. The observation alone does not locate the change; a matched preparation monitor helps only under a justified calibration-transfer assumption.",
+      "placement_after_section": "Calibration transfer sets an identifiability boundary",
+      "claim_ids": [
+        "C23",
+        "C24"
+      ],
+      "nodes": [
+        {
+          "id": "outputs",
+          "label": "Observed coherence contrast rises"
+        },
+        {
+          "id": "alternatives",
+          "label": "Dynamics or preparation and readout may change"
+        },
+        {
+          "id": "monitor",
+          "label": "Matched monitor tests preparation contrast"
+        },
+        {
+          "id": "limit",
+          "label": "Inference remains conditional on calibration transfer"
+        }
+      ],
+      "edges": [
+        {
+          "source": "outputs",
+          "target": "alternatives",
+          "label": "Multiple explanations"
+        },
+        {
+          "source": "alternatives",
+          "target": "monitor",
+          "label": "Additional measurement"
+        },
+        {
+          "source": "monitor",
+          "target": "limit",
+          "label": "Transfer assumption"
+        }
       ]
     }
   ]

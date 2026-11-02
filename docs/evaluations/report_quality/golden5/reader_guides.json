@@ -28,5 +28,11 @@
     "answer": "A prescribed spacetime geometry can produce that timing effect while the traveler remains locally timelike. Under the examined Einstein-gravity assumptions, it also needs negative energy and defeats the simple scalar sources tested here.",
     "route": "Define the clock comparison, test the geometry's local causality, calculate its required source, then examine propagation and remaining feasibility gates.",
     "boundary": "No physically realizable source, stable transport system, or working faster-than-light drive is established."
+  },
+  "qubit-non-markovian-v1": {
+    "question": "When do finite, noisy measurements justify rejecting a CP-divisible model of qubit dephasing?",
+    "answer": "Within a specified fixed-axis model, a calibrated increase in coherence can reject that null. A visible revival alone can also arise from preparation or readout drift.",
+    "route": "First define the physical model; then examine what sparse sampling and calibration can hide; finally state the rejection rule and the assumptions it needs.",
+    "boundary": "No experiment or simulation was run, and the primary literature was not independently benchmarked."
   }
 }

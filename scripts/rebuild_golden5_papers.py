@@ -28,7 +28,11 @@ SLUGS = (
     "xenopus-tadpoles-v9",
     "nonconsecutive-subset-sums-modulo-3",
     "warp-drive-design",
+    "qubit-non-markovian-v1",
 )
+OUTPUT_NAMES = {
+    "qubit-non-markovian-v1": "when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1"
+}
 
 
 def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
@@ -114,9 +118,10 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
                 f"TeX compilation failed for {slug}:\n{result.stdout}\n{result.stderr}"
             )
         output_dir.mkdir(parents=True, exist_ok=True)
+        output_name = OUTPUT_NAMES.get(slug, f"{slug}-golden5")
         for suffix in ("tex", "pdf"):
-            shutil.copyfile(work / f"paper.{suffix}", output_dir / f"{slug}-golden5.{suffix}")
-    print(f"{slug}: {output_dir / (slug + '-golden5.pdf')}")
+            shutil.copyfile(work / f"paper.{suffix}", output_dir / f"{output_name}.{suffix}")
+    print(f"{slug}: {output_dir / (output_name + '.pdf')}")
 
 
 def main() -> None:
