@@ -177,10 +177,11 @@ def check(root: Path, base: Path) -> None:
     states = {item["id"]: item["pin_state"] for item in recent_projects()["projects"]}
     assert states[first.project.id] == "unpin"
     assert states[second.project.id] == "remove"
-    visibility = {item["id"]: item["hidden_by_family_pin"] for item in recent_projects()["projects"]}
+    visibility = {
+        item["id"]: item["hidden_by_family_pin"] for item in recent_projects()["projects"]
+    }
     assert visibility[first.project.id] is False
     assert visibility[second.project.id] is True
-    assert visibility[first.project.id] is False
     assert [item["id"] for item in pinned_projects()["projects"]] == [first.project.id]
     try:
         set_project_pin(second.project.id, second.path, True)
@@ -198,7 +199,8 @@ def check(root: Path, base: Path) -> None:
         blocked = api.post("/api/projects/recent/forget", json={"project_id": first.project.id})
         assert blocked.status_code == 400
         delete = api.request(
-            "DELETE", "/api/projects",
+            "DELETE",
+            "/api/projects",
             json={"path": first.path, "expected_project_id": first.project.id},
         )
         assert delete.status_code == 400
@@ -218,10 +220,13 @@ def check(root: Path, base: Path) -> None:
         )
         assert selected.status_code == 200
         assert api.get("/api/projects/pinned").json()["projects"][0]["id"] == second.project.id
-        assert api.post(
-            "/api/projects/pin",
-            json={"project_id": second.project.id, "path": second.path, "pinned": False},
-        ).status_code == 200
+        assert (
+            api.post(
+                "/api/projects/pin",
+                json={"project_id": second.project.id, "path": second.path, "pinned": False},
+            ).status_code
+            == 200
+        )
         assert api.get("/api/projects/pinned").json()["projects"] == []
     assert all(item["pin_state"] == "pin_remove" for item in recent_projects()["projects"])
     assert not any(item["hidden_by_family_pin"] for item in recent_projects()["projects"])
@@ -399,8 +404,10 @@ def check(root: Path, base: Path) -> None:
     # Legacy v1 state is upgraded without discarding the saved project index.
     legacy = json.loads(index_path.read_text())
     assert legacy["version"] == 2 and legacy["pins"] == {}
+    assert legacy["dismissed_default_pins"] == []
     legacy["version"] = 1
     del legacy["pins"]
+    del legacy["dismissed_default_pins"]
     index_path.write_text(json.dumps(legacy))
     previous_ids = [item["id"] for item in legacy["entries"]]
     assert [item["id"] for item in recent_projects()["projects"]] == previous_ids
