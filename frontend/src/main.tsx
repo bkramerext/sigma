@@ -1852,33 +1852,48 @@ type PaperScore = {
   provisional: boolean;
   categories: Record<'tex_correctness' | 'readability' | 'sustained_answer' | 'research_rigor' | 'evidence' | 'visuals', { earned: number; max: number; explanation: string }>;
 };
-const paperScoreCategories: { key: keyof PaperScore['categories']; title: string }[] = [
-  { key: 'tex_correctness', title: 'TeX correctness' },
-  { key: 'readability', title: 'Human readability, including layout' },
-  { key: 'sustained_answer', title: 'Clear question and sustained answer' },
-  { key: 'research_rigor', title: 'Research rigor and correctness' },
-  { key: 'evidence', title: 'Evidence and verification' },
-  { key: 'visuals', title: 'Useful visuals' },
+const paperScoreCategories: { key: keyof PaperScore['categories']; title: string; standard: string }[] = [
+  { key: 'tex_correctness', title: 'TeX correctness', standard: 'Equations render correctly, without material compilation, clipping, or obscuration defects.' },
+  { key: 'readability', title: 'Human readability, including layout', standard: 'A scientifically curious nonspecialist can follow the prose, definitions, equations, and page flow on a careful first read; full credit also requires a human cold read.' },
+  { key: 'sustained_answer', title: 'Clear question and sustained answer', standard: 'A bounded research question is advanced consistently throughout the paper and answered with a supported conclusion.' },
+  { key: 'research_rigor', title: 'Research rigor and correctness', standard: 'Sound derivations and logic; alternatives, counterexamples, uncertainty, and reproducibility are evaluated; established results are distinguished from conjectures.' },
+  { key: 'evidence', title: 'Evidence and verification', standard: 'Inspect-able evidence and computations support material claims; assumptions, limitations, and unresolved gaps are explicit.' },
+  { key: 'visuals', title: 'Useful visuals', standard: 'Accurate figures or tables clarify difficult relationships, with clear captions and provenance.' },
 ];
 
 function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () => void }) {
   const element = useRef<HTMLDialogElement>(null);
+  const [rubricExpanded, setRubricExpanded] = useState(false);
   useEffect(() => { element.current?.showModal(); }, []);
   return <dialog ref={element} className="project-settings-dialog paper-score-dialog" aria-labelledby="paper-score-title"
     onCancel={event => { event.preventDefault(); onClose(); }}>
-    <header className="settings-header"><h2 id="paper-score-title">Paper Score</h2>
+    <header className="settings-header paper-score-header">
+      <h2 id="paper-score-title">Paper Score</h2>
+      <button type="button" className="text-view-link paper-score-rubric-toggle" aria-expanded={rubricExpanded}
+        aria-controls="paper-score-rubric" onClick={() => setRubricExpanded(value => !value)}>
+        {rubricExpanded ? 'Hide rubric' : 'Show rubric'}
+      </button>
       <div className="settings-actions"><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
     </header>
-    <div className="settings-body">
-      <p className="settings-hint">SIGMA is experimental. Research and paper authoring are still works in progress. These scores are meant to convey: yes, we know there are issues.</p>
-      <p className="settings-hint">Provisional evaluation of the PDF and its documented research. This is not independent scientific verification or a human cold read.</p>
-      <h3>Total: {score.total}/100</h3>
-      <table className="paper-score-table"><thead><tr><th>Criterion</th><th>Score</th></tr></thead>
-        <tbody>{paperScoreCategories.map(({ key, title }) => <tr key={key}><td><strong>{title}</strong><p>{score.categories[key].explanation}</p></td>
-          <td className="paper-score-points">{score.categories[key].earned}/{score.categories[key].max}</td></tr>)}
-          <tr><th>Total</th><th className="paper-score-points">{score.total}/100</th></tr>
-        </tbody>
-      </table>
+    <div className="settings-body paper-score-body">
+      <p className="settings-hint">SIGMA’s research and paper-authoring capabilities are experimental; these provisional scores acknowledge known quality limitations and do not constitute independent scientific verification or human review.</p>
+      {rubricExpanded && <section id="paper-score-rubric" className="paper-score-rubric" aria-label="Scoring rubric">
+        <p className="settings-hint">Each category is scored against the following full-credit standard, for a normalized total of 100 points.</p>
+        <dl>{paperScoreCategories.map(({ key, title, standard }) => <div key={key}>
+          <dt>{title} <span>/{score.categories[key].max}</span></dt><dd>{standard}</dd>
+        </div>)}</dl>
+      </section>}
+      <div className="paper-score-categories" aria-label="Paper scores">
+        {paperScoreCategories.map(({ key, title }) => <section className="paper-score-category" key={key}>
+          <div className="paper-score-category-heading"><h3>{title}</h3>
+            <strong className="paper-score-points">{score.categories[key].earned}/{score.categories[key].max}</strong>
+          </div>
+          <p>{score.categories[key].explanation}</p>
+        </section>)}
+      </div>
+      <div className="paper-score-total" aria-label={`Total score ${score.total} out of 100`}>
+        <strong>Total</strong><strong className="paper-score-points">{score.total}/100</strong>
+      </div>
     </div>
   </dialog>;
 }
