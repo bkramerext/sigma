@@ -1706,9 +1706,9 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { name: string; copied: boolean; disabled?: boolean; onCopy: () => void }) {
   return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} title={copied ? 'Copied' : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={disabled} onClick={onCopy}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
 }
-function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void }) {
+function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, actions }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; actions?: ReactNode }) {
   const titleLabel = `${expanded ? 'Collapse' : 'Expand'} ${itemLabel}: ${title}`;
-  return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title"><span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/></h4></div>;
+  return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title"><span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>{actions && <span className="saved-paper-inline-actions">{actions}</span>}</h4></div>;
 }
 async function sha256Text(value: string): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
@@ -1893,7 +1893,7 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[] } };
 type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'source_material' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
-type PaperRecord = PaperSummary & { eli5?: { source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
+type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function paperProgressOperation(progress: PaperProgress): string {
   const count = progress.current !== null && progress.total !== null ? ` (${progress.current} of ${progress.total})` : '';
@@ -2078,6 +2078,21 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
   }
+  async function readPaperResponse(response: Response, action: string): Promise<any> {
+    const text = await response.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = null; }
+    if (!response.ok) {
+      const message = typeof data?.error === 'string' ? data.error
+        : typeof data?.detail === 'string' ? data.detail
+        : response.status >= 500
+          ? `${action} failed because the server encountered an error (HTTP ${response.status}). Please retry.`
+          : `${action} failed (HTTP ${response.status}).`;
+      throw new Error(message);
+    }
+    if (!data || typeof data !== 'object') throw new Error(`${action} returned an invalid response.`);
+    return data;
+  }
   async function explainPaper(paper: PaperSummary) {
     if (explainingRef.current) return;
     explainingRef.current = true;
@@ -2086,21 +2101,20 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     setExplainingId(paper.paper_id);
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
-      const record = await response.json();
-      if (!response.ok) throw new Error(record.error ?? 'Could not open this paper.');
+      const record = await readPaperResponse(response, "Loading the paper");
       const saved = record.eli5;
-      let markdown = saved?.source_sha256 === record.pdf_sha256 && typeof saved.markdown === 'string' ? saved.markdown : '';
+      let markdown = saved?.version === 2 && saved?.source_sha256 === record.pdf_sha256 && typeof saved.markdown === 'string' ? saved.markdown : '';
       if (!markdown) {
         if (!binding) throw new Error('Connect an eligible AI provider to explain this paper.');
         const result = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/eli5`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
         });
-        const data = await result.json();
-        if (!result.ok) throw new Error(data.error ?? 'Could not explain this paper.');
+        const data = await readPaperResponse(result, "Explaining this paper");
+        if (typeof data.markdown !== "string" || !data.markdown.trim()) throw new Error("The explanation was empty.");
         markdown = data.markdown;
       }
-      setSelected({ ...record, eli5: { source_sha256: record.pdf_sha256, markdown } } as PaperRecord);
+      setSelected({ ...record, eli5: { version: 2, source_sha256: record.pdf_sha256, markdown } } as PaperRecord);
       setEli5Id(paper.paper_id);
     } catch (cause) { setEli5Error(errorMessage(cause)); }
     finally { explainingRef.current = false; setExplainingId(''); }
@@ -2296,6 +2310,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
     !planningFallback;
   const generating = busy || request.current !== null || paperProgress?.status === 'active';
+  const bestScoredPaper = papers
+    .filter(paper => paper.pdf_available && paper.score != null && paper.score.total >= 50)
+    .sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0) || b.paper_version - a.paper_version)[0];
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading"
     onKeyDownCapture={event => { if (event.key === 'Escape' && generating) { event.preventDefault(); event.stopPropagation(); } }}
     onCancel={event => { event.preventDefault(); if (!generating) onCancel(); }}>
@@ -2311,7 +2328,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Include claim details</label>
         <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include issues found</label>
         <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Include research excerpts</label>
-        <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)), setIncludeSigmaIssues(event.target.checked))}/>Include Issues and Bugs section (SIGMA generation only)</label>
+        <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)), setIncludeSigmaIssues(event.target.checked))}/>Include Issues and Bugs section</label>
       </div>
       {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot
@@ -2347,10 +2364,13 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       {!loading && papers.length > 0 && <section className="saved-paper-library" aria-label="Saved AI papers"><h3>Saved versions</h3>{papers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            {eli5Id === paper.paper_id
-              ? <button type="button" className="text-view-link ai-paper-eli5-thanks" onClick={() => setEli5Id('')}>Thanks</button>
-              : <button type="button" className="ai-paper-eli5-balloon" disabled={!!explainingId} data-tooltip="Explain it like I'm five" aria-label="Explain it like I'm five" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? '⌛ Explaining...' : <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3c-4 0-6.3 3.3-6.3 7.4 0 4 2.5 7 6.3 8.7 3.8-1.7 6.3-4.7 6.3-8.7C18.3 6.3 16 3 12 3Z"/><path d="m10 19 2 2 2-2M12 21c1 1 .5 1.5 0 2"/></svg>}</button>}
-            <SavedPaperTitle title={paper.title} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/>
+            <SavedPaperTitle title={paper.title} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}
+              actions={<>
+                {bestScoredPaper?.paper_id === paper.paper_id && <a className="saved-paper-score-star" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" aria-label="Top scoring paper, click to view" data-tooltip="Top scoring paper, click to view">★</a>}
+                {eli5Id === paper.paper_id
+                  ? <button type="button" className="text-view-link ai-paper-eli5-thanks" onClick={() => setEli5Id('')}>Thanks</button>
+                  : <button type="button" className="ai-paper-eli5-balloon" disabled={!!explainingId} data-tooltip="Explain it like I'm five" aria-label="Explain it like I'm five" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
+              </>}/>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
