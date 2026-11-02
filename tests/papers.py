@@ -1517,7 +1517,8 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         table = papers.PaperTable(
             caption="Bounded evidence summary for the saved project.",
             headers=["Record", "Status", "Note"],
-            rows=[["Project question", "Saved", "Frozen"]],
+            # Exercise the longtable fallback rather than the compact-table path.
+            rows=[[f"Project question {index}", "Saved", "Frozen"] for index in range(6)],
             evidence_refs=[project_ref],
             claim_ids=["C1"],
         )
