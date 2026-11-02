@@ -15,6 +15,7 @@ UI = os.environ.get("SIGMA_RECENTS_UI_ORIGIN", "http://127.0.0.1:5173").rstrip("
 API = os.environ.get("SIGMA_RECENTS_API_ORIGIN", "http://127.0.0.1:8001").rstrip("/")
 REQUEST_ORIGIN = os.environ.get("SIGMA_BROWSER_REQUEST_ORIGIN", UI)
 running: set[str] = set()
+siblings = {"enabled": False, "project_id": "", "sibling_title": ""}
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -36,6 +37,21 @@ with sync_playwright() as playwright:
             data = response.json()
             for entry in data["projects"]:
                 entry["research_running"] = entry["id"] in running
+            if siblings["enabled"]:
+                original = next(
+                    (entry for entry in data["projects"] if entry["id"] == siblings["project_id"]),
+                    None,
+                )
+                if original:
+                    # Fixture-only second version; project state is untouched.
+                    sibling = {
+                        **original,
+                        "id": "00000000-0000-4000-8000-000000000123",
+                        "title": siblings["sibling_title"],
+                        "pinned": False,
+                        "research_running": False,
+                    }
+                    data["projects"].insert(data["projects"].index(original) + 1, sibling)
             route.fulfill(response=response, body=json.dumps(data))
         else:
             route.fulfill(response=response)
@@ -99,6 +115,17 @@ with sync_playwright() as playwright:
     running.clear()
     expect(metadata).to_have_text(initial, timeout=10000)
 
+    # Another version in the same family stays visible until one is pinned.
+    sibling_title = re.sub(r" v[0-9]+$", " v2", project_title)
+    assert sibling_title != project_title
+    siblings.update(enabled=True, project_id=project_id, sibling_title=sibling_title)
+    page.reload()
+    recent = page.get_by_role("tabpanel", name="Saved")
+    recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
+    if not recent_group.evaluate("group => group.open"):
+        recent_group.locator("summary").click()
+    expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
+
     pin = recent.get_by_role("button", name=f"Pin {project_title}")
     remove = recent.get_by_role("button", name=f"Remove {project_title} from Saved Projects")
     pin_color = pin.evaluate("node => getComputedStyle(node).color")
@@ -109,7 +136,9 @@ with sync_playwright() as playwright:
     expect(recent.locator("details.pinned-type-group")).to_have_count(0)
     pinned = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
+    expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_have_count(0)
     expect(pinned.locator(".recent-title-pin")).to_be_visible()
+    expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_have_count(0)
     expect(pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")).to_have_count(0)
     unpin = pinned.get_by_role("button", name=f"Unpin {project_title}")
     expect(unpin).to_be_visible()
@@ -127,6 +156,7 @@ with sync_playwright() as playwright:
     pinned.get_by_role("button", name=f"Unpin {project_title}").click()
     expect(pinned.locator(".recent-title-pin")).to_have_count(0)
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
+    expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
     expect(pinned.get_by_role("button", name=f"Remove {project_title} from Saved Projects")).to_be_visible()
     expect(pinned.locator("details.pinned-type-group")).to_have_count(0)
     assert not errors, errors
