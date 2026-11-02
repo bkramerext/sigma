@@ -10847,6 +10847,21 @@ def _protocol_completion_recovery_plan(
     if type(cycles) is not int or cycles < 1:
         return None, "The session's saved round limit is invalid."
     target_cycles = set(range(1, cycles + 1))
+    strategy_ids = [
+        str(branch.get("strategy_id") or "") for branch in branches if isinstance(branch, dict)
+    ]
+    if (
+        len(strategy_ids) != len(branches)
+        or not all(strategy_ids)
+        or len(set(strategy_ids)) != len(strategy_ids)
+    ):
+        return None, "The saved protocol has missing or duplicate strategy identities."
+    expected_slots = {
+        (strategy_id, role, cycle)
+        for strategy_id in strategy_ids
+        for cycle in target_cycles
+        for role in ("investigator", "skeptic")
+    }
     steps = [
         step
         for step in record.get("steps", [])
@@ -10857,6 +10872,13 @@ def _protocol_completion_recovery_plan(
         for step in steps
         if step.get("status") == "completed"
     }
+    if not completed <= expected_slots:
+        return None, (
+            "Accepted research turns contain an unknown strategy or an out-of-range "
+            "role/round. Correct the saved protocol record before resuming."
+        )
+    if sum(step.get("status") == "completed" for step in steps) != len(completed):
+        return None, "The saved protocol contains duplicate accepted role/round slots."
     completed_turns = len(completed)
     known_failures: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
     had_provider_limit_rejection = False
@@ -10914,7 +10936,6 @@ def _protocol_completion_recovery_plan(
 
     planned: list[dict[str, Any]] = []
     required_calls = 0
-    expected_turns = 2 * cycles
     for branch in branches:
         if not isinstance(branch, dict):
             return None, "The terminal record contains an invalid strategy branch."
@@ -10924,7 +10945,12 @@ def _protocol_completion_recovery_plan(
             for sid, role, cycle in completed
             if sid == strategy_id and role in {"investigator", "skeptic"}
         }
-        if len(branch_completed) >= expected_turns:
+        branch_expected = {
+            (role, cycle)
+            for cycle in target_cycles
+            for role in ("investigator", "skeptic")
+        }
+        if branch_expected <= branch_completed:
             continue
         if branch.get("status") not in {"ended", "failed", "paused", "stopped"}:
             return None, "An incomplete branch is not in a recoverable terminal state."
