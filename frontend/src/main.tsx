@@ -1893,7 +1893,7 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[] } };
 type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'source_material' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
-type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
+type PaperRecord = PaperSummary & { eli5?: { source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function paperProgressOperation(progress: PaperProgress): string {
   const count = progress.current !== null && progress.total !== null ? ` (${progress.current} of ${progress.total})` : '';
@@ -1977,6 +1977,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
+  const [eli5Id, setEli5Id] = useState('');
+  const [explainingId, setExplainingId] = useState('');
+  const [eli5Error, setEli5Error] = useState('');
+  const explainingRef = useRef(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
   useEffect(() => {
@@ -2073,6 +2077,33 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function explainPaper(paper: PaperSummary) {
+    if (explainingRef.current) return;
+    explainingRef.current = true;
+    setEli5Error('');
+    setExpandedPaperId(paper.paper_id);
+    setExplainingId(paper.paper_id);
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      const record = await response.json();
+      if (!response.ok) throw new Error(record.error ?? 'Could not open this paper.');
+      const saved = record.eli5;
+      let markdown = saved?.source_sha256 === record.pdf_sha256 && typeof saved.markdown === 'string' ? saved.markdown : '';
+      if (!markdown) {
+        if (!binding) throw new Error('Connect an eligible AI provider to explain this paper.');
+        const result = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/eli5`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
+        });
+        const data = await result.json();
+        if (!result.ok) throw new Error(data.error ?? 'Could not explain this paper.');
+        markdown = data.markdown;
+      }
+      setSelected({ ...record, eli5: { source_sha256: record.pdf_sha256, markdown } } as PaperRecord);
+      setEli5Id(paper.paper_id);
+    } catch (cause) { setEli5Error(errorMessage(cause)); }
+    finally { explainingRef.current = false; setExplainingId(''); }
   }
   async function scorePaper(paper: PaperSummary) {
     if (scoringRef.current) return;
@@ -2316,6 +2347,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       {!loading && papers.length > 0 && <section className="saved-paper-library" aria-label="Saved AI papers"><h3>Saved versions</h3>{papers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
+            {eli5Id === paper.paper_id
+              ? <button type="button" className="text-view-link ai-paper-eli5-thanks" onClick={() => setEli5Id('')}>Thanks</button>
+              : <button type="button" className="ai-paper-eli5-balloon" disabled={!!explainingId} data-tooltip="Explain it like I'm five" aria-label="Explain it like I'm five" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? '⌛ Explaining...' : '🎈'}</button>}
             <SavedPaperTitle title={paper.title} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
@@ -2324,9 +2358,12 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           </div>
           <div className="saved-paper-actions">{copyError && <p className="error" role="alert">{copyError}</p>}<a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/txt?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.txt`}>Download text file</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.tex`}>Download TeX file</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.pdf`}>Download PDF</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open PDF in browser</a></>}</div>
         </div>
+        {eli5Error && expandedPaperId === paper.paper_id && <p className="error" role="alert">{eli5Error}</p>}
         {confirmDeleteId === paper.paper_id && <div className="saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}><p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p><span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}><button type="button" className="text-view-link" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button></span></div>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
-        <h3>{selected.draft.title}</h3>
+        {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
+          ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5.markdown}</p>}><RenderedMarkdown body={selected.eli5.markdown}/></Suspense></div>
+          : <><h3>{selected.draft.title}</h3>
         {selected.generation.publication_status === 'needs_review' && <p role="status" className="ai-paper-warning"><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</p>}
         <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
         <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
@@ -2353,6 +2390,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
         <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
         {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
+        </>}
       </article>}</div>
       </article>)}</section>}
       </>}
