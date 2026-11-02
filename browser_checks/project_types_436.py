@@ -116,9 +116,10 @@ with sync_playwright() as playwright:
     literature.locator("summary").click()
     expect(literature).to_have_attribute("open", "")
     expect(literature.locator(".project-type-card-icon svg")).to_be_visible()
-    # Empty reference sections disappear on read-only built-ins.
-    expect(literature.get_by_text("Research standards references")).to_have_count(0)
-    expect(literature.get_by_text("Publication standards references")).to_have_count(0)
+    # Literature now has a curated research and publication reference pair.
+    expect(literature.get_by_text("Research standards references")).to_have_count(1)
+    expect(literature.get_by_text("Publication standards references")).to_have_count(1)
+    expect(literature.locator(".pt-reference-link a")).to_have_count(2)
     expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(0)
     expect(literature.get_by_role("columnheader", name="URL")).to_have_count(0)
     builtin_names = (
