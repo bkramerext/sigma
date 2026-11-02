@@ -175,6 +175,13 @@ def list_project_types_view(request: Request):
         return {
             "project_types": builtins,
             "common_references": project_types.common_references(),
+            "builtin_references": {
+                item.id: {
+                    "research_standards_references": list(item.research_standards_references),
+                    "publication_standards_references": list(item.publication_standards_references),
+                }
+                for item in project_types.builtin_types()
+            },
             "reference_preferences": {"common": {}, "project_types": {}},
             "icons": {"placeholder": project_types.placeholder_icon()},
             "revision": revision,
@@ -182,6 +189,13 @@ def list_project_types_view(request: Request):
     return {
         "project_types": [item.record() for item in project_types.all_types()],
         "common_references": project_types.common_references(),
+            "builtin_references": {
+                item.id: {
+                    "research_standards_references": list(item.research_standards_references),
+                    "publication_standards_references": list(item.publication_standards_references),
+                }
+                for item in project_types.builtin_types()
+            },
         "reference_preferences": project_types.reference_preferences(),
         "icons": {"placeholder": project_types.placeholder_icon()},
         "revision": project_types.catalog_revision(),
