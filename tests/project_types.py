@@ -32,6 +32,20 @@ def main() -> None:
     common = project_types.common_references()
     assert len(common["research_standards_references"]) == 2
     assert len(common["publication_standards_references"]) == 2
+    # Eight standards are distinct across activity and discipline, and all
+    # reference actual documents rather than placeholders or duplicate URLs.
+    all_standards = [
+        *(ref for field in project_types.REFERENCE_FIELDS for ref in common[field]),
+        *(
+            ref
+            for item in builtins
+            for field in project_types.REFERENCE_FIELDS
+            for ref in getattr(item, field)
+        ),
+    ]
+    assert len(all_standards) == 8
+    assert len({ref["url"] for ref in all_standards}) == 8
+    assert all(ref["name"].strip() and ref["url"].startswith("https://") for ref in all_standards)
     builtins_by_id = {item.id: item for item in builtins}
     for identifier in ("mathematical", "physics"):
         item = builtins_by_id[identifier]
