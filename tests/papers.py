@@ -1340,7 +1340,7 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert all(not section["tables"] for section in saved["draft"]["sections"])
         assert r"\usepackage{tikz}" not in saved["tex_source"]
         assert r"\begin{longtable}" not in saved["tex_source"]
-        assert r"\section*{About this paper}" in saved["tex_source"]
+        assert r"\section*{Evidence and authorship note}" in saved["tex_source"]
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
         first_stages = [event["stage"] for event in first_events if event["state"] == "active"]
