@@ -5700,6 +5700,7 @@ def test_combined_visual_schema_and_safe_tex_rendering() -> None:
     assert r"\input{secret}" not in tex
     assert r"Campus \&" in tex
     assert "Proposed campus trust boundary" in tex
+    assert r"\node[boundary,fit=(campus)(policy)" in tex
     assert r"\begin{longtable}" in tex
     assert "Evidence: [project:pid]; claims: C1" in tex
     assert papers._validate(paper, {"sources": [{"id": "project:pid", "data": {}}]})
