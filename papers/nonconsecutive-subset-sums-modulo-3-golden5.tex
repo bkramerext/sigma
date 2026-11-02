@@ -9,6 +9,8 @@
 \usepackage{microtype}
 \usepackage[hyphens]{url}
 \usepackage{titlesec}
+\usepackage{tikz}
+\usetikzlibrary{fit}
 \emergencystretch=2em
 \raggedbottom
 \linespread{1.07}
@@ -67,6 +69,22 @@ This filter selects all subset sums divisible by three, rather than a single exp
 
 Define the correction by $c_n=P_n(\omega)+P_n(\omega^2)$. The filter proves the exact decomposition $3a_n=F_{n+2}+c_n$, and therefore identifies $c_n$ with the integer $3a_n-F_{n+2}$. The counting problem is now reduced to determining the two primitive-root evaluations: the Fibonacci term accounts for the total number of admissible subsets, while their sum accounts exactly for the departure of $a_n$ from one third of that total.
 
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (partition) at (0,0.00) {Select or omit the final integer};
+\node[story node] (polynomial) at (0,-2.15) {Weighted subset recurrence};
+\node[story node] (filter) at (0,-4.30) {Cube-root filter for sums modulo three};
+\node[story node] (correction) at (0,-6.45) {Three Fibonacci correction formulas};
+\node[story node] (results) at (0,-8.60) {Exact recurrence and limiting proportion};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (partition) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Reversible partition} (polynomial);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (polynomial) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Evaluate at roots of unity} (filter);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (filter) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Index phases} (correction);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (correction) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Symbolic deduction} (results);
+\end{tikzpicture}
+\caption{Proof map for the exact count. The select-or-omit partition gives the weighted recurrence; the cube-root filter isolates sums divisible by three; the three index phases yield Fibonacci correction formulas, from which the order-eight recurrence and limiting proportion follow. The diagram summarizes the proof dependencies rather than replacing them.}
+\par\smallskip{\scriptsize Source-linked claims: C1, C2, C3, C4, C5, C9; evidence links appear in the claim notes.}
+\end{figure}
 \section{Three-phase Fibonacci formulas}
 The primitive-root contributions admit exact Fibonacci formulas on each index class modulo three, turning the residue filter into an explicit correction to the total count. Let $\omega$ be a primitive complex cube root of unity, so $\omega^3=1$ and $1+\omega+\omega^2=0$, and put $p_n=P_n(\omega)$ for the weighted subset enumerator defined above. Its recurrence becomes $p_n=p_{n-1}+\omega^n p_{n-2}$ for every integer $n\geq 2$; the multiplier therefore passes successively through $1$, $\omega$, and $\omega^2$ as the index advances through a complete triple.
 

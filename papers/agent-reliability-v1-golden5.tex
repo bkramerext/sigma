@@ -155,6 +155,20 @@ The wrapper argument is a conditional safety\textendash{}progress obstruction, n
 
 Safe replacement requires both a justified account of the original's past outcome and exclusion of its future effect; stronger effect-boundary enforcement can change those premises, whereas local recovery state alone cannot. [C16, C17]
 
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (request) at (0,0.00) {One logical request is sent};
+\node[story node] (unknown) at (0,-2.15) {Acknowledgment is lost; commit status is unknown};
+\node[story node] (retry) at (0,-4.30) {A blind retry may duplicate the effect};
+\node[story node] (contract) at (0,-6.45) {Recovery needs atomic deduplication or authoritative status};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (request) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Ambiguous outcome} (unknown);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (unknown) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Local history cannot decide} (retry);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (retry) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Stronger boundary required} (contract);
+\end{tikzpicture}
+\caption{An ambiguous acknowledgment leaves two externally different outcomes with the same local observation. A safe recovery claim therefore depends on a service contract that can prevent or identify a duplicate effect; the diagram is an analytical model, not a verified implementation.}
+\par\smallskip{\scriptsize Source-linked claims: C8, C9, C10; evidence links appear in the claim notes.}
+\end{figure}
 \section{Atomic recovery contracts and crash semantics}
 Atomic coupling of an external effect with its completion record supplies a conditional recovery contract: retries can preserve at-most-one effect without ensuring that an effect occurs or that the client learns of it. The workload considered here is a single intended ledger append with stable operation key $k$ and full payload $p$; the unit of analysis is that logical operation across its deliveries, retries, and crashes. The evaluator inspects the durable effect multiset $E$ directly and checks its correspondence with the completion map $D$, rather than treating a completion record as its own outcome oracle.
 
@@ -295,25 +309,24 @@ Ordering uncertainty must also be established from what the retained evidence ge
 
 The evidence therefore changes the central reliability argument in two specific ways: a conforming evaluator supports certification only through a sound containment contract, and correct end states support truthful completion claims only when the report-time boundary is adjudicated separately. [C6, C7]
 
-\begin{quote}
-\textbf{Diagram (readable relationship list).} The conditional evidence chain separates external outcomes, evidence validity, mapper conformance, and randomized auditing. None of these dependencies establishes that a practical implementation satisfies the required contract.
-\begin{description}
-\item[\textbf{Node 1.}] Actual external outcome and reporting history
-\item[\textbf{Node 2.}] External certificates and observations
-\item[\textbf{Node 3.}] Conservative possible-outcome sets
-\item[\textbf{Node 4.}] Sealed execution roster
-\item[\textbf{Node 5.}] Randomized audit
-\item[\textbf{Node 6.}] Conditional finite-roster comparison
-\item[\textbf{Edge 1.}] Node 1 points to node 2: Requires soundness, scope, and temporal evidence
-\item[\textbf{Edge 2.}] Node 2 points to node 3: Prescribed mapping does not validate inputs
-\item[\textbf{Edge 3.}] Node 3 points to node 4: Retain unresolved outcomes conservatively
-\item[\textbf{Edge 4.}] Node 4 points to node 5: Independent randomized selection
-\item[\textbf{Edge 5.}] Node 5 points to node 6: Coverage conditional on evidence premises
-\item[\textbf{Boundary 1.}] External state and evidence authority: node 1, node 2
-\item[\textbf{Boundary 2.}] Evaluation and audit protocol: node 3, node 4, node 5, node 6
-\end{description}
-\par\smallskip{\footnotesize Evidence: [Research session 7, artifact 1], [Research session 7, artifact 9], [Research session 6, artifact 1]; claims: C5, C6, C7, C20}
-\end{quote}
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (outcome) at (0,0.00) {Actual external outcome and reporting history};
+\node[story node] (evidence) at (0,-2.15) {External certificates and observations};
+\node[story node] (mapper) at (0,-4.30) {Conservative possible-outcome sets};
+\node[story node] (roster) at (0,-6.45) {Sealed execution roster};
+\node[story node] (audit) at (0,-8.60) {Randomized audit};
+\node[story node] (bound) at (0,-10.75) {Conditional finite-roster comparison};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (outcome) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Requires soundness, scope, and temporal evidence} (evidence);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (evidence) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Prescribed mapping does not validate inputs} (mapper);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (mapper) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Retain unresolved outcomes conservatively} (roster);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (roster) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Independent randomized selection} (audit);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (audit) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Coverage conditional on evidence premises} (bound);
+\end{tikzpicture}
+\caption{The conditional evidence chain separates external outcomes, evidence validity, mapper conformance, and randomized auditing. None of these dependencies establishes that a practical implementation satisfies the required contract.}
+\par\smallskip{\scriptsize Source-linked claims: C5, C6, C7, C20; evidence links appear in the claim notes.}
+\end{figure}
 \begin{landscape}
 \small
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*5)/167*23\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*5)/167*42\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*5)/167*20\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*5)/167*20\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*5)/167*20\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*5)/167*42\relax}@{}}

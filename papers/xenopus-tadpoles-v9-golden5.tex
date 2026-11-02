@@ -79,6 +79,20 @@ Replacing each animal\textquoteright{}s missing early measurement with its stage
 
 These results leave population-level stage-by-time comparisons intact while changing what they can establish about the signal-memory hypothesis. Such comparisons can describe when response distributions differ, but cannot alone show that an animal\textquoteright{}s early response predicts its later epidermal transition or that this association weakens between stages. Evidence for the proposed transmission defect must therefore identify the early\textendash{}late relationship at the intended biological unit, rather than infer it from temporal ordering or stage-assigned averages (C3, C4).
 
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (unlinked) at (0,0.00) {Early and late measurements lack specimen links};
+\node[story node] (marginals) at (0,-2.15) {Separate stage-by-time distributions remain known};
+\node[story node] (couplings) at (0,-4.30) {Opposite animal-level couplings fit the same marginals};
+\node[story node] (linkage) at (0,-6.45) {Verified paired specimens are needed};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (unlinked) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {What is observed} (marginals);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (marginals) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Joint relation unresolved} (couplings);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (couplings) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Identifiability requirement} (linkage);
+\end{tikzpicture}
+\caption{Unlinked early and late samples reveal marginal distributions, but those same marginals can be paired into opposite within-animal associations. Identifying a coupling slope therefore requires verified specimen linkage; this is an identifiability argument, not a measured biological effect.}
+\par\smallskip{\scriptsize Source-linked claims: C3, C4; evidence links appear in the claim notes.}
+\end{figure}
 \section{Reporter persistence is not identified signal persistence}
 Reporter persistence cannot, by itself, identify the persistence of the biological input proposed to support regeneration. The relevant distinction is between an input acting in an epidermal compartment and a reporter state that accumulates and decays in response to that input. The conditional construction below shows that sustained signaling and an interrupted response with a compensating late pulse can produce identical calibrated readings at $0.5$ and $3$ hours after amputation. This is a measurement-identifiability argument, not an observation of signaling dynamics in Xenopus laevis tadpoles [C5].
 
@@ -127,30 +141,20 @@ It identifies the separating information as a calibrated trajectory of the actua
 
 Pulse timing consequently tests a temporal-transfer explanation more sharply than a single endpoint does, but only after the competing models have been restricted in biologically defensible ways. The crossed comparisons can challenge pulse-time-only encoding and readout-time-only gating separately; their success cannot exclude the exact combined-gate construction or assign accumulated-output persistence to signal memory. The central argument therefore changes from treating timing-dependent rescue as evidence of shortened memory to treating it as a conditional signature whose mechanistic interpretation requires information beyond transcriptional output [C7\textendash{}C10].
 
-\begin{quote}
-\textbf{Diagram (readable relationship list).} The candidate signal-memory mechanism and its observation-level alternatives are hypotheses and mathematical models, not measured biological relationships. A persistent reporter, accumulated output, or pulse-timing response cannot by itself identify persistence of the unnamed intervening state.
-\begin{description}
-\item[\textbf{Node 1.}] Basal-epidermal injury input
-\item[\textbf{Node 2.}] Possible pulse-time-dependent encoding
-\item[\textbf{Node 3.}] Unnamed intervening state $P$; candidate stage-dependent decay
-\item[\textbf{Node 4.}] Regenerative transcriptional response
-\item[\textbf{Node 5.}] Possible absolute-wound-age gate
-\item[\textbf{Node 6.}] Accumulated output with turnover
-\item[\textbf{Node 7.}] Reporter accumulation and decay
-\item[\textbf{Node 8.}] Observed endpoint or trajectory
-\item[\textbf{Edge 1.}] Node 1 points to node 2: Alternative model permits time-dependent encoding
-\item[\textbf{Edge 2.}] Node 2 points to node 3: Hypothesized state induction
-\item[\textbf{Edge 3.}] Node 3 points to node 4: Hypothesized coupling
-\item[\textbf{Edge 4.}] Node 5 points to node 4: Alternative model permits wound-age-dependent gating
-\item[\textbf{Edge 5.}] Node 4 points to node 6: Accumulation can mix induction and turnover
-\item[\textbf{Edge 6.}] Node 1 points to node 7: Reporter-model input
-\item[\textbf{Edge 7.}] Node 7 points to node 8: Filtered signal measurement
-\item[\textbf{Edge 8.}] Node 6 points to node 8: Accumulated-output measurement
-\item[\textbf{Boundary 1.}] Unvalidated biological hypothesis and competing gates: node 1, node 2, node 3, node 4, node 5
-\item[\textbf{Boundary 2.}] Measurement and output-dynamics alternatives: node 6, node 7, node 8
-\end{description}
-\par\smallskip{\footnotesize Evidence: [Research session 22, artifact 3], [Research session 22, artifact 2], [Research session 22, artifact 5], [Research session 22, artifact 6]; claims: C5, C6, C7, C9, C10, C11}
-\end{quote}
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (injury) at (0,0.00) {Injury input};
+\node[story node] (state) at (0,-2.15) {Hypothesized intervening state};
+\node[story node] (program) at (0,-4.30) {Later regenerative transcription};
+\node[story node] (readout) at (0,-6.45) {Measured reporter or output};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (injury) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Candidate memory} (state);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (state) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Hypothesized coupling} (program);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (program) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Filtering and turnover matter} (readout);
+\end{tikzpicture}
+\caption{The proposed signal-memory mechanism links injury input to a later regenerative program through an unnamed intervening state. The state and its stage-dependent decay are hypotheses; reporter filtering, wound-age gating, and output turnover can imitate parts of the same observation pattern.}
+\par\smallskip{\scriptsize Source-linked claims: C5, C6, C7, C9; evidence links appear in the claim notes.}
+\end{figure}
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/111*27\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/111*42\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/111*42\relax}@{}}
 \caption{Assumptions register for interpreting pulse-time and delay comparisons. These are proposed model restrictions, not measured properties of Xenopus laevis basal epidermis.}\\
 \toprule

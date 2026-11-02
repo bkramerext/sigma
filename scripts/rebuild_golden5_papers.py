@@ -19,6 +19,7 @@ from sigma import papers
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "docs/evaluations/report_quality/golden5"
+VISUAL_OVERRIDES = ARCHIVE / "visual_overrides.json"
 SLUGS = (
     "agent-reliability-v1",
     "sovereign-ai-federation-v2",
@@ -33,6 +34,25 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
     with gzip.open(record_path, "rt", encoding="utf-8") as stream:
         record = json.load(stream)
     draft = papers.PaperDraft.model_validate(record["draft"])
+    # Curated explanatory visuals are stored as structured paper data, not as
+    # edits to generated TeX. Their evidence links come from the saved claims.
+    visual_data = json.loads(VISUAL_OVERRIDES.read_text(encoding="utf-8"))
+    claim_map = {claim.id: claim for claim in draft.claims}
+    diagrams = list(draft.diagrams) if slug == "agent-reliability-v1" else []
+    for item in visual_data.get(slug, []):
+        refs = list(
+            dict.fromkeys(
+                ref
+                for claim_id in item["claim_ids"]
+                for ref in claim_map[claim_id].evidence_refs
+            )
+        )
+        diagrams.append(
+            papers.PaperDiagram.model_validate({**item, "evidence_refs": refs[:20]})
+        )
+    draft = papers.PaperDraft.model_validate(
+        {**draft.model_dump(), "diagrams": [diagram.model_dump() for diagram in diagrams]}
+    )
     generation = record["generation"]
     project = next(
         (

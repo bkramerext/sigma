@@ -9,6 +9,8 @@
 \usepackage{microtype}
 \usepackage[hyphens]{url}
 \usepackage{titlesec}
+\usepackage{tikz}
+\usetikzlibrary{fit}
 \emergencystretch=2em
 \raggedbottom
 \linespread{1.07}
@@ -140,6 +142,20 @@ The decisive implementation evidence would correlate immutable content-unit iden
 
 The resulting argument is narrower but more actionable: campus control can be specified at new transport submission, whereas request delivery, buffered transmission, recipient behavior, and ownership handoff require distinct assurances that a routing decision alone cannot supply. [[Research session 2, artifact 6]]
 
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (policy) at (0,0.00) {Campus policy and approval state};
+\node[story node] (admission) at (0,-2.15) {Authorization and liability reservation};
+\node[story node] (send) at (0,-4.30) {Operating-system transport submission};
+\node[story node] (reconcile) at (0,-6.45) {Receipt and uncertain-charge reconciliation};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (policy) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Current authority} (admission);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (admission) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Commit before release} (send);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (send) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Retain outstanding holds} (reconcile);
+\end{tikzpicture}
+\caption{Proposed campus-controlled release path. Authorization and budget reservation must precede the operating-system send boundary; later receipt and charge reconciliation do not retroactively authorize a forbidden submission. This is a conditional design, not a deployed system.}
+\par\smallskip{\scriptsize Source-linked claims: C10, C11, C12; evidence links appear in the claim notes.}
+\end{figure}
 \section{Hard budgets under uncertain billing}
 Hard-budget protection requires reserving possible liability before dispatch, rather than treating a missing response as evidence that no expense occurred. The proposed accounting rule separates financial safety from useful availability: retaining an uncertain charge can preserve a cap while preventing a retry that would otherwise complete useful work. Its contribution is a conditional invariant for gateway-controlled spending, not an observed reliability result or an established MindRouter capability. [C10\textendash{}C11]
 
@@ -280,6 +296,22 @@ Administrative burden and fairness also require their own approved operational c
 
 The evidence thus changes the deployment question from whether federation can complete selected tasks to whether its incremental benefit survives offered-demand accounting, correlated execution, unresolved billing and separate safety gates. A favorable controlled comparison would support only the declared population, load conditions, cost perspective and approved policy domains; live-service generality would require corresponding evidence rather than extrapolation from replay. Unless federation clears those requirements and its administrative ceilings, the evaluation cannot establish a reason to replace the gateway with separately approved external access. [C18, C21, C23]
 
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (tasks) at (0,0.00) {Prespecified offered task episodes};
+\node[story node] (pair) at (0,-2.15) {Paired gateway and federation runs};
+\node[story node] (outcomes) at (0,-4.30) {Quality, policy, latency and provenance};
+\node[story node] (cost) at (0,-6.45) {Actual costs and uncertain charges};
+\node[story node] (decision) at (0,-8.60) {Incremental-benefit decision};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (tasks) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Same workload} (pair);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (pair) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Offered-demand denominator} (outcomes);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (outcomes) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Separate safety and economics} (cost);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (cost) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {No result yet} (decision);
+\end{tikzpicture}
+\caption{The proposed 90-day comparison asks whether federation adds useful, policy-permitted service beyond a gateway that already permits separately approved external access. Paired task quality, safety, and actual cost must be evaluated separately; no pilot result is available.}
+\par\smallskip{\scriptsize Source-linked claims: C18, C19, C23; evidence links appear in the claim notes.}
+\end{figure}
 \section{Limitations}
 \begin{itemize}
 \item The starting documentation and PEARC\textquoteright{}26 paper were not inspected. The reported 2026-10-31 review date is historical project information, not an access date established here.

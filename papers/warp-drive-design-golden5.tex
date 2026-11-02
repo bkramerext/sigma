@@ -9,6 +9,8 @@
 \usepackage{microtype}
 \usepackage[hyphens]{url}
 \usepackage{titlesec}
+\usepackage{tikz}
+\usetikzlibrary{fit}
 \emergencystretch=2em
 \raggedbottom
 \linespread{1.07}
@@ -78,6 +80,20 @@ so the gradient of $t$ is timelike everywhere on the stated coordinate domain. C
 
 The finite-duration construction therefore defeats the purely kinematic inference that an effective shortcut must entail either locally superluminal carrier motion or a causal loop. What remains at issue is whether a physical source and its evolution can realize this operational geometry, not whether its exterior coordinate speed alone contradicts its local light cones.
 
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (metric) at (0,0.00) {Prescribed finite-duration geometry};
+\node[story node] (carrier) at (0,-2.15) {Carrier stays locally timelike};
+\node[story node] (clocks) at (0,-4.30) {Matched exterior clocks compare arrivals};
+\node[story node] (shortcut) at (0,-6.45) {Conditional effective shortcut};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (metric) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Local causal test} (carrier);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (carrier) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Distinct comparison} (clocks);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (clocks) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Earlier exterior arrival} (shortcut);
+\end{tikzpicture}
+\caption{A prescribed finite-duration metric separates local motion from an exterior-clock shortcut. A central carrier remains timelike while the chosen distant-clock comparison can register an earlier arrival; this geometric result does not provide a material source or a working drive.}
+\par\smallskip{\scriptsize Source-linked claims: C31, C32; evidence links appear in the claim notes.}
+\end{figure}
 \section{The Einstein source: negative energy and null stress}
 The Einstein source calculation turns the prescribed shortcut geometry into a precise material requirement: negative energy measured by the slice-normal observers and, independently, strict negative null stress in the wall. Consider the constant-speed geometry $ds^2=-(dx^0)^2+[dx-u\,dx^0]^2+dy^2+dz^2$, with $x^0=ct$, $u=\beta f(r)$, constant $\beta=v/c$, and $r^2=(x-\beta x^0)^2+y^2+z^2$. The dimensionless profile is smooth, equals one for $r\leq R$, and vanishes for $r\geq R+\Delta$, where $R,\Delta>0$ are lengths. Throughout this calculation, assume signature $(-,+,+,+)$, zero cosmological constant, and Einstein\textquoteright{}s equation $G_{ab}=8\pi G T_{ab}/c^4$.
 
@@ -304,6 +320,20 @@ Observational tests must consequently be tied to the interactions and propagatio
 
 These gates change the next useful target from geometric optimization to two discriminating tasks: finding a source that escapes the established exclusions without sacrificing a well-posed physical evolution, and determining whether a finite episode avoids the eternal propagation obstruction. Either task can reject a particular source\textendash{}target combination without establishing a prohibition on every effective-superluminal framework. Only their joint success would justify advancing the conditional corridor to quantum and operational transport tests; the geometric shortcut alone no longer carries that inference.
 
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,story node/.style={draw=blue!65,very thick,rounded corners=4pt,align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]
+\node[story node] (target) at (0,0.00) {Target shortcut geometry};
+\node[story node] (stress) at (0,-2.15) {Negative energy and null-energy violation};
+\node[story node] (sources) at (0,-4.30) {Examined scalar sources excluded};
+\node[story node] (gates) at (0,-6.45) {Other sources, stability, quantum and control tests open};
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (target) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Einstein-source requirement} (stress);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (stress) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {Model-specific exclusions} (sources);
+\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] (sources) -- node[midway,right,font=\scriptsize\itshape,align=left,text width=3.8cm,fill=white,inner sep=1pt] {No viability inference} (gates);
+\end{tikzpicture}
+\caption{The physical-feasibility chain remains open. The chosen geometry requires negative energy and null-energy violation under Einstein gravity; the examined canonical and regular single-scalar sources fail the needed conditions. Unexamined sources, finite-duration propagation, quantum behavior, stability, and control remain gates rather than achieved engineering steps.}
+\par\smallskip{\scriptsize Source-linked claims: C14, C15, C16, C33, C35, C38, C39; evidence links appear in the claim notes.}
+\end{figure}
 \section{Limitations}
 \begin{itemize}
 \item The source selection is bounded and omits substantial underlying notes. It supports a scoped synthesis, not an exhaustive review or independent reconstruction of every proof.
