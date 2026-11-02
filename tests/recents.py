@@ -274,7 +274,7 @@ def check(root: Path, base: Path) -> None:
     # Pinning is account-local, persists across project access, and does not
     # rewrite research projects or mutate their version titles.
     pinned_view = created[1]
-    project_before_pin = Path(pinned_view.path, "project.json").read_bytes()
+    project_before_pin = Path(pinned_view.path).read_bytes()
     order_before_pin = [item["id"] for item in recent_projects()["projects"]]
     set_recent_pin(pinned_view.project.id, pinned_view.path, True)
     pinned_list = recent_projects()["projects"]
@@ -282,7 +282,7 @@ def check(root: Path, base: Path) -> None:
     assert next(item for item in pinned_list if item["id"] == pinned_view.project.id)["pinned"] is True
     open_project(first.path)
     assert recent_projects()["projects"][0]["id"] == first.project.id
-    assert Path(pinned_view.path, "project.json").read_bytes() == project_before_pin
+    assert Path(pinned_view.path).read_bytes() == project_before_pin
     try:
         set_recent_pin(first.project.id, pinned_view.path, True)
         raise AssertionError("Pinning another project's path was accepted")
