@@ -272,6 +272,8 @@ def _index():
                     os.close(parent_fd)
             finally:
                 staged.unlink(missing_ok=True)
+    except ProjectError:
+        raise
     except (OSError, ValueError, TypeError, KeyError):
         raise ProjectError(
             "Recent Projects index is unavailable. Check its owned 0700 directory/0600 files; research was not altered."
@@ -318,7 +320,8 @@ def forget_recent(project_id: str, path: str | None = None) -> None:
     """Forget a saved entry by identity, or by its saved path if identity drifted."""
     with _index() as index:
         matched = [
-            entry for entry in index["entries"]
+            entry
+            for entry in index["entries"]
             if entry["id"] == project_id or (path is not None and entry["path"] == path)
         ]
         if any(entry["id"] in _effective_pins(index).values() for entry in matched):
@@ -433,7 +436,8 @@ def pinned_projects() -> dict:
     """Paper-test source selection; does not launch or authorize generation."""
     return {
         "projects": [
-            item for item in recent_projects()["projects"]
+            item
+            for item in recent_projects()["projects"]
             if item["pin_state"] == "unpin" and item["available"]
         ]
     }
