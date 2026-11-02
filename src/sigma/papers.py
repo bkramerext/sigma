@@ -2626,6 +2626,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
             or progress_state.get("stage")
             not in {
                 "snapshot",
+                "source_material",
                 "writing",
                 "evidence",
                 "consolidation",
