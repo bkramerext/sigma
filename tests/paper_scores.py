@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
 from sigma import paper_scores, papers
-from sigma.projects import ProjectError, initialize_project
+from sigma.projects import initialize_project
 
 def judgment() -> paper_scores.PaperJudgment:
     return paper_scores.PaperJudgment.model_validate({
