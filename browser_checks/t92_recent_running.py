@@ -51,6 +51,18 @@ with sync_playwright() as playwright:
                     "pinned": False,
                     "error": "Unavailable or changed identity",
                 })
+                data["projects"].append({
+                    "id": "00000000-0000-4000-8000-000000000125",
+                    "path": "/valid-but-no-project-type.sigma",
+                    "title": "Valid Untyped Project",
+                    "investigation_type": "default",
+                    "strategy_count": 1,
+                    "difficulty": "medium",
+                    "research_running": False,
+                    "available": True,
+                    "pinned": False,
+                    "error": None,
+                })
             if siblings["enabled"]:
                 original = next(
                     (entry for entry in data["projects"] if entry["id"] == siblings["project_id"]),
@@ -134,6 +146,7 @@ with sync_playwright() as playwright:
     page.reload()
     recent = page.get_by_role("tabpanel", name="Saved")
     expect(recent.get_by_text("Unfindable Ghost Project")).to_have_count(0)
+    expect(recent.get_by_text("Valid Untyped Project")).to_have_count(0)
     expect(recent.locator("details.recent-type-group").filter(has_text="Unavailable")).to_have_count(0)
     unavailable_fixture["enabled"] = False
 
