@@ -80,9 +80,7 @@ def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
     else:
         raise AssertionError("An unreviewed unknown call did not block provider dispatch")
     try:
-        authorize_independent_review_after_unknown(
-            ledger, uncertain_call_ids={"different-id"}
-        )
+        authorize_independent_review_after_unknown(ledger, uncertain_call_ids={"different-id"})
     except BudgetExceeded:
         pass
     else:
@@ -91,17 +89,13 @@ def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
     # Invalid provider usage is *not* an unknown-dispatch review approval.
     ledger["blocked_reason"] = "Provider input usage exceeded or failed its reserved bound"
     try:
-        authorize_independent_review_after_unknown(
-            ledger, uncertain_call_ids={"uncertain"}
-        )
+        authorize_independent_review_after_unknown(ledger, uncertain_call_ids={"uncertain"})
     except BudgetExceeded:
         pass
     else:
         raise AssertionError("Invalid usage was incorrectly converted into a recoverable call")
     ledger["blocked_reason"] = "Provider call outcome or usage is unknown"
-    authorize_independent_review_after_unknown(
-        ledger, uncertain_call_ids={"uncertain"}
-    )
+    authorize_independent_review_after_unknown(ledger, uncertain_call_ids={"uncertain"})
     assert ledger["calls"][-1] == {**reserved_bounds, "status": "unknown"}
     assert totals(ledger)["input_tokens_used_or_reserved"] == held["input_tokens_used_or_reserved"]
     assert totals(ledger)["cost_usd_used_or_reserved"] == held["cost_usd_used_or_reserved"]
@@ -11682,9 +11676,7 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(
                 output_price_per_million=2.0,
             )
             reserve_before_dispatch(ledger, call_id=accepted_id, request_body=b"investigator")
-            settle_after_response(
-                ledger, call_id=accepted_id, input_tokens=500, output_tokens=300
-            )
+            settle_after_response(ledger, call_id=accepted_id, input_tokens=500, output_tokens=300)
             reserve_before_dispatch(ledger, call_id=invalid_id, request_body=b"skeptic")
             mark_unknown(ledger, call_id=invalid_id)
             record["hard_budget_ledger"] = ledger
@@ -11755,10 +11747,13 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(
         if unknown_skeptic:
             assert final_record["hard_budget_ledger"]["blocked_reason"] is None
             assert final_record["hard_budget_ledger"]["calls"][-1]["status"] == "unknown"
-            assert sum(
-                event.get("kind") == "session.unknown_review_budget_gate_reconciled"
-                for event in final_record.get("events", [])
-            ) == 1
+            assert (
+                sum(
+                    event.get("kind") == "session.unknown_review_budget_gate_reconciled"
+                    for event in final_record.get("events", [])
+                )
+                == 1
+            )
         if original.get("hard_budget_ledger"):
             before = original["hard_budget_ledger"]
             after = final_record["hard_budget_ledger"]
@@ -11766,10 +11761,13 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(
             assert after["input_token_limit"] == before["input_token_limit"]
             assert after["cost_limit_usd"] == before["cost_limit_usd"]
         assert len(final_record["call_limit_adjustments"]) == 1
-        assert sum(
-            event.get("kind") == "session.protocol_call_limit_extended"
-            for event in final_record.get("events", [])
-        ) == 1
+        assert (
+            sum(
+                event.get("kind") == "session.protocol_call_limit_extended"
+                for event in final_record.get("events", [])
+            )
+            == 1
+        )
         assert resumed["calls_used"] == 2
         assert resumed["call_limit"] == 7
         assert research_sessions._read(str(path), started["id"])["steps"] == original["steps"]
