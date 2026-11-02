@@ -207,7 +207,11 @@ def record_access(view: ProjectView) -> None:
                     "accessed_at": datetime.now(UTC).isoformat(),
                     "included_example": False,
                     "pinned": next(
-                        (entry["pinned"] for entry in index["entries"] if entry["id"] == str(UUID(view.project.id))),
+                        (
+                            entry["pinned"]
+                            for entry in index["entries"]
+                            if entry["id"] == str(UUID(view.project.id))
+                        ),
                         False,
                     ),
                 },
@@ -236,7 +240,11 @@ def set_recent_pin(project_id: str, path: str, pinned: bool) -> None:
         raise ProjectError("Invalid project identifier") from exc
     with _index() as index:
         entry = next(
-            (item for item in index["entries"] if item["id"] == canonical_id and item["path"] == path),
+            (
+                item
+                for item in index["entries"]
+                if item["id"] == canonical_id and item["path"] == path
+            ),
             None,
         )
         if entry is None:
