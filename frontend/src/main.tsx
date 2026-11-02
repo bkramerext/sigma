@@ -1863,16 +1863,11 @@ const paperScoreCategories: { key: keyof PaperScore['categories']; title: string
 
 function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () => void }) {
   const element = useRef<HTMLDialogElement>(null);
-  const [rubricExpanded, setRubricExpanded] = useState(false);
   useEffect(() => { element.current?.showModal(); }, []);
   return <dialog ref={element} className="project-settings-dialog paper-score-dialog" aria-labelledby="paper-score-title"
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header paper-score-header">
       <h2 id="paper-score-title">Paper Score</h2>
-      <button type="button" className="text-view-link paper-score-rubric-toggle" aria-expanded={rubricExpanded}
-        aria-controls="paper-score-rubric" onClick={() => setRubricExpanded(value => !value)}>
-        {rubricExpanded ? 'Hide rubric' : 'Show rubric'}
-      </button>
       <div className="settings-actions"><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
     </header>
     <div className="settings-body paper-score-body">
@@ -1880,19 +1875,17 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
         <strong>Weighted score</strong><strong className="paper-score-points">{score.total}/100</strong>
       </div>
       <p className="settings-hint">SIGMA’s research and paper-authoring capabilities are experimental; these provisional scores acknowledge known quality limitations and do not constitute independent scientific verification or human review.</p>
-      {rubricExpanded && <section id="paper-score-rubric" className="paper-score-rubric" aria-label="Scoring rubric">
-        <p className="settings-hint">Each category receives a score from 1–100. The weighted average of the six categories produces the overall score.</p>
-        <dl>{paperScoreCategories.map(({ key, title, standard }) => <div key={key}>
-          <dt>{title} <span>· weight {score.categories[key].weight.toFixed(2)}</span></dt><dd>{standard}</dd>
-        </div>)}</dl>
-      </section>}
       <div className="paper-score-categories" aria-label="Paper scores">
-        {paperScoreCategories.map(({ key, title }) => <section className="paper-score-category" key={key}>
-          <div className="paper-score-category-heading"><h3>{title} <span className="paper-score-weight">(weight {score.categories[key].weight.toFixed(2)})</span></h3>
+        {paperScoreCategories.map(({ key, title, standard }) => <details className="paper-score-category" key={key}>
+          <summary className="paper-score-category-heading">
+            <span className="paper-score-category-label">{title} <span className="paper-score-weight">(weight {score.categories[key].weight.toFixed(2)})</span></span>
             <strong className="paper-score-points">{score.categories[key].earned}/100</strong>
+          </summary>
+          <div className="paper-score-category-detail">
+            <p className="paper-score-standard"><strong>Rubric:</strong> {standard}</p>
+            <p className="paper-score-assessment"><strong>Assessment:</strong> {score.categories[key].explanation}</p>
           </div>
-          <p>{score.categories[key].explanation}</p>
-        </section>)}
+        </details>)}
       </div>
     </div>
   </dialog>;
@@ -2322,7 +2315,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
             <SavedPaperTitle title={paper.title} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
