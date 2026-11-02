@@ -3261,9 +3261,11 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
         tex = papers._tex(draft(), [], "f" * 64, investigation_type=research_type)
         assert rf"\section{{{heading}}}" in tex
         assert guidance in tex
-    math_tex = papers._tex(draft(), [], "f" * 64, math_style=True)
+    math_tex = papers._tex(
+        draft(), [], "f" * 64, math_style=True, include_claim_details=True
+    )
     assert r"\section{Introduction}" in math_tex
-    assert r"\section*{Claim status and evidence}" in math_tex
+    assert r"\section{Claim and source notes}" in math_tex
 
 
 def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures() -> None:
