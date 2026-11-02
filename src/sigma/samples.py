@@ -69,6 +69,7 @@ class SampleProject:
     investigation_type: str
     difficulty: str | None
     strategy_count: int
+    best_paper_score: int | None = None
 
 
 def _projects() -> list[tuple[str, Path]]:
@@ -101,6 +102,7 @@ def _load(identifier: str) -> tuple[dict[str, Any], SampleProject]:
             project.investigation_type,
             project.difficulty.value if project.difficulty is not None else None,
             len(project.active_order),
+            _best_sample_paper(identifier)[0],
         ),
     )
 
@@ -230,6 +232,31 @@ def _sample_papers(identifier: str) -> dict[str, tuple[dict[str, Any], bytes]]:
         _validate_pdf_bytes(pdf)
         papers[paper_id] = (record, pdf)
     return papers
+
+
+def _best_sample_paper(identifier: str) -> tuple[int | None, str | None]:
+    """Find a scored, PDF-backed sample paper using the canonical score validator."""
+    from sigma.paper_scores import validate_score
+
+    best: tuple[int | None, str | None] = (None, None)
+    for paper_id, (record, _pdf) in _sample_papers(identifier).items():
+        score = record.get("score")
+        if (
+            isinstance(score, dict)
+            and validate_score(score, record.get("pdf_sha256", ""))
+            and isinstance(score.get("total"), int)
+            and (best[0] is None or score["total"] > best[0])
+        ):
+            best = (score["total"], paper_id)
+    return best
+
+
+def top_sample_pdf(identifier: str) -> bytes:
+    """Return the top scored sample PDF without creating a mutable project."""
+    score, paper_id = _best_sample_paper(identifier)
+    if score is None or score < 50 or paper_id is None:
+        raise ProjectError("This sample has no top-scoring paper.")
+    return _sample_papers(identifier)[paper_id][1]
 
 
 def _validate_pdf_bytes(pdf: bytes) -> None:
