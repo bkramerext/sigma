@@ -6794,9 +6794,7 @@ def main() -> None:
     notice = "Unreviewed records could affect its conclusions"
     assert notice in integrity_tex
     methods_heading = papers._paper_style("default")[1]
-    assert integrity_tex.index(r"\section{" + methods_heading + "}") < integrity_tex.index(
-        notice
-    )
+    assert integrity_tex.index(r"\section{" + methods_heading + "}") < integrity_tex.index(notice)
     assert "Evidence coverage limitation" not in integrity_tex
     material = papers._material_evidence_omissions(
         [
@@ -6937,8 +6935,21 @@ def main() -> None:
     notation = papers._latex_prose(r"Let $R(\mathcal{A})$ denote the region count.")
     assert r"$R(\mathcal{A})$" in notation
     assert r"\textbackslash{}mathcal" not in notation
+    # Render formulas from the reader-facing article, not from the opt-in
+    # claim ledger. Claim reasoning is retained in the paper record.
     formula_draft = parsed.model_copy(
         update={
+            "sections": [
+                parsed.sections[0].model_copy(
+                    update={
+                        "paragraphs": [
+                            r"The count is $R(n)=1+\sum_{j=1}^n j²$. "
+                            r"The line family lies in $\mathbb{R}^2$."
+                        ]
+                    }
+                ),
+                *parsed.sections[1:],
+            ],
             "claims": [
                 parsed.claims[0].model_copy(
                     update={
@@ -6946,10 +6957,11 @@ def main() -> None:
                         "reasoning": r"The line family lies in $\mathbb{R}^2$.",
                     }
                 )
-            ]
+            ],
         }
     )
     formula_tex = papers._tex(formula_draft, warnings, "a" * 64, math_style=True)
+    assert r"\section{Claim and source notes}" not in formula_tex
     assert r"$R(n)=1+\sum_{j=1}^n j^{2}$" in formula_tex
     assert r"$\mathbb{R}^2$" in formula_tex
     assert r"\textbackslash{}sum" not in formula_tex
