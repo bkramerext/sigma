@@ -386,11 +386,11 @@
   width: 22px; min-width: 22px; height: 28px; min-height: 28px;
   padding: 0; margin: 0; overflow: visible;
   border: 0; background: transparent; box-shadow: none;
-  color: #c88761; line-height: 1; text-decoration: none; cursor: pointer;
+  color: #e5ba69; line-height: 1; text-decoration: none; cursor: pointer;
 }
 .project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:hover:not(:disabled),
 .project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:focus-visible {
-  color: #e8a782; text-decoration: none;
+  color: #f5d593; text-decoration: none;
 }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
