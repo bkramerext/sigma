@@ -11646,12 +11646,12 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path)
             research_sessions, "_protocol_completion_recovery_plan", new=plan_under_lock
         ):
             results = await asyncio.gather(
-            research_sessions.control_session(
-                str(path), started["id"], "resume", additional_calls=4
-            ),
-            research_sessions.control_session(
-                str(path), started["id"], "resume", additional_calls=4
-            ),
+                research_sessions.control_session(
+                    str(path), started["id"], "resume", additional_calls=4
+                ),
+                research_sessions.control_session(
+                    str(path), started["id"], "resume", additional_calls=4
+                ),
                 return_exceptions=True,
             )
         resumed = next((item for item in results if isinstance(item, dict)), None)
