@@ -677,7 +677,13 @@ def research_qa_markdown(qa_id: str, path: str):
 
 @app.get("/api/projects/papers")
 def papers_view(path: str):
-    return {"papers": papers.list_papers(path)}
+    saved = papers.list_papers(path)
+    available = [paper for paper in saved if paper.get("pdf_available")]
+    return {
+        "papers": saved,
+        "paper_count": len(available),
+        "best_paper_score": paper_scores.best_score(available),
+    }
 
 
 @app.get("/api/projects/papers/preflight")
