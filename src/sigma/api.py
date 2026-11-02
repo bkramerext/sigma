@@ -771,7 +771,9 @@ async def paper_eli5_view(paper_id: str, body: PaperScoreRequest):
     except Exception:
         logging.getLogger(__name__).exception("Unexpected ELI5 explanation failure")
         return JSONResponse(
-            {"error": "The explanation failed unexpectedly. Please retry or inspect the server logs."},
+            {
+                "error": "The explanation failed unexpectedly. Please retry or inspect the server logs."
+            },
             status_code=500,
         )
     return {"markdown": markdown}
@@ -2075,7 +2077,10 @@ def sample_top_paper_pdf_view(sample_id: str):
     return Response(
         top_sample_pdf(sample_id),
         media_type="application/pdf",
-        headers={"Cache-Control": "no-store", "Content-Disposition": 'inline; filename="sigma-sample-paper.pdf"'},
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": 'inline; filename="sigma-sample-paper.pdf"',
+        },
     )
 
 
