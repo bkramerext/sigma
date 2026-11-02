@@ -115,6 +115,10 @@ with sync_playwright() as playwright:
     running.clear()
     expect(metadata).to_have_text(initial, timeout=10000)
 
+    # A singleton family needs neither Pin nor Unpin.
+    singleton_row = entry.locator("xpath=../..")
+    expect(singleton_row.locator(".recent-pin")).to_have_count(0)
+
     # Another version in the same family stays visible until one is pinned.
     sibling_title = re.sub(r" v[0-9]+$", " v2", project_title)
     assert sibling_title != project_title
