@@ -820,6 +820,25 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
     project = data.get("project", {})
     project_data = dict(project)
     strategies = project_data.pop("strategies", [])
+    # Freeze the workspace's effective publication guidance with the evidence
+    # package. These links are methodological pointers, not read or validated
+    # source material and must never be cited as research evidence.
+    from sigma import project_types
+
+    type_record = project_types.get_type(
+        str(project_data.get("investigation_type", "default"))
+    )
+    if type_record is not None:
+        publication_urls = list(type_record.publication_standards_references)
+    else:
+        saved_type = project_data.get("project_type_snapshot")
+        publication_urls = (
+            saved_type.get("publication_standards_references", [])
+            if isinstance(saved_type, dict) else []
+        )
+    project_data["publication_reference_urls"] = [
+        url for url in publication_urls[:20] if isinstance(url, str)
+    ]
     sources.append({"id": f"project:{project.get('id')}", "kind": "project", "data": project_data})
     for strategy in strategies:
         sources.append(
@@ -1329,6 +1348,7 @@ def _long_plan_input(
         # The paper's scientific question should not be inferred only from
         # selected index fragments. Retain the actual project problem.
         "project_question": str(project_data.get("problem", ""))[:4_000],
+        "publication_reference_urls": project_data.get("publication_reference_urls", []),
         "evidence_index": evidence_index,
         "source_count_in_frozen_snapshot": source_count,
         "batch_coverage": {"completed": batch_count, "total": batch_count},
@@ -3716,6 +3736,11 @@ async def _provider(
         else "default"
     )
     instructions += "\n\nRESEARCH TYPE AND WRITING STYLE: " + _paper_style(project_type)[3]
+    instructions += (
+        "\n\nPublication reference URLs in the evidence snapshot are optional "
+        "methodological pointers, not inspected website contents or citable "
+        "scientific evidence. Do not claim to have read them."
+    )
     if project_type == "mathematical":
         instructions += "\n\n" + MATHEMATICS_INSTRUCTIONS
     serialized_context = json.dumps(context, ensure_ascii=False)
@@ -4497,6 +4522,11 @@ that occur in the input. Do not add scientific claims or outside citations."""
         + PUBLICATION_INSTRUCTIONS
         + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
+        + (
+            "\n\nPublication reference URLs in the evidence snapshot are pointers "
+            "to optional writing standards, not fetched source text or research "
+            "evidence; do not pretend to have read them."
+        )
         + ("\n\n" + VISUAL_AUTHORING_INSTRUCTIONS if include_diagrams else "")
         + (
             "\n\nProduce between 2 and 8 substantial, logically connected sections. "
@@ -4662,6 +4692,7 @@ or document markup."""
             "title": long_plan.title,
             "project_question": str(project_data.get("problem", ""))[:3_000],
             "investigation_type": project_type,
+            "publication_reference_urls": project_data.get("publication_reference_urls", []),
             "shared_claim_register": [
                 claim.model_dump() for claim in long_plan.claims if claim.id in section.claim_ids
             ],

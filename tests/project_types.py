@@ -28,6 +28,111 @@ def main() -> None:
     assert literature.icon["key"] == "literature"
     assert [item.id for item in builtins if (item.behavior or {}).get("lean")] == ["mathematical"]
 
+    # Common and discipline-specific defaults remain immutable. A workspace
+    # can hide built-ins and add its own without mutating anyone else's catalog.
+    common = project_types.common_references()
+    assert common["research_standards_references"]
+    assert common["publication_standards_references"]
+    math = next(item for item in builtins if item.id == "mathematical")
+    physics = next(item for item in builtins if item.id == "physics")
+    assert math.research_standards_references and math.publication_standards_references
+    assert physics.research_standards_references and physics.publication_standards_references
+    with TemporaryDirectory() as directory:
+        root = Path(directory).resolve()
+        first, second = root / "owner-one", root / "owner-two"
+        first.mkdir()
+        second.mkdir()
+        with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(first)}), TestClient(app) as client:
+            before = client.get("/api/project-types").json()
+            assert before["builtin_references"]["mathematical"]["research_standards_references"]
+            assert before["common_references"] == common
+            hidden_common = common["research_standards_references"][0]
+            hidden_math = math.research_standards_references[0]
+            preferences = {
+                "common": {
+                    "added_research": ["https://example.org/new-method"],
+                    "hidden_research": [hidden_common],
+                },
+                "project_types": {
+                    "mathematical": {
+                        "added_publication": ["https://example.org/math-publication"],
+                        "hidden_research": [hidden_math],
+                    },
+                },
+            }
+            write = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": before["revision"],
+                    "reference_preferences": preferences,
+                },
+            )
+            assert write.status_code == 200, write.text
+            after = client.get("/api/project-types").json()
+            assert after["revision"] != before["revision"]
+            assert after["common_references"] == common
+            math_for_ui = next(
+                item for item in after["project_types"] if item["id"] == "mathematical"
+            )
+            assert hidden_math not in math_for_ui["research_standards_references"]
+            assert "https://example.org/math-publication" in math_for_ui[
+                "publication_standards_references"
+            ]
+            assert hidden_common not in project_types.effective_common_references()[
+                "research_standards_references"
+            ]
+            assert "https://example.org/new-method" in project_types.effective_common_references()[
+                "research_standards_references"
+            ]
+            resolved = project_types.get_type("mathematical")
+            assert resolved is not None
+            assert hidden_common not in resolved.research_standards_references
+            assert hidden_math not in resolved.research_standards_references
+            assert "https://example.org/new-method" in resolved.research_standards_references
+            # Invalid hides cannot suppress user-chosen or arbitrary URLs.
+            invalid = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": after["revision"],
+                    "reference_preferences": {
+                        "common": {"hidden_research": ["https://unknown.org/not-a-default"]}
+                    },
+                },
+            )
+            assert invalid.status_code == 400, invalid.text
+            assert client.get("/api/project-types").json()["revision"] == after["revision"]
+            restored = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": after["revision"],
+                    "reference_preferences": {"common": {}, "project_types": {}},
+                },
+            )
+            assert restored.status_code == 200, restored.text
+            assert hidden_common in project_types.effective_common_references()[
+                "research_standards_references"
+            ]
+            assert hidden_math in project_types.get_type("mathematical").research_standards_references
+        with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(second)}):
+            assert project_types.reference_preferences()["project_types"] == {}
+            assert hidden_common in project_types.effective_common_references()[
+                "research_standards_references"
+            ]
+
+    from sigma.reference_titles import _TitleParser, resolve_title
+
+    parsed_title = _TitleParser()
+    parsed_title.feed(
+        '<html><head><title>Fallback</title><meta property="og:title" '
+        'content="Preferred &amp; Tested"></head></html>'
+    )
+    assert parsed_title.og_title == "Preferred & Tested"
+    assert resolve_title("http://127.0.0.1/secret") is None
+    assert resolve_title("file:///etc/passwd") is None
+
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
         first = root / "first"

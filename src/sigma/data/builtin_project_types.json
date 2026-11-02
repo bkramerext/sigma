@@ -251,8 +251,13 @@
         "mathematical": true,
         "lean": true
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        "https://terrytao.wordpress.com/career-advice/solving-mathematical-problems/",
+        "https://terrytao.wordpress.com/career-advice/be-sceptical-of-your-own-work/"
+      ],
+      "publication_standards_references": [
+        "https://epubs.siam.org/journal-authors"
+      ]
     },
     {
       "id": "military",
@@ -370,8 +375,14 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        "https://www.nationalacademies.org/read/13395/chapter/2",
+        "https://www.feynmanlectures.caltech.edu/I_01.html"
+      ],
+      "publication_standards_references": [
+        "https://journals.aps.org/prresearch/authors",
+        "https://publishingsupport.iopscience.iop.org/questions/what-we-look-for-in-your-article/"
+      ]
     },
     {
       "id": "religion",
@@ -423,5 +434,14 @@
       "research_standards_references": [],
       "publication_standards_references": []
     }
-  ]
+  ],
+  "common_references": {
+    "research_standards_references": [
+      "https://www.nationalacademies.org/read/25303/chapter/5",
+      "https://plato.stanford.edu/entries/abduction/"
+    ],
+    "publication_standards_references": [
+      "https://journals.plos.org/plosone/s/best-practices-in-research-reporting"
+    ]
+  }
 }
