@@ -3697,7 +3697,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; pin_state: 'pin_remove' | 'unpin' | 'remove'; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; pin_state: 'pin_remove' | 'unpin' | 'remove'; hidden_by_family_pin: boolean; error: string | null };
 type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
@@ -3765,7 +3765,8 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     } catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
-  const recentGroups = projects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+  const visibleProjects = projects.filter(project => !project.hidden_by_family_pin);
+  const recentGroups = visibleProjects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
@@ -3773,7 +3774,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     return groups;
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
-    {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
+    {loading ? <p role="status">Loading recent projects…</p> : !visibleProjects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
