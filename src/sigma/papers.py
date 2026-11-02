@@ -3720,8 +3720,14 @@ def _frozen_research_diagnostics(package: dict[str, Any]) -> list[dict[str, str]
     are eligible. Avoid serializing entire session transcripts into the paper.
     """
     keys = {
-        "issues_found", "diagnostics", "validation_warnings", "warnings",
-        "contradictions", "failures", "errors", "unresolved_issues",
+        "issues_found",
+        "diagnostics",
+        "validation_warnings",
+        "warnings",
+        "contradictions",
+        "failures",
+        "errors",
+        "unresolved_issues",
     }
     found: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
@@ -3740,18 +3746,21 @@ def _frozen_research_diagnostics(package: dict[str, Any]) -> list[dict[str, str]
                         entries = value if isinstance(value, list) else [value]
                         for item in entries[:12]:
                             description = (
-                                item if isinstance(item, str)
+                                item
+                                if isinstance(item, str)
                                 else json.dumps(item, ensure_ascii=False, default=str)
                             )
                             description = description.strip()
                             fingerprint = (source_id, description)
                             if description and fingerprint not in seen:
                                 seen.add(fingerprint)
-                                found.append({
-                                    "source_ref": source_id,
-                                    "kind": str(key),
-                                    "detail": description[:700],
-                                })
+                                found.append(
+                                    {
+                                        "source_ref": source_id,
+                                        "kind": str(key),
+                                        "detail": description[:700],
+                                    }
+                                )
                             if len(found) >= 60:
                                 break
                     elif depth < 3 and isinstance(value, (dict, list)):
@@ -4224,10 +4233,12 @@ def _tex(
         if not include_research_excerpts or not integrity_records:
             parts.append(r"\appendix")
         parts.append(r"\section{Issues found (diagnostic data)}")
-        parts.append(prose_text(
-            "These are recorded research and authoring diagnostics, not independently verified conclusions. "
-            "The appendix is a bounded extract of archived issues, uncertainties, and outstanding checks."
-        ))
+        parts.append(
+            prose_text(
+                "These are recorded research and authoring diagnostics, not independently verified conclusions. "
+                "The appendix is a bounded extract of archived issues, uncertainties, and outstanding checks."
+            )
+        )
         items: list[str] = []
         for warning in warnings[:40]:
             items.append("Validation: " + warning)
@@ -4235,22 +4246,32 @@ def _tex(
             items.append("Author self-review: " + warning)
         for item in (research_diagnostics or [])[:60]:
             items.append(
-                "Saved research [" + str(item.get("source_ref", "unknown")) + "] "
-                + str(item.get("kind", "diagnostic")) + ": "
+                "Saved research ["
+                + str(item.get("source_ref", "unknown"))
+                + "] "
+                + str(item.get("kind", "diagnostic"))
+                + ": "
                 + str(item.get("detail", ""))
             )
         if obligation_reconciliation:
             for item in obligation_reconciliation[:40]:
                 items.append(
-                    "Open obligation [" + str(item.get("status", "unresolved")) + "]: "
-                    + str(item.get("text", "")) + " [Sources: "
-                    + ", ".join(str(ref) for ref in item.get("source_refs", [])[:8]) + "]"
+                    "Open obligation ["
+                    + str(item.get("status", "unresolved"))
+                    + "]: "
+                    + str(item.get("text", ""))
+                    + " [Sources: "
+                    + ", ".join(str(ref) for ref in item.get("source_refs", [])[:8])
+                    + "]"
                 )
         if material_omissions:
             for item in material_omissions[:40]:
                 items.append(
-                    "Evidence omission: " + str(item.get("source_ref", "unknown"))
-                    + " (" + str(item.get("reason", "unavailable")) + ")"
+                    "Evidence omission: "
+                    + str(item.get("source_ref", "unknown"))
+                    + " ("
+                    + str(item.get("reason", "unavailable"))
+                    + ")"
                 )
         items = list(dict.fromkeys(item for item in items if item.strip()))
         if items:
@@ -4258,11 +4279,15 @@ def _tex(
             parts.extend(r"\item " + prose_text(item[:1000]) for item in items[:120])
             parts.append(r"\end{itemize}")
             if len(items) > 120:
-                parts.append(prose_text(
-                    f"{len(items) - 120} additional diagnostics remain in the saved paper archive."
-                ))
+                parts.append(
+                    prose_text(
+                        f"{len(items) - 120} additional diagnostics remain in the saved paper archive."
+                    )
+                )
         else:
-            parts.append(prose_text("No recorded issues were found in the available diagnostic fields."))
+            parts.append(
+                prose_text("No recorded issues were found in the available diagnostic fields.")
+            )
         parts += [
             r"\section*{Evidence and authorship note}",
             esc("Snapshot SHA-256: " + snapshot_hash),
@@ -7509,7 +7534,9 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                         },
                         "pdf_available": _valid_pdf_file(path, value),
                         "pdf_sha256": value.get("pdf_sha256"),
-                        "score": __import__("sigma.paper_scores", fromlist=["cached_score"]).cached_score(value),
+                        "score": __import__(
+                            "sigma.paper_scores", fromlist=["cached_score"]
+                        ).cached_score(value),
                     }
                 )
         except (OSError, ValueError, KeyError, TypeError):
