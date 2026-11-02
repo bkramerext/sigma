@@ -34,6 +34,7 @@ from sigma.research_budget import (
     mark_unknown,
     new_ledger,
     reserve_before_dispatch,
+    settle_after_response,
     settle_rejected,
     totals,
 )
@@ -11596,7 +11597,9 @@ def test_terminal_protocol_completion_allows_known_invalid_response_replacement(
     assert plan["required_calls"] - (record["call_limit"] - record["calls_used"]) == 2
 
 
-async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path) -> None:
+async def test_terminal_protocol_resume_extends_only_exact_shortfall(
+    path: Path, *, unknown_skeptic: bool = False
+) -> None:
     view, strategy, credential, config = await setup(path)
 
     async def idle_worker(*_args):
@@ -11638,11 +11641,33 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path)
                 "strategy_id": strategy.id,
                 "role": "skeptic",
                 "cycle": 1,
-                "status": "failed",
-                "failure_kind": "response_invalid",
-                "provider_input_audit": {"status": "provider_response_invalid"},
+                "status": "interrupted" if unknown_skeptic else "failed",
+                "failure_kind": "interrupted" if unknown_skeptic else "response_invalid",
+                "provider_input_audit": {
+                    "status": (
+                        "call_interrupted_dispatch_unknown"
+                        if unknown_skeptic
+                        else "provider_response_invalid"
+                    )
+                },
             },
         ]
+        if unknown_skeptic:
+            ledger = new_ledger(
+                call_limit=3,
+                input_token_limit=400_000,
+                output_tokens_per_call=4000,
+                cost_limit_usd=100.0,
+                input_price_per_million=1.0,
+                output_price_per_million=2.0,
+            )
+            reserve_before_dispatch(ledger, call_id=accepted_id, request_body=b"investigator")
+            settle_after_response(
+                ledger, call_id=accepted_id, input_tokens=500, output_tokens=300
+            )
+            reserve_before_dispatch(ledger, call_id=invalid_id, request_body=b"skeptic")
+            mark_unknown(ledger, call_id=invalid_id)
+            record["hard_budget_ledger"] = ledger
         record["call_limit"] = 3
         branch.update(
             {
@@ -11690,6 +11715,13 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path)
         assert resumed is not None
         assert resumed["status"] == "queued"
         final_record = research_sessions._read(str(path), started["id"])
+        if unknown_skeptic:
+            assert final_record["hard_budget_ledger"]["blocked_reason"] is None
+            assert final_record["hard_budget_ledger"]["calls"][-1]["status"] == "unknown"
+            assert sum(
+                event.get("kind") == "session.unknown_review_budget_gate_reconciled"
+                for event in final_record.get("events", [])
+            ) == 1
         if original.get("hard_budget_ledger"):
             before = original["hard_budget_ledger"]
             after = final_record["hard_budget_ledger"]
@@ -12105,6 +12137,11 @@ def main():
         asyncio.run(
             test_terminal_protocol_resume_extends_only_exact_shortfall(
                 Path(temporary) / "protocol-resume.sigma"
+            )
+        )
+        asyncio.run(
+            test_terminal_protocol_resume_extends_only_exact_shortfall(
+                Path(temporary) / "protocol-unknown-resume.sigma", unknown_skeptic=True
             )
         )
     test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
