@@ -3871,6 +3871,27 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
+  async function openTopPaper(entry: RecentProject) {
+    if (pending.current) return;
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) { setError('Allow pop-ups to open the top-scoring paper.'); return; }
+    tab.opener = null;
+    pending.current = true; setOpening(entry.id); setError('');
+    try {
+      const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path: entry.path })}`, { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? 'Could not load paper scores.');
+      const scored = (payload.papers as PaperSummary[] | undefined ?? [])
+        .filter(paper => paper.pdf_available && paper.score != null && paper.score.total >= 50)
+        .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0) || right.paper_version - left.paper_version);
+      if (!scored.length) throw new Error('No scored paper with an available PDF meets the 50-point threshold.');
+      const pdf = `/api/projects/papers/${encodeURIComponent(scored[0].paper_id)}/pdf?${new URLSearchParams({ path: entry.path, open_in_browser: 'true' })}`;
+      tab.location.replace(pdf);
+    } catch (cause) {
+      tab.close();
+      setError(errorMessage(cause));
+    } finally { pending.current = false; setOpening(''); }
+  }
   async function togglePin(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError(''); setConfirmRemoveId('');
     try {
@@ -3907,8 +3928,8 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            {entry.pinned && <span className="recent-title-annotation" tabIndex={0} role="img" aria-label="Pinned: only this version of the project is shown" data-tooltip="Pinned: only this version of the project is shown"><svg className="recent-title-pin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 10.8V6a2 2 0 0 0-2-2H5V2h14v2h-2a2 2 0 0 0-2 2v4.8a2 2 0 0 0 .6 1.4L17 14v2H7v-2l1.4-1.8A2 2 0 0 0 9 10.8Z"/><path d="M12 16v6"/></svg></span>}
-            {entry.best_paper_score != null && entry.best_paper_score >= 50 && <span className="recent-title-annotation recent-title-star" tabIndex={0} role="img" aria-label={`Best paper scored ${entry.best_paper_score}/100 (at least 50)`} data-tooltip={`Best paper score: ${entry.best_paper_score}/100 (minimum 50 for a star)`}>★</span>}
+            {entry.pinned && <button type="button" className="recent-title-annotation" disabled={!!opening} aria-label="Pinned: click to unpin and show all versions of this project" data-tooltip="Pinned project version. Click to unpin and show all versions." onClick={() => void togglePin(entry)}><svg className="recent-title-pin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 10.8V6a2 2 0 0 0-2-2H5V2h14v2h-2a2 2 0 0 0-2 2v4.8a2 2 0 0 0 .6 1.4L17 14v2H7v-2l1.4-1.8A2 2 0 0 0 9 10.8Z"/><path d="M12 16v6"/></svg></button>}
+            {entry.best_paper_score != null && entry.best_paper_score >= 50 && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="Top scoring paper, click to view" data-tooltip="Top scoring paper, click to view" onClick={() => void openTopPaper(entry)}>★</button>}
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
           </div>
           <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} title={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? 'Unpin' : 'Pin'}</button>}{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" title="Remove this project" onClick={event => {
