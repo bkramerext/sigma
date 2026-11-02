@@ -59,6 +59,7 @@ def cached(record: dict[str, Any]) -> str | None:
 
 def _save(path: str, paper_id: str, sha: str, markdown: str) -> str:
     from sigma import papers
+
     lock = papers._paper_version_lock(path)
     try:
         record = papers._read_one(path, paper_id)
@@ -77,6 +78,7 @@ def _save(path: str, paper_id: str, sha: str, markdown: str) -> str:
         target = project_path(path)
         if target.suffix == ".json":
             from sigma.projects import save_project_artifacts
+
             save_project_artifacts(target, {f"artifacts/papers/{paper_id}.json": data})
         else:
             directory = papers._paper_dir(path, create=False)
