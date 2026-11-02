@@ -1,0 +1,250 @@
+{
+  "name": "agent",
+  "title": "AI Agent Reliability and Evaluation v1",
+  "project_id": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+  "paper_id": "13a908d9b3074cb49b993186164559cb",
+  "started_at": "2026-11-01T07:54:32.365630+00:00",
+  "finished_at": "2026-11-01T08:12:43.773212+00:00",
+  "elapsed_seconds": 1089.226,
+  "preflight_snapshot_sha256": "080d3b70b67cfbe346acdb0f565d4a61c09ec4819229f2dd92dded43d9de40d9",
+  "source_count": 36,
+  "maximum_provider_calls": 123,
+  "hashes": {
+    "txt": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/ai-agent-reliability-v1.txt",
+      "bytes": 45163,
+      "sha256": "7b4b0f3c9270af76d5b4ff3e022de0440cbaf3c99ee487b202d528315b302074"
+    },
+    "tex": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/ai-agent-reliability-v1.tex",
+      "bytes": 82289,
+      "sha256": "50628abf09884c5b0344385a8881f81e58b49aeaac35ddef9fa53bbb6c739711"
+    },
+    "pdf": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/ai-agent-reliability-v1.pdf",
+      "bytes": 116700,
+      "sha256": "ff444335353d63f0886931677341ae447cbd30d205730781e1318eccd58b35e6"
+    }
+  },
+  "generation": {
+    "provider": "openai",
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "provider_calls_attempted": 7,
+    "generation_elapsed_seconds": 1088,
+    "long_form": true,
+    "include_research_details": true,
+    "include_claim_details": true,
+    "include_validation_notes": true,
+    "include_research_excerpts": false,
+    "include_diagrams": true,
+    "diagram_count": 0,
+    "snapshot_size_bytes": 14352082,
+    "source_count": 36,
+    "evidence_fields_omitted": 32191,
+    "research_integrity_record_count": 1055,
+    "publication_status": "needs_review",
+    "pdf_check_final_pass": 3,
+    "layout_status": "needs_review",
+    "source_reference_map": [
+      {
+        "source_ref": "project:da4580f5-7620-49b0-882e-aee34fcdc05d",
+        "label": "Project overview"
+      },
+      {
+        "source_ref": "strategy:b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+        "label": "Strategy 1: Develop a rigorous framework for measuring AI agent reliability"
+      },
+      {
+        "source_ref": "strategy:843ffb99-1d7b-476b-973f-845d79d4b6e3",
+        "label": "Strategy 2: Understand failure propagation and recovery in autonomous AI age"
+      },
+      {
+        "source_ref": "strategy:260e90ee-69ee-4e5a-b9e8-c0bc84062c81",
+        "label": "Strategy 3: Test architectural mechanisms for dependable agent outcomes"
+      },
+      {
+        "source_ref": "session:a1a9ab51-f8d1-4b60-ba10-baad7585a34f",
+        "label": "Research session 1"
+      },
+      {
+        "source_ref": "artifact:a1a9ab51-f8d1-4b60-ba10-baad7585a34f:df5067f1-d298-4203-a108-a2e7056af576",
+        "label": "Research session 1, artifact 1"
+      },
+      {
+        "source_ref": "artifact:a1a9ab51-f8d1-4b60-ba10-baad7585a34f:984e8fd3-f76b-46fb-b868-378c2f103425",
+        "label": "Research session 1, artifact 2"
+      },
+      {
+        "source_ref": "session:6298e28d-b9e9-4b8a-99cb-a4872c5af875",
+        "label": "Research session 2"
+      },
+      {
+        "source_ref": "session:6ca303b6-130f-4f30-ad6e-9dea7e2031ff",
+        "label": "Research session 3"
+      },
+      {
+        "source_ref": "session:d2f726f2-e5d5-4a00-ac51-a07b089bcf10",
+        "label": "Research session 4"
+      },
+      {
+        "source_ref": "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:0310e2ff-4aa0-4c95-b1a8-795559e484b8",
+        "label": "Research session 4, artifact 1"
+      },
+      {
+        "source_ref": "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:4435b6ec-fefc-43a1-8706-a3a6794dbbe5",
+        "label": "Research session 4, artifact 2"
+      },
+      {
+        "source_ref": "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:faca8cd0-991f-46a4-91d4-288bb0cd53ea",
+        "label": "Research session 4, artifact 3"
+      },
+      {
+        "source_ref": "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:9df3cd5f-0a68-4356-81e9-189708026006",
+        "label": "Research session 4, artifact 4"
+      },
+      {
+        "source_ref": "session:60b63ed0-9a6f-486c-9d4f-232b1fe082c3",
+        "label": "Research session 5"
+      },
+      {
+        "source_ref": "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:2c4dca26-4c2f-4c55-bab1-b11bb97a5954",
+        "label": "Research session 5, artifact 1"
+      },
+      {
+        "source_ref": "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:fdfb1b57-9f8a-451c-b9b4-2cca9cbf618f",
+        "label": "Research session 5, artifact 2"
+      },
+      {
+        "source_ref": "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:c8070adb-7c30-44b1-b0ad-e838053aaf29",
+        "label": "Research session 5, artifact 3"
+      },
+      {
+        "source_ref": "session:bea430f9-56e7-4ced-aa69-376cee40c523",
+        "label": "Research session 6"
+      },
+      {
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:f59b1252-c29e-4f4a-a888-f436ab9a93aa",
+        "label": "Research session 6, artifact 1"
+      },
+      {
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:7d39bad1-603b-43cf-ad04-0d256b837472",
+        "label": "Research session 6, artifact 2"
+      },
+      {
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:5e47ab12-4c7d-45ae-9b1f-af87a75768d6",
+        "label": "Research session 6, artifact 3"
+      },
+      {
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:ced69145-e60c-42ed-bd2c-b39b70905a03",
+        "label": "Research session 6, artifact 4"
+      },
+      {
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:db6d3f8e-de46-4162-bbac-d615d3092afa",
+        "label": "Research session 6, artifact 5"
+      },
+      {
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:2a80dd67-72e5-4748-9a2f-3d6ed5bafbf3",
+        "label": "Research session 6, artifact 6"
+      },
+      {
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:6c3a675d-0b11-40f4-8ca2-548f100367a4",
+        "label": "Research session 6, artifact 7"
+      },
+      {
+        "source_ref": "session:ebc7ac05-823c-4a02-9590-1e9f9726e807",
+        "label": "Research session 7"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:0040c8af-dd04-481b-8b9a-b08d1be1865e",
+        "label": "Research session 7, artifact 1"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:93f26c0d-5b31-4566-8b43-abc04d7d2cb7",
+        "label": "Research session 7, artifact 2"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:c1fd1f73-e977-4767-af23-6d44dd28c105",
+        "label": "Research session 7, artifact 3"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:b34bf3a5-c7b4-459a-adaa-be0a091bebc0",
+        "label": "Research session 7, artifact 4"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:3c991003-9fc5-4d55-848a-000e98154d8c",
+        "label": "Research session 7, artifact 5"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:0db63ee8-6358-421e-bd88-1929ba799dc5",
+        "label": "Research session 7, artifact 6"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:4de86267-cde1-423d-a2e6-7576deba7571",
+        "label": "Research session 7, artifact 7"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:36ec8074-02b1-4343-92f5-9ee5dccbf79c",
+        "label": "Research session 7, artifact 8"
+      },
+      {
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:8a554d50-7080-431c-aacf-1fa03496133c",
+        "label": "Research session 7, artifact 9"
+      }
+    ],
+    "omitted_evidence_ledger_sha256": "0225d73cac7845f03b140400dcf1d34a10ca2965fb0d7753c7d9da75367108b7",
+    "proofreading": {
+      "attempted": true,
+      "ai_performed": false,
+      "status": "fallback",
+      "verification_status": "incomplete",
+      "accepted_correction_count": 0,
+      "provider_calls_attempted": 1,
+      "elapsed_seconds": 3,
+      "unresolved_diagnostic_count": 34
+    },
+    "layout_passes": [
+      {
+        "pass": 1,
+        "page_count": 27,
+        "diagnostic_count": 4
+      },
+      {
+        "pass": 2,
+        "page_count": 27,
+        "diagnostic_count": 4
+      },
+      {
+        "pass": 3,
+        "page_count": 27,
+        "diagnostic_count": 6
+      }
+    ],
+    "layout_warnings": [
+      "warning: report.tex:296: Underfull \\hbox (badness 10000) in paragraph at lines 295--296",
+      "warning: report.tex:298: Overfull \\hbox (114.99454pt too wide) in paragraph at lines 297--298",
+      "warning: report.tex:301: Underfull \\hbox (badness 10000) in paragraph at lines 300--301",
+      "warning: report.tex:389: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 389--389",
+      "warning: report.tex:443: Underfull \\hbox (badness 10000) in paragraph at lines 442--443",
+      "Text on PDF page 16 extends beyond horizontal page bounds."
+    ]
+  },
+  "validation_warnings": [
+    "Evidence indexing omitted 32187 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "The AI planning stage did not yield a usable outline. A conservative, source-linked outline was reconstructed from saved evidence without repeating the planning request; review the resulting paper's structure.",
+    "The evidence index explicitly omitted 32191 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 437 source-linked text fragments from 36 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "The frozen evidence contains open proof/research obligation(s) requiring reconciliation: 690 item(s) are not listed by the author and are not presumed resolved; 16 author-listed item(s) have no exact frozen-record match. See the obligation reconciliation.",
+    "The methods narrative has no linked claim IDs; check it for unsupported factual statements.",
+    "AI-authored analysis is not independent formal verification; model agreement does not establish proof.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout.",
+    "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+  ],
+  "full_generator_metadata": {
+    "path": "docs/evaluations/report_quality/iteration_1/papers/ai-agent-reliability-v1.metadata.full.json.gz",
+    "bytes": 2825454,
+    "sha256": "649414035efc19411ec1962933e2a55c6bb4b2b8b0cee6cee7238090a085b9fd",
+    "original_uncompressed_bytes": 22748961
+  }
+}

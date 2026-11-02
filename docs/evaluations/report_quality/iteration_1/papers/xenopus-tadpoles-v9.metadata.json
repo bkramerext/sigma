@@ -1,0 +1,176 @@
+{
+  "name": "xenopus",
+  "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v9",
+  "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+  "paper_id": "880b802fdc534200807047b107aebaaf",
+  "started_at": "2026-11-01T08:05:43.375219+00:00",
+  "finished_at": "2026-11-01T08:12:33.834931+00:00",
+  "elapsed_seconds": 410.152,
+  "preflight_snapshot_sha256": "3236a8c66a96d713f28726271169e67c88c8a768f398ab3b9b504fee3cdcc74e",
+  "source_count": 15,
+  "maximum_provider_calls": 123,
+  "hashes": {
+    "txt": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/xenopus-tadpoles-v9.txt",
+      "bytes": 47406,
+      "sha256": "c9e48dd616023d58bb86591f18844f3f9cca5b10cfcc8e66154f9acdab5881fa"
+    },
+    "tex": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/xenopus-tadpoles-v9.tex",
+      "bytes": 77566,
+      "sha256": "87d4420cbc808d319805e4ae0bb22b4b6401f7f6f772517385e6385b606513b0"
+    },
+    "pdf": {
+      "path": "docs/evaluations/report_quality/iteration_1/papers/xenopus-tadpoles-v9.pdf",
+      "bytes": 121748,
+      "sha256": "41dc17f821483a8efe34e7e3ca6d4330ca2115da7f9b74528c73509cd71681b2"
+    }
+  },
+  "generation": {
+    "provider": "openai",
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "provider_calls_attempted": 9,
+    "generation_elapsed_seconds": 410,
+    "long_form": true,
+    "include_research_details": true,
+    "include_claim_details": true,
+    "include_validation_notes": true,
+    "include_research_excerpts": false,
+    "include_diagrams": true,
+    "diagram_count": 1,
+    "snapshot_size_bytes": 1834568,
+    "source_count": 15,
+    "evidence_fields_omitted": 3370,
+    "research_integrity_record_count": 354,
+    "publication_status": "needs_review",
+    "pdf_check_final_pass": 3,
+    "layout_status": "needs_review",
+    "source_reference_map": [
+      {
+        "source_ref": "project:01de54c9-9593-413a-9577-1a952d28da70",
+        "label": "Project overview"
+      },
+      {
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000001",
+        "label": "Strategy 1: Establish the known-mechanism frontier"
+      },
+      {
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000002",
+        "label": "Strategy 2: Find a novel temporal coupling, not another marker"
+      },
+      {
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000003",
+        "label": "Strategy 3: Test a spatial or cell-composition alternative"
+      },
+      {
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000004",
+        "label": "Strategy 4: Design a decisive rescue-versus-block perturbation"
+      },
+      {
+        "source_ref": "strategy:b1010c01-7a62-4b61-912a-4560b0000005",
+        "label": "Strategy 5: Adversarial novelty and external validation"
+      },
+      {
+        "source_ref": "session:084edf65-b9bb-45f4-9eec-8d55d0fc151c",
+        "label": "Research session 8"
+      },
+      {
+        "source_ref": "session:757e88e6-270c-47f4-b0df-0c2acecc2fee",
+        "label": "Research session 9"
+      },
+      {
+        "source_ref": "session:cf2b7181-d4e3-4833-af48-52c9475d1e1c",
+        "label": "Research session 20"
+      },
+      {
+        "source_ref": "session:4847f3f9-7873-4688-a8c0-30d601f5d3a3",
+        "label": "Research session 21"
+      },
+      {
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:93b351c3-bd06-488a-8d6e-0d6c2be5a6a7",
+        "label": "Research session 21, artifact 1"
+      },
+      {
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:f4eaeebc-8aa7-4369-8d70-8e1577b596d0",
+        "label": "Research session 21, artifact 2"
+      },
+      {
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:d3bff1c1-5559-4047-8576-dc86a08c720a",
+        "label": "Research session 21, artifact 3"
+      },
+      {
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:21519596-9653-4752-a867-21892e17e040",
+        "label": "Research session 21, artifact 4"
+      },
+      {
+        "source_ref": "artifact:4847f3f9-7873-4688-a8c0-30d601f5d3a3:2f1e538a-a749-4ed3-9863-37bd95ca9405",
+        "label": "Research session 21, artifact 5"
+      }
+    ],
+    "omitted_evidence_ledger_sha256": "c6d087deeb7eaf00c7459521b505576c8ee7239d2cc5272fbd5e2263a7acd5f4",
+    "proofreading": {
+      "attempted": true,
+      "ai_performed": false,
+      "status": "fallback",
+      "verification_status": "incomplete",
+      "accepted_correction_count": 0,
+      "provider_calls_attempted": 3,
+      "elapsed_seconds": 34,
+      "unresolved_diagnostic_count": 21
+    },
+    "layout_passes": [
+      {
+        "pass": 1,
+        "page_count": 24,
+        "diagnostic_count": 5
+      },
+      {
+        "pass": 2,
+        "page_count": 24,
+        "diagnostic_count": 4
+      },
+      {
+        "pass": 3,
+        "page_count": 24,
+        "diagnostic_count": 4
+      }
+    ],
+    "layout_warnings": [
+      "warning: report.tex:259: Overfull \\hbox (13.81073pt too wide) in paragraph at lines 258--259",
+      "warning: report.tex:300: Overfull \\hbox (21.21768pt too wide) in paragraph at lines 300--300",
+      "warning: report.tex:340: Overfull \\hbox (167.15729pt too wide) in paragraph at lines 340--340",
+      "Text on PDF page 22 extends beyond horizontal page bounds."
+    ]
+  },
+  "validation_warnings": [
+    "Evidence indexing omitted 3370 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "The evidence index is a bounded selection with omitted notes and fragments. This plan does not imply exhaustive review of the saved research or the literature.",
+    "No original sample manifest, expression matrix, inspected full-text publication, or independent biological dataset is supplied here. Accession coverage and detailed prior-publication conclusions must not be upgraded from provisional descriptions to verified observations.",
+    "C3, C4, and C6 are labeled established only as conditional analytical deductions supported by explicit constructions or algebra. Agent review is not independent formal verification, experimental validation, or evidence that their assumptions describe the biological system.",
+    "The numerical values in the nonidentifiability example and the signed pulse-drive contrasts are constructed quantities, not gene-expression measurements, regeneration effects, or confidence bounds.",
+    "The saved timing proposal contains an unresolved latency confound. A contrast at one common wound age cannot alone establish a wound-age-dependent gate.",
+    "The saved redox persistence design contains a dependent-variable problem: matching an integral also fixes any score exactly proportional to that integral. Its proposed control therefore cannot establish a persistence-specific effect.",
+    "The spatial-alignment proposal lacks a validated structure-preserving null and linked individual outcome baseline. Marginal abundance differences or simple spatial permutations cannot establish its mechanism.",
+    "No biological null result is established. Missing measurements, incomplete analysis, and unsuccessful execution are not evidence against any candidate mechanism.",
+    "The evidence index explicitly omitted 3370 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 466 source-linked text fragments from 15 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "C3 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C3 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C4 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C4 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C6 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C6 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "The frozen evidence contains open proof/research obligation(s) requiring reconciliation: 121 item(s) are not listed by the author and are not presumed resolved; 8 author-listed item(s) have no exact frozen-record match. See the obligation reconciliation.",
+    "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout.",
+    "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+  ],
+  "full_generator_metadata": {
+    "path": "docs/evaluations/report_quality/iteration_1/papers/xenopus-tadpoles-v9.metadata.full.json.gz",
+    "bytes": 305258,
+    "sha256": "fb59bdccd14355859726a6e93b17c912a7bf29abdf1edfa547525ddafbedfc12",
+    "original_uncompressed_bytes": 2423981
+  }
+}
