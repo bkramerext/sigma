@@ -332,7 +332,7 @@ def recent_projects() -> dict:
                         available=True,
                         pin_state=(
                             "unpin"
-                            if pins.get(project_family(view.project.title)) == view.project.id
+                            if view.project.id in pins.values()
                             else "remove"
                             if project_family(view.project.title) in pins
                             else "pin_remove"
@@ -373,7 +373,7 @@ def pinned_projects() -> dict:
     return {
         "projects": [
             item for item in recent_projects()["projects"]
-            if item["pin_state"] == "unpin"
+            if item["pin_state"] == "unpin" and item["available"]
         ]
     }
 
