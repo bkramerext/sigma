@@ -6291,10 +6291,21 @@ def test_review_fallback_question_and_tex_safety() -> None:
     )
     assert r"\section{Selected source-linked research excerpts}" not in tex
     assert r"\section{Structured reasoning and review records}" not in tex
-    assert r"\section{Claim and source notes}" in tex
+    # Research detail is not permission to append the claim audit ledger.
+    assert r"\section{Claim and source notes}" not in tex
     assert r"\section*{Evidence and authorship note}" not in tex
-    assert r"\begin{sloppypar}" in tex
-    assert r"\end{sloppypar}" in tex
+    with_claims = papers._tex(
+        draft(),
+        [],
+        "a" * 64,
+        integrity_records=[{"kind": "research", "description": "Saved private artifact"}],
+        include_research_details=True,
+        include_claim_details=True,
+        include_research_excerpts=False,
+    )
+    assert r"\section{Claim and source notes}" in with_claims
+    assert r"\begin{sloppypar}" in with_claims
+    assert r"\end{sloppypar}" in with_claims
 
 
 def test_review_fallback_rejects_process_text_as_claim() -> None:
