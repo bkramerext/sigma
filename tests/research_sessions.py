@@ -1029,6 +1029,20 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
     old_instructions = research_sessions._role_instructions("skeptic", old_context)
     assert "actually executed computation" not in old_instructions
     assert "discriminating next_question" not in old_instructions
+    # These are strict schema/provenance clarifications, not a method-version
+    # change; frozen v2 sessions need the same explicit empty-list semantics.
+    assert "if no IDs are supplied, return an empty array" in old_instructions
+    assert "If no approved continuation sources are supplied, return an empty array" in (
+        old_instructions
+    )
+    packet_context = {
+        **old_context,
+        "approved_continuation": {"sources": [{"artifact_id": "a" * 36}]},
+        "prior_session_failure_attempt_ids": ["attempt-1"],
+    }
+    packet_instructions = research_sessions._role_instructions("investigator", packet_context)
+    assert "inspect every selected source" in packet_instructions
+    assert "use only the exact IDs supplied" in packet_instructions
     assert research_sessions._role_instructions("skeptic", {}) == (
         research_sessions._role_instructions("skeptic", {"research_method_version": "phase2-i2-v2"})
     )
