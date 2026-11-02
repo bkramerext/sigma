@@ -175,8 +175,10 @@ with sync_playwright() as playwright:
     target_row = recent.locator("li").filter(has_text=project_title).first
     pin = target_row.get_by_role("button", name="Just show this version of the project")
     remove = target_row.get_by_role("button", name="Remove this project")
-    assert pin.get_attribute("title") == "Just show this version of the project"
-    assert remove.get_attribute("title") == "Remove this project"
+    assert pin.get_attribute("data-tooltip") == "Just show this version of the project"
+    assert pin.get_attribute("title") is None
+    assert remove.get_attribute("data-tooltip") == "Remove this project"
+    assert remove.get_attribute("title") is None
     pin_color = pin.evaluate("node => getComputedStyle(node).color")
     assert pin_color == remove.evaluate("node => getComputedStyle(node).color")
     pin.click()
@@ -186,11 +188,12 @@ with sync_playwright() as playwright:
     pinned = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_have_count(0)
-    expect(pinned.locator(".recent-title-pin")).to_be_visible()
+    expect(pinned.locator(".recent-title-pin")).to_have_count(0)
     expect(pinned.get_by_role("button", name="Remove this project")).to_have_count(0)
     unpin = pinned.get_by_role("button", name="Show all versions of this project")
     expect(unpin).to_be_visible()
-    assert unpin.get_attribute("title") == "Show all versions of this project"
+    assert unpin.get_attribute("data-tooltip") == "Show all versions of this project"
+    assert unpin.get_attribute("title") is None
     assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
     unpin.hover()
     assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
@@ -200,7 +203,7 @@ with sync_playwright() as playwright:
     pinned = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     if not pinned.evaluate("group => group.open"):
         pinned.locator("summary").click()
-    expect(pinned.locator(".recent-title-pin")).to_be_visible()
+    expect(pinned.locator(".recent-title-pin")).to_have_count(0)
     expect(pinned.get_by_role("button", name="Remove this project")).to_have_count(0)
     pinned.get_by_role("button", name="Show all versions of this project").click()
     expect(pinned.locator(".recent-title-pin")).to_have_count(0)
