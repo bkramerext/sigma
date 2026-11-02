@@ -755,16 +755,17 @@ def main() -> None:
             assert removed["removed"] and removed["session_number"] == 28
             assert f"research-sessions/{lifecycle_id}.json" not in list_files(created.path)
             assert _allocate_session_number(created.path, []) == 28
-            # A nonterminal session must not be deleted, and a completed
-            # session must reject stale optimistic-concurrency timestamps.
+            # Paused sessions displayed as stopped can be removed without
+            # resuming them; the bundle retains its monotonic sequence.
             lifecycle["status"] = "paused"
             _save(created.path, lifecycle)
-            try:
-                asyncio.run(remove_session(created.path, lifecycle_id, lifecycle["updated_at"]))
-            except ProjectError:
-                pass
-            else:
-                raise AssertionError("Paused session was removed")
+            removed_paused = asyncio.run(
+                remove_session(created.path, lifecycle_id, lifecycle["updated_at"])
+            )
+            assert removed_paused["removed"] and removed_paused["session_number"] == 28
+            assert f"research-sessions/{lifecycle_id}.json" not in list_files(created.path)
+            assert _allocate_session_number(created.path, []) == 28
+            # Completed sessions still reject stale optimistic-concurrency timestamps.
             lifecycle["status"] = "completed"
             _save(created.path, lifecycle)
             try:
