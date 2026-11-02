@@ -29,6 +29,14 @@ How can an agent evaluation distinguish correct external outcomes from convincin
 
 Counterexamples show why negative status reads, local checkpoints, and stable keys alone need not suffice. The contribution is an analytical evaluation framework and an executable-test specification, not a measured improvement in agent reliability. Its practical significance is to make the assumptions behind reliability certificates and recovery guarantees explicit, while identifying the external evidence and controlled experiments still needed to justify deployment claims.
 \end{abstract}
+\begingroup\setlength{\fboxsep}{10pt}
+\noindent\fcolorbox{blue!55}{blue!5}{\begin{minipage}{0.90\linewidth}\small\sffamily
+{\large\bfseries\color{blue}In brief}\par\smallskip
+\textbf{The question.} When an AI agent says a task is done, what shows that the intended external effect happened exactly once, and when is a retry safe?\par\smallskip
+\textbf{The answer.} A fluent report or tool acknowledgment cannot settle that question. Evaluation needs evidence of the external outcome; safe recovery after an ambiguous response needs stronger guarantees from the service that creates the effect.\par\smallskip
+\textbf{The route.} Separate outcomes from reports, examine what ambiguous histories cannot reveal, then state the contracts and evaluations needed for a defensible reliability claim.\par\smallskip
+\textbf{The limit.} These are conditional analytical results. No real agent or external service was shown to satisfy the proposed contracts.
+\end{minipage}}\endgroup\par\medskip
 \section{Introduction and problem statement}
 The central question is what correctness and recovery claims an evaluation can support when an agent acts through tools whose external effects are not fully visible in its transcript. The bounded workload is a logical operation that should produce exactly one irreversible effect. A successful-looking response, an actual effect, and evidence that the effect occurred are separate objects.
 
@@ -45,25 +53,17 @@ Recovery arguments were compared at the transition that creates the actual exter
 
 This synthesis uses a bounded selection of the archived research. Unreviewed records could affect its conclusions; the full omission ledger remains available with the generation record.
 \section{Correctness, observation, and the evaluation target}
-Reliability at the external-effect boundary requires an evaluation target that separates what an execution accomplished from what the agent or its tools reported. The target adopted here is satisfaction of an independently specified outcome rubric under a fixed execution protocol, including its safety constraints and deadline. Acknowledgments and automated completion judgments are observations of that outcome, not substitutes for it. This distinction determines both what counts as success and which executions may legitimately contribute to a reliability estimate.
+The reliability target is an independently specified external outcome, evaluated under a fixed execution protocol, safety rules, and deadline. Consider one logical request that should create exactly one irreversible effect, such as one debit or shipment order. Several tool calls may attempt that same request. If $N$ is the number of committed effects for it, the narrow effect-count rubric is $Y=1$ exactly when $N=1$; $N=0$ is an omission and $N\geq 2$ is a duplication. Payload validity and broader task requirements need separate checks.
 
-Consider a deliberately narrow workload: an agent is instructed to cause exactly one irreversible external effect, such as applying one debit or appending one shipment order. The unit of work is the logical request, rather than an individual tool invocation; several invocations may attempt to fulfill the same request. Let $N$ denote the number of effects applied for that request over the specified execution horizon. The effect-count rubric assigns $Y=1$ exactly when $N=1$, with $N=0$ classified as omission and $N\geq 2$ as duplication. This predicate isolates effect-count correctness; it does not, by itself, establish payload validity or satisfaction of a broader task specification.
+Acknowledgment is a different observation. Let $R=1$ mean that the agent received at least one valid acknowledgment. A commit whose response is lost can give $Y=1$ with $R=0$; an acknowledged call after an earlier commit can give $R=1$ with $Y=0$. A fluent completion report adds no external-state evidence. The proposed evaluator therefore reads an authoritative committed-event ledger after execution. That ledger must correctly distinguish pre-commit failure from post-commit acknowledgment loss and must not return stale final-state information; these are requirements for a test harness, not properties established by this paper.
 
-Define acknowledgment-based completion separately: $R=1$ when the agent receives at least one valid acknowledgment. A request can commit while its acknowledgment is lost, leaving a correct external state without acknowledged completion. Conversely, under an ordinary non-idempotent interface, an acknowledged invocation can follow an earlier committed invocation and leave duplicate effects. Thus neither receipt nor absence of an acknowledgment determines the effect-count outcome, and a fluent assertion of completion supplies no replacement for external-state evidence.
+For population reliability, fix a task distribution $D$, agent and model versions, prompts, tools, environment policy, execution budget, and deadline. For each sampled task, run the prescribed batch of $r$ executions and choose an index $J$ uniformly. Define $Y_J=1$ only if that attempted execution satisfies its outcome rubric, safety constraints, and deadline; timeouts and crashes count as attempts. The target is $p=\mathbb{E}[Y_J]$, success per attempted execution under that protocol. It is not success conditional on evaluator acceptance or unlimited retries. Other runs in the batch cannot be ignored if they change the selected run's distribution.
 
-For this workload, the proposed outcome oracle is a read-only inspection of an authoritative committed-event ledger after execution. Its role is distinct from the agent-visible tool response: the evaluator uses external-state evidence to determine $Y$, while the agent may have only messages and local records. The oracle must neither alter the task nor return stale final-state information if its labels are to implement the stated rubric. Correct ledger adjudication and the distinction between pre-commit failure and post-commit acknowledgment loss remain implementation requirements, not demonstrated properties of a tested harness; the supplied evidence establishes an analytical target rather than measured reliability of an agent or benchmark.
+Task and batch form the sampling cluster. Runs within a task can be dependent, so repeating one task does not create independent task samples. Population inference here assumes independent task clusters and independent cluster-level execution randomness while allowing within-cluster dependence. The binary target also does not by itself summarize delayed harm, persistent corruption, or severity-weighted loss; those require additional rubrics.
 
-The broader evaluation target fixes a task distribution $D$, agent, model and prompt versions, tool interfaces, environment-generation policy, and execution budget. For each sampled task, the protocol specifies a batch of $r$ runs and selects an index $J$ uniformly from that batch. Let $Y_J=1$ precisely when the selected run meets the independently specified end-state requirements, safety constraints, and deadline, and let $Y_J=0$ otherwise. Reliability under this protocol is $p=\mathbb{E}[Y_J]$: expected success per attempted execution, not success conditional on acceptance or success after unlimited retries. Timeouts and crashes remain attempted executions.
+Let $Z_J$ be the automated evaluator's binary acceptance decision. $Z_J$, acknowledgment $R$, and actual rubric satisfaction $Y_J$ answer three different questions. Reference adjudication must measure the external outcome rather than simply agree with the automated evaluator; its own correctness remains to be checked. Higher acknowledgment or acceptance rates therefore do not establish higher reliability unless they track the chosen outcome target.
 
-The execution horizon is part of the rubric rather than an incidental evaluation setting. A run must meet the specified deadline, and the budget and timeout policy constrain which recovery actions belong to that execution. Moreover, a uniformly selected run from a batch is not automatically equivalent to a fresh isolated run: other batch executions cannot be omitted if they change its outcome distribution. The resulting binary target therefore concerns the stated protocol and horizon; it does not independently summarize delayed harm, persistent-state corruption, or severity-sensitive loss.
-
-The automated completion oracle supplies another variable, $Z_J$, representing its binary acceptance decision. Keeping $Z_J$, acknowledgment receipt $R$, and rubric satisfaction $Y_J$ distinct prevents three different observations from being collapsed into a single completion rate. Reference adjudication is intended to assess actual outcomes rather than merely reproduce the automated oracle's decision, but its correctness cannot be presumed from agreement alone. The definition of reliability remains actual rubric satisfaction even when the available evaluator is imperfect.
-
-For inference about $D$, the task and its prescribed run batch form the task cluster. Repeated executions within a cluster may be dependent, so their number is not automatically the number of independent observations of task difficulty. The sampling construction considered here assumes independently sampled task clusters and independent cluster-level execution randomness, while allowing dependence among runs of the same task. These assumptions define the scope of subsequent population claims; repeated runs can characterize within-task variability without becoming additional independent task samples.
-
-A finite execution roster defines a different target: the outcomes of the particular recorded executions being assessed, rather than expected performance on newly sampled tasks. Task and run identities must therefore remain explicit, including when the roster contains paired executions of alternative systems. Conditional randomized-audit claims concern selection from that frozen roster and must not be interpreted as establishing independent execution outcomes or representativeness of future workloads. Here this distinction specifies the target of a possible certificate, without asserting an unconditional finite-roster guarantee.
-
-These definitions change the central reliability question from whether an agent appears to finish to whether an attempted execution satisfies its external-outcome rubric within the stated horizon. They also distinguish two possible objects of assurance: expected correctness under a fixed task-sampling protocol and correctness within a fixed execution roster. A higher acknowledgment or acceptance rate is consequently not yet evidence of improved reliability; the improvement must concern the chosen actual-outcome target.
+A frozen execution roster has a different target: the outcomes of those recorded executions, with task and run identities preserved. A randomized audit of that roster can support a conditional statement about the inspected population, but it does not create independent outcomes or prove representativeness for future tasks. The paper accordingly keeps population reliability and finite-roster certification separate.
 
 \section{Conditional measurement and architectural comparison}
 Reliability measurement and architectural comparison require different corrections for the gap between evaluator acceptance and actual correctness. Fix a workload distribution $D$, execution protocol, resource budget, observation horizon, and binary outcome rubric; for a sampled task, schedule $r\geq 1$ runs and select one uniformly to define the target execution. Let $Y\in\{0,1\}$ indicate actual satisfaction of the rubric, $O\in\{0,1\}$ automated acceptance, and $R\in\{0,1\}$ reference certification. The reliability estimand is $p=\Pr(Y=1)$, not either evaluator\textquoteright{}s acceptance rate, and no independence among these three variables is assumed.
@@ -127,6 +127,11 @@ Ambiguous commitment creates an information limit: recovery decisions based on i
 
 An independent evaluator would therefore need authoritative external-effect evidence that the recovery policy itself does not possess.
 
+\begingroup\setlength{\fboxsep}{9pt}
+\noindent\fcolorbox{blue!45}{blue!4}{\begin{minipage}{0.91\linewidth}\small
+{\sffamily\bfseries\color{blue}Example: A lost acknowledgment}\par\smallskip
+Imagine a service that applies one debit but loses its reply. From the agent's side, that timeout looks the same as a request that never committed. Retrying the first case can create two debits; refusing to retry the second leaves none. The agent's local transcript cannot choose safely between those actions without a stronger service guarantee.
+\end{minipage}}\endgroup\par\medskip
 Consider two histories ending at the same timeout. In $H_0$, the original request is lost before commitment, leaving $N=0$; in $H_1$, it commits, leaving $N=1$, but its acknowledgment is lost. The accessible checkpoint, messages, and other observations are identical, and no authoritative lookup or distinguishing observation is available before the decision. A policy restricted to this information must consequently assign the same retry probability, $q$, in both histories, provided its randomization distribution does not depend on the hidden external state.
 
 The forced-choice premise makes the conflict precise: the policy must either stop without retrying or issue one retry that commits exactly one additional effect. In $H_0$, stopping omits the required effect, whereas retrying produces the correct count; in $H_1$, stopping preserves the correct count, whereas retrying duplicates the effect. The corresponding error probabilities are $e_0=1-q$ and $e_1=q$, so $e_0+e_1=1$ and $\max(e_0,e_1)\geq 1/2$. Choosing $q=1/2$ attains equality for external-effect correctness under these premises, but does not establish equally strong guarantees for independently confirmed completion or deadline satisfaction.
@@ -283,7 +288,7 @@ Report-time truthfulness requires a further outcome predicate because the horizo
 
 These predicates distinguish eventual correctness within the declared horizon from the truth of the completion assertion at its own event boundary; they do not equate truth with the agent\textquoteright{}s justified knowledge or with protection against future effects. [C7; [Research session 7, artifact 8]]
 
-An analytical temporal control demonstrates the distinction. Suppose a unique, timely, well-formed matching SUCCESS is emitted at tick $15$, the sole correct commit occurs at tick $18$, and no other covered commit occurs through tick $40$. With horizon $H=20$ and the stipulated receipt contract satisfied, the outcome vector is \[(X_{20},X_{40},Y_H,Y_{\mathrm{window}},T)=(1,1,1,1,0)\]. Moving the sole commit to tick $14$, with the remaining conditions unchanged, makes the vector $(1,1,1,1,1)$.
+An analytical temporal control demonstrates the distinction. Suppose a unique, timely, well-formed matching SUCCESS is emitted at tick $15$, the sole correct commit occurs at tick $18$, and no other covered commit occurs through tick $40$. With horizon $H=20$ and the stipulated receipt contract satisfied, the outcome vector is \[(X_{20},X_{40},Y_H,Y_{\mathrm{window}},T)=(1,1,1,1,0).\] Moving the sole commit to tick $14$, with the remaining conditions unchanged, makes the vector $(1,1,1,1,1)$.
 
 The late-commit control therefore passes both horizon and later-state checks while failing report-time truthfulness; it is a counterexample to treating those checks as a truthfulness certificate, not a refutation of a client contract that requires reporting after successful commitment.
 
@@ -370,27 +375,21 @@ These measurements would determine whether a recovery mechanism improves the int
 
 This evaluation sequence changes the assurance claim from an architectural expectation into a set of separable, falsifiable obligations. Conditional analysis identifies which observation and service premises would support a guarantee; deterministic tests can challenge an implementation's compliance with those premises; outcome-grounded, controlled comparisons are needed to establish an improvement. Demonstrated deployment reliability would additionally require justified sampling and transport to the relevant tasks, environments, versions, and budgets\textemdash{}not merely successful execution of the boundary schedules.
 
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*32\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*42\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*42\relax}@{}}
-\caption{Proposed evaluation stages and the distinct assurance question each addresses. These are validation requirements, not completed tests or observed results.}\\
+\begin{table}[!htbp]
+\centering\small
+\caption{Proposed evaluation stages and the distinct assurance question each addresses. These are validation requirements, not completed tests or observed results.}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*32\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*42\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*42\relax}@{}}
 \toprule
 \textbf{Stage} & \textbf{Required discriminating checks} & \textbf{Conclusion not warranted by this stage alone}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Stage} & \textbf{Required discriminating checks} & \textbf{Conclusion not warranted by this stage alone}\\
-\midrule
-\endhead
-\midrule
-\multicolumn{3}{r}{\footnotesize Continued on next page}\\
-\endfoot
-\bottomrule
-\endlastfoot
 Oracle and injector validation & Distinguish precommit failure from postcommit acknowledgment loss; test fresh, nonmutating state reads and complete reference capture. & Evaluator agreement does not establish actual correctness or calibrate shared reference errors.\\
 Deterministic boundary execution & Run the proposed path, recovery, and evidence panels; separately classify mapper, contract, and containment failures. & Passing finite cases does not prove universal coverage or a measured agent-level benefit.\\
 Real-service contract audit & Check atomicity, key scope, payload binding, concurrency, retention, response semantics, durability, and downstream effects. & Synthetic conformance does not establish that an external service satisfies the recovery premises.\\
 Controlled paired comparison & Freeze workload, versions, environment, rubric, horizon, and budgets; retain failures and unknowns; report paired uncertainty and broader harms. & A fixed-protocol comparison does not automatically transfer to changed tasks, environments, versions, or budgets.\\
-\end{longtable}
-\par\smallskip{\footnotesize Evidence: [Research session 1], [Research session 5], [Research session 7, artifact 6]; claims: C20, C23, C30, C31, C85}
+\bottomrule
+\end{tabular}
+\par\smallskip{\scriptsize Source-linked claims: C20, C23, C30, C31, C85}
+\end{table}
 \section{Limitations}
 \begin{itemize}
 \item The analytical guarantees depend on unvalidated reference-error, evidence-soundness, atomicity, durability, identity, retention, and enforcement-scope premises.
@@ -477,10 +476,4 @@ These notes identify the saved evidence for claims used in the article. The comp
 \textit{Evidence: }[Research session 1, artifact 2]
 \end{description}
 \end{sloppypar}
-\section{Editorial writing sources}
-These sources informed manuscript organization and writing methods, not the scientific evidence or findings.
-\begin{itemize}
-\item PLOS ONE \textemdash{} Manuscript and Reporting Guidelines (general): \url{https://journals.plos.org/plosone/s/submission-guidelines}
-\item EASE \textemdash{} Guidelines for Authors of Scientific Articles (full text) (general): \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/}
-\end{itemize}
 \end{document}
