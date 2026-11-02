@@ -801,172 +801,142 @@ async def setup(path: Path):
     return view, strategy, credential, config
 
 
-def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_if_needed(
-    monkeypatch,
-):
-    from sigma import research_method_sources
+def test_project_type_research_references_replace_keyword_catalog(monkeypatch):
+    from sigma import project_types, research_method_sources
 
-    scenarios = (
-        (
-            "computer_science",
-            "Agent Reliability Evaluation",
-            "Fault injection with retries and acknowledgments",
-            "ai-reliability",
-        ),
-        (
-            "computer_science",
-            "Sovereign AI Federation",
-            "Campus gateway revocation routing",
-            "federation",
-        ),
-        (
-            "biology",
-            "Xenopus Tadpoles",
-            "Tail regeneration and wound timing",
-            "animal-regeneration",
-        ),
-        (
-            "mathematical",
-            "Nonconsecutive Subset Sums",
-            "Count subsets modulo three",
-            "combinatorics",
-        ),
-        ("physics", "Warp Drive Design", "Spacetime metric and stress energy", "relativity"),
-    )
-    for mode, title, problem, branch in scenarios:
-        frozen = research_method_sources.select_method_sources(
-            mode, title, problem, ("Propose a method",), ()
+    monkeypatch.setattr(project_types, "custom_types", lambda: [])
+    for mode in ("computer_science", "mathematical", "biology", "physics"):
+        selected = research_method_sources.select_method_sources(
+            mode, "Unrelated title", "unrelated subject", (), ()
         )
-        assert frozen["status"] == "selected"
-        assert frozen["branch"] == branch
-        assert len(frozen["sources"]) == 3
-        assert [row["tier"] for row in frozen["sources"]] == [
-            "general",
-            "discipline",
-            "branch",
+        assert selected["status"] == "selected"
+        assert selected["branch"] is None
+        assert len(selected["sources"]) == 3
+        assert [item["tier"] for item in selected["sources"]] == [
+            "general", "discipline", "discipline"
         ]
-        assert all(
-            source["url"].startswith("https://") and len(source["notes"]) >= 50
-            for source in frozen["sources"]
-        )
-        assert research_method_sources.methodology_digest(frozen) == (
-            research_method_sources.methodology_digest(frozen)
-        )
-
-        # The most recent comprehensive session's exact notes are preserved.
+        assert selected["sources"][0]["project_type_id"] == "common"
+        assert all(item["project_type_id"] == mode for item in selected["sources"][1:])
+        assert selected["advisory"] is None
+        assert research_method_sources.methodology_digest(selected)
         later = research_method_sources.select_method_sources(
-            mode,
-            title,
-            problem,
-            ("Another method",),
-            (
-                {
-                    "id": "prior-session-id",
-                    "created_at": "2026-11-01T00:00:00+00:00",
-                    "research_method_sources": frozen,
-                },
-            ),
+            mode, "Other", "Another problem", (),
+            ({"id": "old-session", "research_method_sources": selected},)
         )
         assert later["status"] == "reused"
-        assert later["source_session_id"] == "prior-session-id"
-        assert later["sources"] == frozen["sources"]
+        assert later["sources"] == selected["sources"]
+        assert later["source_session_id"] == "old-session"
 
-    # Later catalog edits must not silently alter frozen research methods.
-    earlier = research_method_sources.select_method_sources(
-        "physics", "Warp", "spacetime metric", (), ()
+
+def test_project_type_inheritance_more_than_three_is_advisory(monkeypatch):
+    from sigma import project_types, research_method_sources
+
+    refs = ("https://example.org/special-method", "https://example.org/measurement")
+    physics = next(t for t in project_types.builtin_types() if t.id == "physics")
+    child = project_types.ProjectType(
+        id="custom-physics", name="Special Physics", scope="Research",
+        user_defined=True, icon=project_types.placeholder_icon(),
+        based_on="physics",
+        research_standards_references=refs + (physics.research_standards_references[0],),
     )
-    original_note = earlier["sources"][-1]["notes"]
-    with monkeypatch.context() as patch:
-        updated = dict(research_method_sources.BY_ID["tong-einstein-equations"])
-        updated["notes"] = "REVISED: " + original_note
-        patch.setattr(
-            research_method_sources,
-            "BY_ID",
-            {**research_method_sources.BY_ID, updated["id"]: updated},
-        )
-        stable = research_method_sources.select_method_sources(
-            "physics",
-            "Warp",
-            "spacetime metric",
-            (),
-            ({"id": "saved", "research_method_sources": earlier},),
-        )
-    assert stable["status"] == "reused"
-    assert stable["sources"][-1]["notes"] == original_note
-
-    # An incidental mention of a gateway must not override the actual topic.
-    reliability = research_method_sources.select_method_sources(
-        "computer_science",
-        "AI Agent Reliability",
-        "Evaluate reliability when jobs pass a gateway and route retries",
-        ("Model external acknowledgment",),
-        (),
+    monkeypatch.setattr(project_types, "custom_types", lambda: [child])
+    selected = research_method_sources.select_method_sources(
+        child.id, "This title should not change references", "", (), ()
     )
-    assert reliability["branch"] == "ai-reliability"
-    federation = research_method_sources.select_method_sources(
-        "computer_science",
-        "Sovereign AI Federation",
-        "Evaluate agent reliability under a campus gateway and network partition",
-        ("Compare authorization policies",),
-        (),
+    assert [row["tier"] for row in selected["sources"]] == [
+        "general", "discipline", "discipline", "branch", "branch"
+    ]
+    assert len({row["url"] for row in selected["sources"]}) == 5
+    assert selected["advisory"] and "5 research-method references" in selected["advisory"]
+    assert "not been independently inspected" in selected["sources"][-1]["notes"]
+
+    revised = project_types.ProjectType(
+        **{**child.__dict__, "research_standards_references": refs[:1]}
     )
-    assert federation["branch"] == "federation"
-
-    # If the specialty changes, the previous choice is no longer sufficient.
-    original = research_method_sources.select_method_sources(
-        "mathematical", "Counting subsets", "combinatorics recurrence", (), ()
+    monkeypatch.setattr(project_types, "custom_types", lambda: [revised])
+    changed = research_method_sources.select_method_sources(
+        child.id, "", "", (),
+        ({"id": "older", "research_method_sources": selected},)
     )
-    updated = research_method_sources.select_method_sources(
-        "mathematical",
-        "Topology problem",
-        "topological spaces and homotopy",
-        (),
-        ({"id": "old", "research_method_sources": original},),
+    assert changed["status"] == "selected"  # no stale reference reuse after edit
+    assert len(changed["sources"]) == 4
+    assert selected["sources"][-1]["url"] == refs[1]  # old snapshot immutable
+    assert changed["advisory"]
+
+
+def test_project_type_reference_ancestry_missing_and_cyclic_parents(monkeypatch):
+    from sigma import project_types, research_method_sources
+
+    root = project_types.ProjectType(
+        id="custom-root", name="Root", scope="Research",
+        user_defined=True, icon=project_types.placeholder_icon(),
+        based_on="physics", research_standards_references=("https://example.org/root",),
     )
-    assert updated["branch"] is None and updated["status"] == "selected"
-    assert len(updated["sources"]) == 2
-    assert not any(source.get("branch") for source in updated["sources"])
+    leaf = project_types.ProjectType(
+        id="custom-leaf", name="Leaf", scope="Research",
+        user_defined=True, icon=project_types.placeholder_icon(),
+        based_on="custom-root", research_standards_references=("https://example.org/leaf",),
+    )
+    monkeypatch.setattr(project_types, "custom_types", lambda: [root, leaf])
+    resolved = research_method_sources.select_method_sources(
+        "custom-leaf", "", "", (), ()
+    )
+    assert [r["project_type_id"] for r in resolved["sources"]] == [
+        "common", "physics", "physics", "custom-root", "custom-leaf"
+    ]
+    missing = project_types.ProjectType(**{**leaf.__dict__, "based_on": "not-found"})
+    monkeypatch.setattr(project_types, "custom_types", lambda: [missing])
+    assert len(research_method_sources.select_method_sources(
+        "custom-leaf", "", "", (), ()
+    )["sources"]) == 2
+    cyclic_root = project_types.ProjectType(
+        **{**root.__dict__, "based_on": "custom-leaf"}
+    )
+    monkeypatch.setattr(project_types, "custom_types", lambda: [cyclic_root, leaf])
+    assert len(research_method_sources.select_method_sources(
+        "custom-root", "", "", (), ()
+    )["sources"]) == 3
 
 
-def test_method_source_bad_or_unreadable_candidates_never_block(monkeypatch):
-    from sigma import research_method_sources
+def test_project_type_methods_reach_both_agents_and_skeptic_challenges(monkeypatch):
+    from sigma import project_types, research_method_sources
 
-    untrusted = dict(research_method_sources.BY_ID["applied-combinatorics"])
-    untrusted["notes"] = ""
-    with monkeypatch.context() as patch:
-        patch.setattr(
-            research_method_sources,
-            "BY_ID",
-            {**research_method_sources.BY_ID, untrusted["id"]: untrusted},
-        )
-        patch.setattr(
-            research_method_sources,
-            "CATALOG",
-            tuple(
-                untrusted if row["id"] == untrusted["id"] else row
-                for row in research_method_sources.CATALOG
-            ),
-        )
-        selected = research_method_sources.select_method_sources(
-            "mathematical", "Counting", "nonconsecutive subset recurrence", (), ()
-        )
-    assert selected["status"] == "selected"
-    assert len(selected["sources"]) == 2
-    assert all(item["notes"] for item in selected["sources"])
-    previous = {
-        "id": "prior",
-        "research_method_sources": {
-            "mode": "mathematical",
-            "branch": "combinatorics",
-            "sources": [{"id": "missing"}, {"id": "tao-solving-mathematical-problems"}],
-        },
+    custom = project_types.ProjectType(
+        id="special", name="Special", scope="Research",
+        user_defined=True, icon=project_types.placeholder_icon(),
+        based_on="biology",
+        research_standards_references=("https://example.org/special",),
+    )
+    monkeypatch.setattr(project_types, "custom_types", lambda: [custom])
+    selected = research_method_sources.select_method_sources("special", "", "", (), ())
+    context = {
+        "problem": "A research problem", "investigation_type": "special",
+        "research_method_version": research_sessions.RESEARCH_METHOD_VERSION,
+        "methodology_source_material": selected["sources"],
+        "methodology_source_catalog_version": selected["version"],
+        "execution_tools": [],
     }
-    refreshed = research_method_sources.select_method_sources(
-        "mathematical", "Counting", "subset recurrence", (), (previous,)
+    record = {
+        "mode": "chatgpt", "model": MODEL, "reasoning_effort": "high",
+        "output_token_limit": 4000,
+    }
+    for role in ("investigator", "skeptic"):
+        packet = research_sessions._role_request_payload(record, role, context)
+        for source in selected["sources"]:
+            assert source["url"] in packet["input"][0]["content"]
+    assert "Review whether the Investigator's assumptions" in (
+        research_sessions._role_instructions("skeptic", context)
     )
-    assert refreshed["status"] == "selected"
-    assert len(refreshed["sources"]) == 3
-    assert refreshed["source_session_id"] is None
+    assert "Review whether the Investigator's assumptions" not in (
+        research_sessions._role_instructions("investigator", context)
+    )
+    assert "Scientifically justified departures are allowed" in (
+        research_sessions._role_instructions("skeptic", context)
+    )
+    old = {**context, "methodology_source_catalog_version": "methodology-catalog-v1"}
+    assert "Review whether the Investigator's assumptions" not in (
+        research_sessions._role_instructions("skeptic", old)
+    )
 
 
 def test_research_methodology_outcome_is_not_claimed_as_independent_science():
