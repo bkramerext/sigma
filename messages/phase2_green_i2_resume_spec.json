@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "projects": [
+    {
+      "name": "AI Agent Reliability and Evaluation",
+      "project_path": "/private/tmp/sigma-phase2-green-i2/projects/agent.sigma",
+      "project_id": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+      "session_id": "e3f02cce-aed5-42f7-aa01-a5cad3c99c18",
+      "additional_calls": 0
+    },
+    {
+      "name": "Sovereign AI Federation",
+      "project_path": "/private/tmp/sigma-phase2-green-i2/projects/sovereign.sigma",
+      "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+      "session_id": "d82391f1-956a-4546-adfd-20f030e33688",
+      "additional_calls": 0
+    },
+    {
+      "name": "Xenopus Tadpoles",
+      "project_path": "/private/tmp/sigma-phase2-green-i2/projects/xenopus.sigma",
+      "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+      "session_id": "44e759ac-38bb-4e8d-8c4c-4850541ad3dd",
+      "additional_calls": 0
+    },
+    {
+      "name": "Nonconsecutive Subset Sums Modulo 3",
+      "project_path": "/private/tmp/sigma-phase2-green-i2/projects/math.sigma",
+      "project_id": "7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a",
+      "session_id": "6ce6a07a-c844-4681-a6ec-ede98aa923ea",
+      "additional_calls": 0
+    },
+    {
+      "name": "Warp Drive",
+      "project_path": "/private/tmp/sigma-phase2-green-i2/projects/warp.sigma",
+      "project_id": "e8211dc4-b70f-49d1-a514-671f44ed7e8c",
+      "session_id": "71bc9990-fab0-4c1a-b03c-1d6daa976a3e",
+      "additional_calls": 0
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "iteration": "phase2-green-1",
+  "inputs": [
+    {
+      "project_id": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+      "subject": "AI Agent Reliability and Evaluation v1",
+      "phase1_match": "exact",
+      "source": "/Users/admin/sigma_brian/projects/ai-agent-reliability-and-evaluation-v1.json",
+      "source_sha256": "666c96aafcaaec048099f9d25ef57f66fdd284a54fb5e7aad3425fad4fde79e3",
+      "source_bytes": 10281881,
+      "preserved_copy": "ai_agent_reliability_v1_phase1_frozen.bundle.json.gz",
+      "preserved_copy_sha256": "67a5a32e1989a6d7726065c1af31050daab212c9079346e730f391e270dcbcdb",
+      "preserved_copy_bytes": 4466183
+    },
+    {
+      "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+      "subject": "Sovereign AI Federation v2",
+      "phase1_match": "exact",
+      "source": "origin/report-quality-coordination:docs/evaluations/report_quality/iteration_1/exports/sovereign-ai-federation-v2-after-research.bundle.json",
+      "source_sha256": "40cdebb730fb4cef73ea2676e9dba8e6666630ee2ec2976af595365f7b6c5ea5",
+      "source_bytes": 2570814,
+      "preserved_copy": "sovereign_ai_federation_v2_phase1_frozen_after_research.bundle.json.gz",
+      "preserved_copy_sha256": "ced4c641c4161673aa91c2a5f3d10521e6be36ba3ef8d35e8eef5ff0735ec256",
+      "preserved_copy_bytes": 923598
+    },
+    {
+      "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+      "subject": "Xenopus Tadpoles v9",
+      "phase1_match": "not_byte_identical; coordinator-authorized distinct Phase 2 baseline",
+      "phase1_historical_raw_sha256": "a7ff404708327b1e1a8c80c19426b0463ab412c61d37fe0406b4c334d9bc28a6",
+      "phase1_historical_raw_bytes": 2149128,
+      "phase1_historical_raw_file_status": "not present in available checkout/worktrees; hash and size retained from PR #430 handoff",
+      "authorized_source": "projects/xenopus-tail-regeneration-5.sigma",
+      "coordinator_authorization": "PR #433 comment 6560082678, 2026-11-01T15:37:19Z",
+      "project_export_sha256": "371e3baf395ba3d66508df1a64d12f4e914e4823dd19c8ec3a66447565be46bb",
+      "project_export_bytes": 2150649,
+      "preserved_copy": "xenopus_v9_coordinator_authorized_phase2_baseline.bundle.json.gz",
+      "preserved_copy_sha256": "d8f5d2510485834bffcace8c185c54045263857b5733370194ed2feb6e7f3090",
+      "preserved_copy_bytes": 655252,
+      "unused_historical_candidate": {
+        "source": "/private/tmp/sigma-pr430-report-quality/projects/xenopus-tadpoles-v9-frozen.json",
+        "sha256": "6b0172a3d66212eecde973821e3dc8237a487e9d0b4ce1704db5ab5320631d19",
+        "bytes": 8175751,
+        "preserved_copy": "xenopus_v9_unused_pr430_candidate.json.gz",
+        "preserved_copy_sha256": "a9c4fd37729652e08d9aa1533dc98fed0d18fddf958c310394fd9a499e40e6f2"
+      },
+      "canonical_paper_snapshot": {
+        "source": "origin/report-quality-coordination:docs/evaluations/report_quality/iteration_1/papers/xenopus-tadpoles-v9.metadata.full.json.gz",
+        "preflight_snapshot_sha256": "3236a8c66a96d713f28726271169e67c88c8a768f398ab3b9b504fee3cdcc74e",
+        "archive_copy": "xenopus_phase1_canonical_paper_metadata.full.json.gz",
+        "archive_sha256": "fb59bdccd14355859726a6e93b17c912a7bf29abdf1edfa547525ddafbedfc12",
+        "archive_bytes": 305258,
+        "note": "Canonical paper-evidence snapshot, not the original raw project export; title, project ID, five strategy references, four prior session IDs and source coverage were compared."
+      },
+      "verified_material": "Same project ID/title and scientific problem; five strategies; saved RIC/ECM, identifiability, pulse timing, latency/redox, and observational-data constraints. Phase 2 uses only an immutable copy and remains labeled as a distinct baseline.",
+      "working_copy": "/private/tmp/sigma-phase2-green-i1/projects/xenopus.sigma",
+      "working_copy_change": "research-sessions/limits.json research_rounds 2->3 only; original input archive unchanged"
+    }
+  ]
+}

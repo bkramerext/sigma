@@ -1,0 +1,78 @@
+{
+  "schema_version": 8,
+  "id": "7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a",
+  "title": "Nonconsecutive Subset Sums Modulo 3",
+  "problem": "A simple restriction—no adjacent choices—creates a rich counting problem. For each n, how many subsets of {1,...,n} have no consecutive elements and a sum divisible by 3? The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-21T02:57:36+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-21T02:57:37+00:00",
+      "strategy_id": "5c8ce76f-4965-434b-8862-841c92de89e4"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-21T02:57:38+00:00",
+      "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-21T02:57:39+00:00",
+      "strategy_id": "9ad51640-ff9a-4d22-a928-518f032003bf"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "5c8ce76f-4965-434b-8862-841c92de89e4",
+      "title": "Periodic transfer matrix",
+      "approach": "Use a dynamic-programming state (r,b), with r in {0,1,2} the sum of selected indices modulo 3 and b indicating whether the most recently processed index was selected. On processing i, either omit i, which resets b=0, or include i only if b=0, updating r to r+i mod 3. Encode this as a 6-by-6 transition matrix T_i. Because T_{i+3}=T_i, calculate the three-step matrix and seek a polynomial identity satisfied by each residue-class subsequence of a_n. First tests: independently enumerate admissible subsets for n=0,...,8 and compare all three residues. Proof obligations: derive an exact constant-coefficient recurrence, list sufficient initial values, and bound nontrivial residue modes strongly enough to prove asymptotic equidistribution. If the matrix characteristic polynomial is unnecessarily large, look for invariant subspaces or symmetry reduction; do not infer a recurrence solely from samples.",
+      "author_kind": "human",
+      "created_at": "2026-10-21T02:57:37+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Track adjacency and the subset sum modulo 3 in six states, then exploit the 3-step periodic transition.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
+      "title": "Roots-of-unity weighted Fibonacci polynomials",
+      "approach": "Define P_n(q)=sum q^{sum_{i in S} i} over nonconsecutive subsets S of {1,...,n}. Separating subsets according to whether n is present yields P_n(q)=P_{n-1}(q)+q^n P_{n-2}(q), with P_0(q)=1 and P_1(q)=1+q. For a primitive cube root omega, use a_n=(P_n(1)+P_n(omega)+P_n(omega^2))/3. At q=1 use ordinary Fibonacci growth; at omega and omega^2 examine the periodic 2-by-2 transfer matrices to derive a recurrence over n -> n+3. Combine their annihilating polynomials into a proved integer-coefficient recurrence for a_n. First tests: evaluate P_n modulo q^3-1 for n<=12 and cross-check the six-state DP. Proof obligation: control both complex terms relative to P_n(1) for the 1/3 limit. Do not confuse pointwise evaluation at a root of unity with extracting a coefficient.",
+      "author_kind": "human",
+      "created_at": "2026-10-21T02:57:38+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Introduce a generating polynomial, filter sums divisible by 3, and derive a recurrence at cube roots of unity.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "9ad51640-ff9a-4d22-a928-518f032003bf",
+      "title": "Gap removal and Gaussian binomial sums",
+      "approach": "For a nonconsecutive k-subset 1<=i_1<...<i_k<=n, set y_j=i_j-(j-1). Then 1<=y_1<...<y_k<=n-k+1 and sum i_j=sum y_j+k(k-1)/2. The ordinary k-subset weight enumerator gives P_n(q)=sum_{k>=0} q^{k^2} [n-k+1 choose k]_q, with Gaussian q-binomials and k<=ceil(n/2). Derive this carefully, verify low-n polynomials, then evaluate its 3-dissection using q=1,omega,omega^2; explore q-Lucas identities at cube roots or elementary residue-block arguments. Seek an independent demonstration of the recurrence and asymptotic density, or a clear algebraic reduction to one of those statements. Discriminating test: check any proposed closed form against the weighted-Fibonacci recurrence for several complete periods, not just for n divisible by 3.",
+      "author_kind": "human",
+      "created_at": "2026-10-21T02:57:39+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Bijection nonconsecutive k-subsets to ordinary k-subsets and analyze the resulting q-binomial 3-dissection.",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "mathematical",
+  "active_order": [
+    "5c8ce76f-4965-434b-8862-841c92de89e4",
+    "00469f7f-ba53-4a12-944d-2d3295e48d1f",
+    "9ad51640-ff9a-4d22-a928-518f032003bf"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "hard"
+}
