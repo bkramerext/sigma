@@ -188,15 +188,16 @@ def _optional_text(value: Any, label: str, limit: int) -> str:
     return value
 
 
-def common_research_references() -> tuple[str, ...]:
-    """Research methods shared by every project type, from the same built-in data model."""
+def common_research_references() -> tuple[dict[str, str], ...]:
+    """Shared research references from the unified named Project Types catalog."""
     try:
         catalog = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))
+        common = catalog.get("common_references", {})
         return _validate_references(
-            catalog.get("common_research_standards_references", []),
+            common.get("research_standards_references", []),
             "Common research references",
         )
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, ProjectError) as exc:
         raise RuntimeError("Common research references are invalid") from exc
 
 
