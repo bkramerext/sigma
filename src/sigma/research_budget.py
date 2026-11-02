@@ -23,7 +23,6 @@ def increase_call_limit(ledger: dict[str, Any], new_limit: int) -> tuple[int, in
     return old_limit, new_limit
 
 
-
 def authorize_independent_review_after_unknown(
     ledger: dict[str, Any], *, uncertain_call_ids: set[str]
 ) -> None:
@@ -41,9 +40,7 @@ def authorize_independent_review_after_unknown(
     calls = ledger.get("calls")
     if not isinstance(calls, list):
         raise BudgetExceeded("The saved research budget calls are invalid")
-    unknown_ids = {
-        item.get("call_id") for item in calls if item.get("status") == "unknown"
-    }
+    unknown_ids = {item.get("call_id") for item in calls if item.get("status") == "unknown"}
     if (
         not uncertain_call_ids
         or unknown_ids != uncertain_call_ids
