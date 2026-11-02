@@ -15,6 +15,13 @@ export type ProjectTypeRecord = {
 };
 
 type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode };
+type ReferenceField = 'research_standards_references' | 'publication_standards_references';
+type ReferenceFields = Pick<ProjectTypeRecord, ReferenceField>;
+type ReferenceOverrides = { added_research: string[]; added_publication: string[]; hidden_research: string[]; hidden_publication: string[] };
+type ReferencePreferences = { common: ReferenceOverrides; project_types: Record<string, ReferenceOverrides> };
+type ReferenceCatalog = { common: ReferenceFields; project_types: Record<string, ReferenceFields> };
+const emptyOverrides = (): ReferenceOverrides => ({ added_research: [], added_publication: [], hidden_research: [], hidden_publication: [] });
+const titleCache = new Map<string, string | null>();
 const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
 const handledErrorHeaders = { 'X-Sigma-Error-Handled': 'true' };
 // Keep validation aligned with server-side _validate_references. Empty edit rows
@@ -35,6 +42,32 @@ function referenceUrlError(value: string): string | null {
   return null;
 }
 
+
+function ReferenceLink({ url }: { url: string }) {
+  const candidate = url.trim();
+  const [title, setTitle] = useState<string | null>(() => titleCache.get(candidate) ?? null);
+  useEffect(() => {
+    if (!candidate || referenceUrlError(candidate)) { setTitle(null); return; }
+    if (titleCache.has(candidate)) { setTitle(titleCache.get(candidate) ?? null); return; }
+    setTitle(null);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void fetch(`/api/reference-title?url=${encodeURIComponent(candidate)}`, { signal: controller.signal, headers: handledErrorHeaders })
+        .then(response => response.ok ? response.json() : Promise.reject())
+        .then((data: { title: string | null }) => {
+          const resolved = typeof data.title === 'string' ? data.title : null;
+          titleCache.set(candidate, resolved);
+          if (!controller.signal.aborted) setTitle(resolved);
+        }).catch(() => { if (!controller.signal.aborted) { titleCache.set(candidate, null); setTitle(null); } });
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [candidate]);
+  if (!candidate || referenceUrlError(candidate)) return null;
+  return <div className="pt-reference-link">
+    <a href={candidate} target="_blank" rel="noopener noreferrer">{title || candidate}</a>
+    {title && <a className="pt-reference-url" href={candidate} target="_blank" rel="noopener noreferrer">{candidate}</a>}
+  </div>;
+}
 
 function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   value: string | null | undefined;
@@ -85,6 +118,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const returnFocus = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
   const [drafts, setDrafts] = useState<ProjectTypeRecord[]>([]);
+  const [referenceCatalog, setReferenceCatalog] = useState<ReferenceCatalog | null>(null);
+  const [referencePrefs, setReferencePrefs] = useState<ReferencePreferences | null>(null);
+  const [savedReferencePrefs, setSavedReferencePrefs] = useState<ReferencePreferences | null>(null);
   const [placeholderIcon, setPlaceholderIcon] = useState<ProjectTypeRecord['icon'] | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -106,7 +142,23 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   async function load() {
     const response = await fetch('/api/project-types', { cache: 'no-store', headers: handledErrorHeaders });
     if (!response.ok) throw new Error('Project types could not be loaded.');
-    const data = await response.json() as { project_types: ProjectTypeRecord[]; icons: { placeholder: ProjectTypeRecord['icon'] }; revision: string };
+    const data = await response.json() as {
+      project_types: ProjectTypeRecord[];
+      icons: { placeholder: ProjectTypeRecord['icon'] };
+      revision: string;
+      common_references: ReferenceFields;
+      builtin_references: Record<string, ReferenceFields>;
+      reference_preferences: Partial<ReferencePreferences>;
+    };
+    setReferenceCatalog({ common: data.common_references, project_types: data.builtin_references });
+    const incoming = data.reference_preferences;
+    const current: ReferencePreferences = {
+      common: { ...emptyOverrides(), ...incoming?.common },
+      project_types: Object.fromEntries(Object.entries(incoming?.project_types ?? {}).map(([id, values]) =>
+        [id, { ...emptyOverrides(), ...values }]))
+    };
+    setReferencePrefs(current);
+    setSavedReferencePrefs(structuredClone(current));
     setBuiltins(data.project_types.filter(item => !item.user_defined));
     const savedCustomTypes = data.project_types.filter(item => item.user_defined);
     setSavedDrafts(structuredClone(savedCustomTypes));
@@ -197,7 +249,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
         confirmedRemovals[id] = usage.project_count;
         if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return;
       }
-      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
+      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, expected_revision: revision, confirmed_removals: confirmedRemovals, reference_preferences: referencePrefs }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved. Reload and review any changed types or project usage.');
       await load();
@@ -207,7 +259,57 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
-  const listEditor = (item: ProjectTypeRecord, field: 'research_standards_references' | 'publication_standards_references', readonly: boolean) => {
+  function patchReferencePrefs(scope: string, patch: Partial<ReferenceOverrides>) {
+    setError('');
+    setReferencePrefs(previous => {
+      if (!previous) return previous;
+      if (scope === 'common') return { ...previous, common: { ...previous.common, ...patch } };
+      return { ...previous, project_types: {
+        ...previous.project_types,
+        [scope]: { ...emptyOverrides(), ...previous.project_types[scope], ...patch },
+      } };
+    });
+  }
+  function resetReferencePrefs(scope: string) {
+    patchReferencePrefs(scope, emptyOverrides());
+  }
+  const listPreferenceEditor = (scope: string, field: ReferenceField) => {
+    if (!referenceCatalog || !referencePrefs) return null;
+    const defaults = scope === 'common' ? referenceCatalog.common : referenceCatalog.project_types[scope];
+    if (!defaults) return null;
+    const overrides = scope === 'common' ? referencePrefs.common : referencePrefs.project_types[scope] ?? emptyOverrides();
+    const isResearch = field === 'research_standards_references';
+    const addedKey = isResearch ? 'added_research' : 'added_publication';
+    const hiddenKey = isResearch ? 'hidden_research' : 'hidden_publication';
+    const added = overrides[addedKey];
+    const hidden = overrides[hiddenKey];
+    const label = isResearch ? 'Research' : 'Publication';
+    const builtins = defaults[field].filter(url => !hidden.includes(url));
+    return <table className="pt-reference-table"><tbody>
+      {builtins.map(url => <tr key={url}><td><div className="pt-reference-entry">
+        <div className="pt-reference-field"><ReferenceLink url={url}/></div>
+        <button type="button" disabled={busy} aria-label={`Hide ${label.toLowerCase()} reference ${url}`}
+          onClick={() => patchReferencePrefs(scope, { [hiddenKey]: [...hidden, url] })}>Remove</button>
+      </div></td></tr>)}
+      {added.map((url, index) => {
+        const urlError = referenceUrlError(url);
+        const errorId = `pt-added-error-${scope}-${field}-${index}`;
+        return <tr key={`added-${index}`}><td><div className="pt-reference-entry">
+          <div className="pt-reference-field">
+            <input aria-label={`${label} reference URL ${index + 1} for ${scope}`} type="url" value={url}
+              aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
+              onChange={event => patchReferencePrefs(scope, { [addedKey]: added.map((value, i) => i === index ? event.target.value : value) })}/>
+            <ReferenceLink url={url}/>
+            {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
+          </div>
+          <button type="button" disabled={busy} onClick={() => patchReferencePrefs(scope, { [addedKey]: added.filter((_, i) => i !== index) })}>Remove</button>
+        </div></td></tr>;
+      })}
+      <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || added.some(url => !url.trim())}
+        onClick={() => patchReferencePrefs(scope, { [addedKey]: [...added, ''] })}>New</button></td></tr>
+    </tbody></table>;
+  };
+  const listEditor = (item: ProjectTypeRecord, field: ReferenceField, readonly: boolean) => {
     const urls = item[field];
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
     const setAt = (index: number, value: string) => edit(item.id, { [field]: urls.map((url, i) => i === index ? value : url) });
@@ -217,11 +319,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
         const urlError = !readonly && referenceUrlError(url);
         const errorId = `pt-reference-error-${item.id}-${field}-${index}`;
         return <tr key={index}><td>
-          {readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <div className="pt-reference-entry">
+          {readonly ? <ReferenceLink url={url}/> : <div className="pt-reference-entry">
             <div className="pt-reference-field">
               <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={url}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
                 onChange={event => setAt(index, event.target.value)}/>
+              <ReferenceLink url={url}/>
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
             <button type="button" disabled={busy} onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>
@@ -241,12 +344,22 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderEffectiveIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      {(!readonly || item.research_standards_references.length > 0) && <section><h3>Research standards references</h3>{listEditor(item, 'research_standards_references', readonly)}</section>}
-      {(!readonly || item.publication_standards_references.length > 0) && <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>}
+      <section><h3>Research standards references</h3>{readonly ? listPreferenceEditor(item.id, 'research_standards_references') : listEditor(item, 'research_standards_references', false)}</section>
+      <section><h3>Publication standards references</h3>{readonly ? listPreferenceEditor(item.id, 'publication_standards_references') : listEditor(item, 'publication_standards_references', false)}</section>
+      {readonly && <button className="pt-restore-references" type="button" disabled={busy}
+        onClick={() => resetReferencePrefs(item.id)}>Restore Defaults</button>}
     </div>
   </details>;
-  const hasChanges = savedDrafts !== null && JSON.stringify(drafts) !== JSON.stringify(savedDrafts);
-  const invalidDraft = drafts.some(item =>
+  const hasChanges = savedDrafts !== null && (
+    JSON.stringify(drafts) !== JSON.stringify(savedDrafts) ||
+    (savedReferencePrefs !== null && JSON.stringify(referencePrefs) !== JSON.stringify(savedReferencePrefs))
+  );
+  const invalidPrefs = referencePrefs === null || [
+    referencePrefs.common, ...Object.values(referencePrefs.project_types)
+  ].some(overrides => Object.values(overrides).some(urls =>
+    urls.length > 100 || urls.some(url => !!referenceUrlError(url))
+  ));
+  const invalidDraft = invalidPrefs || drafts.some(item =>
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
     item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
@@ -269,7 +382,15 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
-      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
+      <section className="pt-common-references">
+        <div className="project-types-section-heading"><h3>Common References</h3>
+          <button type="button" disabled={busy || !referencePrefs} onClick={() => resetReferencePrefs('common')}>Restore Defaults</button>
+        </div>
+        <p>References shared by every project type. Remove hides a built-in for your workspace; New adds your own.</p>
+        <h4>Research standards references</h4>{listPreferenceEditor('common', 'research_standards_references')}
+        <h4>Publication standards references</h4>{listPreferenceEditor('common', 'publication_standards_references')}
+      </section>
+      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(names, scopes and icons cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
     </div>
   </dialog>;
 }
