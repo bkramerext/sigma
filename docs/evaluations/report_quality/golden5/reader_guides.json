@@ -34,5 +34,11 @@
     "answer": "Within a specified fixed-axis model, a calibrated increase in coherence can reject that null. A visible revival alone can also arise from preparation or readout drift.",
     "route": "First define the physical model; then examine what sparse sampling and calibration can hide; finally state the rejection rule and the assumptions it needs.",
     "boundary": "No experiment or simulation was run, and the primary literature was not independently benchmarked."
+  },
+  "operation-narrow-passage-round10": {
+    "question": "Can an alliance protect injured personnel, preserve the Philippine position, and avoid war in the fictional crisis?",
+    "answer": "The saved analysis cannot guarantee all three outcomes, but it does not prove success impossible. Its decisive question is whether lifesaving care can be separated from permanent exclusion of the Philippine presence.",
+    "route": "Separate the medical, structural, and political clocks; test an adverse continuation; then compare the conditional paths and the evidence needed to choose among them.",
+    "boundary": "The scenario supplies no validated safety window, legal conclusion, transport plan, or accepted continuity arrangement. These are analytical options, not operational recommendations."
   }
 }

@@ -52,5 +52,12 @@
       "C23",
       "C24"
     ]
+  },
+  "operation-narrow-passage-round10": {
+    "section": "Competing Clocks and Decision Authority",
+    "title": "A deadline is not a safety window",
+    "text": "A political deadline at dawn could be extended while the wreck becomes unsafe earlier. Conversely, an urgent medical evacuation could be feasible while the demand for permanent departure remains. Checking one clock cannot establish that the other constraint is satisfied. A temporary hold or departure proposal therefore needs separate evidence about safety, authority, and an executable continuity arrangement.",
+    "claim_ids": ["C75", "C76", "C83"],
+    "after_paragraph": 2
   }
 }

@@ -1,4 +1,4 @@
-"""Rebuild the five review papers from their archived structured drafts.
+"""Rebuild review papers from their archived structured drafts.
 
 This is a local render and TeX compile. It does not resume research, call an AI
 provider, or replace the archived source records.
@@ -18,6 +18,7 @@ from sigma import papers
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "docs/evaluations/report_quality/golden5"
+ADDITIONAL_ARCHIVE = ROOT / "docs/evaluations/report_quality/additional"
 VISUAL_OVERRIDES = ARCHIVE / "visual_overrides.json"
 READER_GUIDES = ARCHIVE / "reader_guides.json"
 WORKED_EXAMPLES = ARCHIVE / "worked_examples.json"
@@ -28,14 +29,20 @@ SLUGS = (
     "nonconsecutive-subset-sums-modulo-3",
     "warp-drive-design",
     "qubit-non-markovian-v1",
+    "operation-narrow-passage-round10",
 )
 OUTPUT_NAMES = {
-    "qubit-non-markovian-v1": "when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1"
+    "qubit-non-markovian-v1": "when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1",
+    "operation-narrow-passage-round10": "operation-narrow-passage",
 }
 
 
 def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
-    record_path = ARCHIVE / slug / "metadata.full.json.gz"
+    record_path = (
+        (ADDITIONAL_ARCHIVE if slug == "operation-narrow-passage-round10" else ARCHIVE)
+        / slug
+        / "metadata.full.json.gz"
+    )
     with gzip.open(record_path, "rt", encoding="utf-8") as stream:
         record = json.load(stream)
     draft = papers.PaperDraft.model_validate(record["draft"])
@@ -62,14 +69,15 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
             break
     else:
         raise ValueError(f"Worked-example section not found: {target_section}")
-    editorial_path = ARCHIVE / slug / "editorial_override.json"
+    editorial_path = record_path.parent / "editorial_override.json"
     if editorial_path.exists():
         editorial = json.loads(editorial_path.read_text(encoding="utf-8"))
         for edit in [editorial, *editorial.get("additional_sections", [])]:
             for section in section_data:
                 if section["heading"] != edit["section"]:
                     continue
-                section["paragraphs"] = edit["paragraphs"]
+                if "paragraphs" in edit:
+                    section["paragraphs"] = edit["paragraphs"]
                 if "table" in edit:
                     table = edit["table"]
                     refs = list(
@@ -113,7 +121,11 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
         include_validation_notes=False,
         include_research_excerpts=False,
         source_reference_map={
-            item["source_ref"]: item["label"] for item in generation.get("source_reference_map", [])
+            item["source_ref"]: item["label"]
+            for item in (
+                generation.get("source_reference_map")
+                or papers._source_reference_records(record["snapshot"])
+            )
         },
         writing_sources=generation.get("writing_sources", []),
     )

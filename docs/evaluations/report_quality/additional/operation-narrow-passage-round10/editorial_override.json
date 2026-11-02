@@ -1,0 +1,13 @@
+{
+  "section": "Conditional Courses of Action and Their Dependencies",
+  "table": {
+    "caption": "Three conditional paths in the fictional crisis. These are decision branches, not validated recommendations; each depends on facts or sovereign choices the brief does not settle.",
+    "headers": ["Path", "Required condition", "Unresolved point"],
+    "rows": [
+      ["Temporary hold", "Occupancy remains safe long enough for care and an observed pause.", "No reliable safety window or implemented standstill is established."],
+      ["Departure with continuity", "Manila accepts an executable return or replacement arrangement.", "Beijing's agreement and implementation are unverified."],
+      ["Neither path feasible", "Leadership explicitly chooses among competing objectives.", "The brief supplies no validated ranking or alternative course."]
+    ],
+    "claim_ids": ["C76", "C78", "C81", "C82", "C91"]
+  }
+}
