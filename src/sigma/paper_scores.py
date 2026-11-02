@@ -29,6 +29,12 @@ WEIGHTS = {
 }
 assert sum(WEIGHTS.values()) == 100
 
+def normalize_total(earned: int, possible: int) -> int:
+    """Round half up onto a 0–100 scale; reject invalid or fractional raw scores."""
+    if type(earned) is not int or type(possible) is not int or possible <= 0 or not 0 <= earned <= possible:
+        raise ValueError("Invalid paper-score numerator or denominator")
+    return (200 * earned + possible) // (2 * possible)
+
 DESCRIPTION = {
     "tex_correctness": "TeX correctness",
     "readability": "Human readability, including layout",
@@ -40,7 +46,7 @@ DESCRIPTION = {
 
 class CategoryJudgment(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    earned: int = Field(ge=0, le=100)
+    earned: int = Field(ge=0, le=100, strict=True)
     explanation: str = Field(min_length=8, max_length=1500)
 
 class PaperJudgment(BaseModel):
@@ -74,7 +80,7 @@ def validate_score(score: Any, pdf_sha: str) -> dict[str, Any] | None:
         if not isinstance(row["explanation"], str) or not row["explanation"].strip():
             return None
         total += earned
-    if type(score.get("total")) is not int or score["total"] != total:
+    if type(score.get("total")) is not int or score["total"] != normalize_total(total, sum(WEIGHTS.values())):
         return None
     return score
 
@@ -99,8 +105,14 @@ def _pdf_excerpts(pdf: bytes) -> dict[str, Any]:
     page_count, warnings = papers._pdf_text_bounds_diagnostics(pdf)
     pages: list[dict[str, Any]] = []
     document = pypdfium2.PdfDocument(pdf)
+    # For long papers, sample the beginning, middle and conclusion rather than
+    # scoring only an introduction while silently overlooking the final pages.
+    if page_count <= 24:
+        indices = list(range(page_count))
+    else:
+        indices = sorted(set(range(8)) | set(range(max(8, page_count // 2 - 4), min(page_count, page_count // 2 + 4))) | set(range(page_count - 8, page_count)))
     try:
-        for number in range(min(page_count, 24)):
+        for number in indices:
             page = document[number]
             try:
                 textpage = page.get_textpage()
@@ -127,8 +139,34 @@ def _context(record: dict[str, Any], pdf: bytes) -> dict[str, Any]:
     snapshot = record.get("snapshot") or {}
     sources = snapshot.get("sources") if isinstance(snapshot, dict) else None
     claim_list = draft.get("claims") if isinstance(draft, dict) else None
+    # Prefer actual saved source evidence over mere citation inventories.
+    # Large research archives are sampled deterministically and the omissions
+    # are disclosed to the evaluator, never confused with a full independent audit.
+    research_samples: list[dict[str, str]] = []
+    source_rows = [item for item in (sources or []) if isinstance(item, dict)]
+    referenced = {
+        str(ref) for item in (claim_list or []) if isinstance(item, dict)
+        for ref in (item.get("evidence_refs") or []) if isinstance(ref, str)
+    }
+    ordered = sorted(source_rows, key=lambda item: (
+        str(item.get("id", "")) not in referenced,
+        str(item.get("kind", "")) not in {"artifact", "session"},
+    ))
+    budget = 28000
+    for source in ordered:
+        if budget <= 0:
+            break
+        text = json.dumps(source.get("data"), ensure_ascii=False, default=str)
+        excerpt = text[:min(1600, budget)]
+        if excerpt:
+            research_samples.append({"id": str(source.get("id", ""))[:120], "data_excerpt": excerpt,
+                                     "truncated": str(len(text) > len(excerpt))})
+            budget -= len(excerpt)
     return {
         "pdf": _pdf_excerpts(pdf),
+        "saved_research_excerpts": research_samples,
+        "saved_sources_total": len(source_rows),
+        "saved_sources_sampled": len(research_samples),
         "recorded_validation_warnings": (record.get("validation_warnings") or [])[:20],
         "recorded_author_review_warnings": (record.get("author_review_warnings") or [])[:20],
         "claim_register": [
@@ -142,8 +180,8 @@ def _context(record: dict[str, Any], pdf: bytes) -> dict[str, Any]:
             {"id": str(item.get("id", ""))[:100], "kind": str(item.get("kind", ""))[:80]}
             for item in (sources or [])[:100] if isinstance(item, dict)
         ],
-        "evidence_limit": "Only source IDs and the saved paper claim register are supplied. "
-        "Do not claim the original research archive or external references were independently verified.",
+        "evidence_limit": "Saved source excerpts may be truncated or omitted and external references were not independently verified. "
+        "Do not claim that the full original research archive or external references were independently audited.",
     }
 
 INSTRUCTIONS = """Score a scientific paper as a provisional, critical research AND editorial reviewer.
@@ -173,7 +211,7 @@ def _make_score(judgment: PaperJudgment, sha: str) -> dict[str, Any]:
     score = {
         "rubric_id": RUBRIC_ID, "rubric_version": RUBRIC_VERSION,
         "pdf_sha256": sha, "categories": categories,
-        "total": sum(row["earned"] for row in categories.values()),
+        "total": normalize_total(sum(row["earned"] for row in categories.values()), sum(WEIGHTS.values())),
         "provisional": True,
     }
     assert validate_score(score, sha) is not None
