@@ -19,7 +19,8 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 CATALOG_VERSION = "methodology-catalog-v1"
-MAX_SOURCES = 3
+# Advisory only: do not truncate inherited or user-specified references.
+RECOMMENDED_SOURCE_COUNT = 3
 # IDs and notes have been individually source-checked against readable HTML.
 # "notes" are concise method implications written by the SIGMA coordinator.
 CATALOG: tuple[dict[str, str], ...] = (
@@ -142,121 +143,95 @@ CATALOG: tuple[dict[str, str], ...] = (
     },
 )
 
-BY_ID = {row["id"]: row for row in CATALOG}
-# Only identify problem branch to select a *method reference*, never treat
-# branch-keyword matches as verified scientific facts or pre-solved results.
-BRANCH_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
-    (
-        "mathematical",
-        "combinatorics",
-        re.compile(
-            r"\b(subsets?|combinatoric\w*|counting|generating function|recurrence|modulo|fibonacci|graph enumerat\w*)\b",
-            re.IGNORECASE,
-        ),
-    ),
-    (
-        "physics",
-        "relativity",
-        re.compile(
-            r"\b(warp|spacetime|metric|relativit\w*|einstein|superluminal|ftl|stress.energy)\b",
-            re.IGNORECASE,
-        ),
-    ),
-    (
-        "biology",
-        "animal-regeneration",
-        re.compile(
-            r"\b(tadpole\w*|xenopus|regenerat\w*|wound|tail|erk|animal)\b",
-            re.IGNORECASE,
-        ),
-    ),
-    (
-        "computer_science",
-        "federation",
-        re.compile(
-            r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b",
-            re.IGNORECASE,
-        ),
-    ),
-    (
-        "computer_science",
-        "ai-reliability",
-        re.compile(
-            r"\b(agent\w*|retr(?:y|ies)|external effect|reliab\w*|checkpoint|acknowledg\w*)\b",
-            re.IGNORECASE,
-        ),
-    ),
-    (
-        "engineering",
-        "federation",
-        re.compile(
-            r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b",
-            re.IGNORECASE,
-        ),
-    ),
-)
+
+# Source information below enriches *known* URLs, but never chooses references.
+# Selection comes exclusively from the unified Project Types data model.
+BY_URL = {row["url"]: row for row in CATALOG}
+BY_URL["https://github.com/acmsigsoft/EmpiricalStandards/blob/master/docs/standards/EngineeringResearch.md"] = {
+    "id": "acm-engineering-method",
+    "title": "ACM SIGSOFT — Engineering Research",
+    "notes": "For software engineering distinguish conceptual designs, analytical results, tested implementations, and independently measured outcomes. Check the task, correctness oracle, and limitations.",
+}
+CATALOG_VERSION = "project-type-methods-v1"
 
 
-def _usable(row: Mapping[str, Any]) -> bool:
-    """Never select a broken/unreadable or metadata-only catalog record."""
-    return (
-        isinstance(row.get("id"), str)
-        and isinstance(row.get("title"), str)
-        and len(row["title"]) >= 10
-        and isinstance(row.get("url"), str)
-        and row["url"].startswith("https://")
-        and isinstance(row.get("notes"), str)
-        and len(row["notes"]) >= 50
-        and len(row["notes"]) <= 900
+def _canonical_url(url: str) -> str:
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    host = (parts.hostname or "").casefold()
+    if parts.port and (parts.scheme.lower(), parts.port) not in {
+        ("https", 443), ("http", 80)
+    }:
+        host += f":{parts.port}"
+    return urlunsplit((parts.scheme.lower(), host, parts.path or "/", parts.query, ""))
+
+
+def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str | None]:
+    """Collect common + root-to-leaf Project Types references without truncation.
+
+    Missing parents/cycles are bounded. Custom types are allowed; no keyword
+    classifier can override an explicitly persisted project type.
+    """
+    from sigma.project_types import (
+        builtin_types,
+        common_research_references,
+        custom_types,
     )
 
+    definitions = {t.id: t for t in [*builtin_types(), *custom_types()]}
+    chain = []
+    visited: set[str] = set()
+    cursor: str | None = project_type_id
+    while cursor and cursor not in visited:
+        visited.add(cursor)
+        item = definitions.get(cursor)
+        if item is None:
+            break
+        chain.append(item)
+        cursor = item.based_on
+    chain.reverse()
 
-def _branch(mode: str, title: str, text: str) -> str | None:
-    """Prefer the project's declared topic over incidental method keywords."""
-    ranked: list[tuple[int, int, str]] = []
-    for order, (kind, specialty, expression) in enumerate(BRANCH_PATTERNS):
-        if kind != mode:
-            continue
-        # Count distinct topical evidence, heavily weighting project title.
-        # E.g. an AI agent reliability study mentioning a gateway as an
-        # implementation detail must not become a federation methods study.
-        title_hits = len({m.group().casefold() for m in expression.finditer(title)})
-        context_hits = len({m.group().casefold() for m in expression.finditer(text)})
-        if title_hits or context_hits:
-            ranked.append((12 * title_hits + context_hits, -order, specialty))
-    return max(ranked)[2] if ranked else None
+    seen: set[str] = set()
+    sources: list[dict[str, str]] = []
 
+    def add(url: str, tier: str, owner_id: str, owner_name: str) -> None:
+        canonical = _canonical_url(url)
+        if canonical in seen:
+            return
+        seen.add(canonical)
+        known = BY_URL.get(url) or BY_URL.get(canonical)
+        from urllib.parse import urlsplit
 
-def _source(row: Mapping[str, str]) -> dict[str, str]:
-    # Keep the actual usable methodological note with its source, not just URL.
-    return {key: row[key] for key in ("id", "tier", "title", "url", "notes")} | (
-        {"branch": row["branch"]} if row.get("branch") else {}
-    )
+        title = known["title"] if known else (
+            f"{owner_name} — {urlsplit(canonical).hostname or 'Research method'}"
+        )
+        notes = known["notes"] if known else (
+            "Project-type reference provided by the user or catalog; its contents "
+            "have not been independently inspected here. Consult the reference "
+            "before attributing a prescribed method to it, and state uncertainty."
+        )
+        row = {
+            "id": known["id"] if known else "project-type-" + hashlib.sha256(
+                canonical.encode("utf-8")
+            ).hexdigest()[:16],
+            "tier": tier,
+            "title": title,
+            "url": canonical,
+            "notes": notes,
+            "project_type_id": owner_id,
+        }
+        if tier == "branch":
+            row["branch"] = owner_id
+        sources.append(row)
 
-
-def _complete(ids: list[str], mode: str, branch: str | None) -> bool:
-    if not 2 <= len(ids) <= MAX_SOURCES or len(set(ids)) != len(ids):
-        return False
-    rows: list[dict[str, str]] = []
-    for identifier in ids:
-        row = BY_ID.get(identifier)
-        if row is None or not _usable(row):
-            return False
-        rows.append(row)
-    levels = {r["tier"] for r in rows}
-    if not {"general", "discipline"} <= levels:
-        return False
-    if any(
-        (r["tier"] == "discipline" and r.get("mode") not in {mode, "default"})
-        or (r["tier"] == "branch" and (r.get("mode") != mode or r.get("branch") != branch))
-        for r in rows
-    ):
-        return False
-    if branch and any(
-        row["tier"] == "branch" and row.get("branch") == branch and _usable(row) for row in CATALOG
-    ):
-        return "branch" in levels
-    return True
+    for url in common_research_references():
+        add(url, "general", "common", "Common scientific methods")
+    for index, item in enumerate(chain):
+        tier = "discipline" if index == 0 else "branch"
+        for url in item.research_standards_references:
+            add(url, tier, item.id, item.name)
+    return sources, (chain[-1].id if len(chain) > 1 else None)
 
 
 def select_method_sources(
@@ -266,94 +241,73 @@ def select_method_sources(
     strategies: Iterable[str],
     prior_sessions: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
-    """Return a frozen, bounded, content-bearing selection for a *new* session.
+    """Freeze the complete inherited reference set at session creation.
 
-    Last selection is reused if still usable and covers current mode+branch.
-    Failed/incomplete catalog records are skipped; research never blocks.
-    No external internet calls or provider billing happen in this preflight.
+    The legacy signature is retained for callers; title/problem/strategies do
+    *not* guess a methodology branch. A changed project-type reference set is
+    applied on the next session, never retroactively to saved sessions.
     """
+    _ = (title, problem, strategies)
     if not isinstance(mode, str):
         mode = "default"
-    search_text = " ".join([problem, *list(strategies)])[:40_000]
-    branch = _branch(mode, title, search_text)
-    prior = sorted(
-        (s for s in prior_sessions if isinstance(s, Mapping)),
-        key=lambda s: (str(s.get("created_at") or ""), str(s.get("id") or "")),
+    sources, branch = _effective_sources(mode)
+    selection_key = hashlib.sha256(json.dumps(
+        [{"url": row["url"], "tier": row["tier"], "type": row["project_type_id"]}
+         for row in sources],
+        sort_keys=True,
+    ).encode("utf-8")).hexdigest()
+    old_sessions = sorted(
+        (item for item in prior_sessions if isinstance(item, Mapping)),
+        key=lambda item: (str(item.get("created_at") or ""), str(item.get("id") or "")),
         reverse=True,
     )
-    for previous in prior:
+    status = "selected" if sources else "unavailable"
+    source_session_id = None
+    for previous in old_sessions:
         old = previous.get("research_method_sources")
-        if not isinstance(old, Mapping) or old.get("mode") != mode or old.get("branch") != branch:
+        if not isinstance(old, Mapping) or old.get("selection_key") != selection_key:
             continue
-        source_rows = old.get("sources")
-        if not isinstance(source_rows, list):
+        old_sources = old.get("sources")
+        if not isinstance(old_sources, list) or len(old_sources) != len(sources):
             continue
         if not all(
-            isinstance(row, Mapping) and isinstance(row.get("id"), str) for row in source_rows
+            isinstance(row, dict)
+            and row.get("url") == current["url"]
+            and isinstance(row.get("notes"), str)
+            and isinstance(row.get("title"), str)
+            for row, current in zip(old_sources, sources)
         ):
             continue
-        ids: list[str] = [str(row["id"]) for row in source_rows]
-        if not _complete(ids, mode, branch):
-            continue
-        # Retain the previous *readable content*, not only source IDs:
-        # later catalog copy edits must not silently change a controlled
-        # multi-session research comparison. Reject unsafe/empty old rows.
-        if not all(
-            _usable(row) and row.get("tier") == BY_ID[row["id"]]["tier"] for row in source_rows
-        ):
-            continue
-        rows = [dict(row) for row in source_rows]
-        return {
-            "version": CATALOG_VERSION,
-            "status": "reused",
-            "mode": mode,
-            "branch": branch,
-            "sources": rows,
-            "source_session_id": previous.get("id"),
-            "selection_reason": "Previous session source set remains usable and covers shared, project-type and applicable specialty methods.",
-        }
-
-    rows = [r for r in CATALOG if _usable(r)]
-    selected = []
-    general = next((r for r in rows if r.get("tier") == "general"), None)
-    discipline = next(
-        (r for r in rows if r.get("tier") == "discipline" and r.get("mode") == mode), None
+        # Preserve previously supplied exact descriptions when URLs/ancestry
+        # remain unchanged; annotations can be edited without mutating history.
+        sources = [dict(row) for row in old_sources]
+        status = "reused"
+        source_session_id = str(previous.get("id") or "")
+        break
+    advisory = (
+        f"{len(sources)} research-method references are configured. Three or fewer "
+        "is recommended for focus; all selected references will still be supplied."
+        if len(sources) > RECOMMENDED_SOURCE_COUNT
+        else None
     )
-    if discipline is None:
-        discipline = next((r for r in rows if r.get("id") == "stanford-abduction"), None)
-    specialty = next(
-        (
-            r
-            for r in rows
-            if r.get("tier") == "branch" and r.get("branch") == branch and r.get("mode") == mode
-        ),
-        None,
-    )
-    for row in (general, discipline, specialty):
-        if row and row["id"] not in {item["id"] for item in selected}:
-            selected.append(_source(row))
-    if len(selected) < 2:  # Safe fallback if future catalog entries become unusable.
-        for row in rows:
-            if (
-                row.get("tier") == "discipline"
-                and row.get("mode") in {mode, "default"}
-                and row["id"] not in {i["id"] for i in selected}
-            ):
-                selected.append(_source(row))
-                break
     return {
         "version": CATALOG_VERSION,
-        "status": "selected" if len(selected) >= 2 else "partial",
+        "status": status,
         "mode": mode,
         "branch": branch,
-        "sources": selected[:MAX_SOURCES],
-        "source_session_id": None,
-        "selection_reason": "Chosen from readable coordinator-vetted method notes for this project type and detected specialty; optional unavailable candidates are skipped.",
+        "sources": sources,
+        "source_session_id": source_session_id,
+        "selection_key": selection_key,
+        "advisory": advisory,
+        "selection_reason": (
+            "Resolved common and inherited Project Types research references; "
+            "all references are retained, with three as a nonbinding recommendation."
+        ),
     }
 
 
 def methodology_digest(selection: Mapping[str, Any]) -> str:
-    payload = json.dumps(selection.get("sources", []), sort_keys=True, ensure_ascii=False).encode(
-        "utf-8"
-    )
+    payload = json.dumps(
+        selection.get("sources", []), sort_keys=True, ensure_ascii=False
+    ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
