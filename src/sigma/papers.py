@@ -4080,7 +4080,8 @@ def _tex(
                 (
                     r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
                     r"story node/.style={draw=blue!65,very thick,rounded corners=4pt,"
-                    r"align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]"
+                    r"align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt},"
+                    r"boundary/.style={draw,dashed,rounded corners,inner sep=7pt,fill=none}]"
                 ),
             ]
             for index, node_id in enumerate(ordered):
@@ -4104,6 +4105,17 @@ def _tex(
                     + "} ("
                     + edge.target
                     + ");"
+                )
+            # A simple linear story can still carry trust/containment boundaries.
+            # Do not silently omit them when choosing the readable story layout.
+            for boundary in diagram.boundaries:
+                fit_nodes = "".join("(" + item + ")" for item in boundary.node_ids)
+                result.append(
+                    r"\node[boundary,fit="
+                    + fit_nodes
+                    + r",label={[font=\scriptsize,fill=white,inner sep=1pt]above:{"
+                    + prose_text(boundary.label)
+                    + r"}}] {};"
                 )
             result.extend(
                 [
