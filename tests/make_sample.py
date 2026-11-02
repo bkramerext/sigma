@@ -23,7 +23,15 @@ from research_sessions import (
     wait_for,
 )
 
-from sigma import agentic_evidence, cli, papers, project_bundle, research_sessions, samples
+from sigma import (
+    agentic_evidence,
+    cli,
+    paper_scores,
+    papers,
+    project_bundle,
+    research_sessions,
+    samples,
+)
 from sigma.api import export_project_view
 from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
 from sigma.recents import home_projects
@@ -223,6 +231,18 @@ async def main() -> None:
                 "tex_source": tex_fixture,
                 "pdf_sha256": hashlib.sha256(paper_pdf).hexdigest(),
                 "pdf_size_bytes": len(paper_pdf),
+                "score": paper_scores._make_score(
+                    paper_scores.PaperJudgment.model_validate(
+                        {
+                            category: {
+                                "earned": 74,
+                                "explanation": "Synthetic scored paper acceptance test.",
+                            }
+                            for category in paper_scores.WEIGHTS
+                        }
+                    ),
+                    hashlib.sha256(paper_pdf).hexdigest(),
+                ),
             }
             paper_dir = source / "artifacts" / "papers"
             paper_dir.mkdir(parents=True)
@@ -255,10 +275,20 @@ async def main() -> None:
             assert len(second_session_ids) == 2
             assert copied_session_ids.isdisjoint(second_session_ids)
 
+            assert (
+                samples.sample_projects()["projects"][
+                    next(
+                        i
+                        for i, sample in enumerate(samples.sample_projects()["projects"])
+                        if sample["id"] == "t30-paper"
+                    )
+                ]["best_paper_score"]
+                == 74
+            )
+
             # Reject malicious and incomplete bundle members before publishing
             # anything into the existing sample catalog.
             complete_bundle_value = json.loads(complete_bundle)
-            catalog_before_rejections = snapshot_tree(catalog)
 
             def write_bundle(name: str, value: dict) -> Path:
                 target = root / f"{name}.json"
@@ -269,6 +299,41 @@ async def main() -> None:
                 changed = copy.deepcopy(complete_bundle_value)
                 mutation(changed["files"])
                 return changed
+
+            # Real saved .sigma projects use papers/, not artifacts/papers/.
+            # Both layouts must retain the actual scored metadata and PDF.
+            live_bundle = copy.deepcopy(complete_bundle_value)
+            for suffix in (".json", ".pdf"):
+                source_name = f"artifacts/papers/{paper_id}{suffix}"
+                live_bundle["files"][f"papers/{paper_id}{suffix}"] = live_bundle["files"].pop(
+                    source_name
+                )
+            samples.make_sample(write_bundle("live-papers", live_bundle), "t30-live-papers")
+            assert (
+                next(
+                    item["best_paper_score"]
+                    for item in samples.sample_projects()["projects"]
+                    if item["id"] == "t30-live-papers"
+                )
+                == 74
+            )
+            live_copy = samples.open_sample_project("t30-live-papers")
+            assert papers.get_pdf(live_copy.path, paper_id) == paper_pdf
+            assert paper_scores.cached_score(papers.get_paper(live_copy.path, paper_id))
+
+            duplicate_bundle = copy.deepcopy(complete_bundle_value)
+            duplicate_bundle["files"][f"papers/{paper_id}.json"] = duplicate_bundle["files"][
+                f"artifacts/papers/{paper_id}.json"
+            ]
+            rejects(
+                lambda: samples.make_sample(
+                    write_bundle("duplicate-paper-path", duplicate_bundle),
+                    "t30-duplicate-paper-path",
+                ),
+                "duplicate paper",
+            )
+
+            catalog_before_rejections = snapshot_tree(catalog)
 
             incomplete = mutate_bundle(lambda files: files.pop(f"artifacts/papers/{paper_id}.pdf"))
             rejects(
@@ -483,7 +548,7 @@ async def main() -> None:
 
             opened = samples.open_sample_project("t30-exported")
             assert opened.project.id != export["project"]["id"]
-            assert opened.project.title.endswith("v3")
+            assert opened.project.title.endswith("v4")
             assert len(opened.project.strategies) == 2
             copied_sessions = research_sessions.list_sessions(opened.path)
             assert len(copied_sessions) == 2

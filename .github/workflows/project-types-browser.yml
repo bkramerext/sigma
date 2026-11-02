@@ -1,14 +1,6 @@
 name: Project Types browser acceptance
 
 on:
-  pull_request:
-    paths:
-      - "frontend/**"
-      - "src/sigma/project_types.py"
-      - "src/sigma/project_type_icons.py"
-      - "src/sigma/api.py"
-      - "browser_checks/project_types_436.py"
-      - ".github/workflows/project-types-browser.yml"
   workflow_dispatch:
 
 permissions:

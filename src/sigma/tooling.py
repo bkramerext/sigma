@@ -76,6 +76,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/project_types.py"],
             [*python, "python", "tests/recents.py"],
             [*python, "python", "tests/test_sample_copies.py"],
+            [*python, "python", "tests/test_migrate_scored_samples.py"],
             [*python, "python", "tests/make_sample.py"],
             [*python, "python", "tests/example_math.py"],
             [*python, "python", "tests/research_ladder.py"],
@@ -191,6 +192,26 @@ def run_tooling(command: str) -> int:
             ["npm", "--prefix", "frontend", "run", "typecheck"],
             ["npm", "--prefix", "frontend", "run", "build"],
         ]
+    # CI has a separate fast Ruff job; preserve lint/format for local ./sigma test.
+    if command == "test" and os.environ.get("SIGMA_CI_SEPARATE_RUFF") == "1":
+        steps = [
+            step
+            for step in steps
+            if not (
+                len(step) > 4
+                and step[:4] == ["uv", "run", "--locked", "--no-sync"]
+                and step[4] == "ruff"
+            )
+        ]
+    # Two independent CI jobs cover the entire SIGMA test plan exactly once.
+    # Alternate checks rather than splitting contiguously so expensive checks
+    # are distributed across the runners. Local './sigma test' remains whole.
+    shard = os.environ.get("SIGMA_CI_TEST_SHARD") if command == "test" else None
+    if shard:
+        if shard not in {"1", "2"}:
+            print("SIGMA_CI_TEST_SHARD must be 1 or 2.", file=sys.stderr)
+            return 2
+        steps = [step for index, step in enumerate(steps) if index % 2 == int(shard) - 1]
     unsupported_steps = [step for step in steps if not _test_step_allowed(step)]
     if command == "test" and unsupported_steps:
         print(
@@ -220,6 +241,9 @@ def run_tooling(command: str) -> int:
                 "SIGMA_PROJECTS_ROOT": str(projects_root),
                 "SIGMA_AUTH_HOME": str(auth_root),
             }
+            # Do not leak this CI-only option into local-tooling regression tests.
+            environment.pop("SIGMA_CI_SEPARATE_RUFF", None)
+            environment.pop("SIGMA_CI_TEST_SHARD", None)
         else:
             environment = None
         for step in steps:

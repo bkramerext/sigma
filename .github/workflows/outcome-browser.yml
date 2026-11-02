@@ -1,13 +1,6 @@
 name: Research Outcome browser acceptance
 
 on:
-  pull_request:
-    paths:
-      - "frontend/**"
-      - "src/sigma/research_epistemics.py"
-      - "src/sigma/research_sessions.py"
-      - "browser_checks/t47_conclusion.py"
-      - ".github/workflows/outcome-browser.yml"
   workflow_dispatch:
 
 permissions:

@@ -61,6 +61,57 @@ def check_failures() -> None:
         assert not any("increment15_offline_pairs.py" in command for command in completed)
         assert not any(command[-2:] == ["run", "build"] for command in completed)
         assert run.call_args.kwargs["cwd"] == ROOT
+    # CI keeps a separate Ruff job, but local SIGMA verification still lints.
+    with (
+        patch.dict(os.environ, {"SIGMA_CI_SEPARATE_RUFF": "1"}),
+        patch("sigma.tooling.shutil.which", return_value="tool"),
+        patch(
+            "sigma.tooling.subprocess.run", return_value=subprocess.CompletedProcess([], 0)
+        ) as run,
+    ):
+        assert run_tooling("test") == 0
+        commands = [item.args[0] for item in run.call_args_list]
+        assert not any("ruff" in command for command in commands)
+        assert any("pyright" in command for command in commands)
+        assert any("tests/lifecycle.py" in command for command in commands)
+
+    # Both CI shards must be exhaustive together, disjoint, and independent.
+    plans: dict[str, list[list[str]]] = {}
+    for shard in ("", "1", "2"):
+        with (
+            patch.dict(
+                os.environ,
+                {"SIGMA_CI_TEST_SHARD": shard, "SIGMA_CI_SEPARATE_RUFF": "1"},
+            ),
+            patch("sigma.tooling.shutil.which", return_value="tool"),
+            patch(
+                "sigma.tooling.subprocess.run",
+                return_value=subprocess.CompletedProcess([], 0),
+            ) as run,
+        ):
+            assert run_tooling("test") == 0
+            plans[shard] = [item.args[0] for item in run.call_args_list]
+            assert all(
+                "SIGMA_CI_TEST_SHARD" not in item.kwargs["env"] for item in run.call_args_list
+            )
+    whole, first, second = plans[""], plans["1"], plans["2"]
+    assert len(first) > 25 and len(second) > 25
+    assert len(first) + len(second) == len(whole)
+    assert len({tuple(step) for step in first + second}) == len(whole)
+    assert {tuple(step) for step in first + second} == {tuple(step) for step in whole}
+    assert not any("ruff" in step for step in first + second)
+    assert any("tests/papers.py" in step for step in first + second)
+    assert any("tests/cloud_auth.py" in step for step in first + second)
+    assert any("scripts/increment15_offline_pairs.py" in step for step in first + second)
+    assert any(step[-2:] == ["run", "build"] for step in first + second)
+    with (
+        patch.dict(os.environ, {"SIGMA_CI_TEST_SHARD": "invalid"}),
+        patch("sigma.tooling.shutil.which", return_value="tool"),
+        patch("sigma.tooling.subprocess.run") as run,
+    ):
+        assert run_tooling("test") == 2
+        run.assert_not_called()
+
     with (
         patch("sigma.tooling.shutil.which", return_value="tool"),
         patch("sigma.tooling.subprocess.run", side_effect=OSError("cannot launch")),

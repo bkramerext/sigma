@@ -302,7 +302,8 @@ def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any], dict[s
             runs = [
                 json.loads(contents)
                 for name, contents in members.items()
-                if name.startswith("agentic-runs/") and name.endswith(".json")
+                if name.startswith(("agentic-runs/", "evidence/agentic-runs/"))
+                and name.endswith(".json")
             ]
         except (BundleError, KeyError, ValueError, UnicodeDecodeError) as exc:
             raise ProjectError("Expected a valid complete SIGMA project bundle.") from exc
@@ -312,11 +313,25 @@ def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any], dict[s
             "agentic_runs": runs,
             "research_sessions": sessions,
         }
-        paper_members = {
-            name: contents
-            for name, contents in members.items()
-            if name.startswith("artifacts/papers/")
-        }
+        # Saved .sigma projects store papers under papers/, whereas portable
+        # project exports may use artifacts/papers/. Normalize both paths.
+        # Never silently drop a real saved paper or choose between duplicates.
+        paper_members = {}
+        for member_name, contents in members.items():
+            if member_name.startswith("papers/"):
+                paper_name = "artifacts/" + member_name
+            elif member_name.startswith("artifacts/papers/"):
+                paper_name = member_name
+            else:
+                continue
+            # Generation checkpoints and version counters are not saved papers.
+            # A saved paper has an exact 32-hex ID and a JSON/PDF pair.
+            relative_name = paper_name.removeprefix("artifacts/papers/")
+            if not re.fullmatch(r"[0-9a-f]{32}\.(?:json|pdf)", relative_name):
+                continue
+            if paper_name in paper_members:
+                raise ProjectError("Project bundle contains duplicate paper artifacts.")
+            paper_members[paper_name] = contents
     if isinstance(value, dict) and value.get("continuations"):
         raise ProjectError(
             "Sample conversion of continuation approvals is not supported; preserve the Project Audit JSON and working project to retain lineage."

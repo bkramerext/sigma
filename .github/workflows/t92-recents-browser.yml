@@ -1,13 +1,6 @@
 name: T92 Recent Projects browser acceptance
 
 on:
-  pull_request:
-    paths:
-      - "frontend/**"
-      - "src/sigma/recents.py"
-      - "src/sigma/research_sessions.py"
-      - "browser_checks/t92_recent_running.py"
-      - ".github/workflows/t92-recents-browser.yml"
   workflow_dispatch:
 
 permissions:

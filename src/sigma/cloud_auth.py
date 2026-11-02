@@ -859,6 +859,18 @@ _GUEST_PROJECT_READ_PATHS = {
 }
 
 
+def public_sample_paper_path(method: str, path: str) -> bool:
+    """Only the immutable sample PDF viewer is public, never arbitrary project papers."""
+    return (
+        method == "GET"
+        and re.fullmatch(
+            r"/api/projects/samples/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?/top-paper/pdf",
+            path,
+        )
+        is not None
+    )
+
+
 def _guest_project_route_allowed(method: str, path: str) -> bool:
     """Explicitly allow sample browsing and project reads inside a guest workspace."""
     if method == "GET" and (path == "/api/projects/samples" or path in _GUEST_PROJECT_READ_PATHS):
@@ -952,6 +964,8 @@ async def middleware(request: Request, call_next):
     if not cfg.enabled:
         return await call_next(request)
     path = request.url.path
+    if public_sample_paper_path(request.method, path):
+        return await call_next(request)
     public = path == "/api/ui-instance" or path in {
         "/api/cloud-auth/status",
         "/api/cloud-auth/login",

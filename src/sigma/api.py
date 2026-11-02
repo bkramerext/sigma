@@ -85,6 +85,7 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
         not cloud_workspaces.enabled()
         or request.url.path == "/api/ui-instance"
         or request.url.path == "/api/projects/samples"
+        or cloud_auth.public_sample_paper_path(request.method, request.url.path)
         or request.url.path.startswith("/api/cloud-auth/")
         or request.url.path.startswith("/api/ai/auth/callback/")
     ):
