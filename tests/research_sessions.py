@@ -11537,6 +11537,13 @@ def test_protocol_completion_rejects_invalid_or_duplicate_accepted_slots() -> No
     plan, error = research_sessions._protocol_completion_recovery_plan(record)
     assert plan is None and error is not None and "out-of-range" in error
 
+    record["steps"][-1]["cycle"] = True
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert plan is None and error is not None and "non-integer round" in error
+    record["steps"][-1]["cycle"] = ["unhashable"]
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert plan is None and error is not None and "non-integer round" in error
+
     record["steps"][-1]["cycle"] = 3
     record["steps"][-1]["role"] = "investigator"
     plan, error = research_sessions._protocol_completion_recovery_plan(record)
