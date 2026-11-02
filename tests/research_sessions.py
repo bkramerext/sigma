@@ -806,7 +806,7 @@ async def setup(path: Path):
 def test_project_type_research_references_replace_keyword_catalog(monkeypatch):
     from sigma import project_types, research_method_sources
 
-    monkeypatch.setattr(project_types, "custom_types", lambda: [])
+    monkeypatch.setattr(project_types, "custom_types", list)
     for mode in ("computer_science", "mathematical", "biology", "physics"):
         selected = research_method_sources.select_method_sources(
             mode, "Unrelated title", "unrelated subject", (), ()
@@ -816,9 +816,7 @@ def test_project_type_research_references_replace_keyword_catalog(monkeypatch):
         expected_count = 3 if mode in ("mathematical", "physics") else 2
         assert len(selected["sources"]) == expected_count
         assert [item["tier"] for item in selected["sources"]] == (
-            ["general", "general", "discipline"]
-            if expected_count == 3
-            else ["general", "general"]
+            ["general", "general", "discipline"] if expected_count == 3 else ["general", "general"]
         )
         assert all(item["project_type_id"] == "common" for item in selected["sources"][:2])
         assert all(item["project_type_id"] == mode for item in selected["sources"][2:])
@@ -839,7 +837,10 @@ def test_project_type_research_references_replace_keyword_catalog(monkeypatch):
 def test_project_type_inheritance_more_than_three_is_advisory(monkeypatch):
     from sigma import project_types, research_method_sources
 
-    refs = ("https://example.org/special-method", "https://example.org/measurement")
+    refs = (
+        {"name": "Special Method", "url": "https://example.org/special-method"},
+        {"name": "Measurement", "url": "https://example.org/measurement"},
+    )
     physics = next(t for t in project_types.builtin_types() if t.id == "physics")
     child = project_types.ProjectType(
         id="custom-physics",
@@ -874,7 +875,7 @@ def test_project_type_inheritance_more_than_three_is_advisory(monkeypatch):
     )
     assert changed["status"] == "selected"  # no stale reference reuse after edit
     assert len(changed["sources"]) == 4
-    assert selected["sources"][-1]["url"] == refs[1]  # old snapshot immutable
+    assert selected["sources"][-1]["url"] == refs[1]["url"]  # old snapshot immutable
     assert changed["advisory"]
 
 
@@ -888,7 +889,7 @@ def test_project_type_reference_ancestry_missing_and_cyclic_parents(monkeypatch)
         user_defined=True,
         icon=project_types.placeholder_icon(),
         based_on="physics",
-        research_standards_references=("https://example.org/root",),
+        research_standards_references=({"name": "Root", "url": "https://example.org/root"},),
     )
     leaf = project_types.ProjectType(
         id="custom-leaf",
@@ -897,7 +898,7 @@ def test_project_type_reference_ancestry_missing_and_cyclic_parents(monkeypatch)
         user_defined=True,
         icon=project_types.placeholder_icon(),
         based_on="custom-root",
-        research_standards_references=("https://example.org/leaf",),
+        research_standards_references=({"name": "Leaf", "url": "https://example.org/leaf"},),
     )
     monkeypatch.setattr(project_types, "custom_types", lambda: [root, leaf])
     resolved = research_method_sources.select_method_sources("custom-leaf", "", "", (), ())
@@ -932,7 +933,7 @@ def test_project_type_methods_reach_both_agents_and_skeptic_challenges(monkeypat
         user_defined=True,
         icon=project_types.placeholder_icon(),
         based_on="biology",
-        research_standards_references=("https://example.org/special",),
+        research_standards_references=({"name": "Special", "url": "https://example.org/special"},),
     )
     monkeypatch.setattr(project_types, "custom_types", lambda: [custom])
     selected = research_method_sources.select_method_sources("special", "", "", (), ())
