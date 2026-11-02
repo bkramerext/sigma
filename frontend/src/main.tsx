@@ -3698,6 +3698,16 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
 }
 
 type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; pinned: boolean; error: string | null };
+// A versioned project's family is its title without the final " vN" suffix.
+// Pinning is a presentation choice: hidden siblings remain in the account's
+// complete Saved Projects index and become visible again on unpin.
+function recentProjectFamilyKey(project: RecentProject): string {
+  return `${project.investigation_type ?? ''}:\0${project.title.replace(/\\s+v\\d+$/i, '').trim().toLocaleLowerCase()}`;
+}
+function visibleRecentProjects(projects: RecentProject[]): RecentProject[] {
+  const pinnedFamilies = new Set(projects.filter(project => project.pinned && project.available).map(recentProjectFamilyKey));
+  return projects.filter(project => project.pinned || !pinnedFamilies.has(recentProjectFamilyKey(project)));
+}
 type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
@@ -3764,7 +3774,8 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     } catch (cause) { setError(errorMessage(cause)); }
     finally { pending.current = false; setOpening(''); }
   }
-  const recentGroups = projects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+  const visibleProjects = visibleRecentProjects(projects);
+  const recentGroups = visibleProjects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
