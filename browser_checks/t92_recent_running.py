@@ -165,8 +165,9 @@ with sync_playwright() as playwright:
         recent_group.locator("summary").click()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
 
-    pin = recent.get_by_role("button", name="Just show this version of the project")
-    remove = recent.get_by_role("button", name="Remove this project")
+    target_row = recent.locator("li").filter(has=recent.get_by_role("button", name=project_title, exact=True))
+    pin = target_row.get_by_role("button", name="Just show this version of the project")
+    remove = target_row.get_by_role("button", name="Remove this project")
     assert pin.get_attribute("title") == "Just show this version of the project"
     assert remove.get_attribute("title") == "Remove this project"
     pin_color = pin.evaluate("node => getComputedStyle(node).color")
