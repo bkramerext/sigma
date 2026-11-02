@@ -1,4 +1,5 @@
 """Regression tests for SIGMA's versioned, research-aware paper scoring."""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,15 +12,25 @@ from unittest.mock import AsyncMock, patch
 from sigma import paper_scores, papers
 from sigma.projects import initialize_project
 
+
 def judgment() -> paper_scores.PaperJudgment:
-    return paper_scores.PaperJudgment.model_validate({
-        "tex_correctness": {"earned": 80, "explanation": "Typesetting is mostly sound."},
-        "readability": {"earned": 76, "explanation": "Some sections require rereading."},
-        "sustained_answer": {"earned": 72, "explanation": "The conclusion is qualified."},
-        "research_rigor": {"earned": 68, "explanation": "Some alternate explanations are unchecked."},
-        "evidence": {"earned": 82, "explanation": "Several material citations need verification."},
-        "visuals": {"earned": 90, "explanation": "One chart could be more clearly labelled."},
-    })
+    return paper_scores.PaperJudgment.model_validate(
+        {
+            "tex_correctness": {"earned": 80, "explanation": "Typesetting is mostly sound."},
+            "readability": {"earned": 76, "explanation": "Some sections require rereading."},
+            "sustained_answer": {"earned": 72, "explanation": "The conclusion is qualified."},
+            "research_rigor": {
+                "earned": 68,
+                "explanation": "Some alternate explanations are unchecked.",
+            },
+            "evidence": {
+                "earned": 82,
+                "explanation": "Several material citations need verification.",
+            },
+            "visuals": {"earned": 90, "explanation": "One chart could be more clearly labelled."},
+        }
+    )
+
 
 def test_scoring_weights_and_normalized_total() -> None:
     sha = "a" * 64
@@ -28,12 +39,24 @@ def test_scoring_weights_and_normalized_total() -> None:
     assert sum(paper_scores.WEIGHTS.values()) == 100
     assert all(weight >= 10 for weight in paper_scores.WEIGHTS.values())
     assert [score["categories"][key]["weight"] for key in paper_scores.WEIGHTS] == [
-        0.10, 0.20, 0.15, 0.30, 0.15, 0.10,
+        0.10,
+        0.20,
+        0.15,
+        0.30,
+        0.15,
+        0.10,
     ]
-    assert [f"{score['categories'][key]['earned']}/{score['categories'][key]['max']}"
-            for key in paper_scores.WEIGHTS] == [
-                "80/100", "76/100", "72/100", "68/100", "82/100", "90/100",
-            ]
+    assert [
+        f"{score['categories'][key]['earned']}/{score['categories'][key]['max']}"
+        for key in paper_scores.WEIGHTS
+    ] == [
+        "80/100",
+        "76/100",
+        "72/100",
+        "68/100",
+        "82/100",
+        "90/100",
+    ]
     # 8 + 15.2 + 10.8 + 20.4 + 12.3 + 9 = 75.7, rounded half up.
     assert score["total"] == 76
     assert f"{score['total']}/100" == "76/100"
@@ -69,7 +92,10 @@ def test_scoring_weights_and_normalized_total() -> None:
     assert paper_scores.validate_score(invalid, sha) is None
     invalid = copy.deepcopy(score)
     invalid["categories"]["extra"] = {
-        "earned": 1, "max": 100, "weight": 0.10, "explanation": "Extra"
+        "earned": 1,
+        "max": 100,
+        "weight": 0.10,
+        "explanation": "Extra",
     }
     assert paper_scores.validate_score(invalid, sha) is None
 
@@ -91,21 +117,37 @@ def test_score_bounds_and_best_known_only() -> None:
     high["categories"]["research_rigor"]["earned"] = 78
     high["total"] += 3
     assert paper_scores.best_score([]) is None
-    assert paper_scores.best_score([
-        {"score": None, "pdf_available": True, "pdf_sha256": sha}
-    ]) is None
-    assert paper_scores.best_score([
-        {"score": low, "pdf_available": True, "pdf_sha256": sha},
-        {"score": high, "pdf_available": True, "pdf_sha256": sha},
-        {"score": None, "pdf_available": True, "pdf_sha256": sha},
-    ]) == 79
-    assert paper_scores.best_score([
-        {"score": high, "pdf_available": False, "pdf_sha256": sha},
-        {"score": low, "pdf_available": True, "pdf_sha256": sha}
-    ]) == 76
-    assert paper_scores.best_score([
-        {"score": high, "pdf_available": True, "pdf_sha256": "0" * 64},
-    ]) is None
+    assert (
+        paper_scores.best_score([{"score": None, "pdf_available": True, "pdf_sha256": sha}]) is None
+    )
+    assert (
+        paper_scores.best_score(
+            [
+                {"score": low, "pdf_available": True, "pdf_sha256": sha},
+                {"score": high, "pdf_available": True, "pdf_sha256": sha},
+                {"score": None, "pdf_available": True, "pdf_sha256": sha},
+            ]
+        )
+        == 79
+    )
+    assert (
+        paper_scores.best_score(
+            [
+                {"score": high, "pdf_available": False, "pdf_sha256": sha},
+                {"score": low, "pdf_available": True, "pdf_sha256": sha},
+            ]
+        )
+        == 76
+    )
+    assert (
+        paper_scores.best_score(
+            [
+                {"score": high, "pdf_available": True, "pdf_sha256": "0" * 64},
+            ]
+        )
+        is None
+    )
+
 
 def test_score_persists_per_version_and_deleted_highest_falls_back() -> None:
     with TemporaryDirectory() as temporary:
@@ -113,14 +155,20 @@ def test_score_persists_per_version_and_deleted_highest_falls_back() -> None:
         view = initialize_project(path, "Paper Scoring", "Compare two papers.")
         ids = ("a" * 32, "b" * 32)
         for version, paper_id in enumerate(ids):
-            papers._save(str(path), {
-                "schema_version": 1, "paper_id": paper_id,
-                "project_id": view.project.id,
-                "created_at": f"2026-11-0{version + 1}T00:00:00+00:00",
-                "snapshot_sha256": "c" * 64,
-                "draft": {"title": "A saved paper"}, "generation": {},
-                "validation_warnings": [],
-            }, b"%PDF-fixture" + bytes([version]))
+            papers._save(
+                str(path),
+                {
+                    "schema_version": 1,
+                    "paper_id": paper_id,
+                    "project_id": view.project.id,
+                    "created_at": f"2026-11-0{version + 1}T00:00:00+00:00",
+                    "snapshot_sha256": "c" * 64,
+                    "draft": {"title": "A saved paper"},
+                    "generation": {},
+                    "validation_warnings": [],
+                },
+                b"%PDF-fixture" + bytes([version]),
+            )
         assert len(papers.list_papers(str(path))) == 2
         records = [papers.get_paper(str(path), paper_id) for paper_id in ids]
         for index, record in enumerate(records):
@@ -138,31 +186,48 @@ def test_score_persists_per_version_and_deleted_highest_falls_back() -> None:
         assert len(remaining) == 1
         assert paper_scores.best_score(remaining) == 76
 
+
 def test_scoring_is_single_flight_and_cache_hit_avoids_provider() -> None:
     async def scenario() -> None:
         with TemporaryDirectory() as temporary:
             path = Path(temporary) / "score-once.sigma"
             view = initialize_project(path, "Scoring Test", "Evaluate a saved paper.")
             paper_id = "d" * 32
-            papers._save(str(path), {
-                "schema_version": 1, "paper_id": paper_id,
-                "project_id": view.project.id,
-                "created_at": "2026-11-01T00:00:00+00:00",
-                "snapshot_sha256": "c" * 64,
-                "draft": {"title": "Scored paper"}, "generation": {},
-                "validation_warnings": [],
-            }, b"%PDF-fixture")
+            papers._save(
+                str(path),
+                {
+                    "schema_version": 1,
+                    "paper_id": paper_id,
+                    "project_id": view.project.id,
+                    "created_at": "2026-11-01T00:00:00+00:00",
+                    "snapshot_sha256": "c" * 64,
+                    "draft": {"title": "Scored paper"},
+                    "generation": {},
+                    "validation_warnings": [],
+                },
+                b"%PDF-fixture",
+            )
             auth = {"identity": "test-binding", "mode": "api_key", "token": "test-token"}
             calls = 0
+
             async def provider(*args: object, **kwargs: object):
                 nonlocal calls
                 calls += 1
                 await asyncio.sleep(0.03)
                 return judgment(), "mock"
+
             with (
                 patch("sigma.openai_connection.auth_context", new=AsyncMock(return_value=auth)),
-                patch("sigma.proposals.configuration",
-                      new=AsyncMock(return_value={"available": True, "model": "test", "reasoning_effort": "medium"})),
+                patch(
+                    "sigma.proposals.configuration",
+                    new=AsyncMock(
+                        return_value={
+                            "available": True,
+                            "model": "test",
+                            "reasoning_effort": "medium",
+                        }
+                    ),
+                ),
                 patch.object(paper_scores, "_context", return_value={"pdf": "fixture"}),
                 patch.object(papers, "_provider_structured", new=provider),
             ):
@@ -171,10 +236,14 @@ def test_scoring_is_single_flight_and_cache_hit_avoids_provider() -> None:
                     paper_scores.score_paper(str(path), paper_id, "test-binding", view.project.id),
                 )
                 assert first == second and calls == 1
-                third = await paper_scores.score_paper(str(path), paper_id, "test-binding", view.project.id)
+                third = await paper_scores.score_paper(
+                    str(path), paper_id, "test-binding", view.project.id
+                )
                 assert third == first and calls == 1
                 assert papers.list_papers(str(path))[0]["score"] == first
+
     asyncio.run(scenario())
+
 
 def test_rubric_omits_stale_scores() -> None:
     sha = hashlib.sha256(b"paper").hexdigest()
@@ -183,6 +252,7 @@ def test_rubric_omits_stale_scores() -> None:
     obsolete["rubric_version"] = 2
     assert paper_scores.cached_score({"pdf_sha256": sha, "score": obsolete}) is None
     assert paper_scores.cached_score({"pdf_sha256": sha, "score": score}) == score
+
 
 def main() -> None:
     test_scoring_weights_and_normalized_total()
