@@ -37,3 +37,7 @@ Rebuilt from its archived structured draft. An editorial source override condens
 ## Follow-on review: Sovereign AI Federation
 
 Rebuilt from the archived structured draft with the current production renderer. The 22-page PDF now opens with a reader guide and ends with the claim/source register rather than an editorial-writing-source list. The comparison contract was read and retained: its four alternatives, root-task denominator, and joint success criterion are necessary to make the federation thesis testable. No PDF text-bound warnings were reported. No live federation or task-quality evaluation was performed.
+
+## Follow-on review: Xenopus Tadpoles
+
+The first rebuild added the reader guide but created a nearly empty 16th page of claim notes, so it was rejected. A structured editorial override condensed the repetitive operational-requirements section while preserving the named-state, input-cessation, stage-specific calibration, specimen-provenance, prediction-baseline, and later-recovery limits. The final PDF is 15 pages, includes the reader guide and complete claim/source notes, and has the same page-6 integral-limit geometry diagnostic as the previous version. The rendered formula was visually inspected and is legible. No biological effect or mechanistic discovery is claimed.
