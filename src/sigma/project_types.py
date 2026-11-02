@@ -83,7 +83,12 @@ def _validate_references(value: Any, field: str) -> tuple[dict[str, str], ...]:
             hostname, port = parsed.hostname, parsed.port
         except ValueError as exc:
             raise ProjectError(f"{field} contains an invalid URL") from exc
-        if parsed.scheme not in {"http", "https"} or not hostname or parsed.username or parsed.password:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not hostname
+            or parsed.username
+            or parsed.password
+        ):
             raise ProjectError(f"{field} URLs must use HTTP or HTTPS and include a host")
         host = hostname.casefold()
         if ":" in host and not host.startswith("["):
@@ -98,7 +103,8 @@ def _validate_references(value: Any, field: str) -> tuple[dict[str, str], ...]:
         )
         # A URL may be longer than a human title; its fallback name is the URL.
         label = (
-            normalized if not name or name == candidate
+            normalized
+            if not name or name == candidate
             else _optional_text(name, "Reference name", 240)
         )
         cleaned.setdefault(normalized, {"name": label, "url": normalized})
