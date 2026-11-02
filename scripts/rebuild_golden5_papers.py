@@ -16,7 +16,6 @@ from pathlib import Path
 
 from sigma import papers
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "docs/evaluations/report_quality/golden5"
 VISUAL_OVERRIDES = ARCHIVE / "visual_overrides.json"
@@ -48,14 +47,10 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
     for item in visual_data.get(slug, []):
         refs = list(
             dict.fromkeys(
-                ref
-                for claim_id in item["claim_ids"]
-                for ref in claim_map[claim_id].evidence_refs
+                ref for claim_id in item["claim_ids"] for ref in claim_map[claim_id].evidence_refs
             )
         )
-        diagrams.append(
-            papers.PaperDiagram.model_validate({**item, "evidence_refs": refs[:20]})
-        )
+        diagrams.append(papers.PaperDiagram.model_validate({**item, "evidence_refs": refs[:20]}))
     section_data = [section.model_dump() for section in draft.sections]
     example = json.loads(WORKED_EXAMPLES.read_text(encoding="utf-8"))[slug]
     target_section = example["section"]
@@ -67,6 +62,26 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
             break
     else:
         raise ValueError(f"Worked-example section not found: {target_section}")
+    editorial_path = ARCHIVE / slug / "editorial_override.json"
+    if editorial_path.exists():
+        editorial = json.loads(editorial_path.read_text(encoding="utf-8"))
+        for section in section_data:
+            if section["heading"] != editorial["section"]:
+                continue
+            section["paragraphs"] = editorial["paragraphs"]
+            table = editorial["table"]
+            refs = list(
+                dict.fromkeys(
+                    ref
+                    for claim_id in table["claim_ids"]
+                    for ref in claim_map[claim_id].evidence_refs
+                )
+            )
+            section["tables"].append({**table, "evidence_refs": refs[:20]})
+            section["claim_ids"] = list(dict.fromkeys([*section["claim_ids"], *table["claim_ids"]]))
+            break
+        else:
+            raise ValueError(f"Editorial section not found: {editorial['section']}")
     draft = papers.PaperDraft.model_validate(
         {
             **draft.model_dump(),
@@ -77,11 +92,7 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
     )
     generation = record["generation"]
     project = next(
-        (
-            source["data"]
-            for source in record["snapshot"]["sources"]
-            if source["kind"] == "project"
-        ),
+        (source["data"] for source in record["snapshot"]["sources"] if source["kind"] == "project"),
         {},
     )
     investigation_type = project.get("investigation_type", "default")
@@ -98,8 +109,7 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
         include_validation_notes=False,
         include_research_excerpts=False,
         source_reference_map={
-            item["source_ref"]: item["label"]
-            for item in generation.get("source_reference_map", [])
+            item["source_ref"]: item["label"] for item in generation.get("source_reference_map", [])
         },
         writing_sources=generation.get("writing_sources", []),
     )

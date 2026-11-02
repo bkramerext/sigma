@@ -255,30 +255,27 @@ The resulting score bound follows directly from the count probabilities. For a b
 The repair also changes what is being compared: held-out scores would evaluate the smoothed predictive laws rather than the unsmoothed maximum-likelihood fits. The smoothing weight and its sensitivity analysis therefore remain to be fixed, together with the score estimand and the associated complexity comparison; the reference-withheld analysis also needs an explicit support-preserving specification. Predictive evidence can complement the calibrated rejection argument only after these choices make the comparison mathematically well-defined. Better fitting alone cannot supply that requirement, and repairing predictive support does not alter the assumptions needed to reject the CP-divisible null. [C32\textendash{}\allowbreak{}C34]
 
 \section{Operational interpretation and validation limits}
-A calibrated coherence increase can exclude the stipulated completely positive (CP)-divisible dephasing null, but it cannot by itself select a unique dynamical model or identify an environmental mechanism. The relevant null comprises all nonincreasing positive-real coherence functions within the common, invertible, fixed-axis dephasing description, not merely exponential decay. Consequently, rejecting this null is stronger than finding that a revival model fits better than a semigroup, yet narrower than rejecting every CP-divisible qubit evolution.
+What the calibrated test excludes is precise. For two prespecified times, a contrast increase beyond the allowed visibility drift and sampling error rejects every nonincreasing, positive-real coherence function in the stated fixed-axis dephasing class. Under the independent-shot and transferable-reference assumptions, its false-rejection probability is bounded by $\alpha+\zeta$. This is an analytical error guarantee, not an observed rejection rate or evidence for a particular revival mechanism.
 
-The statistical content of that exclusion is conditional and explicit. For the prespecified pair of observation times, the contrast-increase rule bounds false rejection by $\alpha+\zeta$, where $\alpha$ is the delayed-data tail-probability allowance and $\zeta$ is the simultaneous reference-calibration failure allowance. Preparation-label-common offsets cancel in the contrast difference, while transferable nonnegative reference contrast bounds the increase that visibility drift could produce under the null.
+Why those assumptions matter is equally concrete. Preparation or readout drift can reproduce the same delayed and reference measurements while the qubit follows a semigroup; repeating the same measurements cannot break that exact ambiguity. Correlated acquisition can also invalidate a shot-level concentration bound. Matched preparation monitors, independent acquisition units, and fuller quadrature or channel measurements must be justified for the apparatus before the measured contrast can be attributed to the common system coherence function.
 
-An increase exceeding both that allowance and the finite-sampling threshold is therefore incompatible with the restricted null at the stated error budget; this is an analytical guarantee, not an observed rejection frequency or a probability that the null is true.
+What the result leaves open follows from the definitions. In the selected positive-real dephasing family, increasing coherence also raises the trace distance of a fixed antipodal state pair, but this does not establish process-tensor memory or a uniquely quantum environment. A claim about memory under interventions needs validated causal breaks and control-error bounds. A claim between sampled times needs a physical rate-regularity bound. Neither an executed predictive comparison nor an inspected primary-literature novelty benchmark is available here.
 
-Physical interpretation requires separate evidence for the assumptions connecting measured contrast to system coherence. Fresh preparations must be initially uncorrelated with a common, preparation-independent environment distribution, and the controls must support a reproducible fixed-axis description in a known frame. Matched preparations, preparation-label symmetry, and reference-to-delayed calibration transfer must also be independently defensible.
-
-These properties have not been experimentally established here: for example, an increase in one transverse component can arise from coherent rotation rather than increased state-pair distinguishability, so calibrated quadrature measurements or fuller channel characterization are needed before extending the inference beyond real dephasing.
-
-Calibration and acquisition assumptions are consequential rather than merely technical. The apparatus countermodels show that failed transfer can preserve the complete reference-plus-delayed likelihood of an apparent dynamical revival while the reduced system remains a semigroup; more shots from that protocol cannot resolve an exact observational equivalence. Likewise, the copied-shot construction shows why the independent-shot guarantee does not survive arbitrary within-setting dependence.
-
-Randomized interleaving and no-wait references can challenge particular confounders, but do not establish transfer or independence by themselves; if dependence remains, the acquisition unit and concentration argument must be justified for that dependence structure.
-
-The operational meaning of a successful rejection is correspondingly restricted. In positive-real scalar dephasing, increasing coherence also increases the trace distance of the fixed pair of ideal antipodal transverse preparations, so CP indivisibility and this information-backflow witness coincide within the selected family. That restricted agreement does not turn either diagnostic into a process-tensor memory test. Nor does it distinguish a quantum environment from classical colored noise: the latter is a possible mechanism for reduced dynamics, not an operational category mutually exclusive with CP indivisibility.
-
-A process-memory investigation would instead require intervention-conditioned records testing whether future outcomes retain dependence on the earlier history after an appropriate causal break. Such an investigation needs independently validated resets and quantified reset errors, control cross-talk, and apparatus memory before residual dependence can be attributed to the system\textendash{}\allowbreak{}environment process. Controlled-model discrimination, including an echo comparison, addresses a different question unless its intervention-conditioned statistics and causal-break assumptions support the stronger claim. No such empirical process-tensor evidence has been obtained here.
-
-The remaining validation limits concern distinct extensions of the argument. Failure to reject at sampled times does not certify continuous-time divisibility; a between-sample certificate additionally requires an independently defensible physical rate-regularity bound, which is not supplied for an apparatus. Predictive performance and implementation robustness remain unmeasured because the synthetic comparison has not been executed, and its identified predictive-support defect requires repair before the proposed score summaries can be used.
-
-Agreement with published criteria and novelty are also unassessed because the identified primary research texts and relevant identifiability and state-preparation-and-measurement literature were not inspected.
-
-The resulting evidential boundary separates exclusion from attribution. When the dynamical model, calibration transfer, and independent acquisition units are independently supported, the calibrated increase can rule out every CP-divisible explanation inside the stipulated dephasing class without privileging one revival ansatz. When those premises remain open, the same records constrain a joint system-and-apparatus explanation instead. Further physical attribution then requires measurements that test those premises or intervention-conditioned hypotheses, rather than simply increasing the number of observations made under the same assumptions.
-
+\begin{table}[!htbp]
+\centering\small
+\caption{What each observation can and cannot establish in the stated qubit-dephasing analysis. All entries are conditional on the model and measurement assumptions in the text.}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*32\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*42\relax}>{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*2)/116*42\relax}@{}}
+\toprule
+\textbf{Observation} & \textbf{Supported interpretation} & \textbf{Additional requirement}\\
+\midrule
+Nonexponential decay & Does not by itself reject CP divisibility. & A calibrated coherence increase is needed.\\
+Calibrated two-time increase & Can reject the restricted nonincreasing-coherence null. & Transferable references and justified independent acquisition units.\\
+Equal channels at sampled times & Leaves between-sample divisibility unresolved. & A defensible physical rate-regularity bound or denser informative measurements.\\
+Intervention-conditioned history & Could probe process memory beyond single-time maps. & Validated causal breaks, resets, and control-error bounds.\\
+\bottomrule
+\end{tabular}
+\par\smallskip{\scriptsize Source-linked claims: C26, C29, C31, C36}
+\end{table}
 \section{Limitations}
 \begin{itemize}
 \item The conclusions apply to positive-real, invertible, fixed-axis dephasing with a common preparation-independent channel. A transverse contrast revival does not by itself reject arbitrary CP-divisible qubit dynamics.

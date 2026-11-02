@@ -1,0 +1,44 @@
+{
+  "section": "Operational interpretation and validation limits",
+  "paragraphs": [
+    "What the calibrated test excludes is precise. For two prespecified times, a contrast increase beyond the allowed visibility drift and sampling error rejects every nonincreasing, positive-real coherence function in the stated fixed-axis dephasing class. Under the independent-shot and transferable-reference assumptions, its false-rejection probability is bounded by $\\alpha+\\zeta$. This is an analytical error guarantee, not an observed rejection rate or evidence for a particular revival mechanism.",
+    "Why those assumptions matter is equally concrete. Preparation or readout drift can reproduce the same delayed and reference measurements while the qubit follows a semigroup; repeating the same measurements cannot break that exact ambiguity. Correlated acquisition can also invalidate a shot-level concentration bound. Matched preparation monitors, independent acquisition units, and fuller quadrature or channel measurements must be justified for the apparatus before the measured contrast can be attributed to the common system coherence function.",
+    "What the result leaves open follows from the definitions. In the selected positive-real dephasing family, increasing coherence also raises the trace distance of a fixed antipodal state pair, but this does not establish process-tensor memory or a uniquely quantum environment. A claim about memory under interventions needs validated causal breaks and control-error bounds. A claim between sampled times needs a physical rate-regularity bound. Neither an executed predictive comparison nor an inspected primary-literature novelty benchmark is available here."
+  ],
+  "table": {
+    "caption": "What each observation can and cannot establish in the stated qubit-dephasing analysis. All entries are conditional on the model and measurement assumptions in the text.",
+    "headers": [
+      "Observation",
+      "Supported interpretation",
+      "Additional requirement"
+    ],
+    "rows": [
+      [
+        "Nonexponential decay",
+        "Does not by itself reject CP divisibility.",
+        "A calibrated coherence increase is needed."
+      ],
+      [
+        "Calibrated two-time increase",
+        "Can reject the restricted nonincreasing-coherence null.",
+        "Transferable references and justified independent acquisition units."
+      ],
+      [
+        "Equal channels at sampled times",
+        "Leaves between-sample divisibility unresolved.",
+        "A defensible physical rate-regularity bound or denser informative measurements."
+      ],
+      [
+        "Intervention-conditioned history",
+        "Could probe process memory beyond single-time maps.",
+        "Validated causal breaks, resets, and control-error bounds."
+      ]
+    ],
+    "claim_ids": [
+      "C26",
+      "C29",
+      "C31",
+      "C36"
+    ]
+  }
+}

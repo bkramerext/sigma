@@ -138,6 +138,8 @@ Review the **Outcome** and its conclusion alongside detailed findings, objection
 
 Use the workspace's **Report / Export** actions to create a complete, importable project file or readable text/HTML reports. The project file contains the project and its saved research history, evidence, and artifacts in one JSON bundle; use **Import Project** to restore it. For AI-authored TeX papers, SIGMA can use staged long-form generation for large evidence snapshots. The dialog shows provider-use bounds before you start; progress, cancellation, and resumable checkpoints are available. A paper preserves the exported Outcome and underlying research records, including any saved reasoning and optional conclusion. Review its omission warnings, objections, limitations, and verification status before relying on it. When material evidence is omitted, the paper marks conclusions provisional and does not leave affected claims established. Missing Outcome conclusions are not invented. Reports communicate findings, not independent verification.
 
+The optional **Issues and Bugs** paper section records problems observed in SIGMA's own generation and typesetting process, including repairs and unresolved layout diagnostics. It excludes defects in the input research and does not prevent SIGMA from saving a paper if the optional section itself cannot compile.
+
 To turn completed work into a reusable catalog sample, pass a complete Project
 file bundle to `./sigma make_sample bundle.json --name my-sample`. The sample
 keeps validated paper metadata, TeX, PDF bytes, research evidence, and
