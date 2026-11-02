@@ -1711,6 +1711,7 @@ async def delete_project_view(body: DeleteProjectRequest):
         if view.project.id != body.expected_project_id:
             raise ProjectError("Project changed; refresh before deleting it")
         from sigma.recents import assert_project_unpinned
+
         assert_project_unpinned(body.expected_project_id)
         # Admission holds the same manager lock until its worker is published.
         # Keep it across deletion; prove every saved session's original worker
