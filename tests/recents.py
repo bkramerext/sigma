@@ -177,6 +177,10 @@ def check(root: Path, base: Path) -> None:
     states = {item["id"]: item["pin_state"] for item in recent_projects()["projects"]}
     assert states[first.project.id] == "unpin"
     assert states[second.project.id] == "remove"
+    visibility = {item["id"]: item["hidden_by_family_pin"] for item in recent_projects()["projects"]}
+    assert visibility[first.project.id] is False
+    assert visibility[second.project.id] is True
+    assert visibility[first.project.id] is False
     assert [item["id"] for item in pinned_projects()["projects"]] == [first.project.id]
     try:
         set_project_pin(second.project.id, second.path, True)
@@ -220,6 +224,7 @@ def check(root: Path, base: Path) -> None:
         ).status_code == 200
         assert api.get("/api/projects/pinned").json()["projects"] == []
     assert all(item["pin_state"] == "pin_remove" for item in recent_projects()["projects"])
+    assert not any(item["hidden_by_family_pin"] for item in recent_projects()["projects"])
     edited = create_strategy(first.path, "My addition", "Investigate this case")
     reopened = open_sample_project(selected["id"])
     assert reopened.project.id not in {first.project.id, second.project.id}
