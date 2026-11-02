@@ -402,6 +402,23 @@
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-thanks { width: auto; padding: 0; margin: 0; font-size: 13px; }
 .ai-paper-eli5-output { max-width: 75ch; line-height: 1.65; }
 
+/* The paper preview is a nested scroll region. Leave a visible bottom inset
+   inside the saved-paper card instead of letting its border disappear under
+   the Generate Paper dialog's scrollport. The shorter viewport-relative
+   ceiling keeps the rounded bottom edge visible on ordinary laptop screens. */
+.project-settings-dialog.ai-paper-dialog > .settings-body.ai-paper-body {
+  scroll-padding-block-end: 24px;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-library {
+  padding-bottom: 24px;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-card .ai-paper-preview {
+  max-height: min(30dvh, 280px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
 /* Keep the ELI5 output comfortably inside the paper card at narrow widths. */
 .project-settings-dialog.ai-paper-dialog .saved-paper-card,
 .project-settings-dialog.ai-paper-dialog .saved-paper-card .ai-paper-eli5-output {
