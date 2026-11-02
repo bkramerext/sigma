@@ -67,7 +67,9 @@ def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
     assert ledger["call_limit"] == 4
     assert ledger["input_token_limit"] == preserved_input_limit
     assert ledger["cost_limit_usd"] == preserved_cost_limit
+    settle_after_response(ledger, call_id="next", input_tokens=100, output_tokens=50)
     reserved = reserve_before_dispatch(ledger, call_id="uncertain", request_body=b"unknown")
+    reserved_bounds = deepcopy(reserved)
     mark_unknown(ledger, call_id="uncertain")
     held = totals(ledger)
     assert held["blocked_reason"] == "Provider call outcome or usage is unknown"
@@ -100,7 +102,7 @@ def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
     authorize_independent_review_after_unknown(
         ledger, uncertain_call_ids={"uncertain"}
     )
-    assert ledger["calls"][-1] == {**reserved, "status": "unknown"}
+    assert ledger["calls"][-1] == {**reserved_bounds, "status": "unknown"}
     assert totals(ledger)["input_tokens_used_or_reserved"] == held["input_tokens_used_or_reserved"]
     assert totals(ledger)["cost_usd_used_or_reserved"] == held["cost_usd_used_or_reserved"]
     reserve_before_dispatch(ledger, call_id="independent-skeptic", request_body=b"fresh-review")
