@@ -1850,7 +1850,7 @@ type PaperScore = {
   pdf_sha256: string;
   total: number;
   provisional: boolean;
-  categories: Record<'tex_correctness' | 'readability' | 'sustained_answer' | 'research_rigor' | 'evidence' | 'visuals', { earned: number; max: number; explanation: string }>;
+  categories: Record<'tex_correctness' | 'readability' | 'sustained_answer' | 'research_rigor' | 'evidence' | 'visuals', { earned: number; max: 100; weight: number; explanation: string }>;
 };
 const paperScoreCategories: { key: keyof PaperScore['categories']; title: string; standard: string }[] = [
   { key: 'tex_correctness', title: 'TeX correctness', standard: 'Equations render correctly, without material compilation, clipping, or obscuration defects.' },
@@ -1876,23 +1876,23 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
       <div className="settings-actions"><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
     </header>
     <div className="settings-body paper-score-body">
+      <div className="paper-score-overall" aria-label={`Weighted paper score ${score.total} out of 100`}>
+        <strong>Weighted score</strong><strong className="paper-score-points">{score.total}/100</strong>
+      </div>
       <p className="settings-hint">SIGMA’s research and paper-authoring capabilities are experimental; these provisional scores acknowledge known quality limitations and do not constitute independent scientific verification or human review.</p>
       {rubricExpanded && <section id="paper-score-rubric" className="paper-score-rubric" aria-label="Scoring rubric">
-        <p className="settings-hint">Each category is scored against the following full-credit standard, for a normalized total of 100 points.</p>
+        <p className="settings-hint">Each category receives a score from 1–100. The weighted average of the six categories produces the overall score.</p>
         <dl>{paperScoreCategories.map(({ key, title, standard }) => <div key={key}>
-          <dt>{title} <span>/{score.categories[key].max}</span></dt><dd>{standard}</dd>
+          <dt>{title} <span>· weight {score.categories[key].weight.toFixed(2)}</span></dt><dd>{standard}</dd>
         </div>)}</dl>
       </section>}
       <div className="paper-score-categories" aria-label="Paper scores">
         {paperScoreCategories.map(({ key, title }) => <section className="paper-score-category" key={key}>
-          <div className="paper-score-category-heading"><h3>{title}</h3>
-            <strong className="paper-score-points">{score.categories[key].earned}/{score.categories[key].max}</strong>
+          <div className="paper-score-category-heading"><h3>{title} <span className="paper-score-weight">(weight {score.categories[key].weight.toFixed(2)})</span></h3>
+            <strong className="paper-score-points">{score.categories[key].earned}/100</strong>
           </div>
           <p>{score.categories[key].explanation}</p>
         </section>)}
-      </div>
-      <div className="paper-score-total" aria-label={`Total score ${score.total} out of 100`}>
-        <strong>Total</strong><strong className="paper-score-points">{score.total}/100</strong>
       </div>
     </div>
   </dialog>;
