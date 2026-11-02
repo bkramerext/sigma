@@ -27,13 +27,44 @@ def rebuild() -> None:
         "This synthesis uses a bounded selection of archived research; unreviewed records may affect its conclusions.",
         tex,
     )
-    tex = re.sub(r"\s*\\?\[(?:C\d+(?:,\s*C\d+)*)\]", "", tex)
+    article, notes = tex.split(r"\section*{Claim and source notes}", 1)
+    article = re.sub(r"\s*\\?\[(?:C\d+(?:,\s*C\d+)*)\]", "", article)
+    article = re.sub(r"\s*\((?:C\d+(?:,\s*C\d+)*)\)", "", article)
+    tex = article + r"\section*{Claim and source notes}" + notes
     tex = re.sub(
         r"\\section\*?\{Typesetting verification note\}.*?(?=\\end\{document\})",
         "",
         tex,
         flags=re.S,
     )
+    tex = re.sub(
+        r"\\section\*?\{Authorship note\}\s*AI-assisted synthesis from saved research; not independently peer reviewed\.\s*",
+        "",
+        tex,
+    )
+    diagram = r"""
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[>=stealth, every node/.style={draw=blue!65,rounded corners=4pt,fill=blue!5,align=center,text width=5.1cm,font=\small\sffamily,inner sep=6pt}]
+\node (dynamic) at (-3.1,0) {Coherence change in the dynamical channel};
+\node (preparation) at (3.1,0) {Delay-dependent preparation drift};
+\node (same) at (0,-2.5) {Identical unmonitored single-time outputs};
+\node (monitor) at (0,-5.0) {Context-matched preparation monitor may separate them};
+\draw[->,thick,blue!65] (dynamic) -- (same);
+\draw[->,thick,blue!65] (preparation) -- (same);
+\draw[->,thick,blue!65] (same) -- (monitor);
+\end{tikzpicture}
+\caption{Two physically admissible explanations can produce the same unmonitored outputs. A preparation monitor distinguishes this constructed pair only when its calibration transfers to the delayed experiment. The arrows summarize the conditional identifiability argument, not experimental observations.}
+\end{figure}
+"""
+    legacy_diagram = re.compile(
+        r"\\begin\{quote\}\s*\\textbf\{Diagram \(readable relationship list\)\.}.*?\\end\{quote\}",
+        re.S,
+    )
+    if len(legacy_diagram.findall(tex)) != 1:
+        raise RuntimeError("Expected one source-linked diagram list")
+    tex = legacy_diagram.sub(lambda _: diagram, tex)
+    tex = tex.replace(r"\usepackage{titlesec}", r"\usepackage{titlesec}" + "\n" + r"\usepackage{tikz}")
     guide = (
         r"\begingroup\setlength{\fboxsep}{10pt}\noindent"
         r"\fcolorbox{blue!55}{blue!5}{\begin{minipage}{0.90\linewidth}"
