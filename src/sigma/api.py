@@ -150,6 +150,7 @@ class ProjectTypeCatalogBody(BaseModel):
     project_types: list[ProjectTypeBody] = Field(max_length=500)
     expected_revision: str = Field(min_length=64, max_length=64)
     confirmed_removals: dict[str, int] = Field(default_factory=dict)
+    reference_preferences: dict[str, Any] | None = None
 
 
 class ProjectTypeDeleteBody(BaseModel):
@@ -173,11 +174,15 @@ def list_project_types_view(request: Request):
         ).hexdigest()
         return {
             "project_types": builtins,
+            "common_references": project_types.common_references(),
+            "reference_preferences": {"common": {}, "project_types": {}},
             "icons": {"placeholder": project_types.placeholder_icon()},
             "revision": revision,
         }
     return {
         "project_types": [item.record() for item in project_types.all_types()],
+        "common_references": project_types.common_references(),
+        "reference_preferences": project_types.reference_preferences(),
         "icons": {"placeholder": project_types.placeholder_icon()},
         "revision": project_types.catalog_revision(),
     }
@@ -189,6 +194,7 @@ def replace_project_types_view(body: ProjectTypeCatalogBody):
         [item.model_dump() for item in body.project_types],
         expected_revision=body.expected_revision,
         confirmed_removals=body.confirmed_removals,
+        reference_overrides=body.reference_preferences,
     )
     return {
         "project_types": [item.record() for item in saved],
