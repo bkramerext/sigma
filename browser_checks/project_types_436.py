@@ -190,6 +190,8 @@ with sync_playwright() as playwright:
     parent.get_by_role("button", name="New", exact=True).first.click()
     # The next New remains unavailable until the just-created row contains a URL.
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_disabled()
+    # Editable references show URL fields without duplicate title/URL captions.
+    expect(parent.locator(".pt-reference-link")).to_have_count(0)
     url_input = parent.get_by_label("Research reference URL 1")
     url_input.fill("not-a-url")
     expect(url_input).to_have_attribute("aria-invalid", "true")
