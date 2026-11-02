@@ -86,6 +86,17 @@ def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
     else:
         raise AssertionError("The recovery ledger accepted mismatched uncertain calls")
     assert ledger["blocked_reason"] is not None
+    # Invalid provider usage is *not* an unknown-dispatch review approval.
+    ledger["blocked_reason"] = "Provider input usage exceeded or failed its reserved bound"
+    try:
+        authorize_independent_review_after_unknown(
+            ledger, uncertain_call_ids={"uncertain"}
+        )
+    except BudgetExceeded:
+        pass
+    else:
+        raise AssertionError("Invalid usage was incorrectly converted into a recoverable call")
+    ledger["blocked_reason"] = "Provider call outcome or usage is unknown"
     authorize_independent_review_after_unknown(
         ledger, uncertain_call_ids={"uncertain"}
     )
@@ -11689,6 +11700,23 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(
             assert "exactly 4" in str(exc)
         else:
             raise AssertionError("Protocol recovery silently exceeded its saved call ceiling")
+        assert research_sessions._read(str(path), started["id"]) == original
+
+        # A cross-process worker may still own its execution fence even though
+        # its saved session appears terminal: do not change any recovery state.
+        with patch.object(
+            research_sessions,
+            "_idle_worker_lock",
+            side_effect=ProjectError("Session execution is still releasing resources"),
+        ):
+            try:
+                await research_sessions.control_session(
+                    str(path), started["id"], "resume", additional_calls=4
+                )
+            except ProjectError as exc:
+                assert "releasing resources" in str(exc)
+            else:
+                raise AssertionError("Recovery mutated a session while its worker was active")
         assert research_sessions._read(str(path), started["id"]) == original
 
         # Two concurrent authorized resumes cannot apply the same budget
