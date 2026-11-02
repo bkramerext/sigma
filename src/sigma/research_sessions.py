@@ -5357,7 +5357,7 @@ async def control_session(
     # per-session state lock and the cross-process admission lock across the
     # read/validate/save transaction so concurrent resumes cannot overwrite it.
     async with state_lock:
-        with _project_manager_lock(path):
+        with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
             if (
                 action == "resume"
