@@ -237,8 +237,9 @@ with sync_playwright() as playwright:
         }))"""
     )
     assert len(reference_layout) >= 4, reference_layout
-    assert all(row["paddingTop"] == "4px" and row["borderBottom"] == "0px"
-               for row in reference_layout), reference_layout
+    assert all(
+        row["paddingTop"] == "4px" and row["borderBottom"] == "0px" for row in reference_layout
+    ), reference_layout
     expect(first_entry.locator("button")).to_have_count(0)
     # A new draft uses local Cancel, not Remove or a second Save.
     expect(
@@ -289,7 +290,12 @@ with sync_playwright() as playwright:
     assert child_type["icon"]["key"] == "placeholder"
     assert child_type["based_on"] == parent_type["id"]
     assert child_type["scope"] == "Independent copied scope"
-    assert child_type["research_standards_references"] == [{"name": "https://example.org/research-standard", "url": "https://example.org/research-standard"}]
+    assert child_type["research_standards_references"] == [
+        {
+            "name": "https://example.org/research-standard",
+            "url": "https://example.org/research-standard",
+        }
+    ]
     assert not [url for url, _ in api_requests if url.endswith("/project-types/icon")]
 
     # Edit/add/remove are all drafts. Cancel discards all three, and Remove
