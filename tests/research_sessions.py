@@ -29,7 +29,9 @@ from sigma.projects import (
 )
 from sigma.research_budget import (
     BudgetExceeded,
+    authorize_independent_review_after_unknown,
     increase_call_limit,
+    mark_unknown,
     new_ledger,
     reserve_before_dispatch,
     settle_rejected,
@@ -64,6 +66,32 @@ def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
     assert ledger["call_limit"] == 4
     assert ledger["input_token_limit"] == preserved_input_limit
     assert ledger["cost_limit_usd"] == preserved_cost_limit
+    reserved = reserve_before_dispatch(ledger, call_id="uncertain", request_body=b"unknown")
+    mark_unknown(ledger, call_id="uncertain")
+    held = totals(ledger)
+    assert held["blocked_reason"] == "Provider call outcome or usage is unknown"
+    try:
+        reserve_before_dispatch(ledger, call_id="premature", request_body=b"blocked")
+    except BudgetExceeded:
+        pass
+    else:
+        raise AssertionError("An unreviewed unknown call did not block provider dispatch")
+    try:
+        authorize_independent_review_after_unknown(
+            ledger, uncertain_call_ids={"different-id"}
+        )
+    except BudgetExceeded:
+        pass
+    else:
+        raise AssertionError("The recovery ledger accepted mismatched uncertain calls")
+    assert ledger["blocked_reason"] is not None
+    authorize_independent_review_after_unknown(
+        ledger, uncertain_call_ids={"uncertain"}
+    )
+    assert ledger["calls"][-1] == {**reserved, "status": "unknown"}
+    assert totals(ledger)["input_tokens_used_or_reserved"] == held["input_tokens_used_or_reserved"]
+    assert totals(ledger)["cost_usd_used_or_reserved"] == held["cost_usd_used_or_reserved"]
+    reserve_before_dispatch(ledger, call_id="independent-skeptic", request_body=b"fresh-review")
     try:
         increase_call_limit(ledger, 3)
     except BudgetExceeded as exc:
