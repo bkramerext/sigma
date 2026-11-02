@@ -6789,11 +6789,15 @@ def main() -> None:
         include_research_excerpts=True,
     )
     assert r"\section{Structured reasoning and review records}" in integrity_tex
-    assert r"\section*{Evidence coverage limitation}" in integrity_tex
-    opening_heading = papers._paper_style("default")[0]
-    assert integrity_tex.index("Evidence coverage limitation") < integrity_tex.index(
-        r"\section{" + opening_heading + "}"
+    # Coverage is disclosed as short manuscript prose, not as a standalone
+    # boilerplate section ahead of the research question.
+    notice = "Unreviewed records could affect its conclusions"
+    assert notice in integrity_tex
+    methods_heading = papers._paper_style("default")[1]
+    assert integrity_tex.index(r"\section{" + methods_heading + "}") < integrity_tex.index(
+        notice
     )
+    assert "Evidence coverage limitation" not in integrity_tex
     material = papers._material_evidence_omissions(
         [
             {"field": "data/id", "source_ref": "artifact:math-session:proof"},
@@ -6816,8 +6820,8 @@ def main() -> None:
     limited_math_tex = papers._tex(
         limited, [], "d" * 64, math_style=True, material_omissions=material
     )
-    assert "Evidence coverage limitation" in limited_math_tex
-    assert "were not reviewed for this paper" in limited_math_tex
+    assert "Unreviewed records could affect its conclusions" in limited_math_tex
+    assert "full omission ledger remains available with the generation record" in limited_math_tex
     assert original_abstract in limited_math_tex
     assert original_conclusions[0] in limited_math_tex
 
