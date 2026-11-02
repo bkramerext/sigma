@@ -430,7 +430,7 @@ def check(root: Path, base: Path) -> None:
     # Legacy v1 state is upgraded without discarding the saved project index.
     legacy = json.loads(index_path.read_text())
     assert legacy["version"] == 2 and legacy["pins"] == {}
-    assert legacy["dismissed_default_pins"] == []
+    assert project_family(first.project.title) in legacy["dismissed_default_pins"]
     legacy["version"] = 1
     del legacy["pins"]
     del legacy["dismissed_default_pins"]
