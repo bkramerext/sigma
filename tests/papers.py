@@ -3326,17 +3326,13 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
 
 def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
     """Each project type gets general, evidence-specific genre instructions."""
-    def check_case(
-        project_type: str, marker: str, second_marker: str, excluded: str
-    ) -> None:
+    def check_case(project_type: str, marker: str, second_marker: str, excluded: str) -> None:
         package, plan = fast_package()
         package["sources"][0]["data"]["investigation_type"] = project_type
         package["sources"][0]["data"]["problem"] = "Study the stated research question."
         seen: dict[str, list[str]] = {}
 
-        async def fake_stage(
-            _input, _binding, _config, *, instructions, schema_name, **_kwargs
-        ):
+        async def fake_stage(_input, _binding, _config, *, instructions, schema_name, **_kwargs):
             seen.setdefault(schema_name, []).append(instructions)
             if schema_name == "sigma_long_paper_plan":
                 return plan, "fixture-model"
