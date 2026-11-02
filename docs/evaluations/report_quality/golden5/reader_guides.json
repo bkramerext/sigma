@@ -1,0 +1,32 @@
+{
+  "agent-reliability-v1": {
+    "question": "When an AI agent says a task is done, what shows that the intended external effect happened exactly once, and when is a retry safe?",
+    "answer": "A fluent report or tool acknowledgment cannot settle that question. Evaluation needs evidence of the external outcome; safe recovery after an ambiguous response needs stronger guarantees from the service that creates the effect.",
+    "route": "Separate outcomes from reports, examine what ambiguous histories cannot reveal, then state the contracts and evaluations needed for a defensible reliability claim.",
+    "boundary": "These are conditional analytical results. No real agent or external service was shown to satisfy the proposed contracts."
+  },
+  "sovereign-ai-federation-v2": {
+    "question": "Can universities share AI capacity while keeping campus control over data and hard spending limits?",
+    "answer": "The paper identifies conditions a campus-controlled broker and reservation ledger would need to meet. It has not shown that a federation can implement those conditions or outperform a campus gateway with separately approved external access.",
+    "route": "Compare the service options, follow a request across policy and transport boundaries, then examine budget safety and the proposed paired pilot.",
+    "boundary": "Quality, capacity, prices, administrative cost, and the federation's added benefit remain unmeasured."
+  },
+  "xenopus-tadpoles-v9": {
+    "question": "Does the temporary loss of tail-regeneration competence in Xenopus tadpoles reflect a shorter-lived memory of injury signaling?",
+    "answer": "The available records cannot establish that mechanism. Without verified links between early and late measurements from the same animal, the proposed coupling cannot be estimated; several other processes can also make a signal appear persistent.",
+    "route": "Define the candidate mechanism, show why separate time-point distributions do not identify it, then compare reporter, timing, and output alternatives.",
+    "boundary": "The study reports analytical distinctions, not a measured biological effect or a validated assay for the proposed intervening state."
+  },
+  "nonconsecutive-subset-sums-modulo-3": {
+    "question": "How many subsets of the first n positive integers have no neighboring members and a sum divisible by three?",
+    "answer": "An exact Fibonacci correction yields the count for every n, an eight-term recurrence, and a12 = 128. As n grows, the qualifying fraction approaches one third of all no-neighbor subsets.",
+    "route": "Count no-neighbor subsets, filter their sums by residue, then use the resulting three Fibonacci formulas to derive the recurrence and limit.",
+    "boundary": "The recurrence and limit are proved in the saved derivation; the additional claim that order eight is minimal still needs its complete coprimality calculation."
+  },
+  "warp-drive-design": {
+    "question": "Can a traveler reach a distant point sooner than a matched light signal without locally outrunning light?",
+    "answer": "A prescribed spacetime geometry can produce that timing effect while the traveler remains locally timelike. Under the examined Einstein-gravity assumptions, it also needs negative energy and defeats the simple scalar sources tested here.",
+    "route": "Define the clock comparison, test the geometry's local causality, calculate its required source, then examine propagation and remaining feasibility gates.",
+    "boundary": "No physically realizable source, stable transport system, or working faster-than-light drive is established."
+  }
+}

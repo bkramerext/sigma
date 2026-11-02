@@ -1,0 +1,32 @@
+{
+  "agent-reliability-v1": {
+    "section": "Information limits after ambiguous commitment",
+    "title": "A lost acknowledgment",
+    "text": "Imagine a service that applies one debit but loses its reply. From the agent's side, that timeout looks the same as a request that never committed. Retrying the first case can create two debits; refusing to retry the second leaves none. The agent's local transcript cannot choose safely between those actions without a stronger service guarantee.",
+    "claim_ids": ["C8", "C9"]
+  },
+  "sovereign-ai-federation-v2": {
+    "section": "The proposed controlled release boundary",
+    "title": "Approval changes during a request",
+    "text": "Suppose a campus approves an external destination, a researcher starts a request, and an administrator revokes approval before the operating-system send. A separate early policy check can still release the request under stale authority. In the proposed design, the broker must decide against committed policy at the release boundary and reserve the possible charge before that send. This illustrates a required contract, not an implemented guarantee.",
+    "claim_ids": ["C10", "C11"]
+  },
+  "xenopus-tadpoles-v9": {
+    "section": "Why stage-by-time distributions do not identify animal-level coupling",
+    "title": "Two pairings, opposite answers",
+    "text": "As a hypothetical illustration, suppose two early measurements are low and high, and two later measurements are also low and high. Pair low with low and high with high: the within-animal relation is positive. Pair low with high and high with low: it is negative. The unlinked early and late distributions are identical in both cases, so they cannot reveal which relation holds in tadpoles.",
+    "claim_ids": ["C3", "C4"]
+  },
+  "nonconsecutive-subset-sums-modulo-3": {
+    "section": "Admissible subsets and the residue filter",
+    "title": "Count the case $n=4$",
+    "text": "The eight no-neighbor subsets of $\\{1,2,3,4\\}$ are $\\varnothing$, $\\{1\\}$, $\\{2\\}$, $\\{3\\}$, $\\{4\\}$, $\\{1,3\\}$, $\\{1,4\\}$, and $\\{2,4\\}$. Only $\\varnothing$, $\\{3\\}$, and $\\{2,4\\}$ have sums divisible by three. Thus $a_4=3$, one of the initial values used by the general recurrence.",
+    "claim_ids": ["C1", "C6"]
+  },
+  "warp-drive-design": {
+    "section": "An operational shortcut without local superluminal motion",
+    "title": "What the distant clocks compare",
+    "text": "Place two exterior stations a distance $L$ apart. A light signal in the matched flat-space reference needs $L/c$ to make the trip. The prescribed pulse carries the central traveler between them in a time $T<L/c$, while the traveler remains timelike in the pulse geometry. The earlier arrival compares two specified spacetime models; it does not demonstrate a buildable source or a local speed above light.",
+    "claim_ids": ["C31", "C32"]
+  }
+}

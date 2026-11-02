@@ -20,6 +20,8 @@ from sigma import papers
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "docs/evaluations/report_quality/golden5"
 VISUAL_OVERRIDES = ARCHIVE / "visual_overrides.json"
+READER_GUIDES = ARCHIVE / "reader_guides.json"
+WORKED_EXAMPLES = ARCHIVE / "worked_examples.json"
 SLUGS = (
     "agent-reliability-v1",
     "sovereign-ai-federation-v2",
@@ -50,8 +52,24 @@ def rebuild(slug: str, output_dir: Path, tectonic: str) -> None:
         diagrams.append(
             papers.PaperDiagram.model_validate({**item, "evidence_refs": refs[:20]})
         )
+    section_data = [section.model_dump() for section in draft.sections]
+    example = json.loads(WORKED_EXAMPLES.read_text(encoding="utf-8"))[slug]
+    target_section = example["section"]
+    for section in section_data:
+        if section["heading"] == target_section:
+            section["examples"].append(
+                {key: value for key, value in example.items() if key != "section"}
+            )
+            break
+    else:
+        raise ValueError(f"Worked-example section not found: {target_section}")
     draft = papers.PaperDraft.model_validate(
-        {**draft.model_dump(), "diagrams": [diagram.model_dump() for diagram in diagrams]}
+        {
+            **draft.model_dump(),
+            "sections": section_data,
+            "diagrams": [diagram.model_dump() for diagram in diagrams],
+            "reader_guide": json.loads(READER_GUIDES.read_text(encoding="utf-8"))[slug],
+        }
     )
     generation = record["generation"]
     project = next(
