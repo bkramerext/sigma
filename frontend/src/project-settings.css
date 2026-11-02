@@ -386,8 +386,10 @@
   border: 0; background: transparent; box-shadow: none;
   color: #c88761; line-height: 1; text-decoration: none; cursor: pointer;
 }
-.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:hover:not(:disabled),
-.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:focus-visible { color: #e8a782; }
+.project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:hover:not(:disabled),
+.project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:focus-visible {
+  color: #e8a782; text-decoration: none;
+}
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining { font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
