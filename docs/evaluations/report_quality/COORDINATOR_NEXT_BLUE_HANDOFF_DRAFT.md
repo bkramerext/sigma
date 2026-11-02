@@ -24,7 +24,7 @@ Commit five independently readable PDF/TeX pairs and generation metadata (resear
 
 ## Canonical completed Golden 5 research inputs
 
-**The old PR #434 STAGING/completed source archive gate is superseded.** PR #434 was folded into PR #433 before #433 merged into `main`. `projects/complete/` now contains the completed five-project research archives. The original partial I2 STAGING release remains a historical record; it is **not** the input gate for this paper run. Read [`projects/complete/README.md`](../../../projects/complete/README.md) for the exact manifest and validate the committed files against it before paid calls. Every project records **12/12 accepted Investigator/Skeptic role turns**; protocol completion does not establish scientific correctness.
+**The old PR #434 STAGING/READY gate is superseded.** PR #434 was folded into PR #433 before #433 merged into `main`. `projects/complete/` now contains the completed five-project research archives. The original partial I2 STAGING release remains a historical record; it is **not** the input gate for this paper run. Read [`projects/complete/README.md`](../../../projects/complete/README.md) for the exact manifest and validate the committed files against it before paid calls. Every project records **12/12 accepted Investigator/Skeptic role turns**; protocol completion does not establish scientific correctness.
 
 | Golden paper | Project ID | Completed research session | Archive tree SHA-256 |
 |---|---|---|---|
@@ -62,8 +62,8 @@ Read no more than three genuinely usable guides from this list with bounded, SSR
 
 ## Quality process and deliverables
 
-- Start from the latest fully tested Phase 1 code at an exact commit SHA and `./sigma test`/CI gate. Verify model, high effort, provider route and whether user allowance permits four independent operations; never start extra retries on an ambiguous or already consumed call.
-- Save each complete **TXT/TeX/PDF**, compact/full production metadata and exact hashes with **verified source archive identity**, input project/bundle/frozen paper-snapshot hashes, call count, selected model, elapsed time, proofreading proposed/accepted/rejected patches, source status and coverage. If a run is stopped, label it missing/partial and keep completed others.
+- Start from the latest fully tested Phase 1 code at an exact commit SHA and `./sigma test`/CI gate. Verify model, appropriate reasoning effort, provider route and whether user allowance permits all five Golden 5 paper runs; never start extra retries on an ambiguous or already consumed call.
+- Save each complete **TXT/TeX/PDF**, compact/full production metadata and exact hashes with **verified source archive identity**, input project/bundle/frozen paper-snapshot hashes, call count, selected model, elapsed time, proofreading proposed/accepted/rejected patches, source status and coverage. If a run is stopped, label it missing/partial and keep the completed PDF/TeX/TXT artifacts for every other paper in git; the README update is later.
 - Cite exact source/step/artifact spans for decisive claims; compare original research to paper's critical assertions, corrections, counterexamples and incomplete sessions. The main theorem/proof **must appear in the claim register and have section links**, not merely be paraphrased in the body.
 - Evaluate abstract/main body/conclusion as one research argument. Reject metadata headline claims, long claim-register dumps, duplicated definitions, unqualified evidence labels, disappearing negative findings and source inventory mistaken for research conclusions.
 - Render *every PDF page*, then inspect any overfull claims, malformed math, repeated or sparse table pages and long source URLs at readable/full resolution. Record compiler logs and proofreader outcomes; zero safe changes may be correct when scientific integrity protection rejects proposed edits.
