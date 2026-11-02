@@ -41,3 +41,7 @@ Rebuilt from the archived structured draft with the current production renderer.
 ## Follow-on review: Xenopus Tadpoles
 
 The first rebuild added the reader guide but created a nearly empty 16th page of claim notes, so it was rejected. A structured editorial override condensed the repetitive operational-requirements section while preserving the named-state, input-cessation, stage-specific calibration, specimen-provenance, prediction-baseline, and later-recovery limits. The final PDF is 15 pages, includes the reader guide and complete claim/source notes, and has the same page-6 integral-limit geometry diagnostic as the previous version. The rendered formula was visually inspected and is legible. No biological effect or mechanistic discovery is claimed.
+
+## Production authoring guidance
+
+The shared one-shot and long-form publication instructions now ask for an explicit premise → evidence/derivation → inference → boundary chain within each section, short transitions, immediate interpretation of equations and figures, and a normal 450–750-word section range with exceptions for indispensable proof or contrary evidence. This is a production prompt change for future generations. The current archived papers were rebuilt from their saved drafts with separate structured editorial revisions; no live provider run has yet verified that the revised prompt reduces length or improves argument quality on new output.
