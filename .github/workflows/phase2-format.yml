@@ -1,0 +1,27 @@
+name: Phase 2 bounded formatting
+on:
+  push:
+    branches: [phase2/green-iteration-1]
+    paths: [.github/workflows/phase2-format.yml]
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+      - name: Format the four newly edited Python files only
+        run: |
+          uvx --from ruff==0.14.5 ruff check --fix tests/research_sessions.py
+          uvx --from ruff==0.14.5 ruff format src/sigma/project_types.py src/sigma/research_method_sources.py src/sigma/research_sessions.py tests/research_sessions.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/sigma/project_types.py src/sigma/research_method_sources.py src/sigma/research_sessions.py tests/research_sessions.py
+          if ! git diff --cached --quiet; then git commit -m "Format Project Types research integration and tests"; git push origin HEAD:phase2/green-iteration-1; fi
