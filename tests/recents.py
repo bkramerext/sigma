@@ -279,7 +279,9 @@ def check(root: Path, base: Path) -> None:
     set_recent_pin(pinned_view.project.id, pinned_view.path, True)
     pinned_list = recent_projects()["projects"]
     assert [item["id"] for item in pinned_list] == order_before_pin
-    assert next(item for item in pinned_list if item["id"] == pinned_view.project.id)["pinned"] is True
+    assert (
+        next(item for item in pinned_list if item["id"] == pinned_view.project.id)["pinned"] is True
+    )
     open_project(first.path)
     assert recent_projects()["projects"][0]["id"] == first.project.id
     assert Path(pinned_view.path).read_bytes() == project_before_pin
@@ -298,14 +300,23 @@ def check(root: Path, base: Path) -> None:
         assert len(api_recent) > 4
         assert (state_directory() / "recents.json").read_bytes() == before
         assert api.get("/api/projects/samples").json()["projects"] == sample_projects()["projects"]
-        pin_payload = {"project_id": pinned_view.project.id, "path": pinned_view.path, "pinned": True}
+        pin_payload = {
+            "project_id": pinned_view.project.id,
+            "path": pinned_view.path,
+            "pinned": True,
+        }
         pin_response = api.post("/api/projects/recent/pin", json=pin_payload)
         assert pin_response.status_code == 200 and pin_response.json()["pinned"] is True
         api_pinned = api.get("/api/projects/recent").json()["projects"]
         assert api_pinned[0]["id"] == first.project.id
-        assert next(item for item in api_pinned if item["id"] == pinned_view.project.id)["pinned"] is True
         assert (
-            api.post("/api/projects/recent/pin", json={**pin_payload, "path": first.path}).status_code
+            next(item for item in api_pinned if item["id"] == pinned_view.project.id)["pinned"]
+            is True
+        )
+        assert (
+            api.post(
+                "/api/projects/recent/pin", json={**pin_payload, "path": first.path}
+            ).status_code
             == 400
         )
         assert (
