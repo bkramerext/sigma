@@ -9,8 +9,8 @@ Authoring source: merged PR #463, commit `a8a4891fb21352d8467594e976224426f80132
 | Agent Reliability v1 | TXT/TeX/PDF complete, 50 pages, 13,499 words | 878.64 s | 18 | `needs_review` |
 | Sovereign AI Federation v2 | TXT/TeX/PDF complete after checkpoint recovery, 27 pages, 9,865 words | 1,061 s first attempt + 127 s failed continuation + 143.11 s successful continuation | 18 cumulative | `needs_review` |
 | Xenopus Tadpoles v9 | TXT/TeX/PDF complete, 21 pages, 6,364 words | 512.24 s | 12 | `no_severe_box_warnings_reported` |
-| Nonconsecutive Subset Sums Modulo 3 | No paper published | 249 s | 6 | n/a |
-| Warp Drive Design | No paper published | 529 s | 8 | n/a |
+| Nonconsecutive Subset Sums Modulo 3 | TXT/TeX/PDF complete after checkpoint recovery, 14 pages, 5,031 words | 249 s first attempt + 35 s continuation + 90.92 s recovery | 13 cumulative | `no_severe_box_warnings_reported` |
+| Warp Drive Design | TXT/TeX/PDF complete after checkpoint recovery, 28 pages, 11,444 words | 529 s first attempt + 131.32 s recovery | 13 cumulative | `needs_review` |
 
 The completed PDF/TeX pairs are also in top-level `papers/`, named with the `-golden5` suffix to preserve existing files. The text, full and compact generation metadata, and exact artifact hashes remain in this directory. The first three papers started at 2026-11-02 06:03:47 UTC; the final Sovereign recovery ended at about 06:42 UTC. Generation overlapped, so the per-paper times must not be summed as wall time.
 
@@ -26,3 +26,8 @@ The completed PDF/TeX pairs are also in top-level `papers/`, named with the `-go
 8. Before production, a local `./sigma test` run initially stopped at missing frontend `tsc`; `npm ci` restored the locked dependencies, and the full suite passed on the merged source tree. The PR #463 head CI was green; the merge-commit CI later failed with only a generic job-exit detail accessible. No tests were run after paper generation, per user direction.
 
 The paper PDFs and TeX files are outputs of this iteration, not publication acceptance. The coordinator should review all three manuscripts and the two failed projects' preserved failure records before a further production attempt.
+
+
+## Math and Warp checkpoint recovery
+
+After the user's request to retry both papers, each resumed from its preserved checkpoint with table and diagram authoring disabled for remaining calls. This avoided repeating table citation failures while retaining previously saved prose. Math completed in 90.92 seconds of recovery work (13 cumulative calls); Warp completed in 131.32 seconds (13 cumulative calls). Both PDF/TeX pairs are in `papers/` and their result bundles, with hashes and proofreading outcomes in each compact metadata file. Math's PDF has no severe box warnings; Warp's layout remains `needs_review`.

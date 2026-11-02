@@ -1,0 +1,3 @@
+# Warp Drive Design paper recovery
+
+The first run failed in section 3/7 because a generated table cited claims outside that section's outline, after 8 provider calls. The failure checkpoint preserved completed content. At the user's request, generation resumed from that checkpoint with table and diagram authoring disabled. The saved sections were reused and the remaining sections completed. The final paper is 28 pages; its PDF layout status is `needs_review`. The recovery took 131.32 seconds and the checkpoint records 13 cumulative provider calls. See `metadata.json` for hashes and proofreading results.
