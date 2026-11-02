@@ -40,7 +40,7 @@ function referenceUrlError(value: string): string | null {
 }
 
 
-function ReferenceLink({ reference, onResolved }: { reference: Reference; onResolved?: (name: string) => void }) {
+function ReferenceLink({ reference, onResolved, editing = false }: { reference: Reference; onResolved?: (name: string) => void; editing?: boolean }) {
   const candidate = reference.url.trim();
   const knownName = reference.name.trim() || candidate;
   const [resolvedTitle, setResolvedTitle] = useState<string | null>(() => titleCache.get(candidate) ?? null);
@@ -282,7 +282,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
             <div className="pt-reference-field">
               {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
-                onChange={event => setAt(index, event.target.value)}/> : <ReferenceLink reference={reference} onResolved={setResolved}/>}
+                onChange={event => setAt(index, event.target.value)}/> : <ReferenceLink reference={reference} onResolved={setResolved} editing/>}
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
             <button type="button" disabled={busy} onClick={() => setEditingReferences(previous => {
