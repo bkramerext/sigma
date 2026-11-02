@@ -4495,9 +4495,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path })}`, { cache: 'no-store' });
         if (!response.ok) return;
         const data = await response.json();
-        const items = (data.papers as PaperSummary[]).filter(p => p.pdf_available);
-        const scores = items.map(p => p.score?.total).filter((v): v is number => typeof v === 'number');
-        if (live) setPaperMetadata({ count: items.length, best: scores.length ? Math.max(...scores) : null });
+        if (live) setPaperMetadata({
+          count: typeof data.paper_count === 'number' ? data.paper_count : 0,
+          best: typeof data.best_paper_score === 'number' ? data.best_paper_score : null,
+        });
       } catch { /* Keep prior tooltip while offline. */ }
     };
     const changed = () => void update();
