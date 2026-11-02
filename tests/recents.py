@@ -275,12 +275,13 @@ def check(root: Path, base: Path) -> None:
     # rewrite research projects or mutate their version titles.
     pinned_view = created[1]
     project_before_pin = Path(pinned_view.path, "project.json").read_bytes()
+    order_before_pin = [item["id"] for item in recent_projects()["projects"]]
     set_recent_pin(pinned_view.project.id, pinned_view.path, True)
     pinned_list = recent_projects()["projects"]
-    assert pinned_list[0]["id"] == pinned_view.project.id
-    assert pinned_list[0]["pinned"] is True
+    assert [item["id"] for item in pinned_list] == order_before_pin
+    assert next(item for item in pinned_list if item["id"] == pinned_view.project.id)["pinned"] is True
     open_project(first.path)
-    assert recent_projects()["projects"][0]["id"] == pinned_view.project.id
+    assert recent_projects()["projects"][0]["id"] == first.project.id
     assert Path(pinned_view.path, "project.json").read_bytes() == project_before_pin
     try:
         set_recent_pin(first.project.id, pinned_view.path, True)
@@ -300,7 +301,9 @@ def check(root: Path, base: Path) -> None:
         pin_payload = {"project_id": pinned_view.project.id, "path": pinned_view.path, "pinned": True}
         pin_response = api.post("/api/projects/recent/pin", json=pin_payload)
         assert pin_response.status_code == 200 and pin_response.json()["pinned"] is True
-        assert api.get("/api/projects/recent").json()["projects"][0]["id"] == pinned_view.project.id
+        api_pinned = api.get("/api/projects/recent").json()["projects"]
+        assert api_pinned[0]["id"] == first.project.id
+        assert next(item for item in api_pinned if item["id"] == pinned_view.project.id)["pinned"] is True
         assert (
             api.post("/api/projects/recent/pin", json={**pin_payload, "path": first.path}).status_code
             == 400
