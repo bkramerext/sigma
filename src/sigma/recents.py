@@ -282,6 +282,7 @@ class RecentProject:
     included_example: bool
     available: bool
     pin_state: str = "remove"
+    hidden_by_family_pin: bool = False
     error: str | None = None
     project_type_snapshot: dict | None = None
 
@@ -331,10 +332,14 @@ def recent_projects() -> dict:
                         available=True,
                         pin_state=(
                             "unpin"
-                            if view.project.id in pins.values()
+                            if pins.get(project_family(view.project.title)) == view.project.id
                             else "remove"
                             if project_family(view.project.title) in pins
                             else "pin_remove"
+                        ),
+                        hidden_by_family_pin=(
+                            project_family(view.project.title) in pins
+                            and pins[project_family(view.project.title)] != view.project.id
                         ),
                     )
                 )
