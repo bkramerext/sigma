@@ -41,7 +41,6 @@ with sync_playwright() as playwright:
             if unavailable_fixture["enabled"]:
                 data["projects"].append(
                     {
-    
                         "id": "00000000-0000-4000-8000-000000000124",
                         "path": "/unavailable-placeholder.sigma",
                         "title": "Unfindable Ghost Project",
@@ -56,7 +55,6 @@ with sync_playwright() as playwright:
                 )
                 data["projects"].append(
                     {
-    
                         "id": "00000000-0000-4000-8000-000000000125",
                         "path": "/valid-but-no-project-type.sigma",
                         "title": "Valid Untyped Project",
@@ -207,9 +205,7 @@ with sync_playwright() as playwright:
     expect(pinned.locator(".recent-title-pin")).to_have_count(0)
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
-    expect(
-        pinned.get_by_role("button", name="Remove this project").first
-    ).to_be_visible()
+    expect(pinned.get_by_role("button", name="Remove this project").first).to_be_visible()
     expect(pinned.locator("details.pinned-type-group")).to_have_count(0)
     assert not errors, errors
     browser.close()
