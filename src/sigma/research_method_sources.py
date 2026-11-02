@@ -1,24 +1,22 @@
 """Pre-investigation selection of readable research-method references.
 
-This module contains short, independently authored *method notes* derived from
-publicly readable HTML chapters, not scraped or model-invented quotations.
-Selections are from an explicitly vetted catalog: no provider request, third-
-party fetch, network credentials, or website availability can block research.
-A source is not primary evidence about the subject under investigation.
+References are selected exclusively from the unified Project Types catalog and
+its ancestry, with a shared common-reference list. A separate legacy table only
+annotates known sources with short, independently authored method notes. Unknown
+user-provided URLs remain unverified; no external content is invented.
 
-The selection is re-evaluated when the project question/branch changes; for
-compatible later sessions the most recent vetted selection is reused.
+Every inherited reference is retained. Three is advisory, not a cap. Reference
+snapshots are frozen for each session; changed type configuration applies only
+to future sessions.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-CATALOG_VERSION = "methodology-catalog-v1"
 # Advisory only: do not truncate inherited or user-specified references.
 RECOMMENDED_SOURCE_COUNT = 3
 # IDs and notes have been individually source-checked against readable HTML.
