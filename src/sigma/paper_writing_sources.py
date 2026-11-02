@@ -2,42 +2,109 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
+from collections.abc import Awaitable, Callable, Mapping
 from html.parser import HTMLParser
-from typing import Any, Awaitable, Callable, Mapping
+from typing import Any
 
 import httpx
 
 # Fixed, curated discovery pool. The input project NEVER supplies fetch URLs.
 # Add new disciplines and branches here; unavailable pages are skipped.
 CATALOG = (
-    ("general", "*", "*", "PLOS: Structuring Papers",
-     "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005619"),
-    ("general", "*", "*", "PLOS: Writing Research Papers",
-     "https://pmc.ncbi.nlm.nih.gov/articles/PMC3907284/"),
-    ("discipline", "mathematical", "*", "Tao: On Writing Mathematics",
-     "https://terrytao.wordpress.com/advice-on-writing-papers/"),
-    ("discipline", "mathematical", "*", "SIAM: Scientific Computing Author Instructions",
-     "https://epubs.siam.org/sisc/instructions-for-authors"),
-    ("discipline", "physics", "*", "APS: Physics Manuscript Style",
-     "https://journals.aps.org/authors/style-basics"),
-    ("discipline", "physics", "*", "IOP: Journal Article Structure",
-     "https://publishingsupport.iopscience.iop.org/questions/structure-and-format-of-your-journal-article/"),
-    ("discipline", "biology", "*", "ARRIVE: Animal Research Reporting",
-     "https://arriveguidelines.org/arrive-guidelines"),
-    ("discipline", "computer_science", "*", "ACM SIGSOFT: Empirical Standards",
-     "https://www2.sigsoft.org/EmpiricalStandards/docs/standards"),
-    ("discipline", "engineering", "*", "ACM SIGSOFT: Engineering Research Standards",
-     "https://www2.sigsoft.org/EmpiricalStandards/docs/standards"),
-    ("discipline", "law", "*", "Stanford Law: Scholarly Writing",
-     "https://guides.law.stanford.edu/c.php?g=1255722&p=9200577"),
-    ("branch", "mathematical", "combinatorics", "Electronic Journal of Combinatorics: Author Guide",
-     "https://www.combinatorics.org/ojs/index.php/eljc/about/submissions"),
-    ("branch", "physics", "relativity", "Classical and Quantum Gravity: Author Scope",
-     "https://publishingsupport.iopscience.iop.org/journals/classical-and-quantum-gravity/about-classical-quantum-gravity/"),
-    ("branch", "biology", "developmental", "ARRIVE: Animal Study Reporting",
-     "https://arriveguidelines.org/arrive-guidelines"),
+    (
+        "general",
+        "*",
+        "*",
+        "PLOS: Structuring Papers",
+        "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005619",
+    ),
+    (
+        "general",
+        "*",
+        "*",
+        "PLOS: Writing Research Papers",
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC3907284/",
+    ),
+    (
+        "discipline",
+        "mathematical",
+        "*",
+        "Tao: On Writing Mathematics",
+        "https://terrytao.wordpress.com/advice-on-writing-papers/",
+    ),
+    (
+        "discipline",
+        "mathematical",
+        "*",
+        "SIAM: Scientific Computing Author Instructions",
+        "https://epubs.siam.org/sisc/instructions-for-authors",
+    ),
+    (
+        "discipline",
+        "physics",
+        "*",
+        "APS: Physics Manuscript Style",
+        "https://journals.aps.org/authors/style-basics",
+    ),
+    (
+        "discipline",
+        "physics",
+        "*",
+        "IOP: Journal Article Structure",
+        "https://publishingsupport.iopscience.iop.org/questions/structure-and-format-of-your-journal-article/",
+    ),
+    (
+        "discipline",
+        "biology",
+        "*",
+        "ARRIVE: Animal Research Reporting",
+        "https://arriveguidelines.org/arrive-guidelines",
+    ),
+    (
+        "discipline",
+        "computer_science",
+        "*",
+        "ACM SIGSOFT: Empirical Standards",
+        "https://www2.sigsoft.org/EmpiricalStandards/docs/standards",
+    ),
+    (
+        "discipline",
+        "engineering",
+        "*",
+        "ACM SIGSOFT: Engineering Research Standards",
+        "https://www2.sigsoft.org/EmpiricalStandards/docs/standards",
+    ),
+    (
+        "discipline",
+        "law",
+        "*",
+        "Stanford Law: Scholarly Writing",
+        "https://guides.law.stanford.edu/c.php?g=1255722&p=9200577",
+    ),
+    (
+        "branch",
+        "mathematical",
+        "combinatorics",
+        "Electronic Journal of Combinatorics: Author Guide",
+        "https://www.combinatorics.org/ojs/index.php/eljc/about/submissions",
+    ),
+    (
+        "branch",
+        "physics",
+        "relativity",
+        "Classical and Quantum Gravity: Author Scope",
+        "https://publishingsupport.iopscience.iop.org/journals/classical-and-quantum-gravity/about-classical-quantum-gravity/",
+    ),
+    (
+        "branch",
+        "biology",
+        "developmental",
+        "ARRIVE: Animal Study Reporting",
+        "https://arriveguidelines.org/arrive-guidelines",
+    ),
 )
 _CACHE: dict[str, str | None] = {}
 
@@ -175,25 +242,25 @@ async def select(
         for _, _, _, title, url in candidates[:2]:
             try:
                 # Source selection is not permitted to stall paper planning.
-                import asyncio
-
                 body = await asyncio.wait_for(fetch(url), timeout=3.0)
-            except (Exception, asyncio.CancelledError):
+            except (httpx.HTTPError, TimeoutError, RuntimeError, UnicodeError, ValueError):
                 body = None
             if not isinstance(body, str):
                 continue
             excerpt = readable(body)
             if excerpt is None:
                 continue
-            items.append({
-                "title": title,
-                "url": url,
-                "tier": tier,
-                "type": kind,
-                "branch": branch,
-                "excerpt": excerpt,
-                "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
-            })
+            items.append(
+                {
+                    "title": title,
+                    "url": url,
+                    "tier": tier,
+                    "type": kind,
+                    "branch": branch,
+                    "excerpt": excerpt,
+                    "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
+                }
+            )
             urls.add(url)
             break
     # A field without a specific source still receives a second general guide.
@@ -202,22 +269,22 @@ async def select(
             if tier != "general" or url in urls:
                 continue
             try:
-                import asyncio
-
                 body = await asyncio.wait_for(fetch(url), timeout=3.0)
-            except (Exception, asyncio.CancelledError):
-                continue
+            except (httpx.HTTPError, TimeoutError, RuntimeError, UnicodeError, ValueError):
+                body = None
             excerpt = readable(body) if isinstance(body, str) else None
             if excerpt:
-                items.append({
-                    "title": title,
-                    "url": url,
-                    "tier": "general",
-                    "type": kind,
-                    "branch": branch,
-                    "excerpt": excerpt,
-                    "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
-                })
+                items.append(
+                    {
+                        "title": title,
+                        "url": url,
+                        "tier": "general",
+                        "type": kind,
+                        "branch": branch,
+                        "excerpt": excerpt,
+                        "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
+                    }
+                )
                 break
     return items[:3], "selected" if items else "unavailable"
 
