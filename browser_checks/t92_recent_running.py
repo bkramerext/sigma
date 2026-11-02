@@ -128,6 +128,8 @@ with sync_playwright() as playwright:
 
     pin = recent.get_by_role("button", name="Just show this version of the project")
     remove = recent.get_by_role("button", name="Remove this project")
+    assert pin.get_attribute("title") == "Just show this version of the project"
+    assert remove.get_attribute("title") == "Remove this project"
     pin_color = pin.evaluate("node => getComputedStyle(node).color")
     assert pin_color == remove.evaluate("node => getComputedStyle(node).color")
     pin.click()
@@ -143,6 +145,7 @@ with sync_playwright() as playwright:
     ).to_have_count(0)
     unpin = pinned.get_by_role("button", name="Show all versions of this project")
     expect(unpin).to_be_visible()
+    assert unpin.get_attribute("title") == "Show all versions of this project"
     assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
     unpin.hover()
     assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
