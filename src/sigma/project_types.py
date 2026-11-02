@@ -11,7 +11,7 @@ import re
 import stat
 import tempfile
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -20,6 +20,8 @@ from sigma.projects import ProjectError, projects_root
 
 MAX_ICON_BYTES = 512_000
 MAX_REFERENCES = 100
+REFERENCE_FIELDS = ("research_standards_references", "publication_standards_references")
+OVERRIDE_FIELDS = ("added_research", "added_publication", "hidden_research", "hidden_publication")
 _BUILTIN_FILE = Path(__file__).with_name("data") / "builtin_project_types.json"
 _DATA_URI = re.compile(r"^data:(image/(?:png|webp));base64,([A-Za-z0-9+/]+=*)$")
 
@@ -187,12 +189,12 @@ def _store_path() -> Path:
     return projects_root() / ".sigma-project-types.json"
 
 
-def custom_types() -> list[ProjectType]:
+def _read_catalog() -> dict[str, Any]:
     path = _store_path()
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
-        return []
+        return {"schema_version": 1, "project_types": []}
     except OSError as exc:
         raise ProjectError("Custom project type storage is unsafe or unavailable") from exc
     try:
@@ -210,11 +212,79 @@ def custom_types() -> list[ProjectType]:
         raise ProjectError("Custom project type storage could not be read") from exc
     if not isinstance(raw, dict) or raw.get("schema_version") != 1:
         raise ProjectError("Custom project type storage has an unsupported format")
-    records = raw.get("project_types")
-    if not isinstance(records, list):
+    if not isinstance(raw.get("project_types"), list):
         raise ProjectError("Custom project type storage is invalid")
+    return raw
+
+
+def custom_types() -> list[ProjectType]:
+    records = _read_catalog()["project_types"]
     result = [_from_record(item) for item in records if isinstance(item, dict)]
     return sorted(result, key=lambda item: item.name.casefold())
+
+
+def common_references() -> dict[str, list[str]]:
+    """Immutable curated defaults shared by every research discipline."""
+    raw = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))["common_references"]
+    return {field: list(_validate_references(raw[field], field)) for field in REFERENCE_FIELDS}
+
+
+def _normalize_overrides(raw: Any, defaults: dict[str, list[str]]) -> dict[str, list[str]]:
+    if not isinstance(raw, dict) or set(raw) - set(OVERRIDE_FIELDS):
+        raise ProjectError("Reference overrides have invalid fields")
+    result = {key: list(_validate_references(raw.get(key, []), key)) for key in OVERRIDE_FIELDS}
+    for key, field in (
+        ("hidden_research", "research_standards_references"),
+        ("hidden_publication", "publication_standards_references"),
+    ):
+        if not set(result[key]) <= set(defaults[field]):
+            raise ProjectError("Only built-in references may be hidden")
+    return result
+
+
+def _validate_reference_preferences(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict) or set(raw) - {"common", "project_types"}:
+        raise ProjectError("Invalid reference preferences")
+    definitions = {item.id: item for item in builtin_types()}
+    by_type = raw.get("project_types", {})
+    if not isinstance(by_type, dict) or not set(by_type) <= set(definitions):
+        raise ProjectError("Only built-in project type references can be overridden")
+    return {
+        "common": _normalize_overrides(raw.get("common", {}), common_references()),
+        "project_types": {
+            identifier: _normalize_overrides(
+                values,
+                {field: list(getattr(definitions[identifier], field)) for field in REFERENCE_FIELDS},
+            )
+            for identifier, values in by_type.items()
+        },
+    }
+
+
+def reference_preferences() -> dict[str, Any]:
+    return _validate_reference_preferences(_read_catalog().get("reference_preferences", {}))
+
+
+def _effective_references(
+    defaults: dict[str, list[str]], overrides: dict[str, list[str]]
+) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for field, added, hidden in (
+        ("research_standards_references", "added_research", "hidden_research"),
+        ("publication_standards_references", "added_publication", "hidden_publication"),
+    ):
+        seen: set[str] = set()
+        selected: list[str] = []
+        for url in [*(url for url in defaults[field] if url not in overrides[hidden]), *overrides[added]]:
+            if url not in seen:
+                selected.append(url)
+                seen.add(url)
+        result[field] = selected
+    return result
+
+
+def effective_common_references() -> dict[str, list[str]]:
+    return _effective_references(common_references(), reference_preferences()["common"])
 
 
 def resolve_type_metadata(
@@ -227,8 +297,6 @@ def resolve_type_metadata(
     the closest available ancestor. Missing parents use the child's snapshot;
     cycles are bounded and never followed indefinitely.
     """
-    from dataclasses import replace
-
     if definitions is None:
         definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
     item = definitions.get(identifier)
@@ -260,7 +328,16 @@ def resolve_type_metadata(
 
 
 def all_types() -> list[ProjectType]:
+    preferences = reference_preferences()["project_types"]
     definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
+    for identifier, overrides in preferences.items():
+        item = definitions[identifier]
+        effective = _effective_references(
+            {field: list(getattr(item, field)) for field in REFERENCE_FIELDS}, overrides
+        )
+        definitions[identifier] = replace(
+            item, **{field: tuple(effective[field]) for field in REFERENCE_FIELDS}
+        )
     return [
         resolved
         for identifier in definitions
@@ -311,7 +388,15 @@ def project_usage(identifier: str) -> int:
 
 
 def get_type(identifier: str) -> ProjectType | None:
-    return next((item for item in all_types() if item.id == identifier), None)
+    """Snapshots carry effective shared and discipline-specific guidance."""
+    item = next((row for row in all_types() if row.id == identifier), None)
+    if item is None:
+        return None
+    common = effective_common_references()
+    combined = {}
+    for field in REFERENCE_FIELDS:
+        combined[field] = tuple(dict.fromkeys([*common[field], *getattr(item, field)]))
+    return replace(item, **combined)
 
 
 def safe_project_snapshot(value: Any) -> bool:
@@ -365,12 +450,11 @@ def normalize_project_snapshot(value: Any, identifier: str) -> dict[str, Any] | 
         return None
 
 
-def _write_custom(items: list[ProjectType], *, expected_revision: str | None = None) -> None:
+def _write_custom(
+    items: list[ProjectType], *, expected_revision: str | None = None,
+    reference_overrides: dict[str, Any] | None = None,
+) -> None:
     path = _store_path()
-    document = {"schema_version": 1, "project_types": [item.record() for item in items]}
-    payload = json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-    if len(payload.encode("utf-8")) > 16_000_000:
-        raise ProjectError("Custom project type catalog exceeds the storage limit")
     lock_fd = os.open(
         path.parent / ".sigma-project-types.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600
     )
@@ -387,6 +471,19 @@ def _write_custom(items: list[ProjectType], *, expected_revision: str | None = N
             raise ProjectError(
                 "Project types changed in another window; reload and review before saving"
             )
+        # Read under the same lock so type edits never erase concurrent preferences.
+        preferences = (
+            reference_overrides if reference_overrides is not None
+            else _read_catalog().get("reference_preferences", {})
+        )
+        document = {
+            "schema_version": 1,
+            "project_types": [item.record() for item in items],
+            "reference_preferences": _validate_reference_preferences(preferences),
+        }
+        payload = json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+        if len(payload.encode("utf-8")) > 16_000_000:
+            raise ProjectError("Custom project type catalog exceeds the storage limit")
         descriptor, temporary = tempfile.mkstemp(prefix=".project-types-", dir=path.parent)
         try:
             os.fchmod(descriptor, 0o600)
@@ -457,6 +554,7 @@ def replace_custom_types(
     *,
     expected_revision: str | None = None,
     confirmed_removals: dict[str, int] | None = None,
+    reference_overrides: dict[str, Any] | None = None,
 ) -> list[ProjectType]:
     if len(records) > 500:
         raise ProjectError("Too many custom project types")
@@ -498,5 +596,11 @@ def replace_custom_types(
         seen_ids.add(item.id)
         seen_names.add(key)
         result.append(item)
-    _write_custom(result, expected_revision=expected_revision)
+    validated_overrides = (
+        _validate_reference_preferences(reference_overrides)
+        if reference_overrides is not None else None
+    )
+    _write_custom(
+        result, expected_revision=expected_revision, reference_overrides=validated_overrides
+    )
     return sorted(result, key=lambda item: item.name.casefold())
