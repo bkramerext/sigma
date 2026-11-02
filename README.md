@@ -33,13 +33,18 @@ SIGMA supports ordinary local use without a Google account, local testing of Goo
 
 ## Example Outcome Papers
 
-These papers are **proofs of concept**, demonstrating what SIGMA can produce today rather than its intended final quality. Research and paper authoring remain works in progress; further improvements to SIGMA are expected to improve the clarity, rigor, and presentation of future papers. **These examples are experimental AI-generated work, not independently verified publications.** Each PDF is accompanied by its TeX source. The links below point to the latest archived paper outputs available in this PR.
+These papers are **proofs of concept**, demonstrating what SIGMA can produce today rather than its intended final quality. Research and paper authoring remain works in progress; further improvements to SIGMA are expected to improve the clarity, rigor, and presentation of future papers. **These examples are experimental AI-generated work, not independently verified publications.** The eight examples below include the six reference research papers, Maximum Regions by Lines, and Operation Narrow Passage. Each PDF is accompanied by its TeX source, with both archived under `papers/`.
 
 <table>
 <tr>
 <td width="50%" valign="top"><p><sub><img src="papers/icons/mathematics.svg" width="20" height="20" alt="" /></sub> <strong>Mathematics · Easy</strong></p><p><strong><a href="papers/maximum-regions.pdf">Maximum Regions by Lines</a></strong> · <a href="papers/maximum-regions.tex">TeX</a></p><p>A geometric proof of the maximum number of regions formed by lines.</p></td>
 <td width="50%" valign="top"><p><sub><img src="papers/icons/mathematics.svg" width="20" height="20" alt="" /></sub> <strong>Mathematics · Hard</strong></p><p><strong><a href="papers/nonconsecutive-subset-sums-modulo-3-golden5.pdf">Nonconsecutive Subset Sums Modulo 3</a></strong> · <a href="papers/nonconsecutive-subset-sums-modulo-3-golden5.tex">TeX</a></p><p>Exact counts and a corrected identity; the proposed recurrence remains unproved.</p></td>
 </tr>
+<tr>
+<td width="50%" valign="top"><p><sub><img src="papers/icons/computing.svg" width="20" height="20" alt="" /></sub> <strong>AI systems · Hard</strong></p><p><strong><a href="papers/agent-reliability-v1-golden5.pdf">Agent Reliability v1</a></strong> · <a href="papers/agent-reliability-v1-golden5.tex">TeX</a></p><p>Distinguishing successful external actions from convincing agent completion reports, and evaluating recovery guarantees.</p></td>
+<td width="50%" valign="top"><p><sub><img src="papers/icons/computing.svg" width="20" height="20" alt="" /></sub> <strong>AI systems · Hard</strong></p><p><strong><a href="papers/sovereign-ai-federation-v2-golden5.pdf">Sovereign AI Federation v2</a></strong> · <a href="papers/sovereign-ai-federation-v2-golden5.tex">TeX</a></p><p>Assessing whether universities can share AI capacity while retaining data authority and spending controls.</p></td>
+</tr>
+
 <tr>
 <td width="50%" valign="top"><p><sub><img src="papers/icons/biology.svg" width="20" height="20" alt="" /></sub> <strong>Biology · Hard</strong></p><p><strong><a href="papers/xenopus-tadpoles-v9-golden5.pdf">Xenopus Tadpoles</a></strong> · <a href="papers/xenopus-tadpoles-v9-golden5.tex">TeX</a></p><p>Research on the developmental loss of tail regeneration competence, its evidence and unresolved questions.</p></td>
 <td width="50%" valign="top"><p><sub><img src="papers/icons/military.svg" width="20" height="20" alt="" /></sub> <strong>Military planning · Hard</strong></p><p><strong><a href="papers/operation-narrow-passage.pdf">Operation Narrow Passage</a></strong> · <a href="papers/operation-narrow-passage.tex">TeX</a></p><p>Conditional analysis of a fictional crisis, competing objectives, and uncertainty.</p></td>
