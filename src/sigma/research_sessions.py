@@ -10898,6 +10898,11 @@ def _protocol_completion_recovery_plan(
         for step in record.get("steps", [])
         if isinstance(step, dict) and step.get("role") in {"investigator", "skeptic"}
     ]
+    if any(
+        step.get("status") == "completed" and type(step.get("cycle")) is not int
+        for step in steps
+    ):
+        return None, "Accepted research turns contain a non-integer round number."
     completed = {
         (str(step.get("strategy_id") or ""), step.get("role"), step.get("cycle"))
         for step in steps
@@ -10924,7 +10929,8 @@ def _protocol_completion_recovery_plan(
         strategy_id = str(step.get("strategy_id") or "")
         role = step.get("role")
         cycle = step.get("cycle")
-        audit_status = (step.get("provider_input_audit") or {}).get("status")
+        audit = step.get("provider_input_audit")
+        audit_status = audit.get("status") if isinstance(audit, dict) else None
         key = (strategy_id, str(role), cycle if type(cycle) is int else -1)
         if status == "completed":
             continue
