@@ -221,12 +221,23 @@ class PaperTable(BaseModel):
         return self
 
 
+class PaperExample(BaseModel):
+    """A clearly labeled illustration derived from source-linked claims."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    title: str = Field(min_length=3, max_length=80)
+    text: str = Field(min_length=30, max_length=1200)
+    claim_ids: list[str] = Field(min_length=1, max_length=12)
+    after_paragraph: int = Field(default=1, ge=1, le=80)
+
+
 class PaperSection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     heading: str = Field(min_length=2, max_length=120)
     paragraphs: list[str] = Field(min_length=1, max_length=80)
     claim_ids: list[str] = Field(max_length=30)
     tables: list[PaperTable] = Field(default_factory=list, max_length=4)
+    examples: list[PaperExample] = Field(default_factory=list, max_length=2)
 
 
 class DiagramNode(BaseModel):
@@ -256,6 +267,7 @@ class PaperDiagram(BaseModel):
     boundaries: list[DiagramBoundary] = Field(default_factory=list, max_length=4)
     evidence_refs: list[str] = Field(default_factory=list, max_length=20)
     claim_ids: list[str] = Field(default_factory=list, max_length=30)
+    placement_after_section: str | None = Field(default=None, max_length=180)
 
     @model_validator(mode="after")
     def validate_caption_completeness(self) -> PaperDiagram:
@@ -264,6 +276,16 @@ class PaperDiagram(BaseModel):
                 "diagram caption appears incomplete at the previous 300-character schema limit"
             )
         return self
+
+
+class PaperReaderGuide(BaseModel):
+    """Short, evidence-bounded route into a technical paper."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    question: str = Field(min_length=15, max_length=350)
+    answer: str = Field(min_length=25, max_length=650)
+    route: str = Field(min_length=25, max_length=500)
+    boundary: str = Field(min_length=25, max_length=500)
 
 
 class PaperDraft(BaseModel):
@@ -283,6 +305,7 @@ class PaperDraft(BaseModel):
     conclusion_claim_ids: list[str] = Field(max_length=30)
     validation_warnings: list[str] = Field(max_length=12)
     diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
+    reader_guide: PaperReaderGuide | None = None
 
 
 class TeXCorrection(BaseModel):
@@ -359,6 +382,7 @@ class LongPaperPlan(BaseModel):
     validation_warnings: list[str] = Field(max_length=12)
     # Defaulted for compatibility with plans saved before diagrams were added.
     diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
+    reader_guide: PaperReaderGuide | None = None
 
 
 FAST_MAX_SECTIONS = 8
@@ -374,6 +398,7 @@ class LongSectionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     paragraphs: list[LongText] = Field(min_length=1, max_length=80)
     tables: list[PaperTable] = Field(default_factory=list, max_length=4)
+    examples: list[PaperExample] = Field(default_factory=list, max_length=2)
 
 
 def _without_optional_visuals(draft: PaperDraft) -> PaperDraft:
@@ -491,6 +516,10 @@ supported finding or precisely bounded unresolved result, and why it matters. Ai
 accounting or process narration. The methods field must describe analysis actually
 performed on saved evidence, not imperatives addressed to the writer (such as "Use",
 "Evaluate", or "Test") or unperformed experiments presented as completed work.
+Supply a concise reader_guide in plain language: the exact question, the bounded
+answer, the route through the argument, and the most important limit. It is a
+navigation aid for a scientifically curious reader, not a second abstract or a
+place to introduce new findings. Define any necessary technical term there.
 Be an exacting academic editor. Write one substantive idea per paragraph, typically two to five
 sentences. Prefer short, active sentences and precise definitions; avoid inflated language,
 throat-clearing, repetition, and re-explaining results introduced earlier. Do not duplicate
@@ -498,6 +527,13 @@ framing or methods content in each findings section. Separate important equation
 with $...$ math delimiters; protect inline mathematical notation with $...$. State
 limitations once, in the relevant argument or limitations section, without repeatedly disclaiming
 the entire paper. Maintain full evidentiary fidelity without adding length for its own sake.
+Make the reasoning easy to follow on a first read: each section should state its specific
+question or test near the start, then move through the relevant premise, evidence or derivation,
+inference, and boundary in that order. Use a short transition when the next step depends on the
+previous one. Explain an equation or figure in plain language immediately after it appears.
+Keep necessary definitions and proof steps, but cut a sentence if it only restates a result,
+limitation, or plan already given. A section should normally fit in about 450–750 words; exceed
+that range only when indispensable derivation or source-specific analysis needs the space.
 
 ACADEMIC ARGUMENT: Organize the work around one answerable question and a bounded
 contribution. State the estimand, theorem, mechanism, decision criterion, or
@@ -575,7 +611,7 @@ VISUAL_AUTHORING_INSTRUCTIONS = """VISUALS: Actively consider both explanatory d
 
 SECTION_TABLE_INSTRUCTIONS = """TABLES: Actively consider an informative table when it materially strengthens this section, such as a source-backed comparison, quantitative result, assumptions register, or sensitivity summary. Use only the supplied evidence notes, cite exact source IDs, and use only this section's fixed claim IDs. Avoid decorative or trivial tables, repeated information, fabricated measurements, or unsupported conclusions. Return an empty tables list when evidence does not justify a table."""
 
-_MATH_TOKEN = re.compile(r"\\([A-Za-z]+)|([A-Za-z0-9+*/=<>()[\]{}.,:|^_\-\s])")
+_MATH_TOKEN = re.compile(r"\\([A-Za-z]+)|([A-Za-z0-9+*/=<>()[\]{}.,:|^_\-'\s])")
 _SAFE_MATH_COMMANDS = {
     "displaystyle",
     "frac",
@@ -707,6 +743,31 @@ _SAFE_MATH_COMMANDS = {
     "perp",
     "partial",
     "nabla",
+    "Box",
+    "Pr",
+    "Psi",
+    "Sigma",
+    "big",
+    "bigcup",
+    "bigl",
+    "bigr",
+    "boldsymbol",
+    "cong",
+    "ddot",
+    "deg",
+    "dot",
+    "ell",
+    "hbar",
+    "ll",
+    "ln",
+    "mp",
+    "pm",
+    "prec",
+    "Lambda",
+    "Longleftrightarrow",
+    "dagger",
+    "supseteq",
+    "tfrac",
 }
 _MATH_SPAN = re.compile(r"(\$\$[\s\S]*?\$\$|(?<!\\)\$[^$\n]+\$)")
 _UNICODE_MATH = {
@@ -752,7 +813,7 @@ _UNICODE_TEXT = {
     "…": "\ue006",
 }
 _UNICODE_TEXT_TEX = {
-    "\ue000": r"\textendash{}",
+    "\ue000": r"\textendash{}\allowbreak{}",
     "\ue001": r"\textemdash{}",
     "\ue002": r"\textquoteleft{}",
     "\ue003": r"\textquoteright{}",
@@ -767,9 +828,35 @@ _SUPERSCRIPT_SUFFIX = re.compile(
 
 
 def _safe_math(source: str) -> bool:
+    # Validate only a small set of math-only layout environments. Their rows
+    # are checked as ordinary expressions before the envelope is accepted.
+    invalid_environment = False
+
+    def validated_environment(match: re.Match[str]) -> str:
+        nonlocal invalid_environment
+        name, columns, body = match.groups()
+        if (name == "array") != (columns is not None):
+            invalid_environment = True
+            return ""
+        body = body.replace(r"\hline", " ").replace(r"\\", " ").replace("&", " ")
+        if not _safe_math(body):
+            invalid_environment = True
+        return "M"
+
+    source = re.sub(
+        r"\\begin\{(array|pmatrix|bmatrix|cases)\}"
+        r"(?:\{([clr|]{1,24})\})?(.*?)\\end\{\1\}",
+        validated_environment,
+        source,
+        flags=re.DOTALL,
+    )
+    if invalid_environment:
+        return False
+    if r"\begin" in source or r"\end" in source or "&" in source or r"\\" in source:
+        return False
     # Common TeX spacing commands are safe within math. Normalize only for
     # token validation; preserve the original commands in rendered TeX.
-    validated = re.sub(r"\\[,;!: {}#%&]", " ", source)
+    validated = re.sub(r"\\[,;!: {}#%&|]", " ", source)
     position = 0
     for match in _MATH_TOKEN.finditer(validated):
         if match.start() != position:
@@ -780,7 +867,7 @@ def _safe_math(source: str) -> bool:
     return position == len(validated) and bool(validated.strip())
 
 
-def _latex_prose(source: str) -> str:
+def _latex_prose(source: str, *, display_long_math: bool = False) -> str:
     def escape_links(text: str) -> str:
         """Use breakable TeX URLs without changing their visible content."""
         pieces: list[str] = []
@@ -846,12 +933,24 @@ def _latex_prose(source: str) -> str:
         token = match.group(0)
         delimiter = "$$" if token.startswith("$$") else "$"
         body = math_body(token[len(delimiter) : -len(delimiter)])
+        consumed_punctuation = ""
         if _safe_math(body):
-            command = r"\[" + body + r"\]" if delimiter == "$$" else r"$" + body + r"$"
+            should_display = display_long_math and (
+                len(body) > 65 or (len(body) > 45 and body.count(",") >= 5)
+            )
+            if delimiter == "$$" or should_display:
+                if match.end() < len(source) and source[match.end()] in ".,;:":
+                    consumed_punctuation = source[match.end()]
+                if len(body) > 140 and r"\qquad" in body:
+                    rows = [part.strip() for part in body.split(r"\qquad")]
+                    body = r"\begin{gathered}" + r" \\ ".join(rows) + r"\end{gathered}"
+                command = r"\[" + body + consumed_punctuation + r"\]"
+            else:
+                command = r"$" + body + r"$"
             output.append(command)
         else:
             output.append(_latex(token))
-        position = match.end()
+        position = match.end() + len(consumed_punctuation)
     output.append(plain(source[position:]))
     return "".join(output)
 
@@ -3602,7 +3701,7 @@ def _diagram_layout(
             indegree[target] -= 1
             if indegree[target] == 0:
                 queue.append(target)
-    if visited != len(node_ids) or max(layers.values(), default=0) > 2:
+    if visited != len(node_ids):
         return None
 
     by_layer: dict[int, list[str]] = {}
@@ -3611,26 +3710,35 @@ def _diagram_layout(
     node_heights = {
         node.id: max(0.78, 0.42 + 0.25 * ((len(node.label) + 27) // 28)) for node in diagram.nodes
     }
-    vertical_gap = 0.72
-    if (
-        max(
-            sum(node_heights[node_id] for node_id in members)
-            + max(0, len(members) - 1) * vertical_gap
-            for members in by_layer.values()
-        )
-        > 14.0
-    ):
-        return None
-
     positions: dict[str, tuple[float, float]] = {}
-    for layer, members in by_layer.items():
-        total_height = sum(node_heights[node_id] for node_id in members)
-        total_height += max(0, len(members) - 1) * vertical_gap
-        cursor = total_height / 2
-        for node_id in members:
-            half_height = node_heights[node_id] / 2
-            positions[node_id] = (layer * 5.7, cursor - half_height)
-            cursor -= node_heights[node_id] + vertical_gap
+    if max(layers.values(), default=0) > 2:
+        # Long evidence chains fit the page vertically. The prior three-column
+        # limit converted both saved diagrams into prose lists, even though
+        # their graphs were simple, acyclic and informative.
+        if max(layers.values()) > 6 or max(map(len, by_layer.values())) > 3:
+            return None
+        for layer, members in by_layer.items():
+            for index, node_id in enumerate(members):
+                positions[node_id] = ((index - (len(members) - 1) / 2) * 5.25, -layer * 2.35)
+    else:
+        vertical_gap = 0.72
+        if (
+            max(
+                sum(node_heights[node_id] for node_id in members)
+                + max(0, len(members) - 1) * vertical_gap
+                for members in by_layer.values()
+            )
+            > 14.0
+        ):
+            return None
+        for layer, members in by_layer.items():
+            total_height = sum(node_heights[node_id] for node_id in members)
+            total_height += max(0, len(members) - 1) * vertical_gap
+            cursor = total_height / 2
+            for node_id in members:
+                half_height = node_heights[node_id] / 2
+                positions[node_id] = (layer * 5.7, cursor - half_height)
+                cursor -= node_heights[node_id] + vertical_gap
 
     width = 4.15
 
@@ -3790,8 +3898,9 @@ def _tex(
     source_reference_map: Mapping[str, str] | None = None,
     writing_sources: list[dict[str, Any]] | None = None,
 ) -> str:
-    include_claim_details = include_claim_details or include_research_details
-    include_validation_notes = include_validation_notes or include_research_details
+    # Research detail controls the content of the article. The claim ledger
+    # and validation notes are separate publication choices: requesting a
+    # detailed article must not silently append an audit log to the PDF.
     # Research detail is not consent to append the entire saved transcript.
     # An explicit excerpts choice must remain independent.
     esc = _latex
@@ -3811,7 +3920,23 @@ def _tex(
         return prose(readable_source_text(text))
 
     def article_paragraph(text: str) -> str:
-        return "\n\n".join(prose_text(chunk) for chunk in _publication_paragraphs(text))
+        # Claim IDs are traceability metadata, not reader-facing citations.
+        # The source-linked register after the article retains their mapping.
+        readable = re.sub(r"\s*[\[(](?:C\d+(?:,\s*C\d+)*)[\])]", "", text)
+        rendered: list[str] = []
+        for chunk in _publication_paragraphs(readable):
+            chunk = readable_source_text(chunk)
+            gate = re.match(r"^(Gate [1-9]: [^.]{3,80}\.)\s+(.+)$", chunk, re.DOTALL)
+            if gate:
+                rendered.append(
+                    r"\textbf{"
+                    + prose(gate.group(1))
+                    + "} "
+                    + prose(gate.group(2), display_long_math=True)
+                )
+            else:
+                rendered.append(prose(chunk, display_long_math=True))
+        return "\n\n".join(rendered)
 
     def render_table(table: PaperTable) -> list[str]:
         columns_count = len(table.headers)
@@ -3859,7 +3984,32 @@ def _tex(
             + "@{}"
         )
         header = " & ".join(r"\textbf{" + prose_text(cell) + "}" for cell in table.headers)
-        landscape = columns_count >= 4
+        if columns_count <= 3 and len(table.rows) <= 5:
+            compact = [
+                r"\begin{table}[!htbp]",
+                r"\centering\small",
+                r"\caption{" + prose_text(table.caption) + "}",
+                r"\begin{tabular}{" + columns + "}",
+                r"\toprule",
+                header + r"\\",
+                r"\midrule",
+            ]
+            compact.extend(
+                " & ".join(prose_text(" ".join(cell.split())) for cell in row) + r"\\"
+                for row in table.rows
+            )
+            compact.extend(
+                [
+                    r"\bottomrule",
+                    r"\end{tabular}",
+                    r"\par\smallskip{\scriptsize Source-linked claims: "
+                    + esc(", ".join(table.claim_ids))
+                    + "}",
+                    r"\end{table}",
+                ]
+            )
+            return compact
+        landscape = columns_count >= 5
         parts = [r"\begin{landscape}", r"\small"] if landscape else []
         parts = [
             *parts,
@@ -3900,12 +4050,70 @@ def _tex(
     def render_diagram(diagram: PaperDiagram) -> list[str]:
         layout = _diagram_layout(diagram)
         source_note = (
-            r"\par\smallskip{\footnotesize Evidence: "
-            + esc(readable_refs(diagram.evidence_refs))
-            + "; claims: "
+            r"\par\smallskip{\scriptsize Source-linked claims: "
             + esc(", ".join(diagram.claim_ids))
-            + "}"
+            + r"; evidence links appear in the claim notes.}"
         )
+        incoming = {node.id: 0 for node in diagram.nodes}
+        outgoing = {node.id: [] for node in diagram.nodes}
+        for edge in diagram.edges:
+            incoming[edge.target] += 1
+            outgoing[edge.source].append(edge)
+        starts = [node_id for node_id, degree in incoming.items() if degree == 0]
+        linear = (
+            len(starts) == 1
+            and len(diagram.edges) == len(diagram.nodes) - 1
+            and all(degree <= 1 for degree in incoming.values())
+            and all(len(edges) <= 1 for edges in outgoing.values())
+        )
+        ordered: list[str] = []
+        if linear:
+            ordered = [starts[0]]
+            while outgoing[ordered[-1]]:
+                ordered.append(outgoing[ordered[-1]][0].target)
+            linear = len(ordered) == len(diagram.nodes)
+        if linear:
+            labels = {node.id: node.label for node in diagram.nodes}
+            result = [
+                r"\begin{figure}[!htbp]",
+                r"\centering",
+                (
+                    r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
+                    r"story node/.style={draw=blue!65,very thick,rounded corners=4pt,"
+                    r"align=center,text width=9cm,font=\small\sffamily,fill=blue!6,inner sep=7pt}]"
+                ),
+            ]
+            for index, node_id in enumerate(ordered):
+                result.append(
+                    r"\node[story node] ("
+                    + node_id
+                    + ") at (0,"
+                    + f"{-index * 2.15:.2f}"
+                    + ") {"
+                    + prose_text(labels[node_id])
+                    + "};"
+                )
+            for node_id in ordered[:-1]:
+                edge = outgoing[node_id][0]
+                result.append(
+                    r"\draw[->,thick,blue!65,shorten <=2mm,shorten >=2mm] ("
+                    + edge.source
+                    + r") -- node[midway,right,font=\scriptsize\itshape,align=left,"
+                    + "text width=3.8cm,fill=white,inner sep=1pt] {"
+                    + prose_text(edge.label)
+                    + "} ("
+                    + edge.target
+                    + ");"
+                )
+            result.extend(
+                [
+                    r"\end{tikzpicture}",
+                    r"\caption{" + prose_text(diagram.caption) + "}",
+                    source_note,
+                    r"\end{figure}",
+                ]
+            )
+            return result
         if layout is None:
             warnings.append(
                 "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation."
@@ -4003,6 +4211,17 @@ def _tex(
 
     diagram_assignments: dict[int | None, list[PaperDiagram]] = {}
     for diagram in draft.diagrams:
+        if diagram.placement_after_section is not None:
+            target = next(
+                (
+                    index
+                    for index, section in enumerate(draft.sections)
+                    if section.heading == diagram.placement_after_section
+                ),
+                None,
+            )
+            diagram_assignments.setdefault(target, []).append(diagram)
+            continue
         claim_ids = set(diagram.claim_ids)
         matches = [
             (len(claim_ids & set(section.claim_ids)), index)
@@ -4013,7 +4232,7 @@ def _tex(
 
     if math_style:
         investigation_type = "mathematical"
-    opening_heading, methods_heading, findings_heading, style_note = _paper_style(
+    opening_heading, methods_heading, _findings_heading, _style_note = _paper_style(
         investigation_type
     )
     parts = [
@@ -4024,6 +4243,7 @@ def _tex(
         r"\usepackage{amsmath,amssymb,array,booktabs,longtable,pdflscape}",
         r"\usepackage{microtype}",
         r"\usepackage[hyphens]{url}",
+        r"\usepackage{xurl}",
         r"\usepackage{titlesec}",
         *([r"\usepackage{tikz}", r"\usetikzlibrary{fit}"] if draft.diagrams else []),
         r"\emergencystretch=2em",
@@ -4051,46 +4271,35 @@ def _tex(
         article_paragraph(draft.abstract),
         r"\end{abstract}",
     ]
-    if include_validation_notes:
-        parts += [
-            r"\section*{About this paper}",
-            prose_text(
-                "This paper was generated by SIGMA, an AI-assisted research system, from the project's recorded investigations, findings, and supporting evidence."
-            ),
-            prose_text(
-                "The analysis and conclusions reflect an automated synthesis of that research. Although SIGMA incorporates evidence tracking, critical review, and consistency checks, the resulting paper has not necessarily undergone independent verification or peer review."
-            ),
-            prose_text(
-                "Readers should evaluate its arguments, supporting evidence, and stated limitations before relying on its conclusions."
-            ),
-            prose_text("Research style: " + style_note),
-        ]
-    if material_omissions:
-        affected_source_count = len(
-            {item.get("source_ref", "unknown") for item in material_omissions}
+    if draft.reader_guide is not None:
+        guide = draft.reader_guide
+        parts.extend(
+            [
+                r"\begingroup\setlength{\fboxsep}{10pt}",
+                (
+                    r"\noindent\fcolorbox{blue!55}{blue!5}{"
+                    r"\begin{minipage}{0.90\linewidth}\small\sffamily"
+                ),
+                r"{\large\bfseries\color{blue}In brief}\par\smallskip",
+                r"\textbf{The question.} " + prose_text(guide.question) + r"\par\smallskip",
+                r"\textbf{The answer.} " + prose_text(guide.answer) + r"\par\smallskip",
+                r"\textbf{The route.} " + prose_text(guide.route) + r"\par\smallskip",
+                r"\textbf{The limit.} " + prose_text(guide.boundary),
+                r"\end{minipage}}\endgroup\par\medskip",
+            ]
         )
-        parts += [
-            r"\section*{Evidence coverage limitation}",
-            prose_text(
-                f"The evidence index omitted {len(material_omissions)} material saved research "
-                f"field fragment(s) across {affected_source_count} source(s). These fragments "
-                "were not reviewed for this paper. Interpretations that could depend on "
-                "omitted material remain provisional; the complete frozen source snapshot "
-                "and omission ledger are retained with the generation record."
-            ),
-        ]
-    if include_claim_details and draft.abstract_claim_ids:
-        parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
     parts.append(r"\section{" + esc(readable_source_text(opening_heading)) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.problem_framing]
-    if include_claim_details and draft.problem_framing_claim_ids:
-        parts.append(
-            r"\textit{Claims discussed: }" + esc(", ".join(draft.problem_framing_claim_ids))
-        )
     parts.append(r"\section{" + esc(readable_source_text(methods_heading)) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.methods]
-    if include_claim_details and draft.methods_claim_ids:
-        parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
+    if material_omissions:
+        parts.append(
+            prose_text(
+                "This synthesis uses a bounded selection of the archived research. "
+                "Unreviewed records could affect its conclusions; the full omission "
+                "ledger remains available with the generation record."
+            )
+        )
     for diagram in diagram_assignments.get(None, []):
         parts.extend(render_diagram(diagram))
 
@@ -4098,39 +4307,66 @@ def _tex(
         parts.append(
             r"\section{" + esc(readable_source_text(_publication_heading(section.heading))) + "}"
         )
-        parts += [article_paragraph(text) + "\n" for text in section.paragraphs]
+        for paragraph_number, paragraph in enumerate(section.paragraphs, start=1):
+            parts.append(article_paragraph(paragraph) + "\n")
+            for example in section.examples:
+                if min(example.after_paragraph, len(section.paragraphs)) != paragraph_number:
+                    continue
+                parts.extend(
+                    [
+                        r"\begingroup\setlength{\fboxsep}{9pt}",
+                        (
+                            r"\noindent\fcolorbox{blue!45}{blue!4}{"
+                            r"\begin{minipage}{0.91\linewidth}\small"
+                        ),
+                        r"{\sffamily\bfseries\color{blue}Example: "
+                        + prose_text(example.title)
+                        + r"}\par\smallskip",
+                        article_paragraph(example.text),
+                        r"\end{minipage}}\endgroup\par\medskip",
+                    ]
+                )
         for diagram in diagram_assignments.get(section_index, []):
             parts.extend(render_diagram(diagram))
         for table in section.tables:
             parts.extend(render_table(table))
-        if include_claim_details and section.claim_ids:
-            parts.append(r"\textit{Claims discussed: }" + esc(", ".join(section.claim_ids)))
 
     def claim_register() -> None:
+        discussed = {
+            *draft.abstract_claim_ids,
+            *draft.problem_framing_claim_ids,
+            *draft.methods_claim_ids,
+            *draft.conclusion_claim_ids,
+            *(claim_id for section in draft.sections for claim_id in section.claim_ids),
+        }
+        selected = [claim for claim in draft.claims if claim.id in discussed]
+        if not selected:
+            return
+        parts.append(r"\section{Claim and source notes}")
         parts.append(
-            r"\section*{Claim status and evidence}"
-            if math_style
-            else r"\section{" + esc(findings_heading) + "}"
+            prose_text(
+                "These notes identify the saved evidence for claims used in the article. "
+                "The complete claim register and reasoning are retained in the paper record."
+            )
         )
-        # Dense source-linked statements and source paths can otherwise create
-        # severe overfull boxes despite valid, readable scientific content.
-        # Scope relaxed line breaking to the register, not the main article.
         parts.append(r"\begin{sloppypar}")
         parts.append(r"\small")
-        for claim in draft.claims:
-            parts.extend(
-                [
-                    r"\subsection{" + esc(claim.id + " -- " + claim.status.title()) + "}",
-                    prose_text(claim.statement),
-                    prose_text(claim.reasoning),
-                ]
+        parts.append(r"\begin{description}")
+        for claim in selected:
+            parts.append(
+                r"\item["
+                + esc(claim.id)
+                + "] "
+                + prose_text(claim.statement)
+                + r" \textit{Status: }"
+                + esc(claim.status)
+                + "."
             )
             if claim.evidence_refs:
                 parts.append(r"\textit{Evidence: }" + esc(readable_refs(claim.evidence_refs)))
+        parts.append(r"\end{description}")
         parts.append(r"\end{sloppypar}")
 
-    if include_claim_details and not math_style:
-        claim_register()
     parts.append(
         r"\section{Verification status and limitations}" if math_style else r"\section{Limitations}"
     )
@@ -4148,29 +4384,31 @@ def _tex(
         )
     parts.append(r"\section{Conclusion}" if math_style else r"\section{Conclusions}")
     parts += [article_paragraph(item) + "\n" for item in draft.conclusions]
-    if include_claim_details and draft.conclusion_claim_ids:
-        parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.conclusion_claim_ids)))
-    if math_style and include_claim_details:
+    parts.append(r"\appendix")
+    if include_claim_details:
         claim_register()
-    parts.append(r"\section*{Paper writing source material used}")
-    if writing_sources:
-        parts.append(
-            prose_text(
-                "These sources informed manuscript organization and writing methods, "
-                "not the scientific evidence or findings."
+    # Writing-method sources remain in generation metadata. The publication
+    # appendix is opt-in with validation notes; they are not scientific sources.
+    if include_validation_notes:
+        parts.append(r"\section{Editorial writing sources}")
+        if writing_sources:
+            parts.append(
+                prose_text(
+                    "These sources informed manuscript organization and writing methods, "
+                    "not the scientific evidence or findings."
+                )
             )
-        )
-        parts.append(r"\begin{itemize}")
-        for source in writing_sources[:3]:
-            if not isinstance(source, dict):
-                continue
-            title = str(source.get("title") or "Writing guide")
-            tier = str(source.get("tier") or "guidance")
-            url = str(source.get("url") or "")
-            parts.append(r"\item " + prose_text(f"{title} ({tier}): {url}"))
-        parts.append(r"\end{itemize}")
-    else:
-        parts.append(prose_text("No external writing-guidance sources were recorded."))
+            parts.append(r"\begin{itemize}")
+            for source in writing_sources[:3]:
+                if not isinstance(source, dict):
+                    continue
+                title = str(source.get("title") or "Writing guide")
+                tier = str(source.get("tier") or "guidance")
+                url = str(source.get("url") or "")
+                parts.append(r"\item " + prose_text(f"{title} ({tier}): {url}"))
+            parts.append(r"\end{itemize}")
+        else:
+            parts.append(prose_text("No external writing-guidance sources were recorded."))
     if include_research_excerpts and integrity_records:
         parts += [
             r"\appendix",
@@ -4229,8 +4467,6 @@ def _tex(
                 )
             )
     if include_validation_notes:
-        if not include_research_excerpts or not integrity_records:
-            parts.append(r"\appendix")
         parts.append(r"\section{Issues found (diagnostic data)}")
         parts.append(
             prose_text(
@@ -4302,19 +4538,45 @@ def _tex(
             r"\section*{Evidence and authorship note}",
             esc("Snapshot SHA-256: " + snapshot_hash),
             esc(
-                "Generated by an AI author from the cited saved research snapshot. "
-                "This document is not independent verification. No external bibliography was added."
+                "Generated by an AI author from the cited saved research snapshot. This document is not independent verification. No external bibliography was added."
             ),
         ]
-    else:
-        parts += [
-            r"\section*{Authorship note}",
-            prose_text(
-                "AI-assisted synthesis from saved research; not independently peer reviewed."
-            ),
-        ]
+        if warnings or obligation_reconciliation:
+            parts.append(
+                prose_text(
+                    "Validation notes and the complete obligation reconciliation "
+                    "are retained with the archived paper metadata."
+                )
+            )
     parts.append(r"\end{document}")
     return "\n".join(parts) + "\n"
+
+
+def _append_sigma_issues(tex: str, issues: list[str]) -> str:
+    """Append observed pipeline diagnostics without making claims about source research."""
+    marker = r"\end{document}"
+    if tex.count(marker) != 1:
+        raise ProjectError("The Issues and Bugs section could not be placed safely.")
+    appendix = [
+        r"\section{Issues and Bugs}",
+        _latex_prose(
+            "This section records issues observed in SIGMA's paper-generation "
+            "pipeline for this version. It does not assess the input research."
+        ),
+    ]
+    if issues:
+        appendix.extend(
+            [
+                r"\begin{itemize}",
+                *[r"\item " + _latex_prose(item) for item in issues],
+                r"\end{itemize}",
+            ]
+        )
+    else:
+        appendix.append(
+            _latex_prose("No SIGMA generation issues were detected by the available checks.")
+        )
+    return tex.replace(marker, "\n".join([*appendix, marker]), 1)
 
 
 async def _provider(
@@ -5186,12 +5448,21 @@ that occur in the input. Do not add scientific claims or outside citations."""
 You are planning a long-form paper, not writing its full section prose. The evidence index is a
 bounded, source-linked selection from saved research, not an exhaustive semantic review. Draft the
 title, abstract, framing, methods, claim register, limitations, obligations, conclusions, and a
-substantive section outline. Assign each section exact evidence_refs from the index and claim_ids
+substantive section outline. Include a plain-language reader_guide with the question,
+bounded answer, route through the reasoning, and principal limit. Assign each section
+exact evidence_refs from the index and claim_ids
 from your claim register. Do not treat the index as proof of exhaustive semantic review; preserve
 its contradictions and limitations. Use enough sections to cover the study and its evidence
 without repetition. Plan the leanest coherent article: each section must make a distinct
 contribution, not merely reintroduce the previous section's definitions or summarize it again.
 Prefer informative, concise headings with no numeric prefixes; TeX adds section numbers.
+Plan the argument as an answer to the project's research question. State that
+answer with its boundary in the abstract; make the introduction preview the
+logical steps needed to support it, and assign each section one distinct step.
+Reserve a worked example or explanatory figure for a step whose reasoning would
+otherwise be hard to follow. A figure must explain a supported relation, not
+decorate the paper. The conclusion must answer the opening question at the
+same strength justified by the body.
 Respect the project's investigation type. For mathematics, distinguish a validated
 proof from an unverified proof candidate, preserve definitions, constructions, counterexamples
 and gaps, and do not invent bridging steps. For experimental research, distinguish observations,
@@ -5302,10 +5573,23 @@ state consequential evidence limitations once where they matter. Develop the sec
 argument without restating the introduction, other sections, or the same result. Write
 short, purposeful paragraphs, typically two to five sentences with one idea each; do not place
 a whole section into one paragraph. Favor economy and precision over rhetorical padding.
+Aim for roughly 450–750 words. Exceed that range only to preserve indispensable proof steps,
+source-specific findings, or important contrary evidence; do not pad to meet a target.
 Use the supplied paper-wide thesis and section-role map as editorial constraints.
 Advance this section's specific claim or analysis; do not re-explain background,
 methods, objections, or caveats assigned to other sections. Open with a substantive
 topic sentence explaining what this section contributes to the central argument.
+Use short transitions that name the logical relation between steps: consequence,
+qualification, contrast, or the next unresolved question. For each major result,
+connect the claim to specific evidence and explain why that evidence supports
+the inference. Define terms and symbols before using them; introduce each
+equation's purpose and interpret its consequence in prose. Use a concrete,
+source-supported example when an abstraction would otherwise hide the method.
+Put a compact worked illustration in the examples field when it makes a
+specific inference or counterexample easier to inspect. Mark hypothetical
+values as hypothetical, use only this section's supported claims, and do not
+repeat the same example at length in the main prose.
+Avoid formulaic signposts, such as repeatedly announcing 'in this section'.
 Close by stating what the evidence changes about that argument, without a generic
 summary or repeated provisional-status disclaimer. The paper-wide abstract and
 other section purposes provide structure, NOT additional factual evidence; support
@@ -5347,6 +5631,7 @@ or document markup."""
                 paragraphs=section_draft.paragraphs,
                 claim_ids=section.claim_ids,
                 tables=section_draft.tables if include_diagrams else [],
+                examples=section_draft.examples,
             )
         if progress and not fast_path:
             await progress("sections", section_number, len(long_plan.sections), "active")
@@ -5421,6 +5706,7 @@ or document markup."""
             paragraphs=section_draft.paragraphs,
             claim_ids=section.claim_ids,
             tables=section_draft.tables if include_diagrams else [],
+            examples=section_draft.examples,
         )
 
     if fast_path:
@@ -5465,6 +5751,7 @@ or document markup."""
                     if include_diagrams
                     else []
                 ),
+                examples=LongSectionDraft.model_validate(saved_sections[str(number)]).examples,
             )
             for number, section in enumerate(long_plan.sections, start=1)
         ]
@@ -5524,6 +5811,7 @@ or document markup."""
         conclusion_claim_ids=long_plan.conclusion_claim_ids,
         validation_warnings=warning_items[:12],
         diagrams=long_plan.diagrams if include_diagrams else [],
+        reader_guide=long_plan.reader_guide,
     )
     unknown = {ref for claim in draft.claims for ref in claim.evidence_refs} - source_ids
     if unknown:
@@ -5736,6 +6024,52 @@ def _tex_semantic_signature(tex: str) -> tuple[tuple[str, ...], tuple[tuple[str,
         else:
             tokens.append(token)
     return tuple(tokens), refs
+
+
+_ESCAPED_MATH_SPAN = re.compile(r"\\\$([^\n]*?)\\\$")
+_LATEX_ESCAPE_INVERSE = (
+    (r"\textbackslash{}", "\\"),
+    (r"\textasciicircum{}", "^"),
+    (r"\textasciitilde{}", "~"),
+    (r"\textless{}", "<"),
+    (r"\textgreater{}", ">"),
+    (r"\&", "&"),
+    (r"\%", "%"),
+    (r"\#", "#"),
+    (r"\_", "_"),
+    (r"\{", "{"),
+    (r"\}", "}"),
+    (r"\$", "$"),
+)
+
+
+def _restore_escaped_math_in_tex(tex: str) -> tuple[str, int]:
+    """Recover only math spans provably escaped by our own prose renderer.
+
+    The exact escape round-trip and safe-math validator guard against treating
+    ordinary dollar amounts or arbitrary TeX text as executable math.
+    """
+    restored = 0
+
+    def repair(match: re.Match[str]) -> str:
+        nonlocal restored
+        escaped = match.group(0)
+        if r"\textbackslash{}" not in escaped or len(escaped) > 4_000:
+            return escaped
+        original = escaped
+        for encoded, literal in _LATEX_ESCAPE_INVERSE:
+            original = original.replace(encoded, literal)
+        if (
+            not original.startswith("$")
+            or not original.endswith("$")
+            or _latex(original) != escaped
+            or not _safe_math(original[1:-1])
+        ):
+            return escaped
+        restored += 1
+        return _latex_prose(original, display_long_math=True)
+
+    return _ESCAPED_MATH_SPAN.sub(repair, tex), restored
 
 
 def _tex_static_diagnostics(tex: str) -> list[str]:
@@ -6003,6 +6337,10 @@ async def _proofread_tex(
     the active checkpoint's initial source is the revised input for that pass.
     Legacy checkpoints without pass metadata retain their previous behavior.
     """
+    if state.get("proofreading") is None:
+        tex, restored_math = _restore_escaped_math_in_tex(tex)
+        if restored_math:
+            state["static_math_restorations"] = restored_math
     while True:
         checkpoint = state.get("proofreading")
         if isinstance(checkpoint, dict) and "pass_number" not in checkpoint:
@@ -6416,6 +6754,7 @@ async def _generate_impl(
     include_research_excerpts: bool = False,
     include_diagrams: bool = True,
     frozen_snapshot: dict[str, Any] | None = None,
+    include_sigma_issues: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -6823,6 +7162,7 @@ async def _generate_impl(
                 "include_claim_details": include_claim_details,
                 "include_validation_notes": include_validation_notes,
                 "include_research_excerpts": include_research_excerpts,
+                "include_sigma_issues": include_sigma_issues,
                 "include_diagrams": include_diagrams,
                 "include_diagrams_and_tables": include_diagrams,
                 "diagram_count": len(draft.diagrams),
@@ -6943,6 +7283,14 @@ async def _generate_impl(
                 project_path_value=path,
                 report=report,
             )
+            # A proofreader pass may introduce a newly escaped math span.
+            # Re-run the bounded, semantic-preserving repair before compilation.
+            tex, postproof_math_restorations = _restore_escaped_math_in_tex(tex)
+            if postproof_math_restorations:
+                work["static_math_restorations"] = (
+                    int(work.get("static_math_restorations", 0)) + postproof_math_restorations
+                )
+                _save_work(path, work)
             _save_work(path, work)
             if proofreading.get("status") == "fallback":
                 fallback_note = (
@@ -7132,6 +7480,97 @@ async def _generate_impl(
             "needs_review" if layout_warnings else "no_severe_box_warnings_reported"
         )
         record["generation"]["layout_warnings"] = layout_warnings
+        sigma_issues: list[str] = []
+        restored_math = int(work.get("static_math_restorations", 0))
+        if restored_math:
+            sigma_issues.append(
+                f"SIGMA's TeX renderer escaped {restored_math} mathematical expression(s); "
+                "its deterministic proofreader restored them before PDF compilation."
+            )
+        correction_count = int(record["generation"]["proofreading"]["accepted_correction_count"])
+        if correction_count:
+            categories = record["generation"]["proofreading"]["correction_categories"]
+            sigma_issues.append(
+                f"SIGMA's TeX proofreader accepted {correction_count} typesetting correction(s)"
+                + (f" in these categories: {', '.join(categories)}." if categories else ".")
+            )
+        if proofreading.get("status") == "fallback":
+            sigma_issues.append(
+                "SIGMA's TeX proofreading did not finish; the paper was retained with a needs-review notice."
+            )
+        if diagram_fallback:
+            sigma_issues.append(
+                "SIGMA's generated diagram failed TeX compilation; its text-only fallback compiled."
+            )
+        if layout_repairs:
+            sigma_issues.append(
+                f"SIGMA applied {len(layout_repairs)} deterministic TeX layout repair(s) after PDF inspection."
+            )
+        sigma_issues.extend(
+            f"Unresolved PDF layout diagnostic: {item}" for item in layout_warnings[:8]
+        )
+        record["generation"]["sigma_issues"] = sigma_issues
+        record["generation"]["sigma_issues_included"] = False
+        if include_sigma_issues:
+            # This optional appendix is generated from observed SIGMA diagnostics,
+            # never from research limitations or defects in the input project.
+            appendix_diagnostics: list[str] = []
+            try:
+                candidate_tex = _append_sigma_issues(tex, sigma_issues)
+                candidate_pdf = await asyncio.to_thread(
+                    _compile_pdf,
+                    candidate_tex,
+                    max_source_bytes=50_000_000,
+                    timeout_seconds=300,
+                    max_pdf_bytes=80_000_000,
+                    diagnostics=appendix_diagnostics,
+                )
+                if not candidate_pdf.startswith(b"%PDF-"):
+                    raise RuntimeError("Issues and Bugs PDF output is invalid")
+                page_count, appendix_warnings = await asyncio.to_thread(
+                    _pdf_text_bounds_diagnostics, candidate_pdf
+                )
+                appendix_warnings = list(
+                    dict.fromkeys(
+                        [*_publication_layout_warnings(appendix_diagnostics), *appendix_warnings]
+                    )
+                )
+                record["generation"]["pdf_check_passes"].append(
+                    {
+                        "pass": len(pdf_check_passes) + 1,
+                        "page_count": page_count,
+                        "compiler_diagnostics": appendix_diagnostics[:100],
+                        "diagnostics": appendix_warnings,
+                        "purpose": "optional Issues and Bugs appendix",
+                    }
+                )
+                record["generation"]["pdf_check_final_pass"] += 1
+                if appendix_warnings:
+                    record["generation"]["layout_warnings"] = list(
+                        dict.fromkeys([*layout_warnings, *appendix_warnings])
+                    )
+                    record["generation"]["layout_status"] = "needs_review"
+                    record["generation"]["publication_status"] = "needs_review"
+                    record["generation"]["proofreading"]["verification_status"] = "incomplete"
+                    record["generation"]["proofreading"]["review_reason"] = (
+                        "Layout warnings remained after the Issues and Bugs appendix was compiled."
+                    )
+                tex, pdf = candidate_tex, candidate_pdf
+                record["generation"]["sigma_issues_included"] = True
+            except Exception as exc:  # noqa: BLE001 - optional appendix must not discard a compiled paper
+                # Keep the already compiled paper rather than discard the
+                # research because its optional diagnostic appendix failed.
+                warnings.append(
+                    "SIGMA could not compile the optional Issues and Bugs section; the paper was saved without it."
+                )
+                record["generation"]["sigma_issues"].append(
+                    "The optional Issues and Bugs section failed: "
+                    + (
+                        appendix_diagnostics[0][:250]
+                        if appendix_diagnostics
+                        else type(exc).__name__
+                    )
+                )
         # Keep the exact source that produced this version's PDF alongside the
         # frozen evidence and draft. A PDF alone is not a reproducible artifact.
         record["draft"] = draft.model_dump()
@@ -7189,6 +7628,7 @@ async def generate(
     include_diagrams: bool = True,
     *,
     frozen_snapshot: dict[str, Any] | None = None,
+    include_sigma_issues: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     key = str(project_path(path).resolve())
@@ -7209,6 +7649,7 @@ async def generate(
             include_research_excerpts,
             include_diagrams,
             frozen_snapshot,
+            include_sigma_issues,
         )
     )
     _generation_tasks[key] = task

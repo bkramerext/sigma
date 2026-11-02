@@ -580,6 +580,7 @@ class PaperGenerateRequest(OpenRequest):
     include_claim_details: bool = False
     include_validation_notes: bool = False
     include_research_excerpts: bool = False
+    include_sigma_issues: bool = False
     # Keep the request name for compatibility; this selects both visual types.
     include_diagrams: bool = True
 
@@ -840,6 +841,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             include_claim_details=body.include_claim_details,
             include_validation_notes=body.include_validation_notes,
             include_research_excerpts=body.include_research_excerpts,
+            include_sigma_issues=body.include_sigma_issues,
             include_diagrams=body.include_diagrams,
         )
     )

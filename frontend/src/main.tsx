@@ -1961,6 +1961,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [includeClaimDetails, setIncludeClaimDetails] = useState(() => window.localStorage.getItem('sigma.paper.claims:' + projectId) !== 'false');
   const [includeValidationNotes, setIncludeValidationNotes] = useState(() => window.localStorage.getItem('sigma.paper.validation:' + projectId) === 'true');
   const [includeResearchExcerpts, setIncludeResearchExcerpts] = useState(() => window.localStorage.getItem('sigma.paper.excerpts:' + projectId) === 'true');
+  const [includeSigmaIssues, setIncludeSigmaIssues] = useState(() => window.localStorage.getItem('sigma.paper.issues:' + projectId) === 'true');
   const [includeDiagramsAndTables, setIncludeDiagramsAndTables] = useState(() => window.localStorage.getItem('sigma.paper.diagrams:' + projectId) !== 'false');
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
@@ -2193,7 +2194,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       requestDispatched = true;
       window.localStorage.setItem(paperRecoveryKey(projectId), '1');
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_diagrams: includeDiagramsAndTables }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -2279,6 +2280,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Include claim details</label>
         <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include issues found</label>
         <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Include research excerpts</label>
+        <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)), setIncludeSigmaIssues(event.target.checked))}/>Include Issues and Bugs section (SIGMA generation only)</label>
       </div>
       {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot

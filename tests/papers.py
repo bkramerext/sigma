@@ -6291,7 +6291,8 @@ def test_review_fallback_question_and_tex_safety() -> None:
     )
     assert r"\section{Selected source-linked research excerpts}" not in tex
     assert r"\section{Structured reasoning and review records}" not in tex
-    assert r"\section*{About this paper}" in tex
+    assert r"\section{Claim and source notes}" in tex
+    assert r"\section*{Evidence and authorship note}" not in tex
     assert r"\begin{sloppypar}" in tex
     assert r"\end{sloppypar}" in tex
 
