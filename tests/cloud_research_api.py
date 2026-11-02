@@ -825,6 +825,11 @@ def main() -> None:
                             transport=httpx.MockTransport(provider_fixture), **kwargs
                         ),
                     ),
+                    patch.object(
+                        papers.paper_writing_sources,
+                        "select",
+                        new=AsyncMock(return_value=([], "unavailable")),
+                    ),
                 ):
                     paper_response = client.post(
                         "/api/projects/papers",
