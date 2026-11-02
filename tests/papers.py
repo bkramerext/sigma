@@ -3391,12 +3391,21 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
         "excerpt": "A source excerpt used only for writing.",
         "sha256": "a" * 64,
     }
-    tex = papers._tex(draft(), [], "f" * 64, writing_sources=[source])
-    assert r"\section*{Paper writing source material used}" in tex
+    # Editorial sources are recorded but kept out of normal reader-facing PDFs.
+    default_tex = papers._tex(draft(), [], "f" * 64, writing_sources=[source])
+    assert r"\section{Editorial writing sources}" not in default_tex
+    assert "Writing Mathematics" not in default_tex
+
+    # When validation notes are explicitly requested, sources are disclosed as
+    # writing-method guidance and distinguished from scientific evidence.
+    tex = papers._tex(
+        draft(), [], "f" * 64, writing_sources=[source], include_validation_notes=True
+    )
+    assert r"\section{Editorial writing sources}" in tex
     assert "Writing Mathematics" in tex
     assert r"\url{https://example.org/writing-math}" in tex
     assert "not the scientific evidence or findings" in tex
-    empty_tex = papers._tex(draft(), [], "f" * 64, writing_sources=[])
+    empty_tex = papers._tex(draft(), [], "f" * 64, include_validation_notes=True)
     assert "No external writing-guidance sources were recorded." in empty_tex
 
 
