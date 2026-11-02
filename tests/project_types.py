@@ -65,6 +65,13 @@ def main() -> None:
         "https://publishingsupport.iopscience.iop.org/publishing-support/authors/"
         "authoring-for-journals/writing-journal-article/"
     )
+    # Publication references must be directly extractable documents, not
+    # ornamental landing pages. Preserve the established physics HTML source.
+    for identifier, item in builtins_by_id.items():
+        if identifier not in {"mathematical", "physics"}:
+            assert item.publication_standards_references[0]["url"].lower().endswith(
+                ".pdf"
+            ), identifier
     for identifier, item in builtins_by_id.items():
         assert len(item.research_standards_references) == 1, identifier
         assert len(item.publication_standards_references) == 1, identifier
