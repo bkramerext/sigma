@@ -340,13 +340,11 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
-        <div className="project-types-section-heading"><h3>Common References</h3><span>(built-in, cannot be modified)</span></div>
-        <p>Standard references inherited by every project type.</p>
-        <h4>Research standards references</h4>
+        <h4>Research standards references for all project types</h4>
         <table className="pt-reference-table"><tbody>{commonReferences?.research_standards_references.map(ref =>
           <tr key={ref.url}><td><ReferenceLink reference={ref}/></td></tr>
         )}</tbody></table>
-        <h4>Publication standards references</h4>
+        <h4>Publication standards references for all project types</h4>
         <table className="pt-reference-table"><tbody>{commonReferences?.publication_standards_references.map(ref =>
           <tr key={ref.url}><td><ReferenceLink reference={ref}/></td></tr>
         )}</tbody></table>
