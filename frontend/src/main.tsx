@@ -2382,7 +2382,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         {confirmDeleteId === paper.paper_id && <div className="saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}><p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p><span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}><button type="button" className="text-view-link" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button></span></div>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
-          ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5.markdown}</p>}><RenderedMarkdown body={selected.eli5.markdown}/></Suspense></div>
+          ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""}/></Suspense></div>
           : <><h3>{selected.draft.title}</h3>
         {selected.generation.publication_status === 'needs_review' && <p role="status" className="ai-paper-warning"><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</p>}
         <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
