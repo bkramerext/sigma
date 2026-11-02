@@ -101,13 +101,21 @@ def paper_context(record: dict[str, Any]) -> dict[str, Any]:
         return result
 
     sections: list[dict[str, Any]] = []
+    truncated = False
     remaining = 32000
     for item in draft.get("sections", []):
         if remaining <= 0:
             break
         if not isinstance(item, dict):
             continue
-        paragraphs = excerpts(item.get("paragraphs"), min(remaining, 3500))
+        source_paragraphs = item.get("paragraphs", [])
+        paragraphs = excerpts(source_paragraphs, min(remaining, 3500))
+        if isinstance(source_paragraphs, list) and (
+            len(paragraphs) < len(source_paragraphs)
+            or any(isinstance(source, str) and len(source) > len(fragment)
+                   for source, fragment in zip(source_paragraphs, paragraphs))
+        ):
+            truncated = True
         remaining -= sum(len(part) for part in paragraphs)
         sections.append({"heading": str(item.get("heading", ""))[:160], "paragraphs": paragraphs})
 
@@ -120,7 +128,7 @@ def paper_context(record: dict[str, Any]) -> dict[str, Any]:
         "conclusions": excerpts(draft.get("conclusions"), 6000),
         "limitations": excerpts(draft.get("limitations"), 3500),
         "open_obligations": excerpts(draft.get("open_obligations"), 2200),
-        "section_content_may_be_truncated": remaining <= 0,
+        "source_excerpts_truncated": truncated or remaining <= 0,
     }
 
 
