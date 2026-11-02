@@ -2008,7 +2008,9 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 include_validation_notes,
                 include_research_excerpts,
                 include_diagrams,
+                include_sigma_issues,
             ):
+                assert include_sigma_issues is False
                 assert include_research_details is False
                 assert include_claim_details is False
                 assert include_validation_notes is False
