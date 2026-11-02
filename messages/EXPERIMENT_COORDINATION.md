@@ -1,4 +1,6 @@
-# SIGMA report-generation quality: current Chat–Blue protocol
+# SIGMA report-generation quality: archived Chat–Blue coordination protocol
+
+**Current status (2026-11-01): ARCHIVED — THE HOURLY COORDINATOR AUTOMATION WAS CANCELLED.** The clock times and polling requirements below document the historical I1–I3 study; they are not active wake schedules, deadlines, or instructions to run a worker. Human-directed handoffs now control work. The next production exercise is the budgeted Golden 5 after current Phase 1 code review/merge, with no autonomous source or paid provider calls authorized by this file.
 
 **Effective 2026-11-01.** **Scheduling clarification (latest human instruction):** scheduled coordinator wakes are fixed at **02:45 PST on 2026-11-01, then 03:45, 04:45, etc., at :45 hourly**; the corresponding Blue report targets are **:40**, five minutes before the *next* wake. No special 02:15 delay remains. This supersedes the earlier :00 example below and the obsolete hold mentioned in the immutable first checkpoint. Use explicit `-08:00` offsets after the DST transition. A checkpoint with unfinished papers is not a completed iteration, even when `message_in_N.md` exists; await the matching immutable completion addendum before publishing `message_out_(N+1).md`. Do not rewrite historical numbered messages.
 
