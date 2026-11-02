@@ -11636,19 +11636,34 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path)
 
         # Two concurrent authorized resumes cannot apply the same budget
         # extension twice or create duplicate session transitions.
-        results = await asyncio.gather(
+        saved_plan = research_sessions._protocol_completion_recovery_plan
+
+        def plan_under_lock(saved_record):
+            assert research_sessions._session_state_lock(started["id"]).locked()
+            return saved_plan(saved_record)
+
+        with patch.object(
+            research_sessions, "_protocol_completion_recovery_plan", new=plan_under_lock
+        ):
+            results = await asyncio.gather(
             research_sessions.control_session(
                 str(path), started["id"], "resume", additional_calls=4
             ),
             research_sessions.control_session(
                 str(path), started["id"], "resume", additional_calls=4
             ),
-            return_exceptions=True,
-        )
+                return_exceptions=True,
+            )
         resumed = next((item for item in results if isinstance(item, dict)), None)
         assert resumed is not None
         assert resumed["status"] == "queued"
         final_record = research_sessions._read(str(path), started["id"])
+        if original.get("hard_budget_ledger"):
+            before = original["hard_budget_ledger"]
+            after = final_record["hard_budget_ledger"]
+            assert after["call_limit"] == before["call_limit"] + 4
+            assert after["input_token_limit"] == before["input_token_limit"]
+            assert after["cost_limit_usd"] == before["cost_limit_usd"]
         assert len(final_record["call_limit_adjustments"]) == 1
         assert sum(
             event.get("kind") == "session.protocol_call_limit_extended"
