@@ -104,7 +104,9 @@ def _validate(value: Any) -> dict:
             ids = [str(UUID(project_id)) for project_id in pins.values()]
         except ValueError as exc:
             raise ValueError() from exc
-        if len(set(ids)) != len(ids):
+        if len(set(ids)) != len(ids) or any(
+            raw != canonical for raw, canonical in zip(pins.values(), ids)
+        ):
             raise ValueError()
     if not isinstance(value["entries"], list) or not isinstance(value["bootstrapped_roots"], dict):
         raise TypeError()
@@ -254,6 +256,12 @@ def record_access(view: ProjectView) -> None:
 def forget_recent(project_id: str, path: str | None = None) -> None:
     """Forget a saved entry by identity, or by its saved path if identity drifted."""
     with _index() as index:
+        matched = [
+            entry for entry in index["entries"]
+            if entry["id"] == project_id or (path is not None and entry["path"] == path)
+        ]
+        if any(entry["id"] in index["pins"].values() for entry in matched):
+            raise ProjectError("Unpin this project before removing it from Saved Projects.")
         index["entries"] = [
             entry
             for entry in index["entries"]
