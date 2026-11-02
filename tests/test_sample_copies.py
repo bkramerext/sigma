@@ -77,6 +77,8 @@ class SampleCopyTests(unittest.TestCase):
         project = inspect_project(copied.path).project
         self.assertNotEqual(project.id, "7fa05c30-1b7c-4df3-9d0c-8d95187a2200")
         self.assertEqual(project.investigation_type, "literature")
+        self.assertIsNotNone(project.difficulty)
+        assert project.difficulty is not None
         self.assertEqual(project.difficulty.value, "medium")
         self.assertEqual(len(project.active_order), 3)
         self.assertEqual(len(set(project.active_order)), 3)
