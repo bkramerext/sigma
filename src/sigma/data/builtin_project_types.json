@@ -67,8 +67,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "NIH — Guidance on Rigor and Reproducibility in Grant Applications",
+          "url": "https://www.grants.nih.gov/policy-and-compliance/policy-topics/reproducibility/guidance"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Harvard — A Student's Guide to Writing in the Life Sciences (PDF)",
+          "url": "https://writingproject.fas.harvard.edu/file_url/141"
+        }
+      ]
     },
     {
       "id": "chemistry",
@@ -92,8 +102,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "ACS — Research Data Guidelines",
+          "url": "https://researcher-resources.acs.org/publish/data_guidelines"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "ACS — Journal of the American Chemical Society Author Guidelines",
+          "url": "https://researcher-resources.acs.org/publish/author_guidelines?coden=jacsat"
+        }
+      ]
     },
     {
       "id": "computer_science",
@@ -117,8 +137,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "ACM SIGSOFT — Empirical Standards for Software Engineering",
+          "url": "https://www2.sigsoft.org/EmpiricalStandards/"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Simon Peyton Jones — How to Write a Great Research Paper (PDF)",
+          "url": "https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/How-to-write-a-great-research-paper.pdf"
+        }
+      ]
     },
     {
       "id": "economics",
@@ -148,8 +178,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "World Bank — Impact Evaluation in Practice, Second Edition",
+          "url": "https://www.worldbank.org/en/programs/sief-trust-fund/publication/impact-evaluation-in-practice"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Harvard — Writing Economics (PDF)",
+          "url": "https://writingproject.fas.harvard.edu/files/hwp/files/writingec_f2014_0.pdf"
+        }
+      ]
     },
     {
       "id": "engineering",
@@ -189,8 +229,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "NASA — Systems Engineering Handbook",
+          "url": "https://www.nasa.gov/reference/systems-engineering-handbook/"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "NASA — Technical Documentation Style Guide KSC-DF-107 (PDF)",
+          "url": "https://standards.nasa.gov/sites/default/files/standards/KSC/F/0/ksc-df-107_rev_f_07082017.pdf"
+        }
+      ]
     },
     {
       "id": "law",
@@ -220,8 +270,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Georgetown Law — Legal Research Resources at GULC and Beyond (PDF)",
+          "url": "https://www.law.georgetown.edu/wp-content/uploads/2018/11/Updated-Research-Resources2.pdf"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Georgetown Law — Creating a Good Scholarly Paper (PDF)",
+          "url": "https://www.law.georgetown.edu/academics/wp-content/uploads/sites/58/2025/01/Creating-A-Good-Scholarly-Paper-1.2.25-2.pdf"
+        }
+      ]
     },
     {
       "id": "mathematical",
@@ -292,8 +352,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Joint Chiefs of Staff — JP 5-0 Joint Planning (full text)",
+          "url": "https://irp.fas.org/doddir/dod/jp5_0.pdf"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "U.S. Army War College — Communicative Arts Directive, Options Paper Guide (PDF)",
+          "url": "https://ssl.armywarcollege.edu/dde/cadaddendum/static/app/files/CAD%20April%202023%20-%20FINAL.pdf"
+        }
+      ]
     },
     {
       "id": "philosophy",
@@ -323,8 +393,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Stanford Encyclopedia of Philosophy — Critical Thinking",
+          "url": "https://plato.stanford.edu/entries/critical-thinking/"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Jim Pryor — Guidelines on Writing a Philosophy Paper",
+          "url": "https://phil101.jimpryor.net/teaching/guidelines/writing.html"
+        }
+      ]
     },
     {
       "id": "physics",
@@ -415,8 +495,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Harvard Divinity School — Religion and Public Life: Our Approach",
+          "url": "https://rpl.hds.harvard.edu/what-we-do/our-approach"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Harvard — A Guide to Writing in Religious Studies (PDF)",
+          "url": "https://writingproject.fas.harvard.edu/file_url/146"
+        }
+      ]
     },
     {
       "id": "literature",
@@ -440,8 +530,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "UW–Madison — A Short Guide to Close Reading for Literary Analysis",
+          "url": "https://writing.wisc.edu/handbook/academicwriting/closereading/"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "University of Toronto — Writing About Literature",
+          "url": "https://www.uc.utoronto.ca/literature"
+        }
+      ]
     }
   ],
   "common_references": {
