@@ -11455,6 +11455,60 @@ def test_terminal_protocol_completion_plan_preserves_attempt_history() -> None:
     assert plan is None and error is not None and "will not replay" in error
 
 
+def test_protocol_completion_rejects_invalid_or_duplicate_accepted_slots() -> None:
+    strategy = "strategy-a"
+    accepted = [
+        {
+            "id": f"accepted-{index}",
+            "strategy_id": strategy,
+            "role": role,
+            "cycle": cycle,
+            "status": "completed",
+        }
+        for index, (role, cycle) in enumerate(
+            (
+                ("investigator", 1),
+                ("skeptic", 1),
+                ("investigator", 2),
+                ("skeptic", 2),
+                ("investigator", 3),
+                ("investigator", 4),
+            )
+        )
+    ]
+    record = {
+        "status": "ended",
+        "cycle_limit": 3,
+        "steps": accepted,
+        "strategy_runs": [
+            {
+                "strategy_id": strategy,
+                "status": "ended",
+                "cycle": 3,
+                "pending_investigation": {"claim": "Unreviewed finding"},
+            }
+        ],
+    }
+    # Six accepted *counts* must not hide the missing third-round Skeptic.
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert plan is None and error is not None and "out-of-range" in error
+
+    record["steps"][-1]["cycle"] = 3
+    record["steps"][-1]["role"] = "investigator"
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert plan is None and error is not None and "duplicate accepted" in error
+
+    record["steps"][-1]["role"] = "skeptic"
+    record["steps"][-1]["strategy_id"] = "unknown-strategy"
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert plan is None and error is not None and "unknown strategy" in error
+
+    record["steps"][-1]["strategy_id"] = strategy
+    record["strategy_runs"].append({**record["strategy_runs"][0]})
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert plan is None and error is not None and "duplicate strategy" in error
+
+
 def test_terminal_protocol_completion_allows_known_invalid_response_replacement() -> None:
     first, second = "strategy-a", "strategy-b"
     steps = []
@@ -11580,10 +11634,26 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path)
             raise AssertionError("Protocol recovery silently exceeded its saved call ceiling")
         assert research_sessions._read(str(path), started["id"]) == original
 
-        resumed = await research_sessions.control_session(
-            str(path), started["id"], "resume", additional_calls=4
+        # Two concurrent authorized resumes cannot apply the same budget
+        # extension twice or create duplicate session transitions.
+        results = await asyncio.gather(
+            research_sessions.control_session(
+                str(path), started["id"], "resume", additional_calls=4
+            ),
+            research_sessions.control_session(
+                str(path), started["id"], "resume", additional_calls=4
+            ),
+            return_exceptions=True,
         )
+        resumed = next((item for item in results if isinstance(item, dict)), None)
+        assert resumed is not None
         assert resumed["status"] == "queued"
+        final_record = research_sessions._read(str(path), started["id"])
+        assert len(final_record["call_limit_adjustments"]) == 1
+        assert sum(
+            event.get("type") == "session.protocol_call_limit_extended"
+            for event in final_record.get("events", [])
+        ) <= 1
         assert resumed["calls_used"] == 2
         assert resumed["call_limit"] == 7
         assert research_sessions._read(str(path), started["id"])["steps"] == original["steps"]
@@ -11981,6 +12051,7 @@ def main():
     test_obligation_dispatch_citations_exclude_withheld_history()
     test_obligation_dispatch_request_contains_only_supplied_citations()
     test_terminal_protocol_completion_plan_preserves_attempt_history()
+    test_protocol_completion_rejects_invalid_or_duplicate_accepted_slots()
     test_terminal_protocol_completion_allows_known_invalid_response_replacement()
     test_protocol_recovery_context_is_a_new_final_provider_input()
     with TemporaryDirectory() as temporary:
