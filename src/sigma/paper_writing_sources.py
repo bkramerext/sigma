@@ -174,21 +174,21 @@ async def _fetch(url: str) -> str | None:
     return value
 
 
-
 def branch_for(project: Mapping[str, Any]) -> str:
     """Conservative branch detection; this classifies writing style, not truth."""
     kind = str(project.get("investigation_type") or "default")
     topic = " ".join(str(project.get(k) or "") for k in ("title", "problem")).lower()
     markers = {
         "mathematical": (
-            ("combinatorics", ("subset", "counting", "combinatoric", "generating function", "recurrence")),
+            (
+                "combinatorics",
+                ("subset", "counting", "combinatoric", "generating function", "recurrence"),
+            ),
         ),
         "physics": (
             ("relativity", ("warp drive", "spacetime", "gravity", "metric", "relativity")),
         ),
-        "biology": (
-            ("developmental", ("tadpole", "xenopus", "regeneration", "developmental")),
-        ),
+        "biology": (("developmental", ("tadpole", "xenopus", "regeneration", "developmental")),),
     }
     for branch, terms in markers.get(kind, ()):
         if any(term in topic for term in terms):
@@ -233,7 +233,8 @@ async def select(
     urls: set[str] = set()
     for tier in ("general", "discipline", "branch"):
         candidates = [
-            candidate for candidate in CATALOG
+            candidate
+            for candidate in CATALOG
             if candidate[0] == tier
             and (tier == "general" or candidate[1] == kind)
             and (tier != "branch" or candidate[2] == branch)
