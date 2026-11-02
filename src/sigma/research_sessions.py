@@ -5469,9 +5469,9 @@ async def control_session(
             extension_seconds = (new_deadline - old_deadline).total_seconds()
             extension_minutes = math.ceil(extension_seconds / 60)
             record["deadline_at"] = new_deadline.isoformat()
-            record["duration_limit_minutes"] = int(
-                record.get("duration_limit_minutes", 0)
-            ) + extension_minutes
+            record["duration_limit_minutes"] = (
+                int(record.get("duration_limit_minutes", 0)) + extension_minutes
+            )
             record.setdefault("protocol_completion_time_extensions", []).append(
                 {
                     "at": _now(),
@@ -12076,6 +12076,61 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
         raise ProjectError(str(exc)) from exc
 
 
+def _record_worker_cancellation(record: dict[str, Any]) -> None:
+    """Persist cancellation without claiming a provider request ran when none started."""
+    running_steps = [step for step in record.get("steps", []) if step.get("status") == "running"]
+    if record["status"] not in {"stopped", "paused"}:
+        record["status"] = "paused"
+        if running_steps:
+            record["message"] = (
+                "Provider step interrupted. It may still complete or be billed and will not be retried automatically."
+            )
+            record["current_action"] = "Paused after interrupted step"
+            _event(record, "interrupted", record["message"])
+        else:
+            record["message"] = (
+                "Research execution was cancelled before a provider step started. "
+                "No provider request was dispatched by this continuation."
+            )
+            record["current_action"] = "Paused before dispatch"
+            _event(record, "paused_before_dispatch", record["message"])
+    for step in running_steps:
+        if isinstance(record.get("hard_budget_ledger"), dict):
+            mark_unknown(record["hard_budget_ledger"], call_id=step["id"])
+            step["hard_budget_status"] = "unknown_in_flight_reserved"
+        step["status"] = "interrupted"
+        step["token_usage_status"] = "unavailable"
+        if isinstance(step.get("provider_input_audit"), dict):
+            step["provider_input_audit"]["status"] = "call_interrupted_dispatch_unknown"
+        if cloud_research.billing_enabled() and step.get("attempt_id"):
+            step["attempt_status"] = "unknown"
+            try:
+                cloud_research.mark_call_unknown(record["id"], step["attempt_id"])
+            except cloud_research.CloudResearchUnavailable:
+                # Keep the existing spend hold if ledger reconciliation fails.
+                pass
+        step["failure_kind"] = "cancelled" if record["status"] == "stopped" else "interrupted"
+        step["interruption_reason"] = "user_stop" if record["status"] == "stopped" else "user_pause"
+        step["finished_at"] = _now()
+        _record_guidance_interruption(record, step, "interrupted")
+        _event(
+            record,
+            "call.interrupted",
+            f"{step['role'].title()} request was cancelled; provider usage may still accrue.",
+            step["role"],
+        )
+    record["current_step"] = None
+    record["current_steps"] = []
+    for branch in record.get("strategy_runs", []):
+        if branch.get("status") in {"queued", "running"}:
+            branch["status"] = "stopped" if record["status"] == "stopped" else "paused"
+            branch["current_action"] = branch["status"].title()
+    if record.get("strategy_runs"):
+        record["outcome"] = _outcome(record)
+        record["strategy_assessments"] = _strategy_assessments(record)
+        record["portfolio_decision"] = _portfolio_decision(record)
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -12565,55 +12620,7 @@ async def _worker(session_id: str, path: str) -> None:
     except asyncio.CancelledError:
         try:
             record = _read(path, session_id)
-            if record["status"] not in {"stopped", "paused"}:
-                record["status"] = "paused"
-                record["message"] = (
-                    "Provider step interrupted. It counts against the six-call limit and will not be retried automatically."
-                )
-                record["current_action"] = "Paused after interrupted step"
-                _event(record, "interrupted", record["message"])
-            running_steps = [
-                step for step in record.get("steps", []) if step.get("status") == "running"
-            ]
-            for step in running_steps:
-                if isinstance(record.get("hard_budget_ledger"), dict):
-                    mark_unknown(record["hard_budget_ledger"], call_id=step["id"])
-                    step["hard_budget_status"] = "unknown_in_flight_reserved"
-                step["status"] = "interrupted"
-                step["token_usage_status"] = "unavailable"
-                if isinstance(step.get("provider_input_audit"), dict):
-                    step["provider_input_audit"]["status"] = "call_interrupted_dispatch_unknown"
-                if cloud_research.billing_enabled() and step.get("attempt_id"):
-                    step["attempt_status"] = "unknown"
-                    try:
-                        cloud_research.mark_call_unknown(record["id"], step["attempt_id"])
-                    except cloud_research.CloudResearchUnavailable:
-                        # Keep the existing spend hold if ledger reconciliation fails.
-                        pass
-                step["failure_kind"] = (
-                    "cancelled" if record["status"] == "stopped" else "interrupted"
-                )
-                step["interruption_reason"] = (
-                    "user_stop" if record["status"] == "stopped" else "user_pause"
-                )
-                step["finished_at"] = _now()
-                _record_guidance_interruption(record, step, "interrupted")
-                _event(
-                    record,
-                    "call.interrupted",
-                    f"{step['role'].title()} request was cancelled; provider usage may still accrue.",
-                    step["role"],
-                )
-            record["current_step"] = None
-            record["current_steps"] = []
-            for branch in record.get("strategy_runs", []):
-                if branch.get("status") in {"queued", "running"}:
-                    branch["status"] = "stopped" if record["status"] == "stopped" else "paused"
-                    branch["current_action"] = branch["status"].title()
-            if record.get("strategy_runs"):
-                record["outcome"] = _outcome(record)
-                record["strategy_assessments"] = _strategy_assessments(record)
-                record["portfolio_decision"] = _portfolio_decision(record)
+            _record_worker_cancellation(record)
             record["updated_at"] = _now()
             _save(path, record)
         except (ProjectError, OSError):

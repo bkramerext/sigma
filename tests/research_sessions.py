@@ -3836,6 +3836,37 @@ async def test_pause_counts_interrupted_call(path: Path):
     assert rejected["message"] == rejection_message
 
 
+def test_worker_cancel_before_dispatch_does_not_claim_provider_call():
+    record = {"id": str(uuid4()), "status": "running", "steps": [], "events": []}
+    research_sessions._record_worker_cancellation(record)
+    assert record["status"] == "paused"
+    assert record["current_action"] == "Paused before dispatch"
+    assert "No provider request was dispatched" in record["message"]
+    assert record["events"][-1]["kind"] == "paused_before_dispatch"
+    assert record.get("calls_used", 0) == 0
+
+
+def test_worker_cancel_with_running_call_preserves_dispatch_uncertainty():
+    step = {
+        "id": str(uuid4()),
+        "role": "investigator",
+        "status": "running",
+        "provider_input_audit": {"status": "provider_request_dispatched"},
+    }
+    record = {
+        "id": str(uuid4()),
+        "status": "running",
+        "steps": [step],
+        "events": [],
+        "strategy_runs": [],
+    }
+    research_sessions._record_worker_cancellation(record)
+    assert record["current_action"] == "Paused after interrupted step"
+    assert step["status"] == "interrupted"
+    assert step["provider_input_audit"]["status"] == "call_interrupted_dispatch_unknown"
+    assert record["events"][-1]["kind"] == "call.interrupted"
+
+
 async def test_malformed_output_and_restart(path: Path):
     view, strategy, credential, config = await setup(path)
 
@@ -11954,6 +11985,8 @@ def main():
         test_t37_obligation_identity_lifecycle_and_history(root / "t37-obligation-review.sigma")
         asyncio.run(test_t37_mandatory_context_blocks_before_provider(root / "t37-blocked.sigma"))
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
+        test_worker_cancel_before_dispatch_does_not_claim_provider_call()
+        test_worker_cancel_with_running_call_preserves_dispatch_uncertainty()
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(
             test_clipped_investigator_automatically_recovers(root / "clipped-auto-recovery.sigma")
