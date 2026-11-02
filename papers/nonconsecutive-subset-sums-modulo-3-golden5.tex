@@ -8,6 +8,7 @@
 \usepackage{amsmath,amssymb,array,booktabs,longtable,pdflscape}
 \usepackage{microtype}
 \usepackage[hyphens]{url}
+\usepackage{xurl}
 \usepackage{titlesec}
 \usepackage{tikz}
 \usetikzlibrary{fit}
@@ -38,17 +39,17 @@ The analysis represents admissible subsets by their sum-weighted polynomial and 
 
 The exact correction formulas are combined with the Fibonacci recurrence through commuting polynomial shift operators. A complementary formal-power-series elimination supplies the rational generating function and checks the recurrence's starting index. Elementary Fibonacci bounds compare the correction with the total count and give an explicit all-index error estimate; the additional minimal-order assertion is separated from these conclusions because the bounded excerpts do not expose its complete coprimality calculation.
 
-The bounded evidence index omitted 2809 saved research fragments across 7 sources. Claims that could depend on those fragments remain provisional; the full omission ledger is retained with the archived research record.
+This synthesis uses a bounded selection of the archived research. Unreviewed records could affect its conclusions; the full omission ledger remains available with the generation record.
 \section{Admissible subsets and the residue filter}
 A weighted enumerator separates the Fibonacci count of nonconsecutive subsets from the correction imposed by divisibility of their sums by three. For an integer $n\geq 0$, call a subset $S\subseteq\{1,\ldots,n\}$ admissible if it contains no two consecutive integers, and let $a_n$ count the admissible subsets for which $3\mid\sum_{i\in S}i$. The ground set is empty when $n=0$; the empty subset is admissible and has sum zero, so it contributes to every $a_n$.
 
 Write $F_0=0$, $F_1=1$, and $F_{k+2}=F_{k+1}+F_k$ for every integer $k\geq 0$. The main theorem, whose proof is developed below, is that the counts satisfy the integer-coefficient recurrence
-$a_{n+8}=a_{n+7}+a_{n+6}+a_{n+5}-a_{n+4}-a_{n+3}+a_{n+2}-a_{n+1}-a_n$
+\[a_{n+8}=a_{n+7}+a_{n+6}+a_{n+5}-a_{n+4}-a_{n+3}+a_{n+2}-a_{n+1}-a_n\]
 for every integer $n\geq 0$, with sufficient initial values
-$(a_0,a_1,a_2,a_3,a_4,a_5,a_6,a_7)=(1,1,1,2,3,5,8,12)$. In particular, $a_{12}=128$.
+\[(a_0,a_1,a_2,a_3,a_4,a_5,a_6,a_7)=(1,1,1,2,3,5,8,12)\]. In particular, $a_{12}=128$.
 
 The theorem also gives the quantitative limiting statement
-$0\leq \frac{a_n}{F_{n+2}}-\frac13\leq\frac23\varphi^{-2n/3}\qquad(n\geq 0),$
+\[0\leq \frac{a_n}{F_{n+2}}-\frac13\leq\frac23\varphi^{-2n/3}\qquad(n\geq 0),\]
 where $\varphi=(1+\sqrt5)/2$. Consequently, $a_n/F_{n+2}\to 1/3$ as $n\to\infty$. We first establish the exact counting identity from which the recurrence and the estimate will follow.
 
 For an indeterminate $q$, define the polynomial
@@ -64,7 +65,7 @@ At $q=1$, every admissible subset has weight one, and this identity becomes the 
 To impose the divisibility condition, fix a primitive cube root of unity $\omega\in\mathbb C$, so that $\omega^3=1$, $\omega\neq 1$, and $1+\omega+\omega^2=0$. For every integer $s$, the expression $1+\omega^s+\omega^{2s}$ equals $3$ if $3\mid s$. If $s\equiv 1\pmod 3$, it equals $1+\omega+\omega^2=0$; if $s\equiv 2\pmod 3$, it equals $1+\omega^2+\omega=0$. Thus $(1+\omega^s+\omega^{2s})/3$ is exactly the indicator that $s$ is divisible by three.
 
 Apply this indicator to the sum of each admissible subset and add over all such subsets. Since the sums are finite, the defining polynomial gives
-$3a_n=P_n(1)+P_n(\omega)+P_n(\omega^2)=F_{n+2}+P_n(\omega)+P_n(\omega^2)\qquad(n\geq 0).$
+\[3a_n=P_n(1)+P_n(\omega)+P_n(\omega^2)=F_{n+2}+P_n(\omega)+P_n(\omega^2)\qquad(n\geq 0).\]
 This filter selects all subset sums divisible by three, rather than a single exponent of $P_n(q)$, and includes the zero sum of the empty subset.
 
 Define the correction by $c_n=P_n(\omega)+P_n(\omega^2)$. The filter proves the exact decomposition $3a_n=F_{n+2}+c_n$, and therefore identifies $c_n$ with the integer $3a_n-F_{n+2}$. The counting problem is now reduced to determining the two primitive-root evaluations: the Fibonacci term accounts for the total number of admissible subsets, while their sum accounts exactly for the departure of $a_n$ from one third of that total.
@@ -89,23 +90,23 @@ Define the correction by $c_n=P_n(\omega)+P_n(\omega^2)$. The filter proves the 
 The primitive-root contributions admit exact Fibonacci formulas on each index class modulo three, turning the residue filter into an explicit correction to the total count. Let $\omega$ be a primitive complex cube root of unity, so $\omega^3=1$ and $1+\omega+\omega^2=0$, and put $p_n=P_n(\omega)$ for the weighted subset enumerator defined above. Its recurrence becomes $p_n=p_{n-1}+\omega^n p_{n-2}$ for every integer $n\geq 2$; the multiplier therefore passes successively through $1$, $\omega$, and $\omega^2$ as the index advances through a complete triple.
 
 We claim that, for every integer $m\geq 0$,
-$P_{3m}(\omega)=F_{m+1}+\omega F_m,\qquad P_{3m+1}(\omega)=(1+\omega)F_{m+1},\qquad P_{3m+2}(\omega)=F_m.$
+\[P_{3m}(\omega)=F_{m+1}+\omega F_m,\qquad P_{3m+1}(\omega)=(1+\omega)F_{m+1},\qquad P_{3m+2}(\omega)=F_m.\]
 We prove these identities simultaneously by induction on $m$, advancing all three phases at each step. The initial polynomials give $p_0=1$, $p_1=1+\omega$, and $p_2=1+\omega+\omega^2=0$. These are precisely the claimed values at $m=0$, since $F_0=0$ and $F_1=F_2=1$.
 
 Suppose the three identities hold for some integer $m\geq 0$. At the first index of the next triple, the multiplier is $\omega^{3m+3}=1$, so
-$p_{3m+3}=p_{3m+2}+p_{3m+1}=F_m+(1+\omega)F_{m+1}=F_{m+2}+\omega F_{m+1}.$
+\[p_{3m+3}=p_{3m+2}+p_{3m+1}=F_m+(1+\omega)F_{m+1}=F_{m+2}+\omega F_{m+1}.\]
 The last equality uses $F_{m+2}=F_{m+1}+F_m$, and establishes the first identity with $m$ replaced by $m+1$.
 
 At the next index, the multiplier is $\omega^{3m+4}=\omega$. Substituting the value just obtained and the induction hypothesis yields
-$p_{3m+4}=p_{3m+3}+\omega p_{3m+2}=F_{m+2}+\omega(F_{m+1}+F_m)=(1+\omega)F_{m+2}.$
+\[p_{3m+4}=p_{3m+3}+\omega p_{3m+2}=F_{m+2}+\omega(F_{m+1}+F_m)=(1+\omega)F_{m+2}.\]
 Thus the second identity also advances, again by the Fibonacci recurrence.
 
 The final phase uses $\omega^{3m+5}=\omega^2$, and here the cube-root cancellation is decisive:
-$p_{3m+5}=p_{3m+4}+\omega^2p_{3m+3}=(1+\omega+\omega^2)F_{m+2}+\omega^3F_{m+1}=F_{m+1}.$
+\[p_{3m+5}=p_{3m+4}+\omega^2p_{3m+3}=(1+\omega+\omega^2)F_{m+2}+\omega^3F_{m+1}=F_{m+1}.\]
 This is the third identity for $m+1$. The base triple and these three successive deductions establish the formulas at every nonnegative index.
 
 The same proof applies to the other primitive root, $\omega^2$: replacing $\omega$ by $\omega^2$ gives $P_{3m}(\omega^2)=F_{m+1}+\omega^2F_m$, $P_{3m+1}(\omega^2)=(1+\omega^2)F_{m+1}$, and $P_{3m+2}(\omega^2)=F_m$. Define the integer correction by $c_n=3a_n-F_{n+2}$. The residue-filter identity and $P_n(1)=F_{n+2}$ identify it as $c_n=P_n(\omega)+P_n(\omega^2)$, so adding the paired formulas and using $\omega+\omega^2=-1$ gives
-$c_{3m}=2F_{m+1}-F_m,\qquad c_{3m+1}=F_{m+1},\qquad c_{3m+2}=2F_m\qquad(m\geq 0).$
+\[c_{3m}=2F_{m+1}-F_m,\qquad c_{3m+1}=F_{m+1},\qquad c_{3m+2}=2F_m\qquad(m\geq 0).\]
 
 These formulas also give a constant-coefficient recurrence for the correction itself. For each fixed $r\in\{0,1,2\}$, let $b_m=c_{3m+r}$ for integers $m\geq 0$; the displayed expressions make $b_m$ a fixed linear combination of $F_m$ and $F_{m+1}$. Since both Fibonacci sequences satisfy the same recurrence in $m$, their linear combination satisfies $b_{m+2}=b_{m+1}+b_m$ for every $m\geq 0$. Writing each nonnegative integer uniquely as $n=3m+r$ therefore yields
 $c_{n+6}=c_{n+3}+c_n\qquad(n\geq 0).$
@@ -122,11 +123,11 @@ Thus their product annihilates $3a$ and, by linearity, also $a$.
 Expanding the product gives
 $(E^2-E-1)(E^6-E^3-1)=E^8-E^7-E^6-E^5+E^4+E^3-E^2+E+1.$
 Consequently, for every integer $n\geq 0$, the desired counts satisfy
-$a_{n+8}=a_{n+7}+a_{n+6}+a_{n+5}-a_{n+4}-a_{n+3}+a_{n+2}-a_{n+1}-a_n.$
+\[a_{n+8}=a_{n+7}+a_{n+6}+a_{n+5}-a_{n+4}-a_{n+3}+a_{n+2}-a_{n+1}-a_n.\]
 The index range is preserved in this argument: both component identities hold at every nonnegative index, and composing forward shifts uses only later indices. In particular, no negative-index extension or eventual-recurrence qualification is needed.
 
 The exact correction formulas give $(c_0,\ldots,c_7)=(2,1,0,1,1,2,3,2)$, while the corresponding Fibonacci values are $(F_2,\ldots,F_9)=(1,2,3,5,8,13,21,34)$. Applying $a_n=(F_{n+2}+c_n)/3$ gives the eight starting counts:
-$\begin{array}{c|rrrrrrrr} n&0&1&2&3&4&5&6&7\\ \hline a_n&1&1&1&2&3&5&8&12 \end{array}$
+\[\begin{array}{c|rrrrrrrr} n&0&1&2&3&4&5&6&7\\ \hline a_n&1&1&1&2&3&5&8&12 \end{array}\]
 Because the coefficient of $a_{n+8}$ is one, the recurrence determines each next term uniquely from the preceding eight terms. These initial values are therefore sufficient to specify the entire counting sequence.
 
 At its first application, the recurrence gives
@@ -149,7 +150,7 @@ $(1-qx)G(qx)=1+q^2x+qx^2G(q^2x)$
 and
 $(1-q^2x)G(q^2x)=1+x+x^2G(x).$
 Thus the three substitutions close: after the third equation, the unknown series is again $G(x)$. Successive substitution into the first equation, followed by multiplication by $(1-qx)(1-q^2x)$, yields
-$\bigl((1-x)(1-qx)(1-q^2x)-x^6\bigr)G(x)=(1+qx)(1-qx)(1-q^2x)+q^2x^2(1+q^2x)(1-q^2x)+x^4(1+x).$
+\[\bigl((1-x)(1-qx)(1-q^2x)-x^6\bigr)G(x)=(1+qx)(1-qx)(1-q^2x)+q^2x^2(1+q^2x)(1-q^2x)+x^4(1+x).\]
 
 The numerator in this elimination is essential, since it retains the initial terms as well as the recurrence structure. Its three contributions expand respectively to $1-q^2x-q^2x^2+qx^3$, $q^2x^2-x^4$, and $x^4+x^5$; the terms of degrees two and four cancel. Since $(1-x)(1-qx)(1-q^2x)=1-x^3$, the resulting identity is
 $G(x)=\frac{1-q^2x+qx^3+x^5}{1-x^3-x^6}.$
@@ -158,12 +159,12 @@ Every denominator used has constant term one and is therefore invertible in the 
 Let $b_n=P_n(q)+P_n(q^2)$ and $B(x)=\sum_{n\geq0}b_nx^n$. Adding the preceding rational identity to its counterpart with $q$ replaced by $q^2$, and using $q+q^2=-1$, gives
 $B(x)=\frac{2+x-x^3+2x^5}{1-x^3-x^6}.$
 For the total count, the Fibonacci recurrence and its first two terms give $\sum_{n\geq0}F_{n+2}x^n=(1+x)/(1-x-x^2)$. Consequently, the residue-filter identity $3a_n=F_{n+2}+b_n$ implies
-$3A(x)=\frac{1+x}{1-x-x^2}+\frac{2+x-x^3+2x^5}{1-x^3-x^6},\qquad A(x)=\sum_{n\geq0}a_nx^n.$
+\[3A(x)=\frac{1+x}{1-x-x^2}+\frac{2+x-x^3+2x^5}{1-x^3-x^6},\qquad A(x)=\sum_{n\geq0}a_nx^n.\]
 
 Combining these fractions proves the formal identity
-$A(x)=\frac{N(x)}{D(x)}=\frac{1-x^2-x^3+x^5-x^6-x^7}{(1-x-x^2)(1-x^3-x^6)}.$
+\[A(x)=\frac{N(x)}{D(x)}=\frac{1-x^2-x^3+x^5-x^6-x^7}{(1-x-x^2)(1-x^3-x^6)}.\]
 The two denominator factors thus have separate origins: $1-x-x^2$ comes from the unrestricted admissible count, whereas $1-x^3-x^6$ comes from the primitive-root contribution. Expanding their product gives $D(x)=1-x-x^2-x^3+x^4+x^5-x^6+x^7+x^8$. Because $\deg N=7$, the identity $D(x)A(x)=N(x)$ implies $[x^{n+8}]D(x)A(x)=0$ for every $n\geq0$, which is precisely
-$a_{n+8}-a_{n+7}-a_{n+6}-a_{n+5}+a_{n+4}+a_{n+3}-a_{n+2}+a_{n+1}+a_n=0.$
+\[a_{n+8}-a_{n+7}-a_{n+6}-a_{n+5}+a_{n+4}+a_{n+3}-a_{n+2}+a_{n+1}+a_n=0.\]
 In particular, the numerator establishes the starting index, not merely eventual validity.
 
 Minimality requires a further statement that coefficient extraction alone does not supply: the numerator and denominator must be coprime over $\mathbb{Q}$. To isolate its role, suppose an eventual homogeneous constant-coefficient recurrence of order $d$ has the normalized form $a_m=c_1a_{m-1}+\cdots+c_da_{m-d}$, with coefficients in $\mathbb{Q}$. For $R(x)=1-c_1x-\cdots-c_dx^d$, that recurrence makes $R(x)A(x)$ a polynomial, because all sufficiently high coefficients vanish. Substituting $A=N/D$ then gives $D\mid RN$; if $\gcd(N,D)=1$, it follows that $D\mid R$, hence $d\geq\deg D=8$.
@@ -182,7 +183,7 @@ Let $\varphi=(1+\sqrt{5})/2$, so that $\varphi>1$ and $\varphi^2=\varphi+1$. The
 A separate induction gives $F_{n+2}\geq\varphi^n$ for every integer $n\geq 0$. Here the base cases are $F_2=1=\varphi^0$ and $F_3=2\geq\varphi$. Given the bound at indices $n$ and $n+1$, the recurrence yields $F_{n+4}=F_{n+3}+F_{n+2}\geq\varphi^{n+1}+\varphi^n=\varphi^{n+2}$. Consequently, the correction and the total satisfy $c_n\leq 2\varphi^{\lfloor n/3\rfloor}$ and $F_{n+2}\geq\varphi^n$, respectively.
 
 Because $F_{n+2}>0$, division of the exact identity $3a_n=F_{n+2}+c_n$ now gives
-$0\leq\frac{a_n}{F_{n+2}}-\frac13=\frac{c_n}{3F_{n+2}}\leq\frac23\varphi^{\lfloor n/3\rfloor-n}\leq\frac23\varphi^{-2n/3}\qquad(n\geq 0).$
+\[0\leq\frac{a_n}{F_{n+2}}-\frac13=\frac{c_n}{3F_{n+2}}\leq\frac23\varphi^{\lfloor n/3\rfloor-n}\leq\frac23\varphi^{-2n/3}\qquad(n\geq 0).\]
 The last inequality uses $\lfloor n/3\rfloor\leq n/3$ and $\varphi>1$. At $n=0$, both the normalized excess and the final upper bound equal $2/3$, so the estimate also covers the empty ground set.
 
 The upper bound tends to zero as $n\to\infty$, proving $\lim_{n\to\infty}a_n/F_{n+2}=1/3$. Thus the divisible-by-three proportion converges to one third while remaining at least one third at every finite index. The mechanism is the separation of Fibonacci scales: the correction is controlled at the shorter index $\lfloor n/3\rfloor+1$, whereas the total is indexed by $n+2$. The limiting proportion therefore follows from the exact correction identities and explicit inequalities, rather than from an assumed equidistribution of subset sums.
@@ -205,7 +206,8 @@ The essential structural result is the explicit correction $3a_n-F_{n+2}$, whose
 
 The rational generating function explains the recurrence factors. Its reported reducedness and the resulting minimal-order assertion require fuller proof detail than the bounded selection supplies, so they do not strengthen the main theorem in this plan.
 
-\section*{Claim and source notes}
+\appendix
+\section{Claim and source notes}
 These notes identify the saved evidence for claims used in the article. The complete claim register and reasoning are retained in the paper record.
 \begin{sloppypar}
 \small
@@ -232,13 +234,11 @@ These notes identify the saved evidence for claims used in the article. The comp
 \textit{Evidence: }[Research session 1, artifact 5], [Research session 1, artifact 6], [Research session 1]
 \end{description}
 \end{sloppypar}
-\section*{Paper writing source material used}
+\section{Editorial writing sources}
 These sources informed manuscript organization and writing methods, not the scientific evidence or findings.
 \begin{itemize}
 \item Keith Conrad \textemdash{} Advice on Mathematical Writing (full text) (discipline): \url{https://kconrad.math.uconn.edu/blurbs/proofs/writingtips.pdf}
 \item PLOS ONE \textemdash{} Manuscript and Reporting Guidelines (general): \url{https://journals.plos.org/plosone/s/submission-guidelines}
 \item EASE \textemdash{} Guidelines for Authors of Scientific Articles (full text) (general): \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/}
 \end{itemize}
-\section*{Authorship note}
-AI-assisted synthesis from saved research; not independently peer reviewed.
 \end{document}
