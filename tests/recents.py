@@ -22,7 +22,15 @@ from sigma.projects import (
     inspect_project,
     open_project,
 )
-from sigma.recents import home_projects, recent_projects, state_directory
+from sigma.recents import (
+    forget_recent,
+    home_projects,
+    pinned_projects,
+    project_family,
+    recent_projects,
+    set_project_pin,
+    state_directory,
+)
 from sigma.samples import open_sample_project, sample_projects
 
 
@@ -156,6 +164,62 @@ def check(root: Path, base: Path) -> None:
     recent_by_id = {item["id"]: item for item in recent_projects()["projects"]}
     assert recent_by_id[first.project.id]["difficulty"] == first.project.difficulty
     assert recent_by_id[second.project.id]["difficulty"] == second.project.difficulty
+
+    # Pin is a local selection for paper tests, never a scientific or publication verdict.
+    assert project_family(first.project.title) == project_family(second.project.title)
+    assert project_family("Xenopus Tadpoles V9") == project_family("xenopus tadpoles v10")
+    assert project_family("Warp Drive") == project_family("Warp Drive v2")
+    assert project_family("Nonconsecutive Subsets") != project_family("Warp Drive v2")
+    assert recent_by_id[first.project.id]["pin_state"] == "pin_remove"
+    assert recent_by_id[second.project.id]["pin_state"] == "pin_remove"
+    assert pinned_projects()["projects"] == []
+    set_project_pin(first.project.id, first.path, True)
+    states = {item["id"]: item["pin_state"] for item in recent_projects()["projects"]}
+    assert states[first.project.id] == "unpin"
+    assert states[second.project.id] == "remove"
+    assert [item["id"] for item in pinned_projects()["projects"]] == [first.project.id]
+    try:
+        set_project_pin(second.project.id, second.path, True)
+        raise AssertionError("Two family versions were pinned")
+    except ProjectError as exc:
+        assert "Another version" in str(exc)
+    try:
+        forget_recent(first.project.id, first.path)
+        raise AssertionError("Pinned project was removed from Saved Projects")
+    except ProjectError as exc:
+        assert "Unpin" in str(exc)
+    assert Path(first.path, "project.json").exists()
+    with TestClient(app) as api:
+        assert api.get("/api/projects/pinned").json()["projects"][0]["id"] == first.project.id
+        blocked = api.post("/api/projects/recent/forget", json={"project_id": first.project.id})
+        assert blocked.status_code == 400
+        delete = api.request(
+            "DELETE", "/api/projects",
+            json={"path": first.path, "expected_project_id": first.project.id},
+        )
+        assert delete.status_code == 400
+        conflict = api.post(
+            "/api/projects/pin",
+            json={"project_id": second.project.id, "path": second.path, "pinned": True},
+        )
+        assert conflict.status_code == 400
+        unpin = api.post(
+            "/api/projects/pin",
+            json={"project_id": first.project.id, "path": first.path, "pinned": False},
+        )
+        assert unpin.status_code == 200
+        selected = api.post(
+            "/api/projects/pin",
+            json={"project_id": second.project.id, "path": second.path, "pinned": True},
+        )
+        assert selected.status_code == 200
+        assert api.get("/api/projects/pinned").json()["projects"][0]["id"] == second.project.id
+        assert api.post(
+            "/api/projects/pin",
+            json={"project_id": second.project.id, "path": second.path, "pinned": False},
+        ).status_code == 200
+        assert api.get("/api/projects/pinned").json()["projects"] == []
+    assert all(item["pin_state"] == "pin_remove" for item in recent_projects()["projects"])
     edited = create_strategy(first.path, "My addition", "Investigate this case")
     reopened = open_sample_project(selected["id"])
     assert reopened.project.id not in {first.project.id, second.project.id}
@@ -327,6 +391,15 @@ def check(root: Path, base: Path) -> None:
 
     # Old automatic example entries disappear from Recents without deleting research.
     index_path = state_directory() / "recents.json"
+    # Legacy v1 state is upgraded without discarding the saved project index.
+    legacy = json.loads(index_path.read_text())
+    assert legacy["version"] == 2 and legacy["pins"] == {}
+    legacy["version"] = 1
+    del legacy["pins"]
+    index_path.write_text(json.dumps(legacy))
+    previous_ids = [item["id"] for item in legacy["entries"]]
+    assert [item["id"] for item in recent_projects()["projects"]] == previous_ids
+    assert json.loads(index_path.read_text())["version"] == 2
     index = json.loads(index_path.read_text())
     index["entries"] = [
         {"id": first.project.id, "path": first.path, "accessed_at": None, "included_example": True},
