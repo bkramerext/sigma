@@ -397,6 +397,8 @@ class RecentProject:
     hidden_by_family_pin: bool = False
     error: str | None = None
     project_type_snapshot: dict | None = None
+    paper_count: int = 0
+    best_paper_score: int | None = None
 
 
 def recent_projects() -> dict:
@@ -431,6 +433,11 @@ def recent_projects() -> dict:
             view = inspect_project(entry["path"])
             if str(UUID(view.project.id)) != entry["id"]:
                 raise ProjectError("Project identity changed")
+            from sigma import papers, paper_scores
+
+            summaries = papers.list_papers(view.path)
+            successful = [item for item in summaries if item["pdf_available"]]
+            best = paper_scores.best_score(successful)
             recent.append(
                 asdict(
                     RecentProject(
@@ -439,6 +446,8 @@ def recent_projects() -> dict:
                         investigation_type=view.project.investigation_type,
                         project_type_snapshot=view.project.project_type_snapshot,
                         strategy_count=len(view.project.active_order),
+                        paper_count=len(successful),
+                        best_paper_score=best,
                         difficulty=view.project.difficulty,
                         research_running=has_active_session(view.path),
                         available=True,
