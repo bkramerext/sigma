@@ -127,6 +127,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const [revision, setRevision] = useState('');
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  const [editingBuiltinRefs, setEditingBuiltinRefs] = useState<string | null>(null);
 
   function close() {
     if (dialog.current?.open) dialog.current.close();
@@ -344,9 +345,14 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderEffectiveIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      <section><h3>Research standards references</h3>{readonly ? listPreferenceEditor(item.id, 'research_standards_references') : listEditor(item, 'research_standards_references', false)}</section>
-      <section><h3>Publication standards references</h3>{readonly ? listPreferenceEditor(item.id, 'publication_standards_references') : listEditor(item, 'publication_standards_references', false)}</section>
-      {readonly && <button className="pt-restore-references" type="button" disabled={busy}
+      {readonly && !item.research_standards_references.length && !item.publication_standards_references.length &&
+        editingBuiltinRefs !== item.id && <button type="button" onClick={() => setEditingBuiltinRefs(item.id)}>Add references</button>}
+      {(!readonly || !!item.research_standards_references.length || editingBuiltinRefs === item.id) &&
+        <section><h3>Research standards references</h3>{readonly ? listPreferenceEditor(item.id, 'research_standards_references') : listEditor(item, 'research_standards_references', false)}</section>}
+      {(!readonly || !!item.publication_standards_references.length || editingBuiltinRefs === item.id) &&
+        <section><h3>Publication standards references</h3>{readonly ? listPreferenceEditor(item.id, 'publication_standards_references') : listEditor(item, 'publication_standards_references', false)}</section>}
+      {readonly && (!!item.research_standards_references.length || !!item.publication_standards_references.length ||
+        editingBuiltinRefs === item.id) && <button className="pt-restore-references" type="button" disabled={busy}
         onClick={() => resetReferencePrefs(item.id)}>Restore Defaults</button>}
     </div>
   </details>;
@@ -382,6 +388,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <div className="project-types-section-heading"><h3>Common References</h3>
           <button type="button" disabled={busy || !referencePrefs} onClick={() => resetReferencePrefs('common')}>Restore Defaults</button>
@@ -390,7 +397,6 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
         <h4>Research standards references</h4>{listPreferenceEditor('common', 'research_standards_references')}
         <h4>Publication standards references</h4>{listPreferenceEditor('common', 'publication_standards_references')}
       </section>
-      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
     </div>
   </dialog>;
 }
