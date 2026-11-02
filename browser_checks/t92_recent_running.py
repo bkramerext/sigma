@@ -204,7 +204,7 @@ with sync_playwright() as playwright:
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
     expect(
-        pinned.get_by_role("button", name="Remove this project")
+        pinned.get_by_role("button", name="Remove this project").first
     ).to_be_visible()
     expect(pinned.locator("details.pinned-type-group")).to_have_count(0)
     assert not errors, errors
