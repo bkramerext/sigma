@@ -762,9 +762,19 @@ async def paper_eli5_view(paper_id: str, body: PaperScoreRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    return {"markdown": await explain(
-        body.path, paper_id, body.expected_binding, body.expected_project_id
-    )}
+    try:
+        markdown = await explain(
+            body.path, paper_id, body.expected_binding, body.expected_project_id
+        )
+    except ProjectError:
+        raise
+    except Exception:
+        logging.getLogger(__name__).exception("Unexpected ELI5 explanation failure")
+        return JSONResponse(
+            {"error": "The explanation failed unexpectedly. Please retry or inspect the server logs."},
+            status_code=500,
+        )
+    return {"markdown": markdown}
 
 
 @app.get("/api/projects/papers/{paper_id}/pdf")
