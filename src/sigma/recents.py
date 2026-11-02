@@ -462,18 +462,19 @@ def set_project_pin(project_id: str, path: str, pinned: bool) -> None:
         if entry is None:
             raise ProjectError("Project is not in Saved Projects. Open it before pinning.")
         pins = index["pins"]
-        view = inspect_project(path)
-        if view.project.id != project_id:
-            raise ProjectError("Project identity changed. Reopen it before pinning.")
-        family = project_family(view.project.title)
         active = _effective_pins(index)
         if not pinned:
-            if active.get(family) != project_id:
+            family = next((key for key, value in active.items() if value == project_id), None)
+            if family is None:
                 raise ProjectError("Only the pinned version can be unpinned.")
             pins.pop(family, None)
             if family not in index["dismissed_default_pins"]:
                 index["dismissed_default_pins"].append(family)
             return
+        view = inspect_project(path)
+        if view.project.id != project_id:
+            raise ProjectError("Project identity changed. Reopen it before pinning.")
+        family = project_family(view.project.title)
         if active.get(family) == project_id:
             return
         if family in active:
