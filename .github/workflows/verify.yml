@@ -15,8 +15,13 @@ concurrency:
 
 jobs:
   verify:
+    name: SIGMA tests / Part ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1", "2"]
     env:
       CI: "true"
       # Cloud mode and live provider access must never be enabled by this workflow.
@@ -48,5 +53,8 @@ jobs:
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/gce_host.py
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/tooling.py
       - name: Run full repository verification
+        env:
+          SIGMA_CI_SEPARATE_RUFF: "1"
+          SIGMA_CI_TEST_SHARD: ${{ matrix.shard }}
         run: ./sigma test
 

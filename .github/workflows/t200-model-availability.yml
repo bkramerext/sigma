@@ -1,13 +1,6 @@
 name: T200 Model availability browser acceptance
 
 on:
-  pull_request:
-    paths:
-      - "frontend/**"
-      - "src/sigma/cloud_auth.py"
-      - "src/sigma/openai_connection.py"
-      - "browser_checks/model_availability.py"
-      - ".github/workflows/t200-model-availability.yml"
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,154 @@
+name: Browser verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sigma-browser-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Browser acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CI: "true"
+      SIGMA_CLOUD_AUTH_ENABLED: "false"
+      SIGMA_T201_INFO: /tmp/sigma-t201-info.json
+      SIGMA_OUTCOME_SCREENSHOT_DIR: /tmp/sigma-outcome-acceptance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies once
+        id: dependencies
+        run: ./sigma setup
+      - name: Install Chromium once
+        id: chromium
+        run: uv run --with playwright python -m playwright install --with-deps chromium
+      - name: Public Samples guest star and PDF acceptance
+        # Independent suites should all run, even after another suite fails.
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/guest_samples.py
+      - name: Research Outcome browser acceptance
+        # Independent suites should all run, even after another suite fails.
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/t47_conclusion.py
+      - name: Project Types browser acceptance
+        # Independent suites should all run, even after another suite fails.
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SIGMA_PROJECTS_ROOT="$(mktemp -d)"
+          uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8026 >/tmp/project-types-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort >/tmp/project-types-ui.log 2>&1 &
+          ui_pid=$!
+          trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true; rm -rf "$SIGMA_PROJECTS_ROOT"' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null && curl -fsS http://127.0.0.1:8026/openapi.json >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8026/openapi.json >/dev/null
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/project_types_436.py
+      - name: Model availability browser acceptance
+        # Independent suites should all run, even after another suite fails.
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8001 >/tmp/t200-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort >/tmp/t200-ui.log 2>&1 &
+          ui_pid=$!
+          trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null && curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/model_availability.py
+      - name: Obligation recovery and public legal pages browser acceptance
+        # Independent suites should all run, even after another suite fails.
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run uvicorn browser_checks.t201_fixture:app --host 127.0.0.1 --port 8000 >/tmp/t201-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix frontend run dev -- --port 5173 --strictPort >/tmp/t201-ui.log 2>&1 &
+          ui_pid=$!
+          trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null && curl -fsS http://127.0.0.1:8000/openapi.json >/dev/null && test -s "$SIGMA_T201_INFO"; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/openapi.json >/dev/null
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/t201_overflow.py
+          uv run --with playwright python browser_checks/t81_public_legal_pages.py
+      - name: Recent Projects browser acceptance
+        # Independent suites should all run, even after another suite fails.
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8001 >/tmp/t92-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort >/tmp/t92-ui.log 2>&1 &
+          ui_pid=$!
+          trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null && curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/t92_recent_running.py
+      - name: Preserve browser screenshots and debug logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidated-browser-evidence
+          path: |
+            /tmp/sigma-outcome-acceptance/sigma-increment13-*.png
+            /tmp/sigma-t201-recovery.png
+            /tmp/t201-api.log
+            /tmp/t201-ui.log
+            /tmp/project-types-api.log
+            /tmp/project-types-ui.log
+            /tmp/t200-api.log
+            /tmp/t200-ui.log
+            /tmp/t92-api.log
+            /tmp/t92-ui.log
+          if-no-files-found: ignore
+          retention-days: 14

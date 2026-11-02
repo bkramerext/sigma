@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from sigma import cloud_auth
+from sigma import cloud_auth, samples
 from sigma.api import app  # noqa: F401
 
 
@@ -23,3 +23,7 @@ def fixture_config() -> cloud_auth.Config:
 
 
 cloud_auth.config = fixture_config
+
+fixture_samples = os.environ.get("SIGMA_GUEST_BROWSER_SAMPLE_ROOT")
+if fixture_samples:
+    samples.SAMPLES = Path(fixture_samples)

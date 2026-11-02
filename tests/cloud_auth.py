@@ -127,6 +127,34 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_public_sample_paper_without_signin(self):
+        """Only immutable catalog PDFs bypass hosted auth, never working papers."""
+        pdf = (
+            Path(__file__).resolve().parent / "fixtures/sigma-valid-sample-paper.pdf"
+        ).read_bytes()
+        with patch("sigma.samples.top_sample_pdf", return_value=pdf) as fetch:
+            response = self.client.get("/api/projects/samples/test-sample/top-paper/pdf")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.content, pdf)
+        self.assertEqual(response.headers["content-type"], "application/pdf")
+        self.assertIn("inline", response.headers["content-disposition"])
+        fetch.assert_called_once_with("test-sample")
+        self.assertIsNone(self.client.cookies.get(cloud_auth.GUEST_COOKIE))
+        self.assertEqual(self.client.get("/api/projects/papers/private/pdf").status_code, 401)
+        self.assertEqual(
+            self.client.get("/api/projects/samples/test-sample/top-paper/tex").status_code, 401
+        )
+        for path in (
+            "/api/projects/samples/-bad/top-paper/pdf",
+            "/api/projects/samples/a%2Fb/top-paper/pdf",
+        ):
+            self.assertFalse(cloud_auth.public_sample_paper_path("GET", path))
+        self.assertFalse(
+            cloud_auth.public_sample_paper_path(
+                "POST", "/api/projects/samples/test-sample/top-paper/pdf"
+            )
+        )
+
     def test_mock_queue_recovery_never_contacts_hosted_research(self):
         import asyncio
 
@@ -2211,12 +2239,16 @@ class CloudAuthTests(TestCase):
             # the reviewed guest-safe allowlist.
             protected_count = 0
             allowed_routes = set()
+            public_sample_routes = set()
             for route in app.routes:
                 route_path = getattr(route, "path", "")
                 if not route_path.startswith("/api/projects/"):
                     continue
                 for method in getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}:
                     concrete_path = re.sub(r"\{[^}]+\}", "audit-probe", route_path)
+                    if cloud_auth.public_sample_paper_path(method, concrete_path):
+                        public_sample_routes.add((method, route_path))
+                        continue
                     if cloud_auth._guest_project_route_allowed(method, concrete_path):
                         allowed_routes.add((method, route_path))
                         continue
@@ -2234,6 +2266,10 @@ class CloudAuthTests(TestCase):
                     )
                     protected_count += 1
             self.assertGreater(protected_count, 30)
+            self.assertEqual(
+                public_sample_routes,
+                {("GET", "/api/projects/samples/{sample_id}/top-paper/pdf")},
+            )
             expected_guest_routes = {
                 ("GET", path)
                 for path in cloud_auth._GUEST_PROJECT_READ_PATHS | {"/api/projects/samples"}

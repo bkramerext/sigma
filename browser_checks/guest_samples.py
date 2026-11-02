@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -15,6 +17,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from playwright.sync_api import expect, sync_playwright
+
+from sigma import paper_scores
 
 ROOT = Path(__file__).resolve().parents[1]
 CHROME = os.environ.get(
@@ -40,6 +44,44 @@ def wait_for(url: str, process: subprocess.Popen, log: Path) -> None:
     raise RuntimeError(f"Guest browser fixture failed to start:\n{log.read_text(errors='replace')}")
 
 
+def make_scored_sample_fixture(directory: Path) -> bytes:
+    """Add an offline scored-paper sample without modifying the shipped catalog."""
+    from uuid import uuid4
+
+    shutil.copytree(ROOT / "samples", directory)
+    sample = directory / "test-scored-warp-drive"
+    shutil.copytree(ROOT / "samples" / "warp-drive-engineering", sample)
+    project_path = sample / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["id"] = str(uuid4())
+    project["title"] = "Warp Drive Design v9 (acceptance fixture)"
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    pdf = (ROOT / "tests/fixtures/sigma-valid-sample-paper.pdf").read_bytes()
+    tex = (ROOT / "tests/fixtures/sigma-valid-sample-paper.tex").read_text(encoding="utf-8")
+    sha = hashlib.sha256(pdf).hexdigest()
+    judgment = paper_scores.PaperJudgment.model_validate(
+        {
+            key: {"earned": 75, "explanation": "Synthetic public PDF acceptance fixture."}
+            for key in paper_scores.WEIGHTS
+        }
+    )
+    paper_id = "f" * 32
+    paper = sample / "sample-papers"
+    paper.mkdir()
+    record = {
+        "paper_id": paper_id,
+        "project_id": "$SIGMA_SAMPLE_PROJECT_ID",
+        "draft": {"title": "Public Warp Drive PDF acceptance fixture"},
+        "tex_source": tex,
+        "pdf_sha256": sha,
+        "pdf_size_bytes": len(pdf),
+        "score": paper_scores._make_score(judgment, sha),
+    }
+    (paper / f"{paper_id}.json").write_text(json.dumps(record), encoding="utf-8")
+    (paper / f"{paper_id}.pdf").write_bytes(pdf)
+    return pdf
+
+
 def main() -> None:
     api_port, ui_port = free_port(), free_port()
     while api_port == ui_port:
@@ -49,9 +91,11 @@ def main() -> None:
     with TemporaryDirectory(prefix="sigma-guest-browser-") as temporary:
         root = Path(temporary)
         os.chmod(root, 0o700)
+        public_pdf = make_scored_sample_fixture(root / "samples")
         env = os.environ.copy()
         env.update(
             {
+                "SIGMA_GUEST_BROWSER_SAMPLE_ROOT": str(root / "samples"),
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
                 "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
                 "GOOGLE_OIDC_CLIENT_SECRET": "fixture-secret",
@@ -109,7 +153,7 @@ def main() -> None:
                     stderr=subprocess.STDOUT,
                 )
                 wait_for(ui_url, ui_process, ui_log)
-                exercise(ui_url, root)
+                exercise(ui_url, root, public_pdf)
             finally:
                 for process in (ui_process, api_process):
                     if process is not None:
@@ -126,7 +170,7 @@ def main() -> None:
         )
 
 
-def exercise(ui_url: str, root: Path) -> None:
+def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 850})
@@ -234,6 +278,26 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         expect(page.locator("details.sample-type-group").first).to_be_visible()
         assert page.locator("details.sample-type-group[open]").count() == 0
+        scored_group = page.locator("details.sample-type-group").filter(
+            has_text="Warp Drive Design v9 (acceptance fixture)"
+        )
+        expect(scored_group).to_be_visible()
+        scored_group.evaluate("element => { element.open = true; }")
+        star = scored_group.get_by_role("link", name="Top scoring paper, click to view (75/100)")
+        expect(star).to_be_visible()
+        expect(star).to_have_attribute("target", "_blank")
+        expect(star).to_have_attribute("rel", "noopener noreferrer")
+        expect(scored_group).to_contain_text("Best score 75/100")
+        expect(scored_group.locator(".recent-title-star")).to_have_count(1)
+        assert scored_group.locator(".recent-pin, .recent-forget").count() == 0
+        pdf_response = httpx.get(ui_url + star.get_attribute("href"), timeout=10)
+        assert pdf_response.status_code == 200, pdf_response.text[:500]
+        assert pdf_response.headers["content-type"].startswith("application/pdf")
+        assert "inline" in pdf_response.headers["content-disposition"]
+        assert pdf_response.content == public_pdf
+        # An unauthenticated HTTP client received the PDF without a guest
+        # session cookie, working project, provider connection or research run.
+        scored_group.evaluate("element => { element.open = false; }")
         page.get_by_role("tab", name="Saved").click()
         message = page.locator(".guest-recent-message")
         expect(message.locator("span").nth(0)).to_have_text("Sign in to create and")

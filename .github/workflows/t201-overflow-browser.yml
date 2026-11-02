@@ -1,11 +1,5 @@
 name: T201 obligation recovery browser acceptance
 on:
-  pull_request:
-    paths:
-      - 'frontend/**'
-      - 'src/sigma/research_sessions.py'
-      - 'browser_checks/t201_*.py'
-      - '.github/workflows/t201-overflow-browser.yml'
   workflow_dispatch:
 permissions:
   contents: read

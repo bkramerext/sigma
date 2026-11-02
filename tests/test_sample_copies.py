@@ -1,5 +1,6 @@
 """Sample examples are templates; opening them creates independent recent projects."""
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -9,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-from sigma import projects, recents, samples
+from sigma import paper_scores, papers, projects, recents, samples
 from sigma.projects import (
     STATE,
     ProjectError,
@@ -169,6 +170,62 @@ class SampleCopyTests(unittest.TestCase):
         )
         copied = samples.open_sample_project("sample")
         self.assertEqual(copied.project.title, "Sample Investigation v2")
+
+    def test_scored_sample_star_selects_original_best_pdf_and_copy_retains_score(self):
+        """The public top-paper selection uses the same strict score validator as Saved Projects."""
+        paper_dir = self.sample / "sample-papers"
+        paper_dir.mkdir()
+        fixture = Path(__file__).resolve().parent / "fixtures/sigma-valid-sample-paper.pdf"
+        other = Path(__file__).resolve().parents[1] / "papers/maximum-regions.pdf"
+        low_pdf = fixture.read_bytes()
+        high_pdf = other.read_bytes()
+        ids = ("a" * 32, "b" * 32, "c" * 32, "d" * 32)
+        for paper_id, pdf, earned, valid in (
+            (ids[0], low_pdf, 49, True),
+            (ids[1], low_pdf, 62, True),
+            (ids[2], high_pdf, 83, True),
+            (ids[3], high_pdf, 99, False),
+        ):
+            sha = hashlib.sha256(pdf).hexdigest()
+            judgment = paper_scores.PaperJudgment.model_validate(
+                {
+                    key: {"earned": earned, "explanation": "Synthetic acceptance fixture."}
+                    for key in paper_scores.WEIGHTS
+                }
+            )
+            score = paper_scores._make_score(judgment, sha)
+            if not valid:
+                score["rubric_version"] += 1
+            record = {
+                "paper_id": paper_id,
+                "project_id": "$SIGMA_SAMPLE_PROJECT_ID",
+                "tex_source": "% Fixture TeX source\\n\\\\documentclass{article}",
+                "pdf_sha256": sha,
+                "pdf_size_bytes": len(pdf),
+                "score": score,
+                "research_session_id": None,
+            }
+            (paper_dir / f"{paper_id}.json").write_text(json.dumps(record), encoding="utf-8")
+            (paper_dir / f"{paper_id}.pdf").write_bytes(pdf)
+
+        catalog = samples.sample_projects()["projects"]
+        self.assertEqual(catalog[0]["best_paper_score"], 83)
+        self.assertEqual(samples.top_sample_pdf("sample"), high_pdf)
+        copy = samples.open_sample_project("sample")
+        copied_score = papers.get_paper(copy.path, ids[2])["score"]
+        self.assertEqual(
+            paper_scores.validate_score(copied_score, hashlib.sha256(high_pdf).hexdigest()),
+            copied_score,
+        )
+        self.assertEqual(papers.get_pdf(copy.path, ids[2]), high_pdf)
+        self.assertEqual(samples.top_sample_pdf("sample"), high_pdf)
+
+        for paper_id in ids[1:]:
+            (paper_dir / f"{paper_id}.json").unlink()
+            (paper_dir / f"{paper_id}.pdf").unlink()
+        self.assertEqual(samples.sample_projects()["projects"][0]["best_paper_score"], 49)
+        with self.assertRaisesRegex(ProjectError, "no top-scoring paper"):
+            samples.top_sample_pdf("sample")
 
     def test_sample_catalog_does_not_change_after_copy(self):
         before = samples.sample_projects()
