@@ -188,6 +188,14 @@ def list_project_types_view(request: Request):
     }
 
 
+@app.get("/api/reference-title")
+def reference_title_view(url: str):
+    """Optional presentation metadata; never required for editing or saving."""
+    from sigma.reference_titles import resolve_title
+
+    return {"title": resolve_title(url)}
+
+
 @app.put("/api/project-types")
 def replace_project_types_view(body: ProjectTypeCatalogBody):
     saved = project_types.replace_custom_types(
