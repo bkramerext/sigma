@@ -1576,7 +1576,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     setBusy(true); setError('');
     try {
       const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(target.id)}`, {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: JSON.stringify({ path, expected_updated_at: target.updated_at }),
       });
       const result = await response.json();

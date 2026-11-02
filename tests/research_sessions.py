@@ -9599,6 +9599,53 @@ async def test_single_project_admission(path: Path):
         assert research_sessions.get_session(str(path), started["id"])["status"] == "paused"
 
 
+async def test_remove_paused_session_stops_it_before_deleting(path: Path):
+    """A session displayed as stopped can be removed without resuming provider work."""
+    view, strategy, credential, config = await setup(path)
+    entered = asyncio.Event()
+
+    async def provider(_record, _role, _context, timeout_seconds=None, step_id=None):
+        del timeout_seconds, step_id
+        entered.set()
+        await asyncio.Event().wait()
+        raise AssertionError("Cancelled provider continued")
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call", new=AsyncMock(side_effect=provider)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(entered.wait(), 3)
+        paused = await research_sessions.control_session(str(path), started["id"], "pause")
+        assert paused["status"] == "paused"
+
+        # The revision guard still protects against removing stale UI state.
+        try:
+            await research_sessions.remove_session(str(path), started["id"], "stale-revision")
+        except ProjectError as exc:
+            assert "changed" in str(exc)
+        else:
+            raise AssertionError("stale paused session removal was accepted")
+        assert research_sessions.get_session(str(path), started["id"])["status"] == "paused"
+
+        removed = await research_sessions.remove_session(
+            str(path), started["id"], paused["updated_at"]
+        )
+        assert removed == {"removed": True, "id": started["id"], "session_number": 1}
+        assert research_sessions.list_sessions(str(path)) == []
+        assert research_sessions._tasks.get(started["id"]) is None
+
+        next_session = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        assert next_session["session_number"] == 2
+        await research_sessions.control_session(str(path), next_session["id"], "stop")
+
+
 async def test_remove_running_session_cancels_execution_and_releases_slot(path: Path):
     view, strategy, credential, config = await setup(path)
     entered = asyncio.Event()
