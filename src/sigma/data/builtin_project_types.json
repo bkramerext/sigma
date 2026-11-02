@@ -69,14 +69,14 @@
       },
       "research_standards_references": [
         {
-          "name": "NIH — Guidelines for Conduct of Research: Scientific Rigor and Reproducibility (PDF)",
-          "url": "https://oir.nih.gov/system/files/media/file/2021-11/guidelines-conduct_research.pdf"
+          "name": "NIH — Experimental Design and Reproducibility, Introduction (PDF)",
+          "url": "https://oir.nih.gov/system/files/media/file/2021-08/rcr_training-introduction.pdf"
         }
       ],
       "publication_standards_references": [
         {
-          "name": "University of New Hampshire — Guide to Scientific Writing (2-page PDF)",
-          "url": "https://studentclimatedata.sr.unh.edu/climate/communicatefindings/GuideToScienceWriting.pdf"
+          "name": "University of Georgia — Biology Research Paper Guidelines (6-page PDF)",
+          "url": "https://biosciences.uga.edu/sites/default/files/2026-01/BIOL%2049X0R%20Research%20paper%20guidelines_Jan2026.pdf"
         }
       ]
     },
@@ -186,8 +186,8 @@
       ],
       "publication_standards_references": [
         {
-          "name": "Harvard — Writing Economics (PDF)",
-          "url": "https://www.writingproject.fas.harvard.edu/files/hwp/files/writingeconomics.pdf"
+          "name": "Harvard — Writing Economics (full-text PDF)",
+          "url": "https://writingproject.fas.harvard.edu/sites/g/files/omnuum4531/files/hwp/files/writingec_f2014_0.pdf"
         }
       ]
     },
@@ -238,7 +238,7 @@
       "publication_standards_references": [
         {
           "name": "University of Guelph — Writing Style for Engineering Reports (PDF)",
-          "url": "https://www.uoguelph.ca/engineering/sites/uoguelph.ca.engineering/files/public/ReportWriting.pdf"
+          "url": "https://islab.soe.uoguelph.ca/sareibi/PROJECTS_dr/UNDERGRAD_INFO_dr/docs/ReportWriting.pdf"
         }
       ]
     },
@@ -401,8 +401,8 @@
       ],
       "publication_standards_references": [
         {
-          "name": "Harvard — How to Write a Philosophy Paper: Argument and Objections (PDF)",
-          "url": "https://projects.iq.harvard.edu/files/phil-dwf/files/how_to_write_a_philosophy_paperoutline.pdf"
+          "name": "Harvard Writing Center — A Brief Guide to Writing the Philosophy Paper (PDF)",
+          "url": "https://philosophy.fas.harvard.edu/files/phildept/files/brief_guide_to_writing_philosophy_paper.pdf"
         }
       ]
     },
@@ -532,8 +532,8 @@
       },
       "research_standards_references": [
         {
-          "name": "Harvard — A Guide to Writing in History & Literature: Close Reading and Evidence (PDF)",
-          "url": "https://histlit.fas.harvard.edu/sites/projects.iq.harvard.edu/files/histlit/files/guide_to_writing_in_history_and_literature.pdf"
+          "name": "University College Dublin — What Is a Close Reading? Analytical Method (PDF)",
+          "url": "https://www.ucd.ie/writingcentre/t4media/SoRh_Close%20Reading_updated.pdf"
         }
       ],
       "publication_standards_references": [
