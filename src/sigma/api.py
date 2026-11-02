@@ -26,6 +26,7 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     papers,
+    paper_scores,
     project_types,
     proposals,
     python_sandbox,
@@ -728,6 +729,21 @@ async def papers_restart_view(body: PaperRestartRequest):
 @app.get("/api/projects/papers/{paper_id}")
 def paper_view(paper_id: str, path: str):
     return papers.get_paper(path, paper_id)
+
+
+class PaperScoreRequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+
+
+@app.post("/api/projects/papers/{paper_id}/score")
+async def paper_score_view(paper_id: str, body: PaperScoreRequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    return {"score": await paper_scores.score_paper(
+        body.path, paper_id, body.expected_binding, body.expected_project_id
+    )}
 
 
 @app.get("/api/projects/papers/{paper_id}/pdf")
