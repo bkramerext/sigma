@@ -144,7 +144,7 @@ CATALOG: tuple[dict[str, str], ...] = (
 
 # Source information below enriches *known* URLs, but never chooses references.
 # Selection comes exclusively from the unified Project Types data model.
-BY_URL = {row["url"]: row for row in CATALOG}
+BY_URL = {row["url"]: row for row in reversed(CATALOG)}  # first catalog ID wins
 BY_URL["https://github.com/acmsigsoft/EmpiricalStandards/blob/master/docs/standards/EngineeringResearch.md"] = {
     "id": "acm-engineering-method",
     "title": "ACM SIGSOFT — Engineering Research",
