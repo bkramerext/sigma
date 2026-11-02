@@ -166,12 +166,18 @@ def _validate(value: Any) -> dict:
         raise TypeError()
     seen = set()
     for item in value["entries"]:
-        if not isinstance(item, dict) or set(item) != {
+        expected_keys = {
             "id",
             "path",
             "accessed_at",
             "included_example",
-        }:
+        }
+        if not isinstance(item, dict) or set(item) not in (
+            expected_keys,
+            expected_keys | ({"pinned"} if value["version"] == 1 else set()),
+        ):
+            raise ValueError()
+        if value["version"] == 1 and "pinned" in item and type(item["pinned"]) is not bool:
             raise ValueError()
         if not isinstance(item["id"], str):
             raise TypeError()
@@ -240,8 +246,23 @@ def _index():
                 value = _validate(json.loads(raw))
         original = json.dumps(value, sort_keys=True)
         if value["version"] == 1:
+            legacy_pins: dict[str, str] = {}
+            for entry in value["entries"]:
+                if not entry.get("pinned", False):
+                    continue
+                view = inspect_project(entry["path"])
+                if view.project.id != entry["id"]:
+                    raise ValueError("Legacy pin project identity changed")
+                family = project_family(view.project.title)
+                if family in legacy_pins and legacy_pins[family] != entry["id"]:
+                    raise ValueError("Conflicting legacy project pins")
+                legacy_pins[family] = entry["id"]
+            value["entries"] = [
+                {key: item for key, item in entry.items() if key != "pinned"}
+                for entry in value["entries"]
+            ]
             value["version"] = 2
-            value["pins"] = {}
+            value["pins"] = legacy_pins
         if "dismissed_default_pins" not in value:
             value["dismissed_default_pins"] = []
         # Older releases inserted canonical sample examples in Recents. Keep
@@ -277,7 +298,7 @@ def _index():
         raise
     except (OSError, ValueError, TypeError, KeyError):
         raise ProjectError(
-            "Recent Projects index is unavailable. Check its owned 0700 directory/0600 files; research was not altered."
+            "Saved Projects index is unavailable. Verify its entries and private state directory; the original index and research were preserved."
         ) from None
     finally:
         if descriptor is not None:
