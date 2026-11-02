@@ -2046,6 +2046,17 @@ def pin_recent_project_view(body: ProjectPinRequest):
     return pin_project_view(body)
 
 
+@app.get("/api/projects/samples/{sample_id}/top-paper/pdf")
+def sample_top_paper_pdf_view(sample_id: str):
+    from sigma.samples import top_sample_pdf
+
+    return Response(
+        top_sample_pdf(sample_id),
+        media_type="application/pdf",
+        headers={"Cache-Control": "no-store", "Content-Disposition": 'inline; filename="sigma-sample-paper.pdf"'},
+    )
+
+
 @app.get("/api/projects/samples")
 def samples_view():
     from sigma.samples import sample_projects
