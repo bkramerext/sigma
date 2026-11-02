@@ -2905,8 +2905,7 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
             "justified departures are allowed; never assert the contents of an "
             "uninspected linked reference. "
             if role == "skeptic"
-            and context.get("methodology_source_catalog_version")
-            == "project-type-methods-v1"
+            and context.get("methodology_source_catalog_version") == "project-type-methods-v1"
             else ""
         )
         + _research_mode_guidance(context)

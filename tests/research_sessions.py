@@ -815,15 +815,20 @@ def test_project_type_research_references_replace_keyword_catalog(monkeypatch):
         assert selected["branch"] is None
         assert len(selected["sources"]) == 3
         assert [item["tier"] for item in selected["sources"]] == [
-            "general", "discipline", "discipline"
+            "general",
+            "discipline",
+            "discipline",
         ]
         assert selected["sources"][0]["project_type_id"] == "common"
         assert all(item["project_type_id"] == mode for item in selected["sources"][1:])
         assert selected["advisory"] is None
         assert research_method_sources.methodology_digest(selected)
         later = research_method_sources.select_method_sources(
-            mode, "Other", "Another problem", (),
-            ({"id": "old-session", "research_method_sources": selected},)
+            mode,
+            "Other",
+            "Another problem",
+            (),
+            ({"id": "old-session", "research_method_sources": selected},),
         )
         assert later["status"] == "reused"
         assert later["sources"] == selected["sources"]
@@ -836,8 +841,11 @@ def test_project_type_inheritance_more_than_three_is_advisory(monkeypatch):
     refs = ("https://example.org/special-method", "https://example.org/measurement")
     physics = next(t for t in project_types.builtin_types() if t.id == "physics")
     child = project_types.ProjectType(
-        id="custom-physics", name="Special Physics", scope="Research",
-        user_defined=True, icon=project_types.placeholder_icon(),
+        id="custom-physics",
+        name="Special Physics",
+        scope="Research",
+        user_defined=True,
+        icon=project_types.placeholder_icon(),
         based_on="physics",
         research_standards_references=refs + (physics.research_standards_references[0],),
     )
@@ -846,7 +854,11 @@ def test_project_type_inheritance_more_than_three_is_advisory(monkeypatch):
         child.id, "This title should not change references", "", (), ()
     )
     assert [row["tier"] for row in selected["sources"]] == [
-        "general", "discipline", "discipline", "branch", "branch"
+        "general",
+        "discipline",
+        "discipline",
+        "branch",
+        "branch",
     ]
     assert len({row["url"] for row in selected["sources"]}) == 5
     assert selected["advisory"] and "5 research-method references" in selected["advisory"]
@@ -857,8 +869,7 @@ def test_project_type_inheritance_more_than_three_is_advisory(monkeypatch):
     )
     monkeypatch.setattr(project_types, "custom_types", lambda: [revised])
     changed = research_method_sources.select_method_sources(
-        child.id, "", "", (),
-        ({"id": "older", "research_method_sources": selected},)
+        child.id, "", "", (), ({"id": "older", "research_method_sources": selected},)
     )
     assert changed["status"] == "selected"  # no stale reference reuse after edit
     assert len(changed["sources"]) == 4
@@ -870,56 +881,72 @@ def test_project_type_reference_ancestry_missing_and_cyclic_parents(monkeypatch)
     from sigma import project_types, research_method_sources
 
     root = project_types.ProjectType(
-        id="custom-root", name="Root", scope="Research",
-        user_defined=True, icon=project_types.placeholder_icon(),
-        based_on="physics", research_standards_references=("https://example.org/root",),
+        id="custom-root",
+        name="Root",
+        scope="Research",
+        user_defined=True,
+        icon=project_types.placeholder_icon(),
+        based_on="physics",
+        research_standards_references=("https://example.org/root",),
     )
     leaf = project_types.ProjectType(
-        id="custom-leaf", name="Leaf", scope="Research",
-        user_defined=True, icon=project_types.placeholder_icon(),
-        based_on="custom-root", research_standards_references=("https://example.org/leaf",),
+        id="custom-leaf",
+        name="Leaf",
+        scope="Research",
+        user_defined=True,
+        icon=project_types.placeholder_icon(),
+        based_on="custom-root",
+        research_standards_references=("https://example.org/leaf",),
     )
     monkeypatch.setattr(project_types, "custom_types", lambda: [root, leaf])
-    resolved = research_method_sources.select_method_sources(
-        "custom-leaf", "", "", (), ()
-    )
+    resolved = research_method_sources.select_method_sources("custom-leaf", "", "", (), ())
     assert [r["project_type_id"] for r in resolved["sources"]] == [
-        "common", "physics", "physics", "custom-root", "custom-leaf"
+        "common",
+        "physics",
+        "physics",
+        "custom-root",
+        "custom-leaf",
     ]
     missing = project_types.ProjectType(**{**leaf.__dict__, "based_on": "not-found"})
     monkeypatch.setattr(project_types, "custom_types", lambda: [missing])
-    assert len(research_method_sources.select_method_sources(
-        "custom-leaf", "", "", (), ()
-    )["sources"]) == 2
-    cyclic_root = project_types.ProjectType(
-        **{**root.__dict__, "based_on": "custom-leaf"}
+    assert (
+        len(research_method_sources.select_method_sources("custom-leaf", "", "", (), ())["sources"])
+        == 2
     )
+    cyclic_root = project_types.ProjectType(**{**root.__dict__, "based_on": "custom-leaf"})
     monkeypatch.setattr(project_types, "custom_types", lambda: [cyclic_root, leaf])
-    assert len(research_method_sources.select_method_sources(
-        "custom-root", "", "", (), ()
-    )["sources"]) == 3
+    assert (
+        len(research_method_sources.select_method_sources("custom-root", "", "", (), ())["sources"])
+        == 3
+    )
 
 
 def test_project_type_methods_reach_both_agents_and_skeptic_challenges(monkeypatch):
     from sigma import project_types, research_method_sources
 
     custom = project_types.ProjectType(
-        id="special", name="Special", scope="Research",
-        user_defined=True, icon=project_types.placeholder_icon(),
+        id="special",
+        name="Special",
+        scope="Research",
+        user_defined=True,
+        icon=project_types.placeholder_icon(),
         based_on="biology",
         research_standards_references=("https://example.org/special",),
     )
     monkeypatch.setattr(project_types, "custom_types", lambda: [custom])
     selected = research_method_sources.select_method_sources("special", "", "", (), ())
     context = {
-        "problem": "A research problem", "investigation_type": "special",
+        "problem": "A research problem",
+        "investigation_type": "special",
         "research_method_version": research_sessions.RESEARCH_METHOD_VERSION,
         "methodology_source_material": selected["sources"],
         "methodology_source_catalog_version": selected["version"],
         "execution_tools": [],
     }
     record = {
-        "mode": "chatgpt", "model": MODEL, "reasoning_effort": "high",
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "high",
         "output_token_limit": 4000,
     }
     for role in ("investigator", "skeptic"):

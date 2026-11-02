@@ -188,7 +188,6 @@ def _optional_text(value: Any, label: str, limit: int) -> str:
     return value
 
 
-
 def common_research_references() -> tuple[str, ...]:
     """Research methods shared by every project type, from the same built-in data model."""
     try:

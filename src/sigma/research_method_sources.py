@@ -145,7 +145,9 @@ CATALOG: tuple[dict[str, str], ...] = (
 # Source information below enriches *known* URLs, but never chooses references.
 # Selection comes exclusively from the unified Project Types data model.
 BY_URL = {row["url"]: row for row in reversed(CATALOG)}  # first catalog ID wins
-BY_URL["https://github.com/acmsigsoft/EmpiricalStandards/blob/master/docs/standards/EngineeringResearch.md"] = {
+BY_URL[
+    "https://github.com/acmsigsoft/EmpiricalStandards/blob/master/docs/standards/EngineeringResearch.md"
+] = {
     "id": "acm-engineering-method",
     "title": "ACM SIGSOFT — Engineering Research",
     "notes": "For software engineering distinguish conceptual designs, analytical results, tested implementations, and independently measured outcomes. Check the task, correctness oracle, and limitations.",
@@ -158,9 +160,7 @@ def _canonical_url(url: str) -> str:
 
     parts = urlsplit(url)
     host = (parts.hostname or "").casefold()
-    if parts.port and (parts.scheme.lower(), parts.port) not in {
-        ("https", 443), ("http", 80)
-    }:
+    if parts.port and (parts.scheme.lower(), parts.port) not in {("https", 443), ("http", 80)}:
         host += f":{parts.port}"
     return urlunsplit((parts.scheme.lower(), host, parts.path or "/", parts.query, ""))
 
@@ -201,18 +201,24 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
         known = BY_URL.get(url) or BY_URL.get(canonical)
         from urllib.parse import urlsplit
 
-        title = known["title"] if known else (
-            f"{owner_name} — {urlsplit(canonical).hostname or 'Research method'}"
+        title = (
+            known["title"]
+            if known
+            else (f"{owner_name} — {urlsplit(canonical).hostname or 'Research method'}")
         )
-        notes = known["notes"] if known else (
-            "Project-type reference provided by the user or catalog; its contents "
-            "have not been independently inspected here. Consult the reference "
-            "before attributing a prescribed method to it, and state uncertainty."
+        notes = (
+            known["notes"]
+            if known
+            else (
+                "Project-type reference provided by the user or catalog; its contents "
+                "have not been independently inspected here. Consult the reference "
+                "before attributing a prescribed method to it, and state uncertainty."
+            )
         )
         row = {
-            "id": known["id"] if known else "project-type-" + hashlib.sha256(
-                canonical.encode("utf-8")
-            ).hexdigest()[:16],
+            "id": known["id"]
+            if known
+            else "project-type-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16],
             "tier": tier,
             "title": title,
             "url": canonical,
@@ -249,11 +255,15 @@ def select_method_sources(
     if not isinstance(mode, str):
         mode = "default"
     sources, branch = _effective_sources(mode)
-    selection_key = hashlib.sha256(json.dumps(
-        [{"url": row["url"], "tier": row["tier"], "type": row["project_type_id"]}
-         for row in sources],
-        sort_keys=True,
-    ).encode("utf-8")).hexdigest()
+    selection_key = hashlib.sha256(
+        json.dumps(
+            [
+                {"url": row["url"], "tier": row["tier"], "type": row["project_type_id"]}
+                for row in sources
+            ],
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
     old_sessions = sorted(
         (item for item in prior_sessions if isinstance(item, Mapping)),
         key=lambda item: (str(item.get("created_at") or ""), str(item.get("id") or "")),
@@ -305,7 +315,7 @@ def select_method_sources(
 
 
 def methodology_digest(selection: Mapping[str, Any]) -> str:
-    payload = json.dumps(
-        selection.get("sources", []), sort_keys=True, ensure_ascii=False
-    ).encode("utf-8")
+    payload = json.dumps(selection.get("sources", []), sort_keys=True, ensure_ascii=False).encode(
+        "utf-8"
+    )
     return hashlib.sha256(payload).hexdigest()
