@@ -230,7 +230,7 @@
 .project-settings-dialog.paper-score-dialog {
   display: flex; flex-direction: column;
   width: min(750px, calc(100vw - 24px));
-  max-height: calc(100dvh - 32px); height: auto; overflow: hidden;
+  height: fit-content; max-height: calc(100dvh - 32px); overflow: hidden;
 }
 .project-settings-dialog.paper-score-dialog:not([open]) { display: none; }
 .project-settings-dialog.paper-score-dialog .paper-score-header {
@@ -241,7 +241,7 @@
   margin: 0; width: auto; flex: 0 0 auto;
 }
 .project-settings-dialog.paper-score-dialog .paper-score-body {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   padding: 16px 24px 24px;
 }
 .paper-score-categories { display: grid; }
