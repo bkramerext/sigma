@@ -3702,7 +3702,7 @@ type RecentProject = { id: string; path: string; title: string; investigation_ty
 // Pinning is a presentation choice: hidden siblings remain in the account's
 // complete Saved Projects index and become visible again on unpin.
 function recentProjectFamilyKey(project: RecentProject): string {
-  return `${project.investigation_type ?? ''}:\0${project.title.replace(/\\s+v\\d+$/i, '').trim().toLocaleLowerCase()}`;
+  return `${project.investigation_type ?? ''}::${project.title.replace(/s+vd+$/i, '').trim().toLocaleLowerCase()}`;
 }
 function visibleRecentProjects(projects: RecentProject[]): RecentProject[] {
   const pinnedFamilies = new Set(projects.filter(project => project.pinned && project.available).map(recentProjectFamilyKey));
