@@ -32,8 +32,8 @@ def main() -> None:
     common = project_types.common_references()
     assert len(common["research_standards_references"]) == 2
     assert len(common["publication_standards_references"]) == 2
-    # Eight standards are distinct across activity and discipline, and all
-    # reference actual documents rather than placeholders or duplicate URLs.
+    # Four shared references and one research/publication pair for each
+    # of twelve disciplines: 28 distinct, titled, secure-source references.
     all_standards = [
         *(ref for field in project_types.REFERENCE_FIELDS for ref in common[field]),
         *(
@@ -43,29 +43,49 @@ def main() -> None:
             for ref in getattr(item, field)
         ),
     ]
-    assert len(all_standards) == 8
-    assert len({ref["url"] for ref in all_standards}) == 8
+    assert len(all_standards) == 4 + 2 * len(builtins)
+    assert len({ref["url"] for ref in all_standards}) == len(all_standards)
     assert all(ref["name"].strip() and ref["url"].startswith("https://") for ref in all_standards)
     builtins_by_id = {item.id: item for item in builtins}
-    for identifier in ("mathematical", "physics"):
-        item = builtins_by_id[identifier]
-        assert len(item.research_standards_references) == 1
-        assert len(item.publication_standards_references) == 1
-        for field in project_types.REFERENCE_FIELDS:
-            assert all(
-                ref["name"] and ref["url"].startswith("https://") for ref in getattr(item, field)
-            )
+    # Every discipline contributes a curated pair beyond the shared guidance.
+    assert {
+        ref["url"]
+        for item in builtins
+        for field in project_types.REFERENCE_FIELDS
+        for ref in getattr(item, field)
+    }.isdisjoint(
+        {ref["url"] for field in project_types.REFERENCE_FIELDS for ref in common[field]}
+    )
+    builtins_by_id = {item.id: item for item in builtins}
+    # Regression checks for the compact methodology guides: no textbooks or
+    # oversized handbooks, and no dead Army War College/Buffalo URLs.
+    assert builtins_by_id["chemistry"].research_standards_references[0]["url"] == (
+        "https://www.chemistry.ucla.edu/undergraduate/undergraduate-research/"
+        "research-proposal-guidelines/"
+    )
+    assert builtins_by_id["mathematical"].research_standards_references[0]["url"] == (
+        "https://dummit.cos.northeastern.edu/teaching_fa19_1365/1365_problemsolving"
+    )
+    assert builtins_by_id["military"].publication_standards_references[0]["url"].endswith(
+        "/VDF%20Decision%20Paper.pdf"
+    )
+    # Plain, substantive HTML is acceptable along with compact PDFs and Markdown;
+    # do not require PDF-only links when the source itself has a clean text body.
+    for identifier, item in builtins_by_id.items():
+        assert len(item.research_standards_references) == 1, identifier
+        assert len(item.publication_standards_references) == 1, identifier
         effective = project_types.get_type(identifier)
         assert effective is not None
         for field in project_types.REFERENCE_FIELDS:
-            assert len(getattr(effective, field)) == 3
-            assert {ref["url"] for ref in common[field]} <= {
-                ref["url"] for ref in getattr(effective, field)
+            own = getattr(item, field)
+            assert all(
+                ref["name"].strip() and ref["url"].startswith("https://") for ref in own
+            )
+            inherited = getattr(effective, field)
+            assert len(inherited) == 3, (identifier, field)
+            assert {ref["url"] for ref in common[field] + list(own)} == {
+                ref["url"] for ref in inherited
             }
-    for identifier, item in builtins_by_id.items():
-        if identifier not in {"mathematical", "physics"}:
-            assert not item.research_standards_references
-            assert not item.publication_standards_references
 
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()

@@ -67,8 +67,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "NIH — Experimental Design and Reproducibility, Introduction (PDF)",
+          "url": "https://oir.nih.gov/system/files/media/file/2021-08/rcr_training-introduction.pdf"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "University of Georgia — Biology Research Paper Guidelines (6-page PDF)",
+          "url": "https://biosciences.uga.edu/sites/default/files/2026-01/BIOL%2049X0R%20Research%20paper%20guidelines_Jan2026.pdf"
+        }
+      ]
     },
     {
       "id": "chemistry",
@@ -92,8 +102,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "UCLA Chemistry — Research Proposal Guidelines: Questions, Methods, Evidence",
+          "url": "https://www.chemistry.ucla.edu/undergraduate/undergraduate-research/research-proposal-guidelines/"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Kenyon College — A Brief Guide to Writing in Chemistry (PDF)",
+          "url": "https://chemistry.kenyon.edu/getzler/08F-CourseFiles/BriefGuideWritingChemistry.pdf"
+        }
+      ]
     },
     {
       "id": "computer_science",
@@ -117,8 +137,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "ACM SIGSOFT — Engineering Research Standard (plain Markdown)",
+          "url": "https://raw.githubusercontent.com/acmsigsoft/EmpiricalStandards/master/docs/standards/EngineeringResearch.md"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Jennifer Widom (Stanford) — Tips for Writing Technical Papers",
+          "url": "https://cs.stanford.edu/people/widom/paper-writing.html"
+        }
+      ]
     },
     {
       "id": "economics",
@@ -148,8 +178,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Reed College — Guide to Reading and Evaluating Economics Papers",
+          "url": "https://www.reed.edu/economics/parker/354/guide.html"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Brandeis University — Writing Tips for an Economics Paper",
+          "url": "https://www.brandeis.edu/writing-program/resources/faculty/wi-instructor-resources/econ-tips.html"
+        }
+      ]
     },
     {
       "id": "engineering",
@@ -189,8 +229,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "NASA — Systems Engineering: 6.8 Decision Analysis",
+          "url": "https://www.nasa.gov/reference/6-8-decision-analysis/"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "University of Toronto — Short Engineering Reports: Structure, Analysis, Recommendations",
+          "url": "https://ecp.engineering.utoronto.ca/resources/online-handbook/types-of-documents/short-reports/"
+        }
+      ]
     },
     {
       "id": "law",
@@ -220,8 +270,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Chapman University Law — Legal Research: The Research Process",
+          "url": "https://libguides.law.chapman.edu/legalresearchbasics/researchprocess"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Columbia Law School — Organizing a Legal Discussion: IRAC/CRAC (PDF)",
+          "url": "https://www.law.columbia.edu/sites/default/files/2021-07/organizing_a_legal_discussion.pdf"
+        }
+      ]
     },
     {
       "id": "mathematical",
@@ -253,8 +313,8 @@
       },
       "research_standards_references": [
         {
-          "name": "Richard Hammack — Book of Proof (full text)",
-          "url": "https://richardhammack.github.io/BookOfProof/Main.pdf"
+          "name": "Northeastern University — Mathematical Problem Solving and Proof Strategies",
+          "url": "https://dummit.cos.northeastern.edu/teaching_fa19_1365/1365_problemsolving"
         }
       ],
       "publication_standards_references": [
@@ -292,8 +352,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "U.S. Army — MDMP & Risk: Critical Assumptions, Courses of Action, Wargaming",
+          "url": "https://www.army.mil/article/289381/mdmp_risk"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Virginia Defense Force — Decision Paper Writing and Format (PDF)",
+          "url": "https://www.vdf.virginia.gov/pdf/FORMS/VDF%20Decision%20Paper.pdf"
+        }
+      ]
     },
     {
       "id": "philosophy",
@@ -323,8 +393,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Connie Rosati (University of Arizona) — How to Analyze a Philosophical Argument (PDF)",
+          "url": "https://philosophy.arizona.edu/sites/philosophy.arizona.edu/files/Rosati%2C%20How%20to%20Read%20a%20Philosophical%20Article%20or%20Book.pdf"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Harvard Writing Center — A Brief Guide to Writing the Philosophy Paper (7-page PDF)",
+          "url": "https://philosophy.fas.harvard.edu/sites/g/files/omnuum4436/files/phildept/files/brief_guide_to_writing_philosophy_paper.pdf"
+        }
+      ]
     },
     {
       "id": "physics",
@@ -388,8 +468,8 @@
       ],
       "publication_standards_references": [
         {
-          "name": "IOP — Writing Your Journal Article",
-          "url": "https://publishingsupport.iopscience.iop.org/publishing-support/authors/authoring-for-journals/writing-journal-article/"
+          "name": "Georgetown University Physics — General Guidelines for Scientific Writing",
+          "url": "https://physics.georgetown.edu/general-guidelines-scientific-writing/"
         }
       ]
     },
@@ -415,8 +495,18 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Oliver Freiberger — Elements of a Comparative Methodology in the Study of Religion (14-page article PDF)",
+          "url": "https://www.wisdomlib.org/uploads/journals/mdpi-relig/2018-volume-9-issue-2--2077-1444-9-2-38-.pdf"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "UNC Charlotte Religious Studies — Writing Papers That Develop a Thesis",
+          "url": "https://religiousstudies.charlotte.edu/writing-papers-develop-thesis"
+        }
+      ]
     },
     {
       "id": "literature",
@@ -440,29 +530,39 @@
         "mathematical": false,
         "lean": false
       },
-      "research_standards_references": [],
-      "publication_standards_references": []
+      "research_standards_references": [
+        {
+          "name": "Brandeis University — Close Reading: A Step-by-Step Guide",
+          "url": "https://www.brandeis.edu/writing-program/resources/faculty/writing-handbook/01-critical-thinking/close-reading-step-by-step.html"
+        }
+      ],
+      "publication_standards_references": [
+        {
+          "name": "Harvard — A Brief Guide to Writing the English Paper (PDF)",
+          "url": "https://writingprogram.fas.harvard.edu/sites/g/files/omnuum4511/files/2025-11/BG%20Writing%20English.pdf"
+        }
+      ]
     }
   ],
   "common_references": {
     "research_standards_references": [
       {
-        "name": "NASEM — Reproducibility and Replicability in Science (full report)",
-        "url": "https://www.nationalacademies.org/read/25303"
+        "name": "University of Connecticut — Critical Reading Methods for Scientific Research",
+        "url": "https://guides.lib.uconn.edu/c.php?g=1067492&p=7986329"
       },
       {
-        "name": "JBI — Manual for Evidence Synthesis (full text)",
-        "url": "https://jbi-global-wiki.refined.site/download/attachments/355599504/JBI%20Manual%20for%20Evidence%20Synthesis%202024.pdf"
+        "name": "Brandeis University — Writing a Literature Review: Critical Source Synthesis",
+        "url": "https://www.brandeis.edu/writing-program/resources/faculty/handouts/writing-a-literature-review.html"
       }
     ],
     "publication_standards_references": [
       {
-        "name": "PLOS ONE — Manuscript and Reporting Guidelines",
-        "url": "https://journals.plos.org/plosone/s/submission-guidelines"
+        "name": "UW–Madison — Writing a Research Paper: Organization and Evidence",
+        "url": "https://writing.wisc.edu/handbook/academicwriting/planresearchpaper/"
       },
       {
-        "name": "EASE — Guidelines for Authors of Scientific Articles (full text)",
-        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/"
+        "name": "Brandeis University — Concision: Five Editing Rules",
+        "url": "https://www.brandeis.edu/writing-program/resources/faculty/handouts/concision.html"
       }
     ]
   }
