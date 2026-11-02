@@ -39,30 +39,36 @@ with sync_playwright() as playwright:
             for entry in data["projects"]:
                 entry["research_running"] = entry["id"] in running
             if unavailable_fixture["enabled"]:
-                data["projects"].append({
-                    "id": "00000000-0000-4000-8000-000000000124",
-                    "path": "/unavailable-placeholder.sigma",
-                    "title": "Unfindable Ghost Project",
-                    "investigation_type": None,
-                    "strategy_count": None,
-                    "difficulty": None,
-                    "research_running": False,
-                    "available": False,
-                    "pinned": False,
-                    "error": "Unavailable or changed identity",
-                })
-                data["projects"].append({
-                    "id": "00000000-0000-4000-8000-000000000125",
-                    "path": "/valid-but-no-project-type.sigma",
-                    "title": "Valid Untyped Project",
-                    "investigation_type": "default",
-                    "strategy_count": 1,
-                    "difficulty": "medium",
-                    "research_running": False,
-                    "available": True,
-                    "pinned": False,
-                    "error": None,
-                })
+                data["projects"].append(
+                    {
+    
+                        "id": "00000000-0000-4000-8000-000000000124",
+                        "path": "/unavailable-placeholder.sigma",
+                        "title": "Unfindable Ghost Project",
+                        "investigation_type": None,
+                        "strategy_count": None,
+                        "difficulty": None,
+                        "research_running": False,
+                        "available": False,
+                        "pinned": False,
+                        "error": "Unavailable or changed identity",
+                    }
+                )
+                data["projects"].append(
+                    {
+    
+                        "id": "00000000-0000-4000-8000-000000000125",
+                        "path": "/valid-but-no-project-type.sigma",
+                        "title": "Valid Untyped Project",
+                        "investigation_type": "default",
+                        "strategy_count": 1,
+                        "difficulty": "medium",
+                        "research_running": False,
+                        "available": True,
+                        "pinned": False,
+                        "error": None,
+                    }
+                )
             if siblings["enabled"]:
                 original = next(
                     (entry for entry in data["projects"] if entry["id"] == siblings["project_id"]),
@@ -147,7 +153,9 @@ with sync_playwright() as playwright:
     recent = page.get_by_role("tabpanel", name="Saved")
     expect(recent.get_by_text("Unfindable Ghost Project")).to_have_count(0)
     expect(recent.get_by_text("Valid Untyped Project")).to_have_count(0)
-    expect(recent.locator("details.recent-type-group").filter(has_text="Unavailable")).to_have_count(0)
+    expect(
+        recent.locator("details.recent-type-group").filter(has_text="Unavailable")
+    ).to_have_count(0)
     unavailable_fixture["enabled"] = False
 
     # A singleton family needs neither Pin nor Unpin.
@@ -180,9 +188,7 @@ with sync_playwright() as playwright:
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_have_count(0)
     expect(pinned.locator(".recent-title-pin")).to_be_visible()
-    expect(
-        pinned.get_by_role("button", name="Remove this project")
-    ).to_have_count(0)
+    expect(pinned.get_by_role("button", name="Remove this project")).to_have_count(0)
     unpin = pinned.get_by_role("button", name="Show all versions of this project")
     expect(unpin).to_be_visible()
     assert unpin.get_attribute("title") == "Show all versions of this project"
@@ -196,9 +202,7 @@ with sync_playwright() as playwright:
     if not pinned.evaluate("group => group.open"):
         pinned.locator("summary").click()
     expect(pinned.locator(".recent-title-pin")).to_be_visible()
-    expect(
-        pinned.get_by_role("button", name="Remove this project")
-    ).to_have_count(0)
+    expect(pinned.get_by_role("button", name="Remove this project")).to_have_count(0)
     pinned.get_by_role("button", name="Show all versions of this project").click()
     expect(pinned.locator(".recent-title-pin")).to_have_count(0)
     expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
