@@ -282,15 +282,24 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
             <div className="pt-reference-field">
               {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
-                onChange={event => setAt(index, event.target.value)}/> : <ReferenceLink reference={reference} onResolved={setResolved} editing/>}
+                autoFocus={editingReferences.has(rowKey)}
+                onChange={event => setAt(index, event.target.value)}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  if (!reference.url.trim() || urlError) return;
+                  setEditingReferences(previous => {
+                    const next = new Set(previous);
+                    next.delete(rowKey);
+                    return next;
+                  });
+                }}/> : <ReferenceLink reference={reference} onResolved={setResolved}/>}
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
-            <button type="button" disabled={busy} onClick={() => setEditingReferences(previous => {
-              const next = new Set(previous);
-              if (next.has(rowKey)) next.delete(rowKey); else next.add(rowKey);
-              return next;
-            })}>{editing ? 'Done' : 'Edit'}</button>
-            <button type="button" disabled={busy} onClick={() => { setEditingReferences(new Set()); edit(item.id, { [field]: references.filter((_, i) => i !== index) }); }}>Remove</button>
+            {!editing && <>
+              <button type="button" disabled={busy} onClick={() => setEditingReferences(previous => new Set(previous).add(rowKey))}>Edit</button>
+              <button type="button" disabled={busy} onClick={() => { setEditingReferences(new Set()); edit(item.id, { [field]: references.filter((_, i) => i !== index) }); }}>Remove</button>
+            </>}
           </div>}
         </td></tr>;
       })}
@@ -321,7 +330,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
     [...item.research_standards_references, ...item.publication_standards_references].some(ref => !!referenceUrlError(ref.url))
   );
-  return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); if (!busy) close(); }} onClick={event => { if (event.target === dialog.current && !busy) close(); }} onKeyDownCapture={event => {
+  return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); }} onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
     const element = dialog.current;
     if (!element) return;
@@ -334,7 +343,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     event.preventDefault();
     focusable[nextIndex].focus();
   }}>
-    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy} onClick={close}>Cancel</button></div></header>
+    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy} onClick={close}>Close</button></div></header>
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
