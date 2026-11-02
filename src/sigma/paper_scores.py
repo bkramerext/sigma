@@ -99,6 +99,14 @@ def best_score(summaries: list[dict[str, Any]]) -> int | None:
     ]
     return max(scores, default=None)
 
+def project_metadata(path: str) -> dict[str, int | None]:
+    """One canonical aggregate for the project-list and TeX tooltip."""
+    from sigma import papers
+
+    available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
+    return {"paper_count": len(available), "best_paper_score": best_score(available)}
+
+
 def _pdf_excerpts(pdf: bytes) -> dict[str, Any]:
     """Inspect actual compiled PDF text and page geometry, not TeX source."""
     from sigma import papers
