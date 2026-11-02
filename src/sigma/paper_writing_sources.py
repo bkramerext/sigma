@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import http.client
 import ipaddress
+import json
 import re
 import socket
 import ssl
@@ -96,6 +97,7 @@ def _pdf_excerpt(document: bytes) -> str | None:
 
 
 def _valid_public_url(url: str) -> bool:
+    """Reject credentials, control characters, unsafe ports and IP literals."""
     if len(url) > 2_048 or any(ord(char) < 33 for char in url):
         return False
     try:
@@ -108,26 +110,20 @@ def _valid_public_url(url: str) -> bool:
             or parsed.port not in (None, 80, 443)
         ):
             return False
-        host = parsed.hostname.encode("idna").decode("ascii")
-        if not host or any(
-            char not in "abcdefghijklmnopqrstuvwxyz0123456789.-"
-            for char in host.casefold()
-        ):
-            return False
-        if ipaddress.ip_address(host).is_global is False:
-            return False
-    except ValueError:
-        # Hostnames, unlike IP literals, legitimately raise ValueError.
-        try:
-            if not parsed.hostname or not all(
-                part and len(part) <= 63 for part in parsed.hostname.split(".")
-            ):
-                return False
-        except (AttributeError, UnboundLocalError):
-            return False
-    except UnicodeError:
+        host = parsed.hostname.encode("idna").decode("ascii").casefold()
+    except (ValueError, UnicodeError):
         return False
-    return True
+    if not host or any(
+        char not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for char in host
+    ):
+        return False
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        return len(host) <= 253 and all(
+            0 < len(label) <= 63 and not label.startswith("-") and not label.endswith("-")
+            for label in host.split(".")
+        )
 
 
 def _fetch_blocking(url: str) -> str | None:
@@ -225,14 +221,21 @@ def _references(project: Mapping[str, Any]) -> list[dict[str, str]]:
     return output
 
 
+def _reference_fingerprint(references: list[dict[str, str]]) -> str:
+    return hashlib.sha256(
+        json.dumps(references, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
+
+
 def _reusable(
     previous: list[dict[str, Any]],
     references: list[dict[str, str]],
     kind: str,
 ) -> bool:
-    if not previous or len(previous) != min(MAX_SELECTED, len(references)):
+    if not previous or not 1 <= len(previous) <= min(MAX_SELECTED, len(references)):
         return False
     official = {item["url"]: item["title"] for item in references}
+    reference_sha = _reference_fingerprint(references)
     chosen_urls: set[str] = set()
     for item in previous:
         if not isinstance(item, dict):
@@ -245,6 +248,7 @@ def _reusable(
             or url in chosen_urls
             or item.get("title") != official[url]
             or item.get("type") != kind
+            or item.get("reference_set_sha256") != reference_sha
             or not isinstance(excerpt, str)
             or len(excerpt) < 450
             or hashlib.sha256(excerpt.encode()).hexdigest() != item.get("sha256")
@@ -277,10 +281,8 @@ async def select(
         }
     except (KeyError, OSError, ValueError):
         common_urls = set()
-    priority = sorted(
-        references,
-        key=lambda item: (item["url"] in common_urls, references.index(item)),
-    )
+    priority = sorted(references, key=lambda item: item["url"] in common_urls)
+    reference_sha = _reference_fingerprint(references)
     for item in priority:
         if len(selected) == MAX_SELECTED:
             break
@@ -308,6 +310,7 @@ async def select(
                 "branch": "project_type",
                 "excerpt": excerpt,
                 "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
+                "reference_set_sha256": reference_sha,
             }
         )
     return selected, "selected" if selected else "unavailable"
