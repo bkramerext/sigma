@@ -96,7 +96,8 @@ with sync_playwright() as playwright:
     common_section = dialog.locator(".pt-common-references")
     expect(common_section.locator(".pt-reference-link")).to_have_count(4)
     expect(common_section.locator("input, button")).to_have_count(0)
-    expect(common_section.locator(".pt-reference-url")).to_have_count(4)
+    expect(common_section.locator(".pt-reference-url")).to_have_count(0)
+    expect(common_section.locator(".pt-reference-link a")).to_have_count(4)
     math_card = dialog.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
     math_card.locator("summary").click()
     expect(math_card.locator(".pt-reference-link")).to_have_count(2)
@@ -199,6 +200,11 @@ with sync_playwright() as playwright:
     expect(parent.get_by_text("Use an HTTP or HTTPS URL with a host.")).to_have_count(0)
     expect(save).to_be_enabled()
     expect(url_input).to_have_value("https://example.org/research-standard")
+    parent.locator(".pt-reference-entry").first.get_by_role("button", name="Done").click()
+    expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
+    expect(parent.locator(".pt-reference-entry").first.locator(".pt-reference-link a")).to_have_count(1)
+    parent.locator(".pt-reference-entry").first.get_by_role("button", name="Edit").click()
+    url_input = parent.get_by_label("Research reference URL 1")
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_enabled()
     assert url_input.evaluate("element => document.activeElement === element"), (
         "URL input remounted during typing"
