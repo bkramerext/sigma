@@ -5930,26 +5930,41 @@ or document markup."""
                 "sections", max(1, len(saved_sections)), len(long_plan.sections), "active"
             )
         semaphore = asyncio.Semaphore(FAST_SECTION_CONCURRENCY)
+        first_failure: Exception | None = None
 
         async def bounded_section(
             section_number: int, section: LongSectionPlan
-        ) -> tuple[int, PaperSection]:
+        ) -> tuple[int, PaperSection] | None:
+            nonlocal first_failure
             async with semaphore:
-                return section_number, await write_section(section_number, section)
+                # A failed request may have consumed provider allowance. Do
+                # not start waiting sections after a known failure, but let
+                # already-dispatched siblings finish and save their drafts.
+                if first_failure is not None:
+                    return None
+                try:
+                    return section_number, await write_section(section_number, section)
+                except Exception as exc:
+                    if first_failure is None:
+                        first_failure = exc
+                    raise
 
         tasks = [
             asyncio.create_task(bounded_section(number, section)) for number, section in pending
         ]
         try:
-            if tasks:
-                await asyncio.gather(*tasks)
+            # Collect failures instead of cancelling other in-flight requests:
+            # their completed results may still be checkpointed safely.
+            results = await asyncio.gather(*tasks, return_exceptions=True)
         except BaseException:
-            # gather itself does not cancel sibling calls on failure. Cancel
-            # and drain them before unwinding, preserving already-saved work.
+            # Explicit cancellation or shutdown must still stop every task.
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
         # Reconstruct in outline order, never in provider completion order.
         long_sections = [
             PaperSection(

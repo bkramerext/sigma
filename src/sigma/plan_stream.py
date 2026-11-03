@@ -346,12 +346,41 @@ async def completed(
     event_count = 0
     refused = False
     done_seen = False
-    async for chunk in response.aiter_bytes():
-        byte_count += len(chunk)
-        if max_stream_bytes is not None and byte_count > max_stream_bytes:
-            raise ProjectError(overflow_message)
-        buffer += decoder.decode(chunk)
-        buffer = buffer.replace("\r\n", "\n")
+    last_event_type = "none"
+
+    async def stream_chunks_with_eof():
+        async for chunk in response.aiter_bytes():
+            yield chunk, False
+        yield b"", True
+
+    async for chunk, at_eof in stream_chunks_with_eof():
+        if at_eof:
+            buffer += decoder.decode(b"", final=True)
+            buffer = buffer.replace("\r\n", "\n")
+            # A proxy can end a stream after complete terminal JSON but before
+            # the final blank SSE line. Accept only fully parsed terminal events,
+            # processed through the same validation as normally framed events.
+            trailing_data = "\n".join(
+                line[5:].lstrip(" ")
+                for line in buffer.split("\n")
+                if line.startswith("data:")
+            )
+            try:
+                trailing_event = json.loads(trailing_data)
+            except (TypeError, ValueError):
+                trailing_event = None
+            if (
+                isinstance(trailing_event, dict)
+                and trailing_event.get("type")
+                in {"response.completed", "response.failed", "response.incomplete"}
+            ):
+                buffer += "\n\n"
+        else:
+            byte_count += len(chunk)
+            if max_stream_bytes is not None and byte_count > max_stream_bytes:
+                raise ProjectError(overflow_message)
+            buffer += decoder.decode(chunk)
+            buffer = buffer.replace("\r\n", "\n")
         while "\n\n" in buffer:
             block, buffer = buffer.split("\n\n", 1)
             event_count += 1
@@ -380,6 +409,12 @@ async def completed(
             if not isinstance(event, dict):
                 raise TypeError("plan_stream:event_not_object")
             kind = event.get("type")
+            # Never expose arbitrary provider content in diagnostic messages.
+            last_event_type = (
+                kind
+                if isinstance(kind, str) and re.fullmatch(r"[a-z][a-z0-9._-]{0,63}", kind)
+                else "other"
+            )
             seq = event.get("sequence_number")
             if (
                 not isinstance(kind, str)
@@ -472,9 +507,13 @@ async def completed(
         # independently of cumulative SSE transport traffic.
         if max_event_chars is not None and len(buffer) > max_event_chars:
             raise ProjectError("Provider emitted an oversized streaming event.")
-    buffer += decoder.decode(b"", final=True)
     if terminal is None:
-        raise ProjectError(incomplete_message)
+        raise ProjectError(
+            f"{incomplete_message} "
+            f"(SSE events: {event_count}; last event: {last_event_type}; "
+            f"response started: {'yes' if response_id else 'no'}; "
+            f"stream bytes: {byte_count}; trailing bytes: {len(buffer.encode('utf-8'))})."
+        )
     if max_text_bytes is not None:
         output_items = terminal.get("output", [])
         if not isinstance(output_items, list):
