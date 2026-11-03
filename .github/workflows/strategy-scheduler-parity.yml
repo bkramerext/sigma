@@ -1,6 +1,9 @@
 name: Strategy scheduler semantic parity (#421)
 
 on:
+  # Temporary parity-only branch trigger while stabilizing without Actions dispatch API access.
+  push:
+    branches: ['chat-a/421-parity-stabilization']
   pull_request:
     branches: [main]
     paths:
@@ -19,7 +22,7 @@ permissions:
 
 jobs:
   original-main-parity:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 423 || github.event.pull_request.number == 426
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.pull_request.number == 423 || github.event.pull_request.number == 426
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
