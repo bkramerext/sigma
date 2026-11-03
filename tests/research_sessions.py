@@ -6199,6 +6199,12 @@ async def test_maximum_regions_false_candidate_is_rejected(path: Path):
         "Test the insertion estimate",
         "Check small arrangements, then look for a general upper bound and a matching construction.",
     ).project.strategies[0]
+    # The counterexample must be reviewed on the final configured round.
+    # Earlier rounds deliberately continue under PR #476's protocol policy.
+    research_sessions.save_limits(
+        str(path),
+        {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2},
+    )
     credential = {
         "identity": "fixture-account",
         "mode": "api_key",
