@@ -401,14 +401,15 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         markdown_box = markdown_button.bounding_box()
         pencil_box = pencil_button.bounding_box()
         assert markdown_box and pencil_box
-        assert abs(
-            (markdown_box["y"] + markdown_box["height"] / 2)
-            - (pencil_box["y"] + pencil_box["height"] / 2)
-        ) < 1.5
-        pencil_button.hover()
-        expect(page.locator("#sigma-ui-tooltip")).to_have_text(
-            "Edit text and description"
+        assert (
+            abs(
+                (markdown_box["y"] + markdown_box["height"] / 2)
+                - (pencil_box["y"] + pencil_box["height"] / 2)
+            )
+            < 1.5
         )
+        pencil_button.hover()
+        expect(page.locator("#sigma-ui-tooltip")).to_have_text("Edit text and description")
         assert pencil_button.get_attribute("title") is None
         strategy_pencils = page.locator(".strategy-title-pencil")
         assert strategy_pencils.count() > 0
