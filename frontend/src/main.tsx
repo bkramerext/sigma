@@ -281,8 +281,8 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
     return { cause: 'This session stopped because its required context exceeded the available context limit. Saved research is preserved.', next: 'Review the saved evidence and context limits before resuming. Resume will remain subject to the backend context guard.' };
   if (/duration|wall.clock/.test(evidence))
     return { cause: 'This session stopped after reaching its configured elapsed-time limit. Saved research is preserved.', next: 'Adjust the project time limit if appropriate, then resume the session.' };
-  if (/cost|budget/.test(evidence))
-    return { cause: 'This session stopped after reaching a configured cost or call budget limit. Saved research is preserved.', next: 'Review the project limits and usage before resuming.' };
+  if (/cost|budget|allowance|funding|spend ceiling/i.test(evidence))
+    return { cause: recordedReason || 'A provider-call funding reservation was denied. Saved research is preserved.', next: 'Check the specific funding denial above before resuming. Retrying cannot bypass a depleted allowance.' };
   if (/model|connection|billing identity/.test(evidence))
     return { cause: 'The selected model or AI connection changed while this session was stopped. Saved research is preserved.', next: 'Check the AI connection and selected model before resuming.' };
   if (/project|strategy/.test(evidence))
@@ -822,8 +822,8 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     ? session.calls_used === 0
       ? compilerAttempted
         ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research References for its status.'
-        : 'The available research funds could not cover a provider call. No provider calls were made.'
-      : 'Research stopped because the remaining research funds could not cover another provider call. Saved findings are preserved.'
+        : 'No Investigator or Skeptic call was dispatched. Check the saved funding denial below.'
+      : 'Research stopped because another provider call could not be funded. Saved findings are preserved.'
     : '';
   const statusHeading = budgetDenied
     ? session.calls_used === 0 ? 'Insufficient research funds' : 'Research funding limit reached'
@@ -1007,7 +1007,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
       {provenancePrelude}
       {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <SessionNotice number={session.session_number} onDismiss={onDismissStatusNotice} title={statusHeading} kind="research-pause-guidance" ariaLabel="Session status and next steps">
-        {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
+        {budgetDenied ? <><p>{budgetNotice}</p>{(session.message || budgetReason) && <p>{session.message || budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
         <p>{statusNextStep}</p>
       </SessionNotice>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
