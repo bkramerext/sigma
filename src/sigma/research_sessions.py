@@ -1308,8 +1308,7 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
             "",
             "### Independent verification still needed",
             "",
-            "The following peer-source inspections remain open; they do not certify "
-            "the reviewed argument or independently verify it.",
+            "Peer-source inspections remain open; they do not independently verify this argument.",
         ]
         lines.extend(f"- {item}" for item in review["independent_verification_followups"][:8])
     unresolved_values = review.get("unresolved_objections", [])
