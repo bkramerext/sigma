@@ -627,6 +627,9 @@ async def verify_compiler_billing_settlement_failure(path: Path) -> None:
 
         with (
             patch.object(research_sessions.cloud_research, "billing_enabled", return_value=True),
+            # Hosted job sync requires a workspace; this billing fixture tests
+            # only the separately mocked compiler reservation/settlement path.
+            patch.object(research_sessions.cloud_research, "sync_job", return_value=None),
             patch.object(
                 research_sessions.cloud_research, "reserve_call", side_effect=verify_write_ahead
             ),
