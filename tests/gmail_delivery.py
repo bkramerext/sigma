@@ -60,8 +60,8 @@ class GmailDeliveryTests(TestCase):
                 self.assertEqual(request.get_header("Authorization"), "Bearer access-token")
                 raw = json.loads(request.data)["raw"]
                 message = message_from_bytes(base64.urlsafe_b64decode(raw))
-                self.assertEqual(message["From"], "zetacontinuation@gmail.com")
-                self.assertEqual(message["To"], "zetacontinuation@gmail.com")
+                self.assertEqual(message["From"], "sponsor@example.test")
+                self.assertEqual(message["To"], "sponsor@example.test")
                 payload = message.get_payload(decode=True)
                 assert isinstance(payload, bytes)
                 self.assertIn("applicant@example.com", payload.decode())
@@ -69,7 +69,7 @@ class GmailDeliveryTests(TestCase):
 
             env = {
                 "SIGMA_INVITATION_GMAIL_TOKEN_FILE": str(token_file),
-                "SIGMA_INVITATION_GMAIL_SENDER": "zetacontinuation@gmail.com",
+                "SIGMA_INVITATION_GMAIL_SENDER": "sponsor@example.test",
             }
             with (
                 patch.dict("os.environ", env),
@@ -137,7 +137,7 @@ class GmailDeliveryTests(TestCase):
             ),
             self.assertRaisesRegex(RuntimeError, "not configured"),
         ):
-            send_invitation("applicant@example.com", 123, recipient="zetacontinuation@gmail.com")
+            send_invitation("applicant@example.com", 123, recipient="sponsor@example.test")
 
     def test_does_not_leak_token_errors(self):
         with TemporaryDirectory() as directory:
@@ -153,7 +153,7 @@ class GmailDeliveryTests(TestCase):
             )
             env = {
                 "SIGMA_INVITATION_GMAIL_TOKEN_FILE": str(token_file),
-                "SIGMA_INVITATION_GMAIL_SENDER": "zetacontinuation@gmail.com",
+                "SIGMA_INVITATION_GMAIL_SENDER": "sponsor@example.test",
             }
             with (
                 patch.dict("os.environ", env),

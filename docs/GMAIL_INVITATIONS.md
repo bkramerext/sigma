@@ -2,6 +2,7 @@
 
 SIGMA can deliver invitation notifications through the Gmail API instead of SMTP.
 The sender must be the Google account that authorized the `gmail.send` scope.
+Set it in private configuration; Compose does not supply a default sender address.
 The existing SMTP path remains available when Gmail API is not configured.
 
 ## Local setup
@@ -13,7 +14,7 @@ The existing SMTP path remains available when Gmail API is not configured.
 4. Set these server-side environment variables:
 
    - `SIGMA_INVITATION_GMAIL_TOKEN_FILE=/absolute/path/to/gmail-token.json`
-   - `SIGMA_INVITATION_GMAIL_SENDER=zetacontinuation@gmail.com`
+   - `SIGMA_INVITATION_GMAIL_SENDER=authorized-sender@example.test`
 
 When `SIGMA_INVITATION_GMAIL_TOKEN_FILE` is set, SIGMA uses Gmail API delivery.
 Otherwise it uses the existing `SIGMA_INVITATION_SMTP_*` settings. Do not place

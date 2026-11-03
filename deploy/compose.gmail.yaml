@@ -10,4 +10,4 @@ services:
         read_only: true
     environment:
       SIGMA_INVITATION_GMAIL_TOKEN_FILE: /run/secrets/invitation_gmail_token
-      SIGMA_INVITATION_GMAIL_SENDER: ${SIGMA_INVITATION_GMAIL_SENDER:-zetacontinuation@gmail.com}
+      SIGMA_INVITATION_GMAIL_SENDER: ${SIGMA_INVITATION_GMAIL_SENDER:?configure authorized Gmail sender}

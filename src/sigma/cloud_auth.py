@@ -51,8 +51,6 @@ _EMAIL = re.compile(r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
 _DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 _SCHEMA_LOCK = Lock()
 _SCHEMA_READY: set[tuple[str, int, int]] = set()
-# Legacy local sponsorship identity; never used to address notification emails.
-INVITATION_RECIPIENT = "zetacontinuation@gmail.com"
 
 
 @dataclass(frozen=True)

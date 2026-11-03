@@ -72,7 +72,7 @@ def exercise(origin: str) -> None:
     selected_mode = {"value": "personal"}
     attempt_complete = {"value": False}
     attempt_failure = {"value": False}
-    current_user = {"email": "zetacontinuation@gmail.com", "role": "admin"}
+    current_user = {"email": "sponsor@example.test", "role": "admin"}
     sponsor_connected = {"value": True}
     google_authenticated = {"value": True}
     posts: list[tuple[str, dict]] = []
@@ -106,7 +106,7 @@ def exercise(origin: str) -> None:
                         "sponsorship": {"eligible": True, "forced": False},
                         "invitation_welcome_pending": False,
                     },
-                    "admin_contact_email": "zetacontinuation@gmail.com",
+                    "admin_contact_email": "sponsor@example.test",
                 }
             elif path.endswith("/api/ai/connection"):
                 is_sponsored = selected_mode["value"] == "sponsored"
@@ -123,10 +123,10 @@ def exercise(origin: str) -> None:
                     "active_account": "personal-z-registration"
                     if not is_sponsored
                     else "sponsor-registration",
-                    "account_label": "zetacontinuation@gmail.com" if provider_connected else None,
+                    "account_label": "sponsor@example.test" if provider_connected else None,
                     "sponsor_account_selected": is_sponsored,
                     "accounts": [
-                        {"id": "personal-z-registration", "label": "zetacontinuation@gmail.com"}
+                        {"id": "personal-z-registration", "label": "sponsor@example.test"}
                     ],
                 }
             elif path.endswith(
@@ -148,7 +148,7 @@ def exercise(origin: str) -> None:
                     "label": "Sponsored ChatGPT",
                     "guidance": "",
                     "checked_at": "2026-10-28T00:00:00Z",
-                    "account_label": "zetacontinuation@gmail.com",
+                    "account_label": "sponsor@example.test",
                 }
             elif path.endswith("/api/ai/auth/begin") and method == "POST":
                 payload = {
@@ -246,7 +246,7 @@ def exercise(origin: str) -> None:
         ), posts
         tip = page.locator("#sponsored-allowance-tooltip")
         assert pill.get_attribute("title") == (
-            "Sponsor Connected · zetacontinuation@gmail.com · Unlimited. "
+            "Sponsor Connected · sponsor@example.test · Unlimited. "
             "Click to connect your own ChatGPT account."
         )
         pill.hover(position={"x": 20, "y": 15})
@@ -260,7 +260,7 @@ def exercise(origin: str) -> None:
         allowance_trigger.click()
         expect(allowance_trigger).to_have_attribute("aria-expanded", "true")
         expect(tip).to_be_visible()
-        expect(tip).to_have_text("Sponsor Connected · zetacontinuation@gmail.com · Unlimited.")
+        expect(tip).to_have_text("Sponsor Connected · sponsor@example.test · Unlimited.")
         assert not posts, posts
         allowance_trigger.click()
         expect(tip).not_to_be_visible()
@@ -268,7 +268,7 @@ def exercise(origin: str) -> None:
         # A sponsored member sees only their allowance and provider state.
         # Even if an upstream fixture includes a sponsor label, no member UI
         # text, tooltip, or accessibility label exposes it.
-        current_user.update(email="nontrivialzeeros@gmail.com", role="member")
+        current_user.update(email="member@example.test", role="member")
         selected_mode["value"] = "sponsored"
         sponsor_connected["value"] = False
         page.reload(wait_until="domcontentloaded")
@@ -281,10 +281,10 @@ def exercise(origin: str) -> None:
         assert member_pill.get_attribute("title") == (
             "$0.37 remaining · Unavailable. Click to connect your own ChatGPT account."
         )
-        assert "zetacontinuation@gmail.com" not in (member_pill.get_attribute("aria-label") or "")
+        assert "sponsor@example.test" not in (member_pill.get_attribute("aria-label") or "")
         member_tip = page.locator("#sponsored-allowance-tooltip")
         expect(member_tip).to_have_text("$0.37 remaining · Unavailable.")
-        expect(member_tip).not_to_contain_text("zetacontinuation@gmail.com")
+        expect(member_tip).not_to_contain_text("sponsor@example.test")
         member_allowance_trigger = page.locator(".sponsored-allowance-trigger")
         member_allowance_trigger.hover()
         expect(member_allowance_trigger).to_have_attribute(
@@ -293,7 +293,7 @@ def exercise(origin: str) -> None:
         member_allowance_trigger.click()
         expect(member_allowance_trigger).to_have_attribute("aria-expanded", "true")
         expect(member_tip).to_be_visible()
-        expect(member_tip).not_to_contain_text("zetacontinuation@gmail.com")
+        expect(member_tip).not_to_contain_text("sponsor@example.test")
         member_allowance_trigger.click()
         expect(member_tip).not_to_be_visible()
         posts.clear()

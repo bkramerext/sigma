@@ -74,8 +74,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
     async def sponsor_context(self):
         return await openai_connection.sponsored_auth_context("a" * 64)
 
-    async def test_local_sponsor_defaults_to_designated_admin_identity(self):
-        from sigma import cloud_auth
+    async def test_local_sponsor_requires_explicit_email(self):
 
         with patch.dict(
             os.environ,
@@ -86,9 +85,31 @@ class SponsorTests(IsolatedAsyncioTestCase):
             },
         ):
             os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
-            self.assertEqual(cloud_sponsor.expected_email(), cloud_auth.INVITATION_RECIPIENT)
+            with self.assertRaisesRegex(ProjectError, "SIGMA_CLOUD_SPONSOR_EMAIL"):
+                cloud_sponsor.expected_email()
+            os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
+            self.assertEqual(cloud_sponsor.expected_email(), "sponsor@example.test")
             os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
+
+    async def test_missing_sponsor_setting_logged_at_backend_startup(self):
+        from sigma import server
+
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_INFERENCE_PROVIDER": "chatgpt",
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            with self.assertLogs("sigma.configuration", level="ERROR") as captured:
+                server._report_configuration_issues()
+            self.assertTrue(
+                any("SIGMA_CLOUD_SPONSOR_EMAIL" in line for line in captured.output)
+            )
+            self.assertFalse(any("sponsor@example.test" in line for line in captured.output))
 
     async def test_hosted_admin_connection_is_role_based(self):
         from types import SimpleNamespace
@@ -131,12 +152,12 @@ class SponsorTests(IsolatedAsyncioTestCase):
         from sigma import cloud_auth, cloud_workspaces
 
         oauth_account = self.account | {
-            "email": "zetacontinuation@gmail.com",
-            "subject": "zetacontinuation-sponsor-subject",
+            "email": "sponsor@example.test",
+            "subject": "fixture-sponsor-subject",
         }
 
         with (
-            patch.dict(os.environ, {"SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com"}),
+            patch.dict(os.environ, {"SIGMA_CLOUD_SPONSOR_EMAIL": "sponsor@example.test"}),
             patch.object(cloud_workspaces, "enabled", return_value=True),
             patch.object(
                 cloud_auth,
@@ -182,19 +203,19 @@ class SponsorTests(IsolatedAsyncioTestCase):
         self.assertEqual(chatgpt_auth.attempt_status(started["id"])["status"], "connected")
         exchange.assert_awaited_once()
         validate.assert_awaited_once()
-        with patch.dict(os.environ, {"SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com"}):
+        with patch.dict(os.environ, {"SIGMA_CLOUD_SPONSOR_EMAIL": "sponsor@example.test"}):
             async with ai_store.sponsor_transaction() as persisted:
                 # Re-read through the store service after OAuth completion; the
                 # connection state must come from the saved sponsor record.
                 self.assertEqual(len(persisted["accounts"]), 1)
                 saved = next(iter(persisted["accounts"].values()))
                 self.assertEqual(saved["access_token"], "fixture-access")
-                self.assertEqual(saved["email"], "zetacontinuation@gmail.com")
+                self.assertEqual(saved["email"], "sponsor@example.test")
             connected = await cloud_sponsor.sponsor_session()
             self.assertEqual(connected["status"], "connected")
             context = await self.sponsor_context()
             self.assertEqual(context["status"], "connected")
-            self.assertEqual(context["account_label"], "zetacontinuation@gmail.com")
+            self.assertEqual(context["account_label"], "sponsor@example.test")
 
             async def checked_connection(*args, **kwargs):
                 result = {
@@ -209,7 +230,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
             ):
                 view = await openai_connection.connection(context=context)
             self.assertEqual(view["status"], "connected")
-            self.assertEqual(view["account_label"], "zetacontinuation@gmail.com")
+            self.assertEqual(view["account_label"], "sponsor@example.test")
             self.assertNotIn("fixture-access", repr(view))
 
     async def test_hosted_sponsor_connection_reads_saved_credentials(self):
@@ -255,13 +276,13 @@ class SponsorTests(IsolatedAsyncioTestCase):
             os.environ,
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "false",
-                "SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_SPONSOR_EMAIL": "sponsor@example.test",
                 "SIGMA_CLOUD_OPENAI_API_KEY": "must-not-be-used",
             },
         ):
             os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
-            self.assertEqual(cloud_sponsor.expected_email(), "zetacontinuation@gmail.com")
+            self.assertEqual(cloud_sponsor.expected_email(), "sponsor@example.test")
             with patch.object(
                 cloud_sponsor,
                 "sponsor_session",

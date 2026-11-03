@@ -1766,7 +1766,7 @@ class CloudAuthTests(TestCase):
     def test_changing_contact_preserves_bound_admin_and_authorizes_new_contact(self):
         response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
         self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)
-        os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
+        os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "sponsor@example.test"
 
         admin_client_context = TestClient(app)
         admin_client = admin_client_context.__enter__()
@@ -1775,7 +1775,7 @@ class CloudAuthTests(TestCase):
             cloud_auth.SESSION_COOKIE, response.cookies[cloud_auth.SESSION_COOKIE]
         )
         status = admin_client.get("/api/cloud-auth/status").json()
-        self.assertEqual(status["admin_contact_email"], "zetacontinuation@gmail.com")
+        self.assertEqual(status["admin_contact_email"], "sponsor@example.test")
         self.assertEqual(status["user"], {"email": "admin@example.org", "role": "admin"})
         self.assertEqual(
             admin_client.get("/api/cloud-auth/admin/grants").json()["bootstrap_admin"],
@@ -1786,7 +1786,7 @@ class CloudAuthTests(TestCase):
         denied_client = denied_context.__enter__()
         self.addCleanup(denied_context.__exit__, None, None, None)
         denied = self.finish(
-            email="zetacontinuation@gmail.com", subject="new-contact-subject", client=denied_client
+            email="sponsor@example.test", subject="new-contact-subject", client=denied_client
         )
         self.assertNotEqual(denied.headers["location"], "/?access=denied")
         self.assertIn(cloud_auth.SESSION_COOKIE, denied.cookies)
@@ -1801,7 +1801,7 @@ class CloudAuthTests(TestCase):
         other = other_context.__enter__()
         self.addCleanup(other_context.__exit__, None, None, None)
         mismatched = self.finish(
-            email="zetacontinuation@gmail.com", subject="different-google-subject", client=other
+            email="sponsor@example.test", subject="different-google-subject", client=other
         )
         self.assertEqual(mismatched.headers["location"], "/?access=denied")
 
@@ -1820,7 +1820,7 @@ class CloudAuthTests(TestCase):
             self.assertIn("sigma_session", first.cookies)
             self.client.cookies.clear()
             initially_uninvited = self.finish(
-                email="zetacontinuation@gmail.com", subject="configured-google-subject"
+                email="sponsor@example.test", subject="configured-google-subject"
             )
             self.assertEqual(initially_uninvited.headers["location"], "/")
             self.assertIn("sigma_session", initially_uninvited.cookies)
@@ -1828,7 +1828,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(
                 self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
             )
-            os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
+            os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "sponsor@example.test"
             # The verified identity becomes an administrator as soon as the
             # configured contact changes; guest status does not pin its role.
             self.assertEqual(
@@ -1844,7 +1844,7 @@ class CloudAuthTests(TestCase):
             )
             # A fresh chooser flow continues to complete normally.
             allowed = self.finish(
-                email="zetacontinuation@gmail.com", subject="configured-google-subject"
+                email="sponsor@example.test", subject="configured-google-subject"
             )
             self.assertEqual(allowed.status_code, 303)
             self.assertEqual(allowed.headers["location"], "/")
@@ -1854,10 +1854,10 @@ class CloudAuthTests(TestCase):
             account = self.client.get("/api/cloud-auth/status").json()
             self.assertTrue(account["authenticated"])
             self.assertEqual(
-                account["user"], {"email": "zetacontinuation@gmail.com", "role": "admin"}
+                account["user"], {"email": "sponsor@example.test", "role": "admin"}
             )
             self.assertFalse(account["account"]["invitation_welcome_pending"])
-            self.assertEqual(account["admin_contact_email"], "zetacontinuation@gmail.com")
+            self.assertEqual(account["admin_contact_email"], "sponsor@example.test")
             self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
 
     def test_local_uninvited_google_user_requests_invitation_and_becomes_member(self):
@@ -2313,19 +2313,19 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "sponsor@example.test",
                 "SIGMA_AUTH_HOME": str(sponsor_home),
             },
         ):
-            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
             login = self.finish(
-                email="zetacontinuation@gmail.com", subject="configured-google-admin"
+                email="sponsor@example.test", subject="configured-google-admin"
             )
             self.assertEqual(login.status_code, 303)
             self.client.cookies.update(login.cookies)
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["user"]["role"], "admin")
-            self.assertEqual(status["user"]["email"], "zetacontinuation@gmail.com")
+            self.assertEqual(status["user"]["email"], "sponsor@example.test")
             self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
 
             # A pre-existing cookie whose legacy personal value was never
@@ -2346,7 +2346,7 @@ class CloudAuthTests(TestCase):
             async def add_selected_sponsor():
                 async with ai_store.sponsor_transaction() as state:
                     state["accounts"]["selected-sponsor"] = {
-                        "email": "zetacontinuation@gmail.com",
+                        "email": "sponsor@example.test",
                         "access_token": "existing-sponsor-token",
                     }
                     state["active"] = "selected-sponsor"
@@ -2369,7 +2369,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "email",
-                    "value": "nontrivialzeeros@gmail.com",
+                    "value": "member@example.test",
                     "role": "member",
                     "allowance_usd": 1,
                 },
@@ -2382,7 +2382,7 @@ class CloudAuthTests(TestCase):
             member = member_context.__enter__()
             self.addCleanup(member_context.__exit__, None, None, None)
             member_login = self.finish(
-                email="nontrivialzeeros@gmail.com",
+                email="member@example.test",
                 subject="sponsor-change-denied-member",
                 client=member,
             )
@@ -2417,13 +2417,13 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "sponsor@example.test",
                 "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-auth"),
             },
         ):
-            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
             os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
-            login = self.finish(email="zetacontinuation@gmail.com", subject="mode-transition-admin")
+            login = self.finish(email="sponsor@example.test", subject="mode-transition-admin")
             self.client.cookies.update(login.cookies)
             self.assertEqual(
                 self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
@@ -2554,13 +2554,13 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "sponsor@example.test",
                 "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-auth"),
             },
         ):
-            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
             login = self.finish(
-                email="zetacontinuation@gmail.com", subject="connection-identity-admin"
+                email="sponsor@example.test", subject="connection-identity-admin"
             )
             self.client.cookies.update(login.cookies)
             self.assertEqual(
@@ -2572,7 +2572,7 @@ class CloudAuthTests(TestCase):
                 async with ai_store.sponsor_transaction() as state:
                     state["accounts"]["completed-oauth"] = {
                         "client_id": "fixture-oauth-client",
-                        "email": "zetacontinuation@gmail.com",
+                        "email": "sponsor@example.test",
                         "access_token": "validated-sponsor-access-token",
                         "refresh_token": "validated-sponsor-refresh-token",
                         "expires_at": time.time() + 3600,
@@ -2596,7 +2596,7 @@ class CloudAuthTests(TestCase):
                 response = self.client.get("/api/ai/connection?refresh=true")
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual(response.json()["status"], "connected")
-            self.assertEqual(response.json()["account_label"], "zetacontinuation@gmail.com")
+            self.assertEqual(response.json()["account_label"], "sponsor@example.test")
             self.assertNotIn("validated-sponsor-access-token", response.text)
             self.assertNotIn("validated-sponsor-refresh-token", response.text)
 
@@ -2604,7 +2604,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "email",
-                    "value": "nontrivialzeeros@gmail.com",
+                    "value": "member@example.test",
                     "role": "member",
                     "allowance_usd": 1,
                 },
@@ -2617,7 +2617,7 @@ class CloudAuthTests(TestCase):
             member = member_context.__enter__()
             self.addCleanup(member_context.__exit__, None, None, None)
             member_login = self.finish(
-                email="nontrivialzeeros@gmail.com",
+                email="member@example.test",
                 subject="sponsor-identity-hidden-member",
                 client=member,
             )
@@ -2639,9 +2639,9 @@ class CloudAuthTests(TestCase):
             self.assertEqual(member_response.status_code, 200, member_response.text)
             self.assertEqual(member_response.json()["status"], "connected")
             self.assertNotIn("account_label", member_response.json())
-            self.assertNotIn("zetacontinuation@gmail.com", member_response.text)
+            self.assertNotIn("sponsor@example.test", member_response.text)
             self.assertEqual(mode_response.status_code, 200, mode_response.text)
-            self.assertNotIn("zetacontinuation@gmail.com", mode_response.text)
+            self.assertNotIn("sponsor@example.test", mode_response.text)
 
     def test_personal_disconnect_cannot_cancel_other_users_or_sponsor_oauth_attempts(self):
         from sigma import chatgpt_auth
@@ -2654,20 +2654,20 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "sponsor@example.test",
                 "SIGMA_CLOUD_AUTH_HOME": str(Path(self.temp.name) / "auth-db"),
                 "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "auth-home"),
             },
         ):
-            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
             with cloud_auth._db(cloud_auth.config()) as db:
                 db.execute(
                     "INSERT INTO grants(kind,value,role,active,updated_at) VALUES('email',?,'admin',1,?)",
-                    ("brian.kramer.personal@gmail.com", cloud_auth._now()),
+                    ("personal@example.test", cloud_auth._now()),
                 )
-            z_login = self.finish(email="zetacontinuation@gmail.com", subject="attempt-owner-z")
+            z_login = self.finish(email="sponsor@example.test", subject="attempt-owner-z")
             b_login = self.finish(
-                email="brian.kramer.personal@gmail.com",
+                email="personal@example.test",
                 subject="attempt-owner-b",
                 client=b_client,
             )
@@ -2757,13 +2757,13 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "sponsor@example.test",
                 "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-auth"),
             },
         ):
-            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
             login = self.finish(
-                email="zetacontinuation@gmail.com", subject="same-email-personal-owner"
+                email="sponsor@example.test", subject="same-email-personal-owner"
             )
             self.assertEqual(login.status_code, 303)
             self.client.cookies.update(login.cookies)
@@ -2777,7 +2777,7 @@ class CloudAuthTests(TestCase):
                     state["accounts"]["shared-sponsor"] = {
                         "client_id": "oaiapp_fixture",
                         "subject": "same-chatgpt-subject",
-                        "email": "zetacontinuation@gmail.com",
+                        "email": "sponsor@example.test",
                         "access_token": sponsor_token,
                         "refresh_token": "shared-sponsor-refresh",
                         "expires_at": time.time() + 3600,
@@ -2815,14 +2815,14 @@ class CloudAuthTests(TestCase):
             self.assertEqual(initial_connection.status_code, 200, initial_connection.text)
             self.assertEqual(initial_connection.json()["status"], "connected")
             self.assertEqual(
-                initial_connection.json().get("account_label"), "zetacontinuation@gmail.com"
+                initial_connection.json().get("account_label"), "sponsor@example.test"
             )
             self.assertIn(sponsor_token, observed_tokens)
 
             token_record = {
                 "client_id": "oaiapp_fixture",
                 "subject": "same-chatgpt-subject",
-                "email": "zetacontinuation@gmail.com",
+                "email": "sponsor@example.test",
                 "name": "Z Personal",
                 "access_token": personal_token,
                 "refresh_token": "z-personal-refresh",
@@ -2911,7 +2911,7 @@ class CloudAuthTests(TestCase):
                 personal = restarted.get("/api/ai/connection?refresh=true")
             self.assertEqual(personal.status_code, 200, personal.text)
             self.assertEqual(personal.json()["status"], "connected")
-            self.assertEqual(personal.json()["account_label"], "zetacontinuation@gmail.com")
+            self.assertEqual(personal.json()["account_label"], "sponsor@example.test")
             self.assertEqual(observed_tokens[-1], personal_token)
             personal_account_id = personal.json()["active_account"]
             reauthorize = restarted.post(
@@ -2942,7 +2942,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(sponsor_connection.status_code, 200, sponsor_connection.text)
             self.assertEqual(sponsor_connection.json()["status"], "connected")
             self.assertEqual(
-                sponsor_connection.json()["account_label"], "zetacontinuation@gmail.com"
+                sponsor_connection.json()["account_label"], "sponsor@example.test"
             )
             self.assertIn(sponsor_token, observed_tokens)
 
@@ -2995,15 +2995,15 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "sponsor@example.test",
                 "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "allowance-sponsor-auth"),
             },
         ):
-            z_login = self.finish(email="zetacontinuation@gmail.com", subject="allowance-z-admin")
+            z_login = self.finish(email="sponsor@example.test", subject="allowance-z-admin")
             self.client.cookies.update(z_login.cookies)
             for email, role, allowance in (
-                ("brian.kramer.personal@gmail.com", "admin", None),
-                ("nontrivialzeeros@gmail.com", "member", 0.05),
+                ("personal@example.test", "admin", None),
+                ("member@example.test", "member", 0.05),
             ):
                 response = self.client.post(
                     "/api/cloud-auth/admin/grants",
@@ -3025,8 +3025,8 @@ class CloudAuthTests(TestCase):
             self.assertEqual(z_budget.json()["allowance_usd"], 15.0)
 
             for email, subject, expected_role, expected_allowance in (
-                ("brian.kramer.personal@gmail.com", "allowance-b-admin", "admin", 15.0),
-                ("nontrivialzeeros@gmail.com", "allowance-n-member", "member", 0.05),
+                ("personal@example.test", "allowance-b-admin", "admin", 15.0),
+                ("member@example.test", "allowance-n-member", "member", 0.05),
             ):
                 context = TestClient(
                     app,
@@ -3060,7 +3060,7 @@ class CloudAuthTests(TestCase):
                         ],
                         "sponsored",
                     )
-                    self.seed_personal_plan_authorization(subject, "zetacontinuation@gmail.com")
+                    self.seed_personal_plan_authorization(subject, "sponsor@example.test")
                     with patch(
                         "sigma.openai_connection._check",
                         new=AsyncMock(
@@ -3080,7 +3080,7 @@ class CloudAuthTests(TestCase):
                         connection = client.get("/api/ai/connection")
                     self.assertEqual(connection.json()["status"], "connected")
                     self.assertEqual(
-                        connection.json().get("account_label"), "zetacontinuation@gmail.com"
+                        connection.json().get("account_label"), "sponsor@example.test"
                     )
 
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
@@ -3303,7 +3303,7 @@ class CloudAuthTests(TestCase):
         admin.cookies.set(
             cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
         )
-        applicant_email = "nontrivialzeero@gmail.com"
+        applicant_email = "applicant@example.test"
         applicant_subject = "pending-domain-applicant"
         denied = self.finish(applicant_email, applicant_subject)
         self.assertIn(cloud_auth.DENIED_COOKIE, denied.cookies)
@@ -3366,7 +3366,7 @@ class CloudAuthTests(TestCase):
 
     def test_local_pending_guest_domain_promotion_materializes_member(self):
         local_origin = "http://127.0.0.1:5173"
-        email = "nontrivialzeero@gmail.com"
+        email = "applicant@example.test"
         subject = "local-domain-applicant"
         with patch.dict(
             os.environ,
@@ -3420,7 +3420,7 @@ class CloudAuthTests(TestCase):
     def test_local_fresh_google_signin_after_admin_domain_grant(self):
         """Exercise local admin-save -> fresh Google callback, not just session refresh."""
         local_origin = "http://127.0.0.1:5173"
-        applicant_email = "nontrivialzeero@gmail.com"
+        applicant_email = "applicant@example.test"
         applicant_subject = "local-fresh-domain-applicant"
         with patch.dict(
             os.environ,
@@ -3675,7 +3675,7 @@ class CloudAuthTests(TestCase):
     def test_new_domain_grant_supersedes_older_revocation_but_not_later_revoke(self):
         """The newest explicit admin admission decision wins in local Google auth."""
         local_origin = "http://127.0.0.1:5173"
-        email = "nontrivialzeero@gmail.com"
+        email = "applicant@example.test"
         subject = "previously-revoked-domain-user"
         with patch.dict(
             os.environ,
@@ -3781,7 +3781,7 @@ class CloudAuthTests(TestCase):
     def test_three_domain_authorization_cycles_reusing_same_google_account(self):
         """Remove/reauthorize must not poison later logins for the same subject."""
         local_origin = "http://127.0.0.1:5173"
-        email = "nontrivialzeero@gmail.com"
+        email = "applicant@example.test"
         subject = "repeat-domain-member-subject"
         with patch.dict(
             os.environ,
@@ -4039,7 +4039,7 @@ class CloudAuthTests(TestCase):
         self.assertFalse(revoked["authorized"])
         self.assertIn("held_usd", revoked["spending"])
 
-    def test_nontrivialzeeros_domain_login_and_reload_request(self):
+    def test_fixture-member_domain_login_and_reload_request(self):
         admin_login = self.finish()
         self.assertEqual(admin_login.status_code, 303)
         self.client.cookies.set(
@@ -4049,7 +4049,7 @@ class CloudAuthTests(TestCase):
             "/api/cloud-auth/admin/grants",
             json={
                 "kind": "domain",
-                "value": "nontrivialzeeros.com",
+                "value": "fixture-member.com",
                 "role": "member",
                 "allowance_usd": 1.25,
             },
@@ -4060,8 +4060,8 @@ class CloudAuthTests(TestCase):
         user = user_context.__enter__()
         self.addCleanup(user_context.__exit__, None, None, None)
         login = self.finish(
-            email="tester@nontrivialzeeros.com",
-            subject="nontrivialzeeros-test-account",
+            email="tester@fixture-member.com",
+            subject="fixture-member-test-account",
             client=user,
         )
         self.assertEqual(login.status_code, 303)
@@ -4078,12 +4078,12 @@ class CloudAuthTests(TestCase):
             )
         self.assertEqual(reload_request.status_code, 200, reload_request.text)
         deliver.assert_called_once()
-        self.assertEqual(deliver.call_args.args[0], "tester@nontrivialzeeros.com")
+        self.assertEqual(deliver.call_args.args[0], "tester@fixture-member.com")
         self.assertEqual(deliver.call_args.kwargs["request_type"], "reload")
         requests = self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
         self.assertEqual(len(requests), 1)
         self.assertEqual(requests[0]["request_type"], "reload")
-        self.assertEqual(requests[0]["email"], "tester@nontrivialzeeros.com")
+        self.assertEqual(requests[0]["email"], "tester@fixture-member.com")
 
     def test_spending_allowance_admin_policy_and_email_precedence(self):
         admin_context = TestClient(app)
@@ -4353,8 +4353,8 @@ class CloudAuthTests(TestCase):
             member_client = member_context.__enter__()
             self.addCleanup(member_context.__exit__, None, None, None)
             denied = self.finish(
-                email="nontrivialzeeros@gmail.com",
-                subject="nontrivialzeeros-local-member",
+                email="member@example.test",
+                subject="fixture-member-local-member",
                 client=member_client,
             )
             self.assertEqual(denied.status_code, 303)
@@ -4366,13 +4366,13 @@ class CloudAuthTests(TestCase):
             self.assertFalse(guest_status["account"]["sponsorship"]["eligible"])
             grant = admin.post(
                 "/api/cloud-auth/admin/grants",
-                json={"kind": "email", "value": "nontrivialzeeros@gmail.com", "role": "member"},
+                json={"kind": "email", "value": "member@example.test", "role": "member"},
                 headers={"Origin": local_origin},
             )
             self.assertEqual(grant.status_code, 200, grant.text)
             signed_member = self.finish(
-                email="nontrivialzeeros@gmail.com",
-                subject="nontrivialzeeros-local-member",
+                email="member@example.test",
+                subject="fixture-member-local-member",
                 client=member_client,
             )
             self.assertEqual(signed_member.status_code, 303)
@@ -4433,7 +4433,7 @@ class CloudAuthTests(TestCase):
                 patch.dict(
                     os.environ,
                     {
-                        "SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com",
+                        "SIGMA_CLOUD_SPONSOR_EMAIL": "sponsor@example.test",
                     },
                 ),
                 patch(
@@ -4443,7 +4443,7 @@ class CloudAuthTests(TestCase):
                             "status": "connected",
                             "account_id": "designated-admin",
                             "account": {
-                                "email": "zetacontinuation@gmail.com",
+                                "email": "sponsor@example.test",
                                 "access_token": "sponsor-token",
                             },
                         }
@@ -4758,21 +4758,21 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "sponsor@example.test",
                 "SIGMA_LOCAL_SPONSORED_TEST_MODE": "0",
                 "SIGMA_MOCK_AUTH": "0",
             },
         ):
-            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
             admin_login = self.finish(
-                email="zetacontinuation@gmail.com", subject="configured-local-admin"
+                email="sponsor@example.test", subject="configured-local-admin"
             )
             self.client.cookies.update(admin_login.cookies)
             grant = self.client.post(
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "email",
-                    "value": "nontrivialzeeros@gmail.com",
+                    "value": "member@example.test",
                     "role": "member",
                     "allowance_usd": 0.01,
                 },
@@ -4785,7 +4785,7 @@ class CloudAuthTests(TestCase):
             member = member_context.__enter__()
             self.addCleanup(member_context.__exit__, None, None, None)
             login = self.finish(
-                email="nontrivialzeeros@gmail.com",
+                email="member@example.test",
                 subject="local-sponsored-member",
                 client=member,
             )
@@ -4879,7 +4879,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "email",
-                    "value": "nontrivialzeero@gmail.com",
+                    "value": "applicant@example.test",
                     "role": "member",
                     "allowance_usd": 0.01,
                 },
@@ -4892,7 +4892,7 @@ class CloudAuthTests(TestCase):
             member = member_context.__enter__()
             self.addCleanup(member_context.__exit__, None, None, None)
             login = self.finish(
-                email="nontrivialzeero@gmail.com",
+                email="applicant@example.test",
                 subject="local-sponsored-member",
                 client=member,
             )
@@ -4906,7 +4906,7 @@ class CloudAuthTests(TestCase):
                     state["active"] = "sponsor"
                     state["accounts"] = {
                         "sponsor": {
-                            "email": "zetacontinuation@gmail.com",
+                            "email": "sponsor@example.test",
                             "client_id": "fixture-client",
                             "access_token": "fixture-sponsor-token",
                             "refresh_token": "fixture-refresh-token",
