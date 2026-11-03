@@ -23,7 +23,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import research_sessions as fixture
 
-from sigma import research_sessions
+from sigma import research_reference_compiler, research_sessions
 from sigma.openai_connection import AuthContext
 
 
@@ -35,6 +35,7 @@ async def verify_compilation(
     compiler_server_error: bool = False,
     pause_during_compilation: bool = False,
     skip_compiler: bool = False,
+    compiler_retry_scenario: str | None = None,
 ) -> None:
     view, strategy, fixture_credential, config = await fixture.setup(path)
     # Match the actual runtime type, not a permissive dict test double.
@@ -96,6 +97,12 @@ async def verify_compilation(
     omitted_urls: list[str] = []
     compilation_started = asyncio.Event()
     compilation_release = asyncio.Event()
+    headroom_attempts = 0
+
+    def budget_after_first(*_args, **_kwargs):
+        nonlocal headroom_attempts
+        headroom_attempts += 1
+        return headroom_attempts == 1
 
     async def provider(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
@@ -104,6 +111,18 @@ async def verify_compilation(
         if name == "research_reference_compilation":
             compilation_started.set()
             await compilation_release.wait()
+            compiler_number = calls.count("research_reference_compilation")
+            if (
+                compiler_retry_scenario in {"rate_limit_then_success", "budget_after_rate_limit"}
+                and compiler_number == 1
+            ) or compiler_retry_scenario == "rate_limit_exhausted":
+                return httpx.Response(
+                    429,
+                    headers={"Retry-After": "0"},
+                    json={
+                        "error": {"code": "rate_limit_exceeded", "message": "Temporarily limited"}
+                    },
+                )
             if compiler_rejection:
                 return httpx.Response(
                     400,
@@ -124,6 +143,17 @@ async def verify_compilation(
                 "omitted_source_ids": [source["id"] for source in sources[1:]],
                 "rationale": "Only the first methodological reference is relevant.",
             }
+            if (
+                compiler_retry_scenario in {"invalid_then_success", "missing_usage"}
+                and compiler_number == 1
+            ):
+                # A fully metered HTTP 200 may still fail local source
+                # partition validation; missing usage makes replay unsafe.
+                result["selected_source_ids"] = ["not-a-frozen-source"]
+                response_body = fixture.provider_response(result)
+                if compiler_retry_scenario == "missing_usage":
+                    response_body["usage"] = None
+                return httpx.Response(200, json=response_body)
         elif name in {"research_investigator", "research_skeptic"}:
             body = json.dumps(payload)
             role_requests.append(body)
@@ -151,6 +181,12 @@ async def verify_compilation(
                 research_sessions, "_optional_reference_compilation_headroom", return_value=False
             )
             if skip_compiler
+            else patch.object(
+                research_sessions,
+                "_optional_reference_compilation_headroom",
+                side_effect=budget_after_first,
+            )
+            if compiler_retry_scenario == "budget_after_rate_limit"
             else nullcontext()
         ),
         patch(
@@ -199,8 +235,26 @@ async def verify_compilation(
                     await research_sessions.control_session(str(path), started["id"], "resume")
         finished = await fixture.wait_for(path, started["id"])
 
+    if compiler_retry_scenario == "missing_usage":
+        assert finished["status"] == "paused", finished.get("message")
+        assert calls.count("research_reference_compilation") == 1
+        assert not role_requests
+        stage = research_sessions._read(str(path), started["id"])["reference_compilation"]
+        assert stage["status"] == "interrupted", stage
+        assert len(stage["attempts"]) == 1
+        assert stage["attempts"][0]["validation_failure"]
+        assert stage["attempts"][0]["usage_status"] == "unknown"
+        assert stage["attempts"][0]["retry_decision"] == "uncertain_delivery_or_billing"
+        return
+
     assert finished["status"] in {"ended", "completed"}, finished.get("message")
-    assert calls.count("research_reference_compilation") == (0 if skip_compiler else 1), calls
+    expected_compiler_count = {
+        "rate_limit_then_success": 2,
+        "invalid_then_success": 2,
+        "rate_limit_exhausted": 3,
+        "budget_after_rate_limit": 1,
+    }.get(compiler_retry_scenario or "", 0 if skip_compiler else 1)
+    assert calls.count("research_reference_compilation") == expected_compiler_count, calls
     expected_roles = rounds * len(strategy_ids)
     assert calls.count("research_investigator") == expected_roles, calls
     assert calls.count("research_skeptic") == expected_roles, calls
@@ -213,7 +267,11 @@ async def verify_compilation(
     saved = research_sessions._read(str(path), started["id"])
     stage = saved["reference_compilation"]
     compiled_ok = not (
-        compiler_rejection or compiler_server_error or pause_during_compilation or skip_compiler
+        compiler_rejection
+        or compiler_server_error
+        or pause_during_compilation
+        or skip_compiler
+        or compiler_retry_scenario in {"rate_limit_exhausted", "budget_after_rate_limit"}
     )
     expected_status = "skipped" if skip_compiler else "completed" if compiled_ok else "fallback"
     assert stage["status"] == expected_status, stage
@@ -225,6 +283,31 @@ async def verify_compilation(
     if compiler_server_error:
         assert stage["provider_http_status"] == 503
         assert stage.get("provider_error_code") is None
+    if compiler_retry_scenario:
+        attempts = stage["attempts"]
+        expected_records = (
+            2 if compiler_retry_scenario == "budget_after_rate_limit" else expected_compiler_count
+        )
+        assert len(attempts) == expected_records, attempts
+        assert len({a["number"] for a in attempts}) == expected_records
+        if compiler_retry_scenario in {"rate_limit_then_success", "invalid_then_success"}:
+            assert attempts[0]["retry_decision"] == "retry"
+            assert attempts[-1]["status"] == "completed"
+            assert attempts[-1]["retry_decision"] == "completed"
+            assert stage["status"] == "completed"
+            if compiler_retry_scenario == "invalid_then_success":
+                assert attempts[0]["validation_failure"]
+                assert attempts[0]["token_usage"]["input_tokens"] == 120
+        if compiler_retry_scenario == "rate_limit_exhausted":
+            assert [a["provider_http_status"] for a in attempts] == [429, 429, 429]
+            assert attempts[-1]["retry_decision"] == "retry_exhausted"
+            assert stage["status"] == "fallback"
+        if compiler_retry_scenario == "budget_after_rate_limit":
+            assert attempts[0]["provider_http_status"] == 429
+            assert attempts[1]["status"] == "not_dispatched" or stage["reason"]
+            assert stage["status"] == "fallback"
+        # Outcome persists the same diagnostic history, not only events.
+        assert saved["outcome"]["source_material"]["compilation"]["attempts"] == attempts
     assert stage["source_sha256"] == saved["research_method_sources"]["sha256"]
     assert stage["status"] != "pending"
     if compiled_ok:
@@ -260,9 +343,7 @@ async def verify_compilation(
         )
     ledger = saved.get("hard_budget_ledger")
     if isinstance(ledger, dict):
-        assert len(ledger["calls"]) == (0 if skip_compiler else 1) + 2 * expected_roles, ledger[
-            "calls"
-        ]
+        assert len(ledger["calls"]) == expected_compiler_count + 2 * expected_roles, ledger["calls"]
         if compiler_server_error or pause_during_compilation:
             assert ledger["calls"][0]["status"] == "unknown_compiler_abandoned"
             assert ledger["blocked_reason"] is None
@@ -819,7 +900,60 @@ async def verify_explicitly_disabled_compiler_checkpoint(path: Path) -> None:
         assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
 
 
+def verify_bounded_retry_policy() -> None:
+    plan = research_reference_compiler.retry_plan
+    assert plan(
+        attempt_number=1,
+        http_status=429,
+        validation_failure=None,
+        usage_status="rejected",
+        billing_settled=True,
+        retry_after_seconds=4,
+    ) == ("retry", 4.0)
+    assert plan(
+        attempt_number=2,
+        http_status=429,
+        validation_failure=None,
+        usage_status="rejected",
+        billing_settled=True,
+        retry_after_seconds=50,
+    ) == ("rate_limit_wait_exceeds_bound", 0.0)
+    assert plan(
+        attempt_number=3,
+        http_status=429,
+        validation_failure=None,
+        usage_status="rejected",
+        billing_settled=True,
+    ) == ("retry_exhausted", 0.0)
+    assert (
+        plan(
+            attempt_number=1,
+            http_status=200,
+            validation_failure="source selection mismatch",
+            usage_status="known",
+            billing_settled=True,
+        )[0]
+        == "retry"
+    )
+    for status, usage, settled in (
+        (503, "unknown", False),
+        (200, "unknown", True),
+        (200, "known", False),
+        (400, "rejected", True),
+        (408, "unknown", False),
+    ):
+        result, delay = plan(
+            attempt_number=1,
+            http_status=status,
+            validation_failure="invalid output" if status == 200 else None,
+            usage_status=usage,
+            billing_settled=settled,
+        )
+        assert result != "retry" and delay == 0.0, (status, usage, result)
+
+
 async def main() -> None:
+    verify_bounded_retry_policy()
     verify_abandoned_compiler_preserves_future_review_recovery()
     verify_compiled_methods_survive_context_compaction()
     verify_compilation_preserves_first_turn_funding()
@@ -830,6 +964,21 @@ async def main() -> None:
         await verify_compilation(root / "multi.sigma", multiple_strategies=True)
         await verify_compilation(root / "fallback.sigma", compiler_rejection=True)
         await verify_compilation(root / "server.sigma", compiler_server_error=True)
+        await verify_compilation(
+            root / "retry-429.sigma", compiler_retry_scenario="rate_limit_then_success"
+        )
+        await verify_compilation(
+            root / "retry-invalid.sigma", compiler_retry_scenario="invalid_then_success"
+        )
+        await verify_compilation(
+            root / "retry-exhausted.sigma", compiler_retry_scenario="rate_limit_exhausted"
+        )
+        await verify_compilation(
+            root / "retry-unfunded.sigma", compiler_retry_scenario="budget_after_rate_limit"
+        )
+        await verify_compilation(
+            root / "missing-usage.sigma", compiler_retry_scenario="missing_usage"
+        )
         await verify_compilation(root / "paused.sigma", pause_during_compilation=True)
         await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
         await verify_compiler_preflight_auth_failure(root / "credential-unavailable.sigma")
@@ -841,7 +990,7 @@ async def main() -> None:
         await verify_explicitly_disabled_compiler_checkpoint(root / "explicit-disabled.sigma")
     print(
         "PASS: pre-fanout barrier, two-round reuse, frozen reload, "
-        "funding guard, HTTP 503 and interrupted compiler recovery"
+        "provider-free retries, exhaustion, funding guard, HTTP 503 and interrupted recovery"
     )
 
 
