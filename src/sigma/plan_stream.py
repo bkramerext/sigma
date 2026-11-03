@@ -361,19 +361,17 @@ async def completed(
             # the final blank SSE line. Accept only fully parsed terminal events,
             # processed through the same validation as normally framed events.
             trailing_data = "\n".join(
-                line[5:].lstrip(" ")
-                for line in buffer.split("\n")
-                if line.startswith("data:")
+                line[5:].lstrip(" ") for line in buffer.split("\n") if line.startswith("data:")
             )
             try:
                 trailing_event = json.loads(trailing_data)
             except (TypeError, ValueError):
                 trailing_event = None
-            if (
-                isinstance(trailing_event, dict)
-                and trailing_event.get("type")
-                in {"response.completed", "response.failed", "response.incomplete"}
-            ):
+            if isinstance(trailing_event, dict) and trailing_event.get("type") in {
+                "response.completed",
+                "response.failed",
+                "response.incomplete",
+            }:
                 buffer += "\n\n"
         else:
             byte_count += len(chunk)

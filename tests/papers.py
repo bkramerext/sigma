@@ -317,8 +317,7 @@ def test_unexpected_paper_exception_yields_sanitized_sse_error() -> None:
 def test_paper_terminal_sse_event_without_final_separator() -> None:
     """A complete EOF terminal is valid; a truncated final JSON is not."""
     created = (
-        b'data: {"type":"response.created","sequence_number":0,'
-        b'"response":{"id":"paper-test"}}\n\n'
+        b'data: {"type":"response.created","sequence_number":0,"response":{"id":"paper-test"}}\n\n'
     )
     delta = (
         b'data: {"type":"response.output_text.delta","sequence_number":1,'
@@ -3971,9 +3970,7 @@ def test_parallel_section_failure_drains_dispatched_siblings() -> None:
         number = input_value["section_number"]
         assert number in {1, 5}, "Saved siblings must not be regenerated"
         dispatched.append(number)
-        return papers.LongSectionDraft(
-            paragraphs=[f"Recovered section {number}."]
-        ), "fixture-model"
+        return papers.LongSectionDraft(paragraphs=[f"Recovered section {number}."]), "fixture-model"
 
     async def resume() -> None:
         with patch.object(papers, "_provider_structured", new=resume_provider):
