@@ -347,6 +347,24 @@ async def completed(
     refused = False
     done_seen = False
     last_event_type = "none"
+    saw_first_character = False
+    pending_cr = False
+
+    def normalize_sse_newlines(text: str) -> str:
+        """Normalize all three SSE line terminators across arbitrary TCP chunks."""
+        nonlocal saw_first_character, pending_cr
+        if not text:
+            return ""
+        # The SSE specification permits one UTF-8 BOM at stream start.
+        if not saw_first_character:
+            saw_first_character = True
+            text = text.removeprefix("\ufeff")
+        # A previous chunk's CR was already emitted as LF. Swallow its
+        # matching LF instead of creating a fictitious blank event boundary.
+        if pending_cr and text.startswith("\n"):
+            text = text[1:]
+        pending_cr = text.endswith("\r")
+        return text.replace("\r\n", "\n").replace("\r", "\n")
 
     async def stream_chunks_with_eof():
         async for chunk in response.aiter_bytes():
@@ -355,8 +373,7 @@ async def completed(
 
     async for chunk, at_eof in stream_chunks_with_eof():
         if at_eof:
-            buffer += decoder.decode(b"", final=True)
-            buffer = buffer.replace("\r\n", "\n")
+            buffer += normalize_sse_newlines(decoder.decode(b"", final=True))
             # A proxy can end a stream after complete terminal JSON but before
             # the final blank SSE line. Accept only fully parsed terminal events,
             # processed through the same validation as normally framed events.
@@ -377,8 +394,7 @@ async def completed(
             byte_count += len(chunk)
             if max_stream_bytes is not None and byte_count > max_stream_bytes:
                 raise ProjectError(overflow_message)
-            buffer += decoder.decode(chunk)
-            buffer = buffer.replace("\r\n", "\n")
+            buffer += normalize_sse_newlines(decoder.decode(chunk))
         while "\n\n" in buffer:
             block, buffer = buffer.split("\n\n", 1)
             event_count += 1

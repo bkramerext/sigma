@@ -314,6 +314,47 @@ def test_unexpected_paper_exception_yields_sanitized_sse_error() -> None:
     asyncio.run(check())
 
 
+def test_paper_sse_accepts_standard_line_endings_across_byte_chunks() -> None:
+    """CR, CRLF and LF SSE frames must all preserve a terminal completion."""
+    events = [
+        {"type": "response.created", "sequence_number": 0, "response": {"id": "paper-cr"}},
+        {"type": "response.output_text.delta", "sequence_number": 1, "delta": "café"},
+        {
+            "type": "response.completed",
+            "sequence_number": 2,
+            "response": {"id": "paper-cr", "status": "completed", "output": []},
+        },
+    ]
+
+    class BytewiseStream:
+        def __init__(self, content: bytes) -> None:
+            self.headers = {"content-type": "text/event-stream"}
+            self.content = content
+
+        async def aiter_bytes(self):
+            for value in self.content:
+                yield bytes((value,))
+
+    for line_break in ("\n", "\r\n", "\r"):
+        for last_separator in (True, False):
+            separator = line_break * 2
+            frames = ["data: " + json.dumps(event, ensure_ascii=False) for event in events]
+            stream_text = "\ufeff" + separator.join(frames)
+            if last_separator:
+                stream_text += separator
+            content = stream_text.encode("utf-8")
+            result = asyncio.run(
+                completed(
+                    cast(httpx.Response, BytewiseStream(content)),
+                    max_stream_bytes=None,
+                    max_event_chars=4_000_000,
+                    max_text_bytes=papers.MAX_RESPONSE_BYTES,
+                )
+            )
+            assert result["status"] == "completed"
+            assert result["output"][0]["content"][0]["text"] == "café"
+
+
 def test_paper_terminal_sse_event_without_final_separator() -> None:
     """A complete EOF terminal is valid; a truncated final JSON is not."""
     created = (
@@ -6717,6 +6758,7 @@ def main() -> None:
     test_structured_evidence_short_tail_does_not_crash()
     test_readable_paper_download_names_keep_stable_versions_and_server_headers()
     test_unexpected_paper_exception_yields_sanitized_sse_error()
+    test_paper_sse_accepts_standard_line_endings_across_byte_chunks()
     test_paper_terminal_sse_event_without_final_separator()
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_api_provider_failure_classification_is_safe_and_actionable()
