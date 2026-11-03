@@ -49,7 +49,10 @@ def equal(label: str, old: object, new: object) -> None:
         "\n".join(
             list(
                 difflib.unified_diff(
-                    left, right, fromfile=label + " baseline", tofile=label + " current",
+                    left,
+                    right,
+                    fromfile=label + " baseline",
+                    tofile=label + " current",
                     lineterm="",
                 )
             )[:160]
@@ -63,7 +66,9 @@ def assert_historical_schema(old: dict, new: dict) -> None:
         equal("provider schema header/" + key, old[key], new[key])
     earlier, current = old["schema"], new["schema"]
     equal("schema root type", earlier["type"], current["type"])
-    equal("schema root extra fields", earlier["additionalProperties"], current["additionalProperties"])
+    equal(
+        "schema root extra fields", earlier["additionalProperties"], current["additionalProperties"]
+    )
     assert set(earlier["properties"]) <= set(current["properties"])
     assert set(earlier["required"]) <= set(current["required"])
     for name, spec in earlier["properties"].items():
@@ -143,8 +148,16 @@ def compare_historical(original: dict, candidate: dict) -> None:
         old, new = saved["payload"], current["payload"]
         equal(
             f"provider request envelope {index}",
-            {key: value for key, value in old.items() if key not in {"input", "instructions", "text"}},
-            {key: value for key, value in new.items() if key not in {"input", "instructions", "text"}},
+            {
+                key: value
+                for key, value in old.items()
+                if key not in {"input", "instructions", "text"}
+            },
+            {
+                key: value
+                for key, value in new.items()
+                if key not in {"input", "instructions", "text"}
+            },
         )
         assert_historical_schema(old["text"]["format"], new["text"]["format"])
         for instructions in (old["instructions"], new["instructions"]):
@@ -163,13 +176,20 @@ def compare_historical(original: dict, candidate: dict) -> None:
         assert set(manifest) - set(previous) == NEW_MANIFEST
         assert not set(previous) - set(manifest)
         except_manifest = {
-            "policy_version", "assembled_context_bytes", "sources",
-            "omitted_obligations", "obligation_disposition_counts",
+            "policy_version",
+            "assembled_context_bytes",
+            "sources",
+            "omitted_obligations",
+            "obligation_disposition_counts",
         }
         equal(
             f"historic manifest durable provenance {index}",
             {key: value for key, value in previous.items() if key not in except_manifest},
-            {key: value for key, value in manifest.items() if key in previous and key not in except_manifest},
+            {
+                key: value
+                for key, value in manifest.items()
+                if key in previous and key not in except_manifest
+            },
         )
         assert previous["policy_version"] == "t37-v1"
         assert manifest["policy_version"] == "continuity-v2"
@@ -181,17 +201,33 @@ def compare_historical(original: dict, candidate: dict) -> None:
         assert right["incomplete_unresolved_obligation_count"] == 0
         equal(
             f"historic obligation omission counts/IDs {index}",
-            {key: value for key, value in previous["omitted_obligations"].items() if key != "reason"},
-            {key: value for key, value in manifest["omitted_obligations"].items() if key != "reason"},
+            {
+                key: value
+                for key, value in previous["omitted_obligations"].items()
+                if key != "reason"
+            },
+            {
+                key: value
+                for key, value in manifest["omitted_obligations"].items()
+                if key != "reason"
+            },
         )
         equal(
             f"historic context source referents {index}",
             [
-                {key: value for key, value in row.items() if key not in {"representation", "reason"}}
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"representation", "reason"}
+                }
                 for row in previous["sources"]
             ],
             [
-                {key: value for key, value in row.items() if key not in {"representation", "reason"}}
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"representation", "reason"}
+                }
                 for row in manifest["sources"]
             ],
         )
@@ -209,9 +245,7 @@ def compare_historical(original: dict, candidate: dict) -> None:
         equal(f"historic unwaived obligation text and status {index}", old_by_text, new_by_text)
         assert len(new_by_text) == len(new_ledger), "Modern continuity duplicated an open duty"
         assert set(left["outstanding_obligations"]) == set(right["outstanding_obligations"])
-        assert len(right["outstanding_obligations"]) == len(
-            set(right["outstanding_obligations"])
-        )
+        assert len(right["outstanding_obligations"]) == len(set(right["outstanding_obligations"]))
         assert set(right["outstanding_obligations"]) <= set(new_by_text)
         assert all(entry["status"] == "unresolved" for entry in new_ledger)
         for entry in new_ledger:
@@ -240,7 +274,8 @@ def main() -> None:
     assert modern["diagnostic_overlap"] is True
     equal(
         "pre-v2 full serialized provider inputs and research outcomes",
-        modern["semantic"], candidate["semantic"],
+        modern["semantic"],
+        candidate["semantic"],
     )
     compare_historical(original, candidate)
     for item in (v2, resumed):
@@ -252,7 +287,11 @@ def main() -> None:
             "enabled_strategies": 2,
             "resumed": item["scheduler_mode"] == "paired-v2-resume",
         }
-    equal("v2 resume reviewed artifacts", v2["semantic"]["artifacts"], resumed["semantic"]["artifacts"])
+    equal(
+        "v2 resume reviewed artifacts",
+        v2["semantic"]["artifacts"],
+        resumed["semantic"]["artifacts"],
+    )
     equal("v2 resume branch decisions", v2["semantic"]["branches"], resumed["semantic"]["branches"])
     equal("v2 resume outcome", v2["semantic"]["assessment"], resumed["semantic"]["assessment"])
     print("PASS: pre-v2 complete v1 parity and both v2 paired-turn/recovery scenarios.")

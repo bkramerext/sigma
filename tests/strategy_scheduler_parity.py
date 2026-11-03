@@ -28,7 +28,7 @@ import httpx
 import research_sessions as fixture
 
 from sigma import research_sessions
-from sigma.projects import create_strategy, set_strategy_enabled
+from sigma.projects import ProjectError, create_strategy, set_strategy_enabled
 
 UUID_RE = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
@@ -131,8 +131,7 @@ async def snapshot():
                 MODE == "paired-v2-resume"
                 and not pause_once
                 and any(
-                    len(row.get("artifacts", [])) >= 2
-                    for row in research_sessions._all(str(path))
+                    len(row.get("artifacts", [])) >= 2 for row in research_sessions._all(str(path))
                 )
             ):
                 pause_once = True
@@ -141,6 +140,7 @@ async def snapshot():
                 # losing committed evidence or consuming provider capacity.
                 await asyncio.Event().wait()
             return config
+
         first_investigator_active = False
         fast_skeptic_overlap = False
 
@@ -205,7 +205,9 @@ async def snapshot():
             patch.object(
                 research_sessions,
                 "configuration",
-                new=configuration_gate if MODE == "paired-v2-resume" else AsyncMock(return_value=config),
+                new=configuration_gate
+                if MODE == "paired-v2-resume"
+                else AsyncMock(return_value=config),
             ),
             patch.object(research_sessions, "execution_capabilities", return_value=[]),
             patch(
@@ -227,7 +229,7 @@ async def snapshot():
                         expected_limits=limits,
                         strategy_ids=[first.id, third.id],
                     )
-                except Exception as exc:
+                except ProjectError as exc:
                     assert "Disabled strategies" in str(exc), str(exc)
                 else:
                     raise AssertionError("Disabled strategy entered a version-2 session")
@@ -251,7 +253,9 @@ async def snapshot():
                     artifact["id"]
                     for artifact in research_sessions._read(str(path), started["id"])["artifacts"]
                 }
-                resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+                resumed = await research_sessions.control_session(
+                    str(path), started["id"], "resume"
+                )
                 assert resumed["status"] in {"queued", "running"}, resumed.get("message")
             final = await asyncio.wait_for(fixture.wait_for(path, started["id"]), timeout=20)
 
@@ -279,9 +283,10 @@ async def snapshot():
             for row in [*stored["steps"], *stored["artifacts"]]:
                 slot = row.get("strategy_cycle", row.get("cycle"))
                 assert 1 <= slot <= 4
-                assert (
-                    row["research_round"], row["paired_turn_in_round"]
-                ) == ((slot - 1) // 2 + 1, (slot - 1) % 2 + 1), row
+                assert (row["research_round"], row["paired_turn_in_round"]) == (
+                    (slot - 1) // 2 + 1,
+                    (slot - 1) % 2 + 1,
+                ), row
             assert all(
                 row.get("strategy_id") != third.id
                 for row in [*stored["steps"], *stored["artifacts"]]
@@ -297,7 +302,9 @@ async def snapshot():
                 for context in [payload["input"]]
             ), "Paired scheduler lost cross-strategy handoff"
             assert stored.get("termination_reason_code") in {
-                "round_limit_reached", "protocol_complete", "productive_conclusion"
+                "round_limit_reached",
+                "protocol_complete",
+                "productive_conclusion",
             }, stored.get("termination_reason_code")
         titles = {first.id: first.title, second.id: second.title}
         names = {
