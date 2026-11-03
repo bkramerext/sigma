@@ -152,12 +152,14 @@ def test_unsupported_assumptions_block():
 def test_typed_nonblocking_requires_accepted_dependency_steps():
     note = "Inspect peer reference independently of the conclusion."
     a = _artifact(notes=[note])
-    a["skeptic_output"]["obligation_impacts"] = [{
-        "obligation_text": note,
-        "impact": "nonblocking_followup",
-        "dependency_rationale": "The reviewed deduction does not use this peer reference as a premise.",
-        "basis_step_numbers": [1],
-    }]
+    a["skeptic_output"]["obligation_impacts"] = [
+        {
+            "obligation_text": note,
+            "impact": "nonblocking_followup",
+            "dependency_rationale": "The reviewed deduction does not use this peer reference as a premise.",
+            "basis_step_numbers": [1],
+        }
+    ]
     impact = objective_obligation_impact(
         note, skeptic=a["skeptic_output"], reviewed_steps=a["reasoning_steps"], mathematical=True
     )
@@ -182,12 +184,14 @@ def test_portfolio_order_independent_and_partial_sibling_does_not_veto():
 def test_explicit_cross_strategy_contradiction_blocks():
     a = _artifact("a", "alpha")
     b = _artifact("b", "beta")
-    a["skeptic_output"]["cross_strategy_relations"] = [{
-        "artifact_id": "b",
-        "strategy_id": "beta",
-        "relation": "contradicts",
-        "rationale": "The same objective and assumptions have incompatible results.",
-    }]
+    a["skeptic_output"]["cross_strategy_relations"] = [
+        {
+            "artifact_id": "b",
+            "strategy_id": "beta",
+            "relation": "contradicts",
+            "rationale": "The same objective and assumptions have incompatible results.",
+        }
+    ]
     for artifacts in ((a, b), (b, a)):
         outcome = research_sessions._outcome(_record(*artifacts))
         assert outcome["label"] == "Mixed · conflicting findings, unresolved"
@@ -204,13 +208,15 @@ def test_supported_negative_result_vs_failed_strategy():
     a = _artifact(achieved=False)
     a["coordinator_decision"] = "stop_decisive_counterexample"
     sk = a["skeptic_output"]
-    sk.update({
-        "stop_reason": "decisive_counterexample",
-        "objections": ["An explicit counterexample falsifies the exact hypothesis."],
-        "negative_target": "project_objective",
-        "negative_evidence_basis_artifact_ids": ["a"],
-        "negative_rationale": "The reviewed counterexample addresses the stated hypothesis and rules it out.",
-    })
+    sk.update(
+        {
+            "stop_reason": "decisive_counterexample",
+            "objections": ["An explicit counterexample falsifies the exact hypothesis."],
+            "negative_target": "project_objective",
+            "negative_evidence_basis_artifact_ids": ["a"],
+            "negative_rationale": "The reviewed counterexample addresses the stated hypothesis and rules it out.",
+        }
+    )
     assert research_sessions._outcome(_record(a))["label"] == (
         "Negative · supported negative finding (unverified)"
     )
@@ -276,9 +282,7 @@ def test_e2_typed_peer_followup_requires_cited_saved_peer_artifact():
     record = _record(complete, other)
     assert research_sessions._outcome(record)["assessment"] == "positive"
 
-    complete["skeptic_output"]["verification_followups"][0][
-        "basis_artifact_ids"
-    ] = ["unknown-peer"]
+    complete["skeptic_output"]["verification_followups"][0]["basis_artifact_ids"] = ["unknown-peer"]
     blocked = research_sessions._outcome(record)
     assert blocked["assessment"] == "mixed"
     assert "peer_followup_reference_invalid" in blocked["solution_review"]["blocking_reasons"]
@@ -296,12 +300,11 @@ def test_execution_failure_does_not_erase_existing_complete_candidate():
 def test_unlinked_model_contradiction_fails_conservatively():
     complete = _artifact("a", "alpha")
     disputed = _artifact("b", "beta", achieved=False)
-    disputed["skeptic_output"]["cross_strategy_relations"] = [
-        {"relation": "contradicts"}
-    ]
-    assert research_sessions._outcome(
-        _record(complete, disputed)
-    )["label"] == "Mixed · conflicting findings, unresolved"
+    disputed["skeptic_output"]["cross_strategy_relations"] = [{"relation": "contradicts"}]
+    assert (
+        research_sessions._outcome(_record(complete, disputed))["label"]
+        == "Mixed · conflicting findings, unresolved"
+    )
 
 
 def test_two_incomplete_strategies_do_not_combine_into_a_solution():

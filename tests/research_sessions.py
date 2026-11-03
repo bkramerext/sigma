@@ -12888,6 +12888,14 @@ def test_reference_compilation_is_bounded_and_source_attributed() -> None:
 
 
 def main():
+    # The project test driver invokes provider-free scientific Outcome
+    # regressions directly; this repository does not use pytest discovery.
+    import test_outcome_policy
+
+    for name, check in vars(test_outcome_policy).items():
+        if name.startswith("test_") and callable(check):
+            check()
+    print("PASS provider-free scientific Outcome policy regressions")
     test_reference_compilation_is_bounded_and_source_attributed()
     test_backend_build_is_pinned_at_backend_start()
     test_project_cost_denial_reports_affordable_first_call()
