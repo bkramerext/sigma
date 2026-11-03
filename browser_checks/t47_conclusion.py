@@ -757,9 +757,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
 
             # Compilation is session-wide: do not render fanout status or
             # concurrency counts until the compiler has completed/fallen back.
-            compilation_context = browser.new_context(
-                viewport={"width": 1440, "height": 844}
-            )
+            compilation_context = browser.new_context(viewport={"width": 1440, "height": 844})
             compilation_page = compilation_context.new_page()
             compilation_page_errors: list[str] = []
             compilation_page.on(
@@ -771,7 +769,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 response = route.fetch()
                 payload = response.json()
                 for index, state in enumerate(
-                    ("pending", "running", "completed", "skipped", "fallback", "not_needed"), start=12
+                    ("pending", "running", "completed", "skipped", "fallback", "not_needed"),
+                    start=12,
                 ):
                     variant = json.loads(json.dumps(session))
                     variant_id = stage_ids.setdefault(state, str(uuid4()))
@@ -862,9 +861,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 )
             # A stale action label cannot revive a completed compiler barrier.
             for state in ("completed", "skipped", "fallback", "not_needed"):
-                stage_row = compilation_page.locator(
-                    f'li[data-session-id="{stage_ids[state]}"]'
-                )
+                stage_row = compilation_page.locator(f'li[data-session-id="{stage_ids[state]}"]')
                 expect(stage_row.locator(".session-strategy-live-status li")).to_have_count(2)
                 expect(stage_row.locator(".session-strategy-live-status")).to_contain_text(
                     "S1/Investigator"
