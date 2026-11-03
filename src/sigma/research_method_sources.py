@@ -378,6 +378,43 @@ def select_method_sources(
     }
 
 
+def retrieval_readiness_errors(selection: Mapping[str, Any]) -> list[str]:
+    """Audit frozen method content before paid pilot dispatch.
+
+    No network access or source substitution: URLs and notes are not content.
+    """
+    rows = selection.get("sources")
+    if not isinstance(rows, list) or not rows:
+        return ["No research-method references are configured."]
+    errors: list[str] = []
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, Mapping):
+            errors.append(f"Reference {index}: invalid source record.")
+            continue
+        title = str(row.get("title") or row.get("url") or f"Reference {index}")[:100]
+        retrieval = row.get("retrieval")
+        if not isinstance(retrieval, Mapping):
+            errors.append(f"{title}: no frozen retrieval result.")
+            continue
+        if retrieval.get("status") != "retrieved":
+            reason = str(retrieval.get("reason") or "not retrieved")[:120]
+            errors.append(f"{title}: {reason}.")
+            continue
+        excerpt = retrieval.get("excerpt")
+        digest = retrieval.get("excerpt_sha256")
+        if (
+            not isinstance(excerpt, str)
+            or not excerpt.strip()
+            or not isinstance(digest, str)
+            or hashlib.sha256(excerpt.encode("utf-8")).hexdigest() != digest
+        ):
+            errors.append(f"{title}: missing or invalid excerpt SHA-256.")
+            continue
+        if not isinstance(retrieval.get("content_sha256"), str):
+            errors.append(f"{title}: missing source-content SHA-256.")
+    return errors
+
+
 def methodology_digest(selection: Mapping[str, Any]) -> str:
     payload = json.dumps(selection.get("sources", []), sort_keys=True, ensure_ascii=False).encode(
         "utf-8"
