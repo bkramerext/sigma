@@ -12620,9 +12620,10 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 if (
                     verified["guidance_sha256"] == compilation.get("guidance_sha256")
                     and compilation.get("source_sha256") == frozen["sha256"]
+                    and methodology_digest(frozen) == frozen["sha256"]
                 ):
                     return True
-            except (ProjectError, KeyError, TypeError, ValueError):
+            except (ProjectError, KeyError, TypeError, ValueError, AttributeError):
                 pass
             compilation["status"] = "fallback"
             compilation["reason"] = "Saved reference compilation failed integrity checks."
@@ -12645,6 +12646,24 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             compilation["status"] = "fallback"
             compilation["reason"] = (
                 "Unrecognized reference compilation state; frozen notes retained."
+            )
+            _event(record, "references.compilation.skipped", compilation["reason"])
+            _save(path, record)
+            return True
+        # A queued compilation must use exactly the persisted, frozen source
+        # snapshot. Recompute its digest rather than trusting two saved copies
+        # of a stale or corrupted checksum.
+        try:
+            frozen = record["research_method_sources"]
+            if (
+                compilation.get("source_sha256") != frozen.get("sha256")
+                or methodology_digest(frozen) != frozen.get("sha256")
+            ):
+                raise ProjectError("Frozen source digest does not match compilation provenance")
+        except (ProjectError, KeyError, TypeError, ValueError, AttributeError):
+            compilation["status"] = "fallback"
+            compilation["reason"] = (
+                "Saved reference source integrity failed; continuing without compiled guidance."
             )
             _event(record, "references.compilation.skipped", compilation["reason"])
             _save(path, record)

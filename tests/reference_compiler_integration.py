@@ -262,6 +262,25 @@ async def verify_compilation(
             assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
         assert calls == before_calls
 
+        # Both pending compilation and completed guide reuse must reject a
+        # source snapshot changed without updating its frozen provenance.
+        for state in ("pending", "completed"):
+            tampered = json.loads(json.dumps({**saved, "status": "queued"}))
+            tampered["reference_compilation"]["status"] = state
+            tampered["research_method_sources"]["sources"][0]["notes"] = (
+                "Modified after the reference snapshot was frozen."
+            )
+            with (
+                patch.object(research_sessions, "_read", return_value=tampered),
+                patch.object(research_sessions, "_save") as persisted_tampering,
+            ):
+                assert await research_sessions._ensure_reference_compilation(
+                    started["id"], str(path)
+                )
+            assert tampered["reference_compilation"]["status"] == "fallback"
+            persisted_tampering.assert_called_once()
+            assert calls == before_calls
+
         # An unknown in-flight compiler attempt cannot be retried on recovery.
         interrupted = {
             **saved,
