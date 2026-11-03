@@ -370,12 +370,15 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(pencil_button).to_be_visible()
         icon_style = (
             "element => { const s = getComputedStyle(element); "
-            "return [s.color, s.backgroundImage, s.borderTopColor, s.borderTopLeftRadius]; }"
+            "return [s.color, s.backgroundImage, s.borderTopColor, "
+            "s.borderTopLeftRadius, s.boxShadow, s.textShadow]; }"
         )
         assert markdown_button.evaluate(icon_style) == pencil_button.evaluate(icon_style)
         pencil_button.hover()
+        expect(pencil_button).to_have_css("color", "rgb(255, 242, 233)")
         pencil_hover = pencil_button.evaluate(icon_style)
         markdown_button.hover()
+        expect(markdown_button).to_have_css("color", "rgb(255, 242, 233)")
         assert markdown_button.evaluate(icon_style) == pencil_hover
         page.mouse.move(0, 0)
         project_google = page.get_by_role("link", name="Sign in with Google")
