@@ -5283,20 +5283,25 @@ async def start_session(
                 record["research_method_sources"]
             )
             source_count = len(record["research_method_sources"].get("sources", []))
-            # Keep legacy provider-fixture tests and staged rollouts explicit.
-            # Live sessions compile by default; disabling preserves the old
-            # request/session behavior without modifying frozen references.
+            # New session records always declare their compiler policy.
+            # The explicit disabled state isolates deterministic role fixtures;
+            # old saved sessions with no marker are not silently compatible.
             compilation_enabled = os.environ.get(
                 "SIGMA_REFERENCE_COMPILATION_ENABLED", "true"
             ).strip().lower() in {"1", "true", "yes", "on"}
-            if compilation_enabled:
-                record["reference_compilation"] = {
-                    "version": research_reference_compiler.VERSION,
-                    "status": "pending" if source_count else "not_needed",
-                    "source_sha256": record["research_method_sources"]["sha256"],
-                    "source_count": source_count,
-                    "created_at": _now(),
-                }
+            record["reference_compilation"] = {
+                "version": research_reference_compiler.VERSION,
+                "status": (
+                    "disabled"
+                    if not compilation_enabled
+                    else "pending"
+                    if source_count
+                    else "not_needed"
+                ),
+                "source_sha256": record["research_method_sources"]["sha256"],
+                "source_count": source_count,
+                "created_at": _now(),
+            }
             if (
                 compilation_enabled
                 and source_count
@@ -5422,6 +5427,12 @@ async def control_session(
     async with state_lock:
         with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
+            if not isinstance(record.get("reference_compilation"), dict):
+                raise ProjectError(
+                    "This saved session predates the reference compiler. "
+                    "Its findings remain viewable, but resuming it is unsupported. "
+                    "Start a new research session."
+                )
             if (
                 action == "resume"
                 and (
@@ -12597,8 +12608,8 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
 
     This is an additional metered call, not one of the Investigator/Skeptic
     protocol slots. Its own persisted state and write-ahead spend reservation
-    survive worker restarts. Missing source material and old sessions continue
-    without retroactively recompiling anything.
+    survive worker restarts. Pre-compiler sessions remain readable but must
+    start over rather than silently continue with legacy method prompts.
     """
     state_lock = _session_state_lock(session_id)
     async with state_lock:
@@ -12607,9 +12618,18 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             return False
         compilation = record.get("reference_compilation")
         if not isinstance(compilation, dict):
-            return True  # Legacy session: preserve exact accepted prompts.
+            record["status"] = "paused"
+            record["current_action"] = "Paused · incompatible research session"
+            record["message"] = (
+                "This session predates the required reference compiler checkpoint. "
+                "Its saved findings remain available, but its research cannot resume. "
+                "Start a new session."
+            )
+            _event(record, "references.compilation.incompatible", record["message"])
+            _save(path, record)
+            return False
         state = compilation.get("status")
-        if state in {"not_needed", "fallback", "skipped"}:
+        if state in {"not_needed", "fallback", "skipped", "disabled"}:
             return True
         if state == "completed":
             try:
