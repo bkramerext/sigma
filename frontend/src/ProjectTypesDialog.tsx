@@ -183,6 +183,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   // null marks a newly inserted row; existing edits retain their original
   // title and URL so an empty/escaped edit can be cancelled without data loss.
   const referenceEditOrigins = useRef<Map<string, Reference | null>>(new Map());
+  const [urlValidation, setUrlValidation] = useState<Record<string, DomainStatus>>({});
 
   function close() {
     if (dialog.current?.open) dialog.current.close();
@@ -401,11 +402,19 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       // Validate changed domains, even when Save is clicked before the title
       // lookup has finished. A definite NXDOMAIN is rejected; transient DNS
       // outages must not destroy a valid user-created reference.
-      const previousUrls = new Set((savedDrafts ?? []).flatMap(type =>
-        [...type.research_standards_references, ...type.publication_standards_references].map(ref => ref.url)));
-      const newUrls = new Set(drafts.flatMap(type =>
-        [...type.research_standards_references, ...type.publication_standards_references]
-          .map(ref => ref.url).filter(url => url.trim() && !previousUrls.has(url))));
+      const allUrls = (types: ProjectTypeRecord[], common: ReferenceFields | null,
+        builtins: Record<string, Partial<ReferenceFields>> | null): string[] => [
+        ...types.flatMap(type => [
+          ...type.research_standards_references, ...type.publication_standards_references,
+        ].map(ref => ref.url)),
+        ...(common ? [...common.research_standards_references, ...common.publication_standards_references].map(ref => ref.url) : []),
+        ...Object.values(builtins ?? {}).flatMap(fields => [
+          ...(fields.research_standards_references ?? []), ...(fields.publication_standards_references ?? []),
+        ].map(ref => ref.url)),
+      ];
+      const previousUrls = new Set(allUrls(savedDrafts ?? [], savedCommonCustomReferences, savedBuiltinCustomReferences));
+      const newUrls = new Set(allUrls(drafts, commonCustomReferences, builtinCustomReferences)
+        .filter(url => url.trim() && !previousUrls.has(url)));
       for (const url of newUrls) {
         const cached = titleCache.get(url)?.status ?? urlValidation[url];
         if (cached === 'invalid') throw new Error(`Website could not be found: ${editableReferenceUrl(url)}. Check the address.`);
@@ -453,13 +462,18 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       else if (builtins.some(item => item.id === owner)) editBuiltinReferences(owner, field, next.slice(immutableCount));
       else edit(owner, { [field]: next });
     };
-    const setAt = (index: number, url: string) => update(references.map((reference, i) =>
-      i === index ? { name: url, url } : reference));
+    const setAt = (index: number, typed: string) => update(references.map((reference, i) => {
+      const url = completeReferenceUrl(typed, reference.url);
+      return i === index ? { name: url, url } : reference;
+    }));
     if (readonly && references.length === 0) return null;
     return <table className="pt-reference-table"><tbody>
       {references.map((reference, index) => {
         const isBuiltIn = readonly || index < immutableCount;
-        const urlError = !isBuiltIn && referenceUrlError(reference.url);
+        const urlError = !isBuiltIn && (
+          referenceUrlError(reference.url)
+          || (urlValidation[reference.url] === 'invalid' ? 'Website could not be found. Check the address.' : null)
+        );
         const duplicate = !isBuiltIn && !!reference.url.trim() &&
           references.some((other, i) => i !== index && preferenceUrl(other.url) === preferenceUrl(reference.url));
         const errorId = `pt-reference-error-${owner}-${field}-${index}`;
@@ -515,7 +529,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         };
         return <tr key={rowKey}><td><div className="pt-reference-entry">
           <div className={referenceDisabled(owner, field, reference.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}>
-            {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
+            {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="text" inputMode="url"
+              placeholder="example.org/guide" value={editableReferenceUrl(reference.url)}
               aria-invalid={!!urlError || duplicate} aria-describedby={urlError || duplicate ? errorId : undefined}
               autoFocus={editingReferences.has(rowKey)}
               onChange={event => {
@@ -524,10 +539,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
               }}
               onKeyDown={event => {
                 if (event.key === 'Enter') { event.preventDefault(); finishEditing(); }
-                if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancelEditing(); }
+                if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finishEditing(); }
               }}
               onBlur={finishEditing}/>
-              : <ReferenceLink reference={reference} onResolved={isBuiltIn ? undefined : setResolved}/>}
+              : <ReferenceLink reference={reference} onResolved={isBuiltIn ? undefined : setResolved}
+                  onChecked={isBuiltIn ? undefined : status => setUrlValidation(previous =>
+                    previous[reference.url] === status ? previous : { ...previous, [reference.url]: status })}/>}
             {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             {duplicate && <span className="pt-validation-error" id={errorId} role="alert">Duplicate reference URL</span>}
           </div>
@@ -553,7 +570,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
             referenceEditOrigins.current.set(newKey, null);
             setEditingReferences(previous => new Set(previous).add(newKey));
             update([...references, { name: '', url: '' }]);
-          }}>New</button>
+          }} className="pt-new-action">New</button>
       </td></tr>}
     </tbody></table>;
   };
@@ -586,13 +603,13 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       const references = fields[field] ?? [];
       const urls = [...base[field], ...references].map(ref => preferenceUrl(ref.url)).filter(Boolean);
       return references.length > 100 || new Set(urls).size !== urls.length ||
-        references.some(reference => !!referenceUrlError(reference.url));
+        references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
     });
   });
   const invalidDraft = invalidBuiltinReferences || Object.entries(commonCustomReferences).some(([field, references]) => {
     const urls = [...(commonReferences?.[field as ReferenceField] ?? []), ...references].map(ref => preferenceUrl(ref.url));
     return references.length > 100 || new Set(urls.filter(Boolean)).size !== urls.filter(Boolean).length ||
-      references.some(reference => !!referenceUrlError(reference.url));
+      references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
   }) || drafts.some(item =>
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
