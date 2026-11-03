@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import research_sessions as fixture
 
 from sigma import research_sessions
+from sigma.openai_connection import AuthContext
 
 
 async def verify_compilation(
@@ -35,7 +36,17 @@ async def verify_compilation(
     pause_during_compilation: bool = False,
     skip_compiler: bool = False,
 ) -> None:
-    view, strategy, credential, config = await fixture.setup(path)
+    view, strategy, fixture_credential, config = await fixture.setup(path)
+    # Match the actual runtime type, not a permissive dict test double.
+    # AuthContext is a Mapping that intentionally does not expose its token
+    # to serialization or accept isinstance(..., dict).
+    credential = AuthContext(
+        token=fixture_credential["token"],
+        mode=fixture_credential["mode"],
+        status=fixture_credential["status"],
+        identity=fixture_credential["identity"],
+    )
+    assert not isinstance(credential, dict)
     limits = research_sessions.get_limits(str(path))
     rounds = 2 if multiple_strategies else 1
     limits.update(
@@ -504,6 +515,60 @@ def verify_compiled_methods_survive_context_compaction() -> None:
     assert "methodology_source_material" not in raw
 
 
+async def verify_compiler_rejects_real_account_change_before_dispatch(path: Path) -> None:
+    """A changed account really does fail closed, without any billable call."""
+    view, strategy, original, config = await fixture.setup(path)
+    original_context = AuthContext(
+        token=original["token"],
+        mode=original["mode"],
+        status=original["status"],
+        identity=original["identity"],
+    )
+    changed_context = AuthContext(
+        token=original["token"],
+        mode=original["mode"],
+        status=original["status"],
+        identity="other-account",
+    )
+    with (
+        patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "true"}),
+        patch.object(
+            research_sessions, "auth_context", new=AsyncMock(return_value=original_context)
+        ),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            original_context["identity"],
+            expected_limits=research_sessions.get_limits(str(path)),
+            strategy_ids=[strategy.id],
+        )
+        assert started["reference_compilation"]["status"] == "pending"
+        with (
+            patch.object(
+                research_sessions, "auth_context", new=AsyncMock(return_value=changed_context)
+            ),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=AssertionError("Account guard incorrectly dispatched compiler"),
+            ),
+        ):
+            assert not await research_sessions._ensure_reference_compilation(
+                started["id"], str(path)
+            )
+        paused = research_sessions._read(str(path), started["id"])
+        assert paused["status"] == "paused"
+        assert paused["reference_compilation"]["status"] == "pending"
+        assert "Account changed before reference compilation" in paused["message"]
+        assert "attempt_id" not in paused["reference_compilation"]
+        assert paused["calls_used"] == 0
+        assert paused["steps"] == []
+
+
 async def verify_compiler_preflight_auth_failure(path: Path) -> None:
     """Transient credential lookup failure must not abort the research session."""
     view, strategy, credential, config = await fixture.setup(path)
@@ -754,6 +819,9 @@ async def main() -> None:
         await verify_compilation(root / "paused.sigma", pause_during_compilation=True)
         await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
         await verify_compiler_preflight_auth_failure(root / "credential-unavailable.sigma")
+        await verify_compiler_rejects_real_account_change_before_dispatch(
+            root / "credential-changed.sigma"
+        )
         await verify_compiler_billing_settlement_failure(root / "settlement-unavailable.sigma")
         await verify_precompiler_session_resume_rejected(root / "precompiler.sigma")
         await verify_explicitly_disabled_compiler_checkpoint(root / "explicit-disabled.sigma")
