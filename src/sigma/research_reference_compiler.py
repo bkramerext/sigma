@@ -20,6 +20,40 @@ MAX_COMPILATION_SOURCES = 100
 MAX_GUIDANCE_CHARS = 1200
 MAX_INPUT_BYTES = 96_000
 OUTPUT_TOKEN_BOUND = 4096
+MAX_COMPILATION_ATTEMPTS = 3  # Initial call and at most two retries.
+MAX_RETRY_AFTER_SECONDS = 30.0
+
+
+def retry_plan(
+    *,
+    attempt_number: int,
+    http_status: int | None,
+    validation_failure: str | None,
+    usage_status: str,
+    billing_settled: bool,
+    retry_after_seconds: float | None = None,
+) -> tuple[str, float]:
+    """Permit another independently funded call only after a settled response.
+
+    A timeout, transport failure, 5xx, missing usage, or uncertain billing is
+    *not* evidence of a safely replayable request. Explicit HTTP 429
+    pre-inference rejections and metered 200 validation failures are retryable.
+    The caller separately rechecks stop, duration and all budgets before dispatch.
+    """
+    if not billing_settled or usage_status == "unknown":
+        return "uncertain_delivery_or_billing", 0.0
+    if attempt_number >= MAX_COMPILATION_ATTEMPTS:
+        return "retry_exhausted", 0.0
+    if http_status == 429 and usage_status == "rejected":
+        backoff = float(0.5 * 2 ** (attempt_number - 1))
+        if retry_after_seconds is not None:
+            if retry_after_seconds > MAX_RETRY_AFTER_SECONDS:
+                return "rate_limit_wait_exceeds_bound", 0.0
+            backoff = max(backoff, retry_after_seconds)
+        return "retry", min(MAX_RETRY_AFTER_SECONDS, backoff)
+    if http_status == 200 and validation_failure and usage_status == "known":
+        return "retry", float(0.5 * 2 ** (attempt_number - 1))
+    return "not_retryable", 0.0
 
 SCHEMA: dict[str, Any] = {
     "type": "object",
