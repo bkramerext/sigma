@@ -55,6 +55,7 @@ def retry_plan(
         return "retry", float(0.5 * 2 ** (attempt_number - 1))
     return "not_retryable", 0.0
 
+
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {

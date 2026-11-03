@@ -113,14 +113,15 @@ async def verify_compilation(
             await compilation_release.wait()
             compiler_number = calls.count("research_reference_compilation")
             if (
-                (compiler_retry_scenario in {"rate_limit_then_success", "budget_after_rate_limit"}
-                 and compiler_number == 1)
-                or compiler_retry_scenario == "rate_limit_exhausted"
-            ):
+                compiler_retry_scenario in {"rate_limit_then_success", "budget_after_rate_limit"}
+                and compiler_number == 1
+            ) or compiler_retry_scenario == "rate_limit_exhausted":
                 return httpx.Response(
                     429,
                     headers={"Retry-After": "0"},
-                    json={"error": {"code": "rate_limit_exceeded", "message": "Temporarily limited"}},
+                    json={
+                        "error": {"code": "rate_limit_exceeded", "message": "Temporarily limited"}
+                    },
                 )
             if compiler_rejection:
                 return httpx.Response(
@@ -142,7 +143,10 @@ async def verify_compilation(
                 "omitted_source_ids": [source["id"] for source in sources[1:]],
                 "rationale": "Only the first methodological reference is relevant.",
             }
-            if compiler_retry_scenario in {"invalid_then_success", "missing_usage"} and compiler_number == 1:
+            if (
+                compiler_retry_scenario in {"invalid_then_success", "missing_usage"}
+                and compiler_number == 1
+            ):
                 # A fully metered HTTP 200 may still fail local source
                 # partition validation; missing usage makes replay unsafe.
                 result["selected_source_ids"] = ["not-a-frozen-source"]
@@ -249,7 +253,7 @@ async def verify_compilation(
         "invalid_then_success": 2,
         "rate_limit_exhausted": 3,
         "budget_after_rate_limit": 1,
-    }.get(compiler_retry_scenario, 0 if skip_compiler else 1)
+    }.get(compiler_retry_scenario or "", 0 if skip_compiler else 1)
     assert calls.count("research_reference_compilation") == expected_compiler_count, calls
     expected_roles = rounds * len(strategy_ids)
     assert calls.count("research_investigator") == expected_roles, calls
@@ -263,7 +267,10 @@ async def verify_compilation(
     saved = research_sessions._read(str(path), started["id"])
     stage = saved["reference_compilation"]
     compiled_ok = not (
-        compiler_rejection or compiler_server_error or pause_during_compilation or skip_compiler
+        compiler_rejection
+        or compiler_server_error
+        or pause_during_compilation
+        or skip_compiler
         or compiler_retry_scenario in {"rate_limit_exhausted", "budget_after_rate_limit"}
     )
     expected_status = "skipped" if skip_compiler else "completed" if compiled_ok else "fallback"
@@ -278,7 +285,9 @@ async def verify_compilation(
         assert stage.get("provider_error_code") is None
     if compiler_retry_scenario:
         attempts = stage["attempts"]
-        expected_records = 2 if compiler_retry_scenario == "budget_after_rate_limit" else expected_compiler_count
+        expected_records = (
+            2 if compiler_retry_scenario == "budget_after_rate_limit" else expected_compiler_count
+        )
         assert len(attempts) == expected_records, attempts
         assert len({a["number"] for a in attempts}) == expected_records
         if compiler_retry_scenario in {"rate_limit_then_success", "invalid_then_success"}:
@@ -334,9 +343,7 @@ async def verify_compilation(
         )
     ledger = saved.get("hard_budget_ledger")
     if isinstance(ledger, dict):
-        assert len(ledger["calls"]) == expected_compiler_count + 2 * expected_roles, ledger[
-            "calls"
-        ]
+        assert len(ledger["calls"]) == expected_compiler_count + 2 * expected_roles, ledger["calls"]
         if compiler_server_error or pause_during_compilation:
             assert ledger["calls"][0]["status"] == "unknown_compiler_abandoned"
             assert ledger["blocked_reason"] is None
@@ -896,22 +903,38 @@ async def verify_explicitly_disabled_compiler_checkpoint(path: Path) -> None:
 def verify_bounded_retry_policy() -> None:
     plan = research_reference_compiler.retry_plan
     assert plan(
-        attempt_number=1, http_status=429, validation_failure=None,
-        usage_status="rejected", billing_settled=True, retry_after_seconds=4,
+        attempt_number=1,
+        http_status=429,
+        validation_failure=None,
+        usage_status="rejected",
+        billing_settled=True,
+        retry_after_seconds=4,
     ) == ("retry", 4.0)
     assert plan(
-        attempt_number=2, http_status=429, validation_failure=None,
-        usage_status="rejected", billing_settled=True, retry_after_seconds=50,
+        attempt_number=2,
+        http_status=429,
+        validation_failure=None,
+        usage_status="rejected",
+        billing_settled=True,
+        retry_after_seconds=50,
     ) == ("rate_limit_wait_exceeds_bound", 0.0)
     assert plan(
-        attempt_number=3, http_status=429, validation_failure=None,
-        usage_status="rejected", billing_settled=True,
+        attempt_number=3,
+        http_status=429,
+        validation_failure=None,
+        usage_status="rejected",
+        billing_settled=True,
     ) == ("retry_exhausted", 0.0)
-    assert plan(
-        attempt_number=1, http_status=200,
-        validation_failure="source selection mismatch",
-        usage_status="known", billing_settled=True,
-    )[0] == "retry"
+    assert (
+        plan(
+            attempt_number=1,
+            http_status=200,
+            validation_failure="source selection mismatch",
+            usage_status="known",
+            billing_settled=True,
+        )[0]
+        == "retry"
+    )
     for status, usage, settled in (
         (503, "unknown", False),
         (200, "unknown", True),
@@ -920,9 +943,11 @@ def verify_bounded_retry_policy() -> None:
         (408, "unknown", False),
     ):
         result, delay = plan(
-            attempt_number=1, http_status=status,
+            attempt_number=1,
+            http_status=status,
             validation_failure="invalid output" if status == 200 else None,
-            usage_status=usage, billing_settled=settled,
+            usage_status=usage,
+            billing_settled=settled,
         )
         assert result != "retry" and delay == 0.0, (status, usage, result)
 
@@ -939,11 +964,21 @@ async def main() -> None:
         await verify_compilation(root / "multi.sigma", multiple_strategies=True)
         await verify_compilation(root / "fallback.sigma", compiler_rejection=True)
         await verify_compilation(root / "server.sigma", compiler_server_error=True)
-        await verify_compilation(root / "retry-429.sigma", compiler_retry_scenario="rate_limit_then_success")
-        await verify_compilation(root / "retry-invalid.sigma", compiler_retry_scenario="invalid_then_success")
-        await verify_compilation(root / "retry-exhausted.sigma", compiler_retry_scenario="rate_limit_exhausted")
-        await verify_compilation(root / "retry-unfunded.sigma", compiler_retry_scenario="budget_after_rate_limit")
-        await verify_compilation(root / "missing-usage.sigma", compiler_retry_scenario="missing_usage")
+        await verify_compilation(
+            root / "retry-429.sigma", compiler_retry_scenario="rate_limit_then_success"
+        )
+        await verify_compilation(
+            root / "retry-invalid.sigma", compiler_retry_scenario="invalid_then_success"
+        )
+        await verify_compilation(
+            root / "retry-exhausted.sigma", compiler_retry_scenario="rate_limit_exhausted"
+        )
+        await verify_compilation(
+            root / "retry-unfunded.sigma", compiler_retry_scenario="budget_after_rate_limit"
+        )
+        await verify_compilation(
+            root / "missing-usage.sigma", compiler_retry_scenario="missing_usage"
+        )
         await verify_compilation(root / "paused.sigma", pause_during_compilation=True)
         await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
         await verify_compiler_preflight_auth_failure(root / "credential-unavailable.sigma")

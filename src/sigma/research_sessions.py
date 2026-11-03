@@ -3880,27 +3880,26 @@ def _refresh_token_accounting(record: dict[str, Any]) -> None:
             for attempt in history:
                 if not isinstance(attempt, dict):
                     steps.append({"status": "interrupted"})
-                elif (
-                    attempt.get("usage_status") == "known"
-                    and isinstance(attempt.get("token_usage"), dict)
+                elif attempt.get("usage_status") == "known" and isinstance(
+                    attempt.get("token_usage"), dict
                 ):
-                    steps.append(
-                        {"status": "incomplete", "token_usage": attempt["token_usage"]}
-                    )
+                    steps.append({"status": "incomplete", "token_usage": attempt["token_usage"]})
                 elif attempt.get("usage_status") == "unknown":
                     steps.append({"status": "interrupted"})
             if compiler.get("status") in {"running", "interrupted"} and not any(
-                isinstance(item, dict)
-                and item.get("usage_status") == "unknown"
-                for item in history
+                isinstance(item, dict) and item.get("usage_status") == "unknown" for item in history
             ):
                 steps.append({"status": "interrupted"})
         elif isinstance(compiler.get("token_usage"), dict):
             # Legacy single-attempt snapshots remain readable.
-            steps.append({
-                "status": "completed" if compiler.get("status") == "completed" else "incomplete",
-                "token_usage": compiler["token_usage"],
-            })
+            steps.append(
+                {
+                    "status": "completed"
+                    if compiler.get("status") == "completed"
+                    else "incomplete",
+                    "token_usage": compiler["token_usage"],
+                }
+            )
         elif compiler.get("status") in {"running", "interrupted"} or (
             compiler.get("usage_status") == "unknown"
         ):
@@ -13659,22 +13658,24 @@ def _record_unknown_compiler_attempt(stage: dict[str, Any]) -> None:
         number = len(attempts) + 1
     if any(isinstance(a, dict) and a.get("number") == number for a in attempts):
         return
-    attempts.append({
-        "number": number,
-        "started_at": stage.get("attempt_started_at") or stage.get("started_at"),
-        "finished_at": _now(),
-        "status": "unknown",
-        "failure_type": "interrupted_before_settlement",
-        "provider_http_status": stage.get("provider_http_status"),
-        "provider_error_code": stage.get("provider_error_code"),
-        "validation_failure": stage.get("validation_failure"),
-        "token_usage": stage.get("token_usage"),
-        "usage_status": "unknown",
-        "retry_decision": "uncertain_delivery_or_billing",
-        "retry_delay_seconds": None,
-        "reason": "Provider delivery or billing was not independently settled.",
-        "request_sha256": stage.get("request_sha256"),
-    })
+    attempts.append(
+        {
+            "number": number,
+            "started_at": stage.get("attempt_started_at") or stage.get("started_at"),
+            "finished_at": _now(),
+            "status": "unknown",
+            "failure_type": "interrupted_before_settlement",
+            "provider_http_status": stage.get("provider_http_status"),
+            "provider_error_code": stage.get("provider_error_code"),
+            "validation_failure": stage.get("validation_failure"),
+            "token_usage": stage.get("token_usage"),
+            "usage_status": "unknown",
+            "retry_decision": "uncertain_delivery_or_billing",
+            "retry_delay_seconds": None,
+            "reason": "Provider delivery or billing was not independently settled.",
+            "request_sha256": stage.get("request_sha256"),
+        }
+    )
 
 
 async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
@@ -13866,17 +13867,23 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 else "Research turns take priority over optional reference compilation."
             )
             if isinstance(compilation.get("attempts"), list) and compilation["attempts"]:
-                compilation["attempts"].append({
-                    "number": len(compilation["attempts"]) + 1,
-                    "started_at": _now(), "finished_at": _now(),
-                    "status": "not_dispatched", "failure_type": "preflight_budget_exhausted",
-                    "provider_http_status": None, "provider_error_code": None,
-                    "validation_failure": None, "token_usage": None,
-                    "usage_status": "not_dispatched",
-                    "retry_decision": "budget_exhausted",
-                    "retry_delay_seconds": None,
-                    "reason": compilation["reason"],
-                })
+                compilation["attempts"].append(
+                    {
+                        "number": len(compilation["attempts"]) + 1,
+                        "started_at": _now(),
+                        "finished_at": _now(),
+                        "status": "not_dispatched",
+                        "failure_type": "preflight_budget_exhausted",
+                        "provider_http_status": None,
+                        "provider_error_code": None,
+                        "validation_failure": None,
+                        "token_usage": None,
+                        "usage_status": "not_dispatched",
+                        "retry_decision": "budget_exhausted",
+                        "retry_delay_seconds": None,
+                        "reason": compilation["reason"],
+                    }
+                )
             _event(record, "references.compilation.skipped", compilation["reason"])
             _save(path, record)
             return True
@@ -13893,19 +13900,27 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             )
         ):
             compilation["status"] = "fallback" if compilation.get("attempts") else "skipped"
-            compilation["reason"] = "No safe cost reservation for compilation; frozen notes retained."
+            compilation["reason"] = (
+                "No safe cost reservation for compilation; frozen notes retained."
+            )
             if isinstance(compilation.get("attempts"), list) and compilation["attempts"]:
-                compilation["attempts"].append({
-                    "number": len(compilation["attempts"]) + 1,
-                    "started_at": _now(), "finished_at": _now(),
-                    "status": "not_dispatched", "failure_type": "cost_budget_exhausted",
-                    "provider_http_status": None, "provider_error_code": None,
-                    "validation_failure": None, "token_usage": None,
-                    "usage_status": "not_dispatched",
-                    "retry_decision": "budget_exhausted",
-                    "retry_delay_seconds": None,
-                    "reason": compilation["reason"],
-                })
+                compilation["attempts"].append(
+                    {
+                        "number": len(compilation["attempts"]) + 1,
+                        "started_at": _now(),
+                        "finished_at": _now(),
+                        "status": "not_dispatched",
+                        "failure_type": "cost_budget_exhausted",
+                        "provider_http_status": None,
+                        "provider_error_code": None,
+                        "validation_failure": None,
+                        "token_usage": None,
+                        "usage_status": "not_dispatched",
+                        "retry_decision": "budget_exhausted",
+                        "retry_delay_seconds": None,
+                        "reason": compilation["reason"],
+                    }
+                )
             _event(
                 record,
                 "references.compilation.skipped",
@@ -13916,7 +13931,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         previous_attempts = compilation.get("attempts", [])
         if not isinstance(previous_attempts, list):
             compilation["status"] = "fallback"
-            compilation["reason"] = "Saved compiler attempt diagnostics are invalid; frozen notes retained."
+            compilation["reason"] = (
+                "Saved compiler attempt diagnostics are invalid; frozen notes retained."
+            )
             _save(path, record)
             return True
         attempt_number = len(previous_attempts) + 1
@@ -13944,21 +13961,23 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     else "Compiling references would exceed the frozen research budget."
                 )
                 compilation["failure_type"] = "budget_exhausted"
-                compilation.setdefault("attempts", []).append({
-                    "number": attempt_number,
-                    "started_at": _now(),
-                    "finished_at": _now(),
-                    "status": "not_dispatched",
-                    "failure_type": "budget_exhausted",
-                    "validation_failure": None,
-                    "provider_http_status": None,
-                    "provider_error_code": None,
-                    "token_usage": None,
-                    "usage_status": "not_dispatched",
-                    "retry_decision": "budget_exhausted",
-                    "retry_delay_seconds": None,
-                    "reason": str(exc)[:320],
-                })
+                compilation.setdefault("attempts", []).append(
+                    {
+                        "number": attempt_number,
+                        "started_at": _now(),
+                        "finished_at": _now(),
+                        "status": "not_dispatched",
+                        "failure_type": "budget_exhausted",
+                        "validation_failure": None,
+                        "provider_http_status": None,
+                        "provider_error_code": None,
+                        "token_usage": None,
+                        "usage_status": "not_dispatched",
+                        "retry_decision": "budget_exhausted",
+                        "retry_delay_seconds": None,
+                        "reason": str(exc)[:320],
+                    }
+                )
                 _event(record, "references.compilation.skipped", compilation["reason"])
                 _save(path, record)
                 return True
@@ -13967,8 +13986,12 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         # must never create an untraceable funded provider attempt.
         hosted = cloud_research.billing_enabled()
         for key in (
-            "provider_http_status", "provider_error_code", "validation_failure",
-            "failure_type", "token_usage", "usage_status",
+            "provider_http_status",
+            "provider_error_code",
+            "validation_failure",
+            "failure_type",
+            "token_usage",
+            "usage_status",
         ):
             compilation.pop(key, None)
         compilation.update(
@@ -14030,22 +14053,24 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     + str(exc)[:240]
                 )
                 compilation["failure_type"] = "funding_rejected"
-                compilation.setdefault("attempts", []).append({
-                    "number": attempt_number,
-                    "started_at": compilation.get("attempt_started_at"),
-                    "finished_at": _now(),
-                    "status": "not_dispatched",
-                    "failure_type": "funding_rejected",
-                    "provider_http_status": None,
-                    "provider_error_code": None,
-                    "validation_failure": None,
-                    "token_usage": None,
-                    "usage_status": "not_dispatched",
-                    "retry_decision": "funding_rejected",
-                    "retry_delay_seconds": None,
-                    "reason": str(exc)[:320],
-                    "request_sha256": compilation.get("request_sha256"),
-                })
+                compilation.setdefault("attempts", []).append(
+                    {
+                        "number": attempt_number,
+                        "started_at": compilation.get("attempt_started_at"),
+                        "finished_at": _now(),
+                        "status": "not_dispatched",
+                        "failure_type": "funding_rejected",
+                        "provider_http_status": None,
+                        "provider_error_code": None,
+                        "validation_failure": None,
+                        "token_usage": None,
+                        "usage_status": "not_dispatched",
+                        "retry_decision": "funding_rejected",
+                        "retry_delay_seconds": None,
+                        "reason": str(exc)[:320],
+                        "request_sha256": compilation.get("request_sha256"),
+                    }
+                )
                 compilation["budget_reservation"] = None
                 compilation["token_reservation"] = 0
                 compilation["cost_reserve"] = 0.0
@@ -14113,8 +14138,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                             retry_after_seconds = max(
                                 0.0,
                                 (
-                                    parsedate_to_datetime(retry_after)
-                                    - datetime.now(UTC)
+                                    parsedate_to_datetime(retry_after) - datetime.now(UTC)
                                 ).total_seconds(),
                             )
                         except (ValueError, TypeError, OverflowError):
@@ -14148,7 +14172,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 )
             else:
                 raw = json.loads(wire)
-        provider_response_status = str(raw.get("status", ""))[:40] if isinstance(raw, dict) else None
+        provider_response_status = (
+            str(raw.get("status", ""))[:40] if isinstance(raw, dict) else None
+        )
         if not isinstance(raw, dict) or raw.get("status") != "completed":
             validation_failure = "response_not_completed"
             raise ProjectError("Reference compiler did not complete.")
@@ -14270,8 +14296,10 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 if isinstance(ledger, dict)
                 else None
             )
-            billing_settled = cloud_settled and not ledger_blocked and (
-                ledger_entry is None or ledger_entry.get("status") in {"settled", "rejected"}
+            billing_settled = (
+                cloud_settled
+                and not ledger_blocked
+                and (ledger_entry is None or ledger_entry.get("status") in {"settled", "rejected"})
             )
             usage_status = (
                 "rejected"
@@ -14292,7 +14320,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 and billing_settled
                 and (estimated is not None or not metering_required)
             )
-            if completed_ok:
+            if completed_ok and compiled is not None:
                 stage.update(compiled)
                 stage["status"] = "completed"
                 stage["reason"] = (
@@ -14364,9 +14392,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     "number": attempt_number,
                     "started_at": stage.get("attempt_started_at"),
                     "finished_at": _now(),
-                    "status": "completed"
-                    if completed_ok
-                    else "rejected" if rejected else "failed",
+                    "status": "completed" if completed_ok else "rejected" if rejected else "failed",
                     "failure_type": None if completed_ok else stage.get("failure_type"),
                     "provider_http_status": provider_http_status,
                     "provider_error_code": provider_error_code,
@@ -14389,12 +14415,14 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 else:
                     latest["status"] = "queued"
                     latest["current_action"] = (
-                        "Compiling research references" if stage["status"] == "pending"
+                        "Compiling research references"
+                        if stage["status"] == "pending"
                         else "References ready"
                     )
                     latest["message"] = (
-                        stage["reason"] if stage["status"] == "pending" else
-                        "Reference preparation finished. Research may proceed."
+                        stage["reason"]
+                        if stage["status"] == "pending"
+                        else "Reference preparation finished. Research may proceed."
                     )
             latest["updated_at"] = _now()
             _save(path, latest)
