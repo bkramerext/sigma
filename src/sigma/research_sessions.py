@@ -853,6 +853,25 @@ def _new_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _session_start_limits(
+    stored: dict[str, Any], expected: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Bind a new v2 browser start to its saved, versioned research limits.
+
+    Historical v1 callers remain explicit legacy callers; saved session records
+    are never rewritten. The UI uses the same projection for its confirmation.
+    """
+    paired = stored.get("scheduler_version") == 2 or (
+        isinstance(expected, dict) and expected.get("scheduler_version") == 2
+    )
+    limits = _validate_limits(_new_session_limits(stored) if paired else stored)
+    if isinstance(expected, dict) and expected.get("scheduler_version") == 2:
+        for field in ("scheduler_version", "research_rounds", "turns_per_round", "model_calls"):
+            if expected.get(field) != limits.get(field):
+                raise ProjectError("Research limits changed since confirmation; reopen session settings")
+    return limits
+
+
 def _paired_call_limit(limits: dict[str, Any], enabled_count: int) -> int:
     """Individual provider-call ceiling; disabled strategies are excluded."""
     return 2 * limits["research_rounds"] * limits["turns_per_round"] * enabled_count
@@ -5847,7 +5866,7 @@ async def start_session(
             raise ProjectError(str(exc)) from exc
     # Provider preflight may suspend on remote I/O. Never hold an exclusive
     # project flock across awaits: concurrent endpoints can block the event loop.
-    _validate_limits(get_limits(view.path))
+    _session_start_limits(get_limits(view.path), expected_limits)
     credential = await auth_context()
     if credential["identity"] != expected_binding:
         raise ProjectError(
@@ -5865,7 +5884,7 @@ async def start_session(
             locked_view, _locked_guard = _snapshot(view.path)
             if locked_view.project.id != expected_project_id:
                 raise ProjectError("Project identity changed during research preflight")
-            limits = _validate_limits(get_limits(view.path))
+            limits = _session_start_limits(get_limits(view.path), expected_limits)
             runtime_limits = _effective_limits(limits)
             records = _all(view.path)
             existing = next(
@@ -7303,6 +7322,13 @@ async def _call_provider(
             reviewed_obligations.add(obligation_id)
             supplied_sources = set(context.get("context_artifact_ids", []))
             supplied_sources.update(context.get("prior_session_artifact_ids", []))
+            supplied_sources.update(
+                item["artifact_id"]
+                for item in context.get("other_strategy_evidence", [])
+                if isinstance(item, dict)
+                and isinstance(item.get("artifact_id"), str)
+                and item.get("evidence_availability") != "pointer_only_original_not_supplied"
+            )
             supplied_steps = (
                 {context["investigator_step_id"]}
                 if isinstance(context.get("investigator_step_id"), str)
@@ -7312,8 +7338,12 @@ async def _call_provider(
                 not set(review["basis_artifact_ids"]) <= supplied_sources
                 or not set(review["basis_step_ids"]) <= supplied_steps
             ):
+                missing_artifacts = sorted(set(review["basis_artifact_ids"]) - supplied_sources)
+                missing_steps = sorted(set(review["basis_step_ids"]) - supplied_steps)
                 raise ProjectError(
-                    "Skeptic cited obligation evidence not selected into its context"
+                    "Skeptic obligation_reviews cited evidence not selected into its context: "
+                    f"obligation_id={obligation_id}; basis_artifact_ids={missing_artifacts[:5]}; "
+                    f"basis_step_ids={missing_steps[:5]}"
                 )
             if review["status"] in {"addressed", "superseded", "retracted"} and not (
                 review["basis_artifact_ids"] or review["basis_step_ids"]
