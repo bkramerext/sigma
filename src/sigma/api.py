@@ -198,9 +198,13 @@ def list_project_types_view(request: Request):
 @app.get("/api/reference-title")
 def reference_title_view(url: str):
     """Optional presentation metadata; never required for editing or saving."""
-    from sigma.reference_titles import resolve_title
+    from sigma.reference_titles import domain_status, resolve_title
 
-    return {"title": resolve_title(url)}
+    status = domain_status(url)
+    return {
+        "title": resolve_title(url) if status == "valid" else None,
+        "domain_status": status,
+    }
 
 
 @app.put("/api/project-types")
