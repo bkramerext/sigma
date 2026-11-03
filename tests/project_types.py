@@ -265,7 +265,10 @@ def main() -> None:
         with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(second)}):
             assert project_types.custom_types() == []
             assert project_types.common_research_references() == ()
-            assert project_types.reference_preferences() == project_types._default_reference_preferences()
+            assert (
+                project_types.reference_preferences()
+                == project_types._default_reference_preferences()
+            )
 
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
