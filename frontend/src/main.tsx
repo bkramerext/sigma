@@ -2360,16 +2360,16 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
       <p className="settings-hint ai-paper-model">Per project settings, AI model is <strong>{model || 'Loading…'}</strong> and thinking level is <strong>{effort || 'Loading…'}</strong>. TeX proofreading uses this model; PDF compilation does not use AI. Generation may consume provider allowance or incur charges.</p>
       <p className="settings-hint">Paper generation may take ten minutes or longer. Keep this dialog open to follow its progress.</p>
-      <div className="ai-paper-options">
-        <label className="ai-paper-details"><input type="checkbox" checked={includeDiagramsAndTables} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.diagrams:' + projectId, String(event.target.checked)), setIncludeDiagramsAndTables(event.target.checked))}/>Include diagrams and tables</label>
-        <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Include claim details</label>
-        <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include research issues and limitations</label>
-        <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Include research excerpts</label>
-      </div>
-      <details className="ai-paper-advanced">
-        <summary>Advanced options</summary>
-        <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)), setIncludeSigmaIssues(event.target.checked))}/>Include paper-generation diagnostics</label>
-      </details>
+      <fieldset className="ai-paper-includes">
+        <legend>Include</legend>
+        <div className="ai-paper-options">
+          <label className="ai-paper-details"><input type="checkbox" checked={includeDiagramsAndTables} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.diagrams:' + projectId, String(event.target.checked)), setIncludeDiagramsAndTables(event.target.checked))}/>Diagrams and tables</label>
+          <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Claim details</label>
+          <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Research issues and limitations</label>
+          <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Research excerpts</label>
+          <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)), setIncludeSigmaIssues(event.target.checked))}/>Paper-generation diagnostics</label>
+        </div>
+      </fieldset>
       {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot
           ? 'The last writing attempt did not save a draft. Start over to generate again.'
