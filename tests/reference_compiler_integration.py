@@ -159,7 +159,11 @@ async def verify_compilation(
     if not compiler_rejection:
         assert saved["outcome"]["source_material"]["compilation"]["guidance"] == stage["guidance"]
         assert (
-            sum(1 for event in saved["events"] if event["kind"] == "references.compilation.completed")
+            sum(
+                1
+                for event in saved["events"]
+                if event["kind"] == "references.compilation.completed"
+            )
             == 1
         )
     ledger = saved.get("hard_budget_ledger")

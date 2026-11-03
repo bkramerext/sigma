@@ -231,6 +231,11 @@ function parallelSessionActivity(session: ResearchSession): string | null {
 }
 
 function strategyLiveStatusLines(session: ResearchSession): { id: string; label: string; detail: string }[] {
+  // Compilation is session-wide and precedes strategy fanout. Do not
+  // misleadingly display concurrent strategy statuses before this barrier.
+  if (['running', 'queued'].includes(session.status) && /compiling research references/i.test(session.current_action)) {
+    return [{ id: 'reference-compilation', label: 'Compiling references', detail: 'Preparing shared guidance for all strategies…' }];
+  }
   if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
   const active = new Map(
     session.steps.filter(step => step.status === 'running' && step.strategy_id)
@@ -1690,7 +1695,6 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {!['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {item.status === 'running' && /compiling research references/i.test(item.current_action) && <small className="session-compilation-status" role="status">Compiling references…</small>}
                 {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session #{item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
                 {(['ended', 'completed', 'failed'].includes(item.status)) && <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>}
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</small>
