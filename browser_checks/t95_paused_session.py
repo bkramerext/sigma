@@ -335,14 +335,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             row.locator(".session-row-disclosure").click()
             expect(row.locator(".stopped-session-guidance")).to_be_visible()
             expect(row.locator(".stopped-session-guidance .session-notice-title")).to_have_text(
-                "Research interrupted"
+                "Stopped"
             )
             expect(
                 row.get_by_role("complementary", name="Session status and next steps")
             ).to_be_visible()
-            expect(
-                row.locator(".research-pause-guidance .session-notice-title")
-            ).to_have_text("Session stopped")
+            expect(row.locator(".research-pause-guidance .session-notice-title")).to_have_text(
+                "Stopped"
+            )
             # Title and Dismiss share the same header line, rather than
             # reserving an empty action row above the explanation.
             for width in (1440, 390, 320):

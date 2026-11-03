@@ -86,9 +86,12 @@ with sync_playwright() as playwright:
                 summary = references.locator(":scope > summary")
                 expect(summary).to_have_text("Research References")
                 expect(summary.locator(".disclosure-chevron")).to_be_visible()
-                assert summary.locator(".disclosure-chevron").evaluate(
-                    "e => getComputedStyle(e).transform"
-                ) == "none"
+                assert (
+                    summary.locator(".disclosure-chevron").evaluate(
+                        "e => getComputedStyle(e).transform"
+                    )
+                    == "none"
+                )
                 summary.click()
                 expect(references).to_have_attribute("open", "")
                 summary.click()

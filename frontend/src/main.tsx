@@ -303,10 +303,7 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
   const guidance = stoppedSessionGuidance(session);
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
-  const title = /cost or call budget limit/i.test(guidance.cause) ? 'Insufficient research funds'
-    : /context limit/i.test(guidance.cause) ? 'Research context limit'
-      : /elapsed-time limit/i.test(guidance.cause) ? 'Research time limit reached'
-        : /interrupted/i.test(guidance.cause) ? 'Research interrupted' : 'Session stopped';
+  const title = 'Stopped';
   return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
     <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
     {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
@@ -824,9 +821,9 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     : '';
   const statusHeading = budgetDenied
     ? session.calls_used === 0 ? 'Insufficient research funds' : 'Research funding limit reached'
-    : session.status === 'paused' ? 'Session paused'
-      : session.status === 'stopped' ? 'Session stopped'
-        : session.status === 'failed' ? 'Session failed' : 'Session ended';
+    : session.status === 'paused' ? 'Paused'
+      : session.status === 'stopped' ? 'Stopped'
+        : session.status === 'failed' ? 'Error' : 'Ended';
   const statusNextStep = session.next_step_guidance
     || (session.termination_reason_code === 'research_completed_early' ? 'Review the saved findings and rationale; the configured turn count was an upper limit, not a target.'
       : budgetDenied ? 'Review the available research allowance before starting another session.'
@@ -3198,7 +3195,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
-    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
+    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
     </div>
   </header>;
 }
@@ -4224,7 +4221,7 @@ function Home({ initialPath, onOpen }: {
         <div className="home-left-actions">{(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="home-about-button" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}>Project Types</button>}</div>
         <div className="home-right-actions"><div className="home-auth-pills"><MockAuthSelector/>
           <div className="home-account-grid">
-            <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>
+            <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
             <GoogleIdentityPill inviteInHeader/>
             {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
             {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
