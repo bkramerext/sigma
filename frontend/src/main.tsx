@@ -4120,7 +4120,6 @@ function Home({ initialPath, onOpen }: {
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
-  const [projectTypesFocusTypeId, setProjectTypesFocusTypeId] = useState<string | null>(null);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
   useEffect(() => {
     const openTypes = () => setProjectTypesOpen(true);
@@ -4237,7 +4236,7 @@ function Home({ initialPath, onOpen }: {
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <ProjectTypesDialog initialOpenTypeId={projectTypesFocusTypeId} onClose={() => { setProjectTypesOpen(false); setProjectTypesFocusTypeId(null); }} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
+      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     </div>
   </div>;
 }
@@ -4609,6 +4608,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [qaOpen, setQaOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
+  const [projectTypesFocusTypeId, setProjectTypesFocusTypeId] = useState<string | null>(null);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
   useEffect(() => {
     const openTypes = () => setProjectTypesOpen(true);
@@ -5018,7 +5018,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onAdjustReferences={() => { setProjectTypesFocusTypeId(view.project.investigation_type); setProjectEditing(false); exitMode('project-settings'); setProjectTypesOpen(true); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
+      {projectTypesOpen && <ProjectTypesDialog initialOpenTypeId={projectTypesFocusTypeId} onClose={() => { setProjectTypesOpen(false); setProjectTypesFocusTypeId(null); if (projectTypesFocusTypeId) requestAnimationFrame(() => editProjectButton.current?.focus()); }} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     {paperOpen && (
       <AIPaperDialog path={view.path} projectId={project.id} guest={guest} onCancel={() => {
         window.localStorage.removeItem(paperRecoveryKey(project.id));
