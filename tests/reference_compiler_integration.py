@@ -669,7 +669,6 @@ async def verify_compiler_billing_settlement_failure(path: Path) -> None:
             assert hard["blocked_reason"]
 
 
-
 async def verify_precompiler_session_resume_rejected(path: Path) -> None:
     """Pre-compiler sessions remain readable but cannot run legacy prompts."""
     from sigma.projects import ProjectError
@@ -739,6 +738,7 @@ async def verify_explicitly_disabled_compiler_checkpoint(path: Path) -> None:
         )
         assert started["reference_compilation"]["status"] == "disabled"
         assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
+
 
 async def main() -> None:
     verify_abandoned_compiler_preserves_future_review_recovery()
