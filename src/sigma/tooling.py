@@ -193,6 +193,7 @@ def run_tooling(command: str) -> int:
             ["npm", "--prefix", "frontend", "run", "typecheck"],
             ["npm", "--prefix", "frontend", "run", "build"],
             [*python, "python", "tests/test_provider_schema_contract.py"],
+            [*python, "python", "tests/reference_compiler_integration.py"],
         ]
     # CI has a separate fast Ruff job; preserve lint/format for local ./sigma test.
     if command == "test" and os.environ.get("SIGMA_CI_SEPARATE_RUFF") == "1":
