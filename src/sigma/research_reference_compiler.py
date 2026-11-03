@@ -79,7 +79,7 @@ def compile_input(record: Mapping[str, Any]) -> str:
         "retrieved_methodology_excerpts": [
             {
                 "id": str(row.get("id", "")),
-                "excerpt": retrieval["excerpt"][:3200],
+                "excerpt": retrieval["excerpt"],
                 "excerpt_sha256": retrieval["excerpt_sha256"],
                 "content_sha256": retrieval.get("content_sha256"),
             }
