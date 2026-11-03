@@ -145,6 +145,7 @@ def _fetch_title(url: str) -> str | None:
         url = target
     return None
 
+
 def domain_status(url: str) -> str:
     """Verify an HTTPS/HTTP reference host without fetching arbitrary URLs.
 
@@ -164,16 +165,13 @@ def domain_status(url: str) -> str:
         ):
             return "invalid"
         host = parts.hostname.encode("idna").decode("ascii").lower()
-        if (
-            "." not in host
-            or any(
-                not label
-                or len(label) > 63
-                or label.startswith("-")
-                or label.endswith("-")
-                or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in label)
-                for label in host.split(".")
-            )
+        if "." not in host or any(
+            not label
+            or len(label) > 63
+            or label.startswith("-")
+            or label.endswith("-")
+            or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in label)
+            for label in host.split(".")
         ):
             return "invalid"
         try:
