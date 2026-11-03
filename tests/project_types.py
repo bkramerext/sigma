@@ -176,7 +176,9 @@ def main() -> None:
                 },
             )
             assert restored.status_code == 200, restored.text
-            assert len(project_types.get_type("mathematical").research_standards_references) == 1
+            restored_type = project_types.get_type("mathematical")
+            assert restored_type is not None
+            assert len(restored_type.research_standards_references) == 1
 
     from sigma.reference_titles import _TitleParser, resolve_title
 
