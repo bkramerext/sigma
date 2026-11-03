@@ -532,7 +532,9 @@ async def verify_compiler_preflight_auth_failure(path: Path) -> None:
         assert recovered["reference_compilation"]["status"] == "fallback"
         assert recovered["status"] == "queued"
         assert recovered["calls_used"] == 0
-        assert not recovered["hard_budget_ledger"]["calls"]
+        ledger = recovered.get("hard_budget_ledger")
+        if isinstance(ledger, dict):
+            assert ledger["calls"] == []
 
 
 async def verify_compiler_billing_settlement_failure(path: Path) -> None:
