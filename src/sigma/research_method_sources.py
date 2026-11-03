@@ -175,6 +175,7 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
         builtin_types,
         common_research_references,
         custom_types,
+        get_type,
     )
 
     definitions = {t.id: t for t in [*builtin_types(), *custom_types()]}
@@ -189,6 +190,14 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
         chain.append(item)
         cursor = item.based_on
     chain.reverse()
+    # A per-type switch may disable an inherited reference. The effective
+    # type controls the complete set; provenance below still labels ancestry.
+    effective = get_type(project_type_id)
+    enabled_urls = (
+        {ref["url"] for ref in effective.research_standards_references}
+        if effective is not None
+        else None
+    )
 
     seen: set[str] = set()
     sources: list[dict[str, str]] = []
@@ -242,6 +251,8 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
     for index, item in enumerate(chain):
         tier = "discipline" if index == 0 else "branch"
         for reference in item.research_standards_references:
+            if enabled_urls is not None and reference["url"] not in enabled_urls:
+                continue
             add(reference, tier, item.id, item.name)
     return sources, (chain[-1].id if len(chain) > 1 else None)
 
