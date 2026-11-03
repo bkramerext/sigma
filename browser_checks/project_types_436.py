@@ -91,7 +91,7 @@ with sync_playwright() as playwright:
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
-    assert dialog.get_by_role("heading", name="Project Types").evaluate(
+    assert dialog.get_by_role("heading", name="Project Types", exact=True).evaluate(
         "e => getComputedStyle(e).color"
     ) == "rgb(244, 204, 105)"
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
@@ -263,7 +263,9 @@ with sync_playwright() as playwright:
 
     page.route("**/api/reference-title?*google.com*", google_title)
     url_input.fill("google.com")
-    url_input.press("Enter")
+    # Clicking outside the input must commit the edit and resolve the title.
+    parent.get_by_text("Publication standards references", exact=True).click()
+    expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
     expect(first_entry.locator(".pt-reference-link a")).to_have_attribute(
         "href", "https://google.com"
     )
@@ -271,6 +273,12 @@ with sync_playwright() as playwright:
     first_entry.get_by_role("button", name="Edit").click()
     url_input = parent.get_by_label("Research reference URL 1")
     expect(url_input).to_have_value("google.com")
+    # Escape is also a valid commit action and must restore the display title.
+    url_input.press("Escape")
+    expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
+    expect(first_entry.locator(".pt-reference-link a")).to_have_text("Google")
+    first_entry.get_by_role("button", name="Edit").click()
+    url_input = parent.get_by_label("Research reference URL 1")
     page.unroute("**/api/reference-title?*google.com*", google_title)
 
     url_input.fill("example.org/research-standard")
