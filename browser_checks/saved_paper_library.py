@@ -62,6 +62,13 @@ with sync_playwright() as playwright:
     expect(dialog.locator(".ai-paper-status")).to_be_visible()
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
+    balloon = card.get_by_role("button", name="Explain it to me like I'm 5")
+    expect(balloon).to_be_visible()
+    button_size = balloon.bounding_box()
+    assert button_size and button_size["width"] == 28 and button_size["height"] == 28
+    balloon.hover()
+    expect(balloon).to_have_css("color", "rgb(255, 242, 233)")
+    assert balloon.evaluate("e => getComputedStyle(e).backgroundImage") != "none"
     expect(dialog.locator(".ai-paper-status")).to_contain_text("Paper saved in Saved versions.")
     tex_download = card.get_by_role("link", name="Download TeX file")
     expect(tex_download).to_be_visible()

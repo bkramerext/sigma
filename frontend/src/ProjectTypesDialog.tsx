@@ -165,6 +165,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
   const [drafts, setDrafts] = useState<ProjectTypeRecord[]>([]);
   const [commonReferences, setCommonReferences] = useState<ReferenceFields | null>(null);
+  const [commonCustomReferences, setCommonCustomReferences] = useState<ReferenceFields>({
+    research_standards_references: [], publication_standards_references: [],
+  });
+  const [savedCommonCustomReferences, setSavedCommonCustomReferences] = useState<ReferenceFields | null>(null);
+  const [builtinCustomReferences, setBuiltinCustomReferences] = useState<Record<string, Partial<ReferenceFields>>>({});
+  const [savedBuiltinCustomReferences, setSavedBuiltinCustomReferences] = useState<Record<string, Partial<ReferenceFields>> | null>(null);
   const [referencePreferences, setReferencePreferences] = useState<ReferencePreferences>({});
   const [savedReferencePreferences, setSavedReferencePreferences] = useState<ReferencePreferences | null>(null);
   const [placeholderIcon, setPlaceholderIcon] = useState<ProjectTypeRecord['icon'] | null>(null);
@@ -174,6 +180,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(initialOpenTypeId);
   const [editingReferences, setEditingReferences] = useState<Set<string>>(() => new Set());
+  // null marks a newly inserted row; existing edits retain their original
+  // title and URL so an empty/escaped edit can be cancelled without data loss.
+  const referenceEditOrigins = useRef<Map<string, Reference | null>>(new Map());
   const [urlValidation, setUrlValidation] = useState<Record<string, DomainStatus>>({});
 
   function close() {
@@ -195,9 +204,19 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       icons: { placeholder: ProjectTypeRecord['icon'] };
       revision: string;
       common_references: ReferenceFields;
+      common_custom_references?: ReferenceFields;
+      builtin_custom_references?: Record<string, Partial<ReferenceFields>>;
       reference_preferences: ReferencePreferences;
     };
     setCommonReferences(data.common_references);
+    const commonCustom = data.common_custom_references ?? {
+      research_standards_references: [], publication_standards_references: [],
+    };
+    setCommonCustomReferences(commonCustom);
+    setSavedCommonCustomReferences(structuredClone(commonCustom));
+    const builtinsCustom = data.builtin_custom_references ?? {};
+    setBuiltinCustomReferences(builtinsCustom);
+    setSavedBuiltinCustomReferences(structuredClone(builtinsCustom));
     setReferencePreferences(data.reference_preferences ?? {});
     setSavedReferencePreferences(structuredClone(data.reference_preferences ?? {}));
     setBuiltins(data.project_types.filter(item => !item.user_defined));
@@ -237,6 +256,49 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         return next;
       });
     }
+  }
+  function editCommonReferences(field: ReferenceField, references: Reference[]) {
+    setError('');
+    setCommonCustomReferences(previous => ({ ...previous, [field]: references }));
+    const allowed = new Set([
+      ...(commonReferences?.[field] ?? []).map(ref => preferenceUrl(ref.url)),
+      ...references.map(ref => preferenceUrl(ref.url)),
+    ]);
+    setReferencePreferences(previous => {
+      const current = previous.common?.[field] ?? [];
+      const kept = current.filter(url => allowed.has(url));
+      if (kept.length === current.length) return previous;
+      const fields: Partial<Record<ReferenceField, string[]>> = { ...previous.common, [field]: kept };
+      if (!kept.length) delete fields[field];
+      const next: ReferencePreferences = { ...previous, common: fields };
+      if (!Object.keys(fields).length) delete next.common;
+      return next;
+    });
+  }
+  function editBuiltinReferences(owner: string, field: ReferenceField, references: Reference[]) {
+    setError('');
+    setBuiltinCustomReferences(previous => {
+      const ownerFields = { ...previous[owner], [field]: references };
+      if (!references.length) delete ownerFields[field];
+      const next = { ...previous };
+      if (Object.keys(ownerFields).length) next[owner] = ownerFields;
+      else delete next[owner];
+      return next;
+    });
+    const base = builtins.find(item => item.id === owner);
+    const allowed = new Set([
+      ...(base?.[field] ?? []).map(ref => preferenceUrl(ref.url)),
+      ...references.map(ref => preferenceUrl(ref.url)),
+    ]);
+    setReferencePreferences(previous => {
+      const kept = (previous[owner]?.[field] ?? []).filter(url => allowed.has(url));
+      if (kept.length === (previous[owner]?.[field] ?? []).length) return previous;
+      const fields: Partial<Record<ReferenceField, string[]>> = { ...previous[owner], [field]: kept };
+      if (!kept.length) delete fields[field];
+      const next: ReferencePreferences = { ...previous, [owner]: fields };
+      if (!Object.keys(fields).length) delete next[owner];
+      return next;
+    });
   }
   function referenceDisabled(owner: string, field: ReferenceField, url: string): boolean {
     return referencePreferences[owner]?.[field]?.includes(preferenceUrl(url)) ?? false;
@@ -340,11 +402,19 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       // Validate changed domains, even when Save is clicked before the title
       // lookup has finished. A definite NXDOMAIN is rejected; transient DNS
       // outages must not destroy a valid user-created reference.
-      const previousUrls = new Set((savedDrafts ?? []).flatMap(type =>
-        [...type.research_standards_references, ...type.publication_standards_references].map(ref => ref.url)));
-      const newUrls = new Set(drafts.flatMap(type =>
-        [...type.research_standards_references, ...type.publication_standards_references]
-          .map(ref => ref.url).filter(url => url.trim() && !previousUrls.has(url))));
+      const allUrls = (types: ProjectTypeRecord[], common: ReferenceFields | null,
+        builtins: Record<string, Partial<ReferenceFields>> | null): string[] => [
+        ...types.flatMap(type => [
+          ...type.research_standards_references, ...type.publication_standards_references,
+        ].map(ref => ref.url)),
+        ...(common ? [...common.research_standards_references, ...common.publication_standards_references].map(ref => ref.url) : []),
+        ...Object.values(builtins ?? {}).flatMap(fields => [
+          ...(fields.research_standards_references ?? []), ...(fields.publication_standards_references ?? []),
+        ].map(ref => ref.url)),
+      ];
+      const previousUrls = new Set(allUrls(savedDrafts ?? [], savedCommonCustomReferences, savedBuiltinCustomReferences));
+      const newUrls = new Set(allUrls(drafts, commonCustomReferences, builtinCustomReferences)
+        .filter(url => url.trim() && !previousUrls.has(url)));
       for (const url of newUrls) {
         const cached = titleCache.get(url)?.status ?? urlValidation[url];
         if (cached === 'invalid') throw new Error(`Website could not be found: ${editableReferenceUrl(url)}. Check the address.`);
@@ -375,7 +445,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         confirmedRemovals[id] = usage.project_count;
         if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return;
       }
-      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
+      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, common_custom_references: commonCustomReferences, builtin_custom_references: builtinCustomReferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved. Reload and review any changed types or project usage.');
       await load();
@@ -385,72 +455,123 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
-  const listEditor = (item: ProjectTypeRecord, field: ReferenceField, readonly: boolean) => {
-    const references = item[field];
+  const listEditor = (owner: string, field: ReferenceField, references: Reference[], readonly: boolean, immutableCount = 0) => {
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
-    const setAt = (index: number, typed: string) => edit(item.id, { [field]: references.map((reference, i) =>
-      i === index ? { name: completeReferenceUrl(typed, reference.url), url: completeReferenceUrl(typed, reference.url) } : reference) });
+    const update = (next: Reference[]) => {
+      if (owner === 'common') editCommonReferences(field, next.slice(immutableCount));
+      else if (builtins.some(item => item.id === owner)) editBuiltinReferences(owner, field, next.slice(immutableCount));
+      else edit(owner, { [field]: next });
+    };
+    const setAt = (index: number, typed: string) => update(references.map((reference, i) => {
+      const url = completeReferenceUrl(typed, reference.url);
+      return i === index ? { name: url, url } : reference;
+    }));
     if (readonly && references.length === 0) return null;
     return <table className="pt-reference-table"><tbody>
       {references.map((reference, index) => {
-        const urlError = !readonly && (
-          referenceUrlError(reference.url) || (
-            urlValidation[reference.url] === 'invalid' ? 'Website could not be found. Check the address.' : null
-          )
+        const isBuiltIn = readonly || index < immutableCount;
+        const urlError = !isBuiltIn && (
+          referenceUrlError(reference.url)
+          || (urlValidation[reference.url] === 'invalid' ? 'Website could not be found. Check the address.' : null)
         );
-        const errorId = `pt-reference-error-${item.id}-${field}-${index}`;
-        const setResolved = (name: string) => setDrafts(previous => previous.map(draft => draft.id !== item.id ? draft : {
-          ...draft,
-          [field]: draft[field].map((current, i) => (
-            i === index && current.url === reference.url && (!current.name || current.name === current.url)
-              ? { ...current, name } : current
-          )),
-        }));
-        const rowKey = `${item.id}:${field}:${index}`;
-        // Enter, Escape and clicking outside are all ways to finish a valid
-        // reference edit. Rendering ReferenceLink then starts title lookup.
-        const commitReference = () => {
-          if (!reference.url.trim() || urlError) return;
+        const duplicate = !isBuiltIn && !!reference.url.trim() &&
+          references.some((other, i) => i !== index && preferenceUrl(other.url) === preferenceUrl(reference.url));
+        const errorId = `pt-reference-error-${owner}-${field}-${index}`;
+        const rowKey = `${owner}:${field}:${index}`;
+        const editing = !isBuiltIn && (editingReferences.has(rowKey) || !reference.url.trim());
+        const setResolved = (name: string) => {
+          if (owner === 'common') setCommonCustomReferences(previous => ({
+            ...previous, [field]: previous[field].map((current, i) => (
+              i + immutableCount === index && current.url === reference.url && (!current.name || current.name === current.url)
+                ? { ...current, name } : current
+            )),
+          }));
+          else if (builtins.some(item => item.id === owner)) setBuiltinCustomReferences(previous => ({
+            ...previous,
+            [owner]: {
+              ...previous[owner],
+              [field]: (previous[owner]?.[field] ?? []).map((current, i) => (
+                i + immutableCount === index && current.url === reference.url && (!current.name || current.name === current.url)
+                  ? { ...current, name } : current
+              )),
+            },
+          }));
+          else setDrafts(previous => previous.map(draft => draft.id !== owner ? draft : {
+            ...draft, [field]: draft[field].map((current, i) => (
+              i === index && current.url === reference.url && (!current.name || current.name === current.url)
+                ? { ...current, name } : current
+            )),
+          }));
+        };
+        const stopEditing = () => {
+          referenceEditOrigins.current.delete(rowKey);
           setEditingReferences(previous => {
-            if (!previous.has(rowKey)) return previous;
             const next = new Set(previous);
             next.delete(rowKey);
             return next;
           });
         };
-        const editing = editingReferences.has(rowKey) || !reference.url.trim();
-        return <tr key={index}><td>
-          {readonly ? <div className="pt-reference-entry"><div className={referenceDisabled(item.id, field, reference.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={reference}/></div>{referenceToggle(item.id, field, reference)}</div> : <div className="pt-reference-entry">
-            <div className="pt-reference-field">
-              {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="text" inputMode="url"
-                placeholder="example.org/guide" value={editableReferenceUrl(reference.url)}
-                aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
-                autoFocus={editingReferences.has(rowKey)}
-                onChange={event => {
-                  // Preserve the input once the first character makes a blank row nonempty.
-                  setEditingReferences(previous => new Set(previous).add(rowKey));
-                  setAt(index, event.target.value);
-                }}
-                onBlur={commitReference}
-                onKeyDown={event => {
-                  if (event.key !== 'Enter' && event.key !== 'Escape') return;
-                  event.preventDefault();
-                  commitReference();
-                }}/> : <ReferenceLink reference={reference} onResolved={setResolved}
-                  onChecked={status => setUrlValidation(previous => previous[reference.url] === status
-                    ? previous : { ...previous, [reference.url]: status })}/>}
-              {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
-            </div>
-            {referenceToggle(item.id, field, reference)}
-            {!editing && <>
-              <button type="button" disabled={busy} onClick={() => setEditingReferences(previous => new Set(previous).add(rowKey))}>Edit</button>
-              <button type="button" disabled={busy} onClick={() => { setEditingReferences(new Set()); edit(item.id, { [field]: references.filter((_, i) => i !== index) }); }}>Remove</button>
-            </>}
-          </div>}
-        </td></tr>;
+        const cancelEditing = () => {
+          const original = referenceEditOrigins.current.get(rowKey);
+          stopEditing();
+          if (original) {
+            // Clearing an existing URL restores it, then exposes Remove.
+            update(references.map((current, i) => i === index ? original : current));
+          } else {
+            // Leaving a new, empty URL cancels its insertion completely.
+            update(references.filter((_, i) => i !== index));
+          }
+        };
+        const finishEditing = () => {
+          if (!reference.url.trim()) { cancelEditing(); return; }
+          if (urlError || duplicate) return;
+          stopEditing();
+        };
+        return <tr key={rowKey}><td><div className="pt-reference-entry">
+          <div className={referenceDisabled(owner, field, reference.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}>
+            {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="text" inputMode="url"
+              placeholder="example.org/guide" value={editableReferenceUrl(reference.url)}
+              aria-invalid={!!urlError || duplicate} aria-describedby={urlError || duplicate ? errorId : undefined}
+              autoFocus={editingReferences.has(rowKey)}
+              onChange={event => {
+                setEditingReferences(previous => new Set(previous).add(rowKey));
+                setAt(index, event.target.value);
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Enter') { event.preventDefault(); finishEditing(); }
+                if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finishEditing(); }
+              }}
+              onBlur={finishEditing}/>
+              : <ReferenceLink reference={reference} onResolved={isBuiltIn ? undefined : setResolved}
+                  onChecked={isBuiltIn ? undefined : status => setUrlValidation(previous =>
+                    previous[reference.url] === status ? previous : { ...previous, [reference.url]: status })}/>}
+            {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
+            {duplicate && <span className="pt-validation-error" id={errorId} role="alert">Duplicate reference URL</span>}
+          </div>
+          {!editing && referenceToggle(owner, field, reference)}
+          {!isBuiltIn && !editing && <>
+            <button type="button" disabled={busy} onClick={() => {
+              referenceEditOrigins.current.set(rowKey, reference);
+              setEditingReferences(previous => new Set(previous).add(rowKey));
+            }}>Edit</button>
+            <button type="button" disabled={busy} onClick={() => {
+              referenceEditOrigins.current.delete(rowKey);
+              setEditingReferences(previous => { const next = new Set(previous); next.delete(rowKey); return next; });
+              update(references.filter((_, i) => i !== index));
+            }}>Remove</button>
+          </>}
+        </div></td></tr>;
       })}
-      {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || references.some(reference => !reference.url.trim())}
-        onClick={() => edit(item.id, { [field]: [...references, { name: '', url: '' }] })} className="pt-new-action">New</button></td></tr>}
+      {!readonly && <tr className="pt-reference-new-row"><td>
+        <button type="button" disabled={busy || references.length - immutableCount >= 100 ||
+          references.some((reference, index) => index >= immutableCount && !reference.url.trim())}
+          onClick={() => {
+            const newKey = `${owner}:${field}:${references.length}`;
+            referenceEditOrigins.current.set(newKey, null);
+            setEditingReferences(previous => new Set(previous).add(newKey));
+            update([...references, { name: '', url: '' }]);
+          }} className="pt-new-action">New</button>
+      </td></tr>}
     </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" data-project-type-id={item.id} key={item.id} open={open === item.id}>
@@ -463,15 +584,33 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderEffectiveIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      {(!readonly || item.research_standards_references.length > 0) &&
-        <section><h3>Research standards references</h3>{listEditor(item, 'research_standards_references', readonly)}</section>}
-      {(!readonly || item.publication_standards_references.length > 0) &&
-        <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>}
+      <section><h3>Research standards references</h3>{listEditor(item.id, 'research_standards_references', [
+        ...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : []),
+      ], false, readonly ? item.research_standards_references.length : 0)}</section>
+      <section><h3>Publication standards references</h3>{listEditor(item.id, 'publication_standards_references', [
+        ...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : []),
+      ], false, readonly ? item.publication_standards_references.length : 0)}</section>
     </div>
   </details>;
   const hasChanges = savedDrafts !== null && (JSON.stringify(drafts) !== JSON.stringify(savedDrafts)
-    || JSON.stringify(referencePreferences) !== JSON.stringify(savedReferencePreferences));
-  const invalidDraft = drafts.some(item =>
+    || JSON.stringify(referencePreferences) !== JSON.stringify(savedReferencePreferences)
+    || JSON.stringify(commonCustomReferences) !== JSON.stringify(savedCommonCustomReferences)
+    || JSON.stringify(builtinCustomReferences) !== JSON.stringify(savedBuiltinCustomReferences));
+  const invalidBuiltinReferences = Object.entries(builtinCustomReferences).some(([owner, fields]) => {
+    const base = builtins.find(item => item.id === owner);
+    if (!base) return true;
+    return (['research_standards_references', 'publication_standards_references'] as const).some(field => {
+      const references = fields[field] ?? [];
+      const urls = [...base[field], ...references].map(ref => preferenceUrl(ref.url)).filter(Boolean);
+      return references.length > 100 || new Set(urls).size !== urls.length ||
+        references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
+    });
+  });
+  const invalidDraft = invalidBuiltinReferences || Object.entries(commonCustomReferences).some(([field, references]) => {
+    const urls = [...(commonReferences?.[field as ReferenceField] ?? []), ...references].map(ref => preferenceUrl(ref.url));
+    return references.length > 100 || new Set(urls.filter(Boolean)).size !== urls.filter(Boolean).length ||
+      references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
+  }) || drafts.some(item =>
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
     item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
@@ -494,18 +633,20 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy} onClick={close}>Close</button></div></header>
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
-      <p className="pt-usage-notice">Reference manuals can increase AI input tokens and usage costs. Shared research and publication references are disabled by default; subject-specific guides remain enabled. Enable only the references you want SIGMA to use for future sessions and papers.</p>
+      <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
-      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
+      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <h4>Research standards references for all project types</h4>
-        <table className="pt-reference-table"><tbody>{commonReferences?.research_standards_references.map(ref =>
-          <tr key={ref.url}><td><div className="pt-reference-entry"><div className={referenceDisabled('common', 'research_standards_references', ref.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={ref}/></div>{referenceToggle('common', 'research_standards_references', ref)}</div></td></tr>
-        )}</tbody></table>
+        {listEditor('common', 'research_standards_references', [
+          ...(commonReferences?.research_standards_references ?? []),
+          ...commonCustomReferences.research_standards_references,
+        ], false, commonReferences?.research_standards_references.length ?? 0)}
         <h4>Publication standards references for all project types</h4>
-        <table className="pt-reference-table"><tbody>{commonReferences?.publication_standards_references.map(ref =>
-          <tr key={ref.url}><td><div className="pt-reference-entry"><div className={referenceDisabled('common', 'publication_standards_references', ref.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={ref}/></div>{referenceToggle('common', 'publication_standards_references', ref)}</div></td></tr>
-        )}</tbody></table>
+        {listEditor('common', 'publication_standards_references', [
+          ...(commonReferences?.publication_standards_references ?? []),
+          ...commonCustomReferences.publication_standards_references,
+        ], false, commonReferences?.publication_standards_references.length ?? 0)}
       </section>
     </div>
   </dialog>;

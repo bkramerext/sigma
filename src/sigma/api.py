@@ -158,6 +158,10 @@ class ProjectTypeCatalogBody(BaseModel):
     confirmed_removals: dict[str, int] = Field(default_factory=dict)
     # Optional for older clients: absence preserves existing enable/disable choices.
     reference_preferences: dict[str, dict[str, list[str]]] | None = None
+    # Private additions to common reference guides, preserving immutable defaults.
+    common_custom_references: dict[str, list[dict[str, str]]] | None = None
+    # Private additions to built-in project types (curated definitions remain immutable).
+    builtin_custom_references: dict[str, dict[str, list[dict[str, str]]]] | None = None
 
 
 class ProjectTypeDeleteBody(BaseModel):
@@ -181,14 +185,21 @@ def list_project_types_view(request: Request):
         ).hexdigest()
         return {
             "project_types": builtins,
-            "common_references": project_types.common_references(),
+            "common_references": project_types.curated_common_references(),
+            "common_custom_references": {},
+            "builtin_custom_references": {},
             "reference_preferences": {},
             "icons": {"placeholder": project_types.placeholder_icon()},
             "revision": revision,
         }
     return {
-        "project_types": [item.record() for item in project_types.all_types()],
-        "common_references": project_types.common_references(),
+        "project_types": [
+            *[item.record() for item in project_types.builtin_types()],
+            *[item.record() for item in project_types.all_types() if item.user_defined],
+        ],
+        "common_references": project_types.curated_common_references(),
+        "common_custom_references": project_types.common_custom_references(),
+        "builtin_custom_references": project_types.builtin_custom_references(),
         "reference_preferences": project_types.reference_preferences(),
         "icons": {"placeholder": project_types.placeholder_icon()},
         "revision": project_types.catalog_revision(),
@@ -214,6 +225,8 @@ def replace_project_types_view(body: ProjectTypeCatalogBody):
         expected_revision=body.expected_revision,
         confirmed_removals=body.confirmed_removals,
         reference_preferences_update=body.reference_preferences,
+        common_custom_references_update=body.common_custom_references,
+        builtin_custom_references_update=body.builtin_custom_references,
     )
     return {
         "project_types": [item.record() for item in saved],

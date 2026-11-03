@@ -38,6 +38,13 @@ with sync_playwright() as playwright:
 
     page.route("**/api/**", forward)
     page.goto(UI_ORIGIN + "/")
+    project_actions = page.locator(".home-projects-heading .home-project-action")
+    expect(project_actions).to_have_count(2)
+    for label in ("New", "Import"):
+        action = project_actions.get_by_role("button", name=label, exact=True)
+        expect(action).to_have_css("color", "rgb(241, 197, 141)")
+        action.hover()
+        expect(action).to_have_css("color", "rgb(255, 224, 171)")
     page.get_by_role("button", name="New", exact=True).hover()
     expect(page.get_by_role("tooltip")).to_have_text("Create a project")
     page.get_by_role("button", name="Open", exact=True).hover()
@@ -133,8 +140,8 @@ with sync_playwright() as playwright:
         "e=>({overflow:getComputedStyle(e).overflowY,scrollHeight:e.scrollHeight,clientHeight:e.clientHeight})"
     )
     assert scroll_metrics["overflow"] == "auto"
-    # The absolutely positioned Projects column must be bounded by the viewport,
-    # otherwise the list grows indefinitely and its parent silently clips it.
+    # Projects is constrained within the viewport. When expanded, the last
+    # category and bottom padding must both be reachable in this scroll area.
     bounds = scroller.evaluate(
         """e => {
           const list = e.getBoundingClientRect();
@@ -145,7 +152,6 @@ with sync_playwright() as playwright:
     assert bounds["projectsBottom"] <= bounds["viewport"] - 10, bounds
     assert bounds["listBottom"] <= bounds["viewport"] - 10, bounds
     assert scroller.evaluate("e => parseFloat(getComputedStyle(e).paddingBottom)") >= 40
-    # All categories are expanded. At a 720px viewport this list MUST overflow.
     assert scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"], scroll_metrics
     scroller.evaluate("e => e.scrollTop = e.scrollHeight")
     assert scroller.evaluate("e => e.scrollTop") > 0

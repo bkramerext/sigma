@@ -189,7 +189,7 @@ def _optional_text(value: Any, label: str, limit: int) -> str:
 
 
 def common_research_references() -> tuple[dict[str, str], ...]:
-    """Enabled shared research-method references; catalog defaults stay immutable."""
+    """Enabled shared research-method references; curated defaults stay immutable."""
     references = common_references()["research_standards_references"]
     disabled = set(
         reference_preferences().get("common", {}).get("research_standards_references", [])
@@ -245,17 +245,95 @@ def custom_types() -> list[ProjectType]:
     return sorted(result, key=lambda item: item.name.casefold())
 
 
-def common_references() -> dict[str, list[dict[str, str]]]:
+def curated_common_references() -> dict[str, list[dict[str, str]]]:
     """Immutable curated defaults shared by every research discipline."""
     raw = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))["common_references"]
     return {field: list(_validate_references(raw[field], field)) for field in REFERENCE_FIELDS}
+
+
+def _validate_common_custom_references(value: Any) -> dict[str, list[dict[str, str]]]:
+    if not isinstance(value, dict) or set(value) - set(REFERENCE_FIELDS):
+        raise ProjectError("Common custom references must have research or publication categories")
+    curated = curated_common_references()
+    result: dict[str, list[dict[str, str]]] = {}
+    for field in REFERENCE_FIELDS:
+        refs = list(_validate_references(value.get(field, []), field))
+        forbidden = {ref["url"] for ref in curated[field]}
+        if any(ref["url"] in forbidden for ref in refs):
+            raise ProjectError("Built-in common references cannot be replaced")
+        result[field] = refs
+    return result
+
+
+def common_custom_references() -> dict[str, list[dict[str, str]]]:
+    """Private user-created common guides, separate from built-in definitions."""
+    return _validate_common_custom_references(_read_catalog().get("common_custom_references", {}))
+
+
+def _validate_builtin_custom_references(value: Any) -> dict[str, dict[str, list[dict[str, str]]]]:
+    """Validate private additions without permitting edits to curated built-in guides."""
+    if not isinstance(value, dict):
+        raise ProjectError("Built-in reference additions must be a map")
+    curated = {item.id: item for item in builtin_types()}
+    if set(value) - set(curated):
+        raise ProjectError("Unknown built-in project type in reference additions")
+    result: dict[str, dict[str, list[dict[str, str]]]] = {}
+    for owner, fields in value.items():
+        if not isinstance(fields, dict) or set(fields) - set(REFERENCE_FIELDS):
+            raise ProjectError("Built-in additions must specify research or publication references")
+        accepted: dict[str, list[dict[str, str]]] = {}
+        for field in REFERENCE_FIELDS:
+            references = list(_validate_references(fields.get(field, []), field))
+            existing = {ref["url"] for ref in getattr(curated[owner], field)}
+            if any(ref["url"] in existing for ref in references):
+                raise ProjectError("Built-in project type references cannot be replaced")
+            if references:
+                accepted[field] = references
+        if accepted:
+            result[owner] = accepted
+    return result
+
+
+def builtin_custom_references() -> dict[str, dict[str, list[dict[str, str]]]]:
+    """User-owned additions to built-in project types, stored separately from curated defaults."""
+    return _validate_builtin_custom_references(_read_catalog().get("builtin_custom_references", {}))
+
+
+def _definitions(
+    custom: list[ProjectType] | None = None,
+    builtin_additions: dict[str, dict[str, list[dict[str, str]]]] | None = None,
+) -> dict[str, ProjectType]:
+    """Merge reference overlays only for resolving effective types, not canonical records."""
+    additions = builtin_custom_references() if builtin_additions is None else builtin_additions
+    definitions = {}
+    for item in builtin_types():
+        fields = additions.get(item.id, {})
+        definitions[item.id] = replace(
+            item,
+            **{
+                field: (*getattr(item, field), *fields.get(field, [])) for field in REFERENCE_FIELDS
+            },
+        )
+    definitions.update({item.id: item for item in (custom_types() if custom is None else custom)})
+    return definitions
+
+
+def common_references() -> dict[str, list[dict[str, str]]]:
+    """Curated and user-created shared guides used by future work."""
+    curated = curated_common_references()
+    additions = common_custom_references()
+    return {
+        field: list({ref["url"]: ref for ref in [*curated[field], *additions[field]]}.values())
+        for field in REFERENCE_FIELDS
+    }
 
 
 def _default_reference_preferences() -> dict[str, dict[str, list[str]]]:
     """Per-user default: omit shared guides, retain discipline-specific guides."""
     return {
         "common": {
-            field: [ref["url"] for ref in refs] for field, refs in common_references().items()
+            field: [ref["url"] for ref in refs]
+            for field, refs in curated_common_references().items()
         }
     }
 
@@ -265,6 +343,8 @@ def _validate_reference_preferences(
     custom: list[ProjectType],
     *,
     drop_removed: bool = False,
+    common_override: dict[str, list[dict[str, str]]] | None = None,
+    builtin_override: dict[str, dict[str, list[dict[str, str]]]] | None = None,
 ) -> dict[str, dict[str, list[str]]]:
     """Validate disabled reference URLs against immutable and custom type definitions.
 
@@ -273,7 +353,7 @@ def _validate_reference_preferences(
     """
     if not isinstance(value, dict) or len(value) > 501:
         raise ProjectError("Reference preferences must be a map of project types")
-    definitions = {item.id: item for item in [*builtin_types(), *custom]}
+    definitions = _definitions(custom, builtin_override)
     if "common" in definitions:
         raise ProjectError("Project type name 'common' is reserved for shared references")
     result: dict[str, dict[str, list[str]]] = {}
@@ -281,7 +361,7 @@ def _validate_reference_preferences(
         if not isinstance(owner, str) or not isinstance(fields, dict):
             raise ProjectError("Reference preferences contain an invalid project type")
         if owner == "common":
-            allowed = common_references()
+            allowed = common_override if common_override is not None else common_references()
         else:
             item = resolve_type_metadata(owner, definitions)
             if item is None:
@@ -331,7 +411,7 @@ def resolve_type_metadata(
     cycles are bounded and never followed indefinitely.
     """
     if definitions is None:
-        definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
+        definitions = _definitions()
     item = definitions.get(identifier)
     if item is None:
         return None
@@ -363,7 +443,7 @@ def resolve_type_metadata(
 
 
 def all_types() -> list[ProjectType]:
-    definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
+    definitions = _definitions()
     return [
         resolved
         for identifier in definitions
@@ -421,7 +501,7 @@ def get_type(identifier: str) -> ProjectType | None:
     common = common_references()
     preferences = reference_preferences()
     # Disabling a reference on a parent also applies to derived types.
-    definitions = {row.id: row for row in [*builtin_types(), *custom_types()]}
+    definitions = _definitions()
     ancestry = {identifier}
     ancestor = definitions[identifier].based_on
     while ancestor and ancestor not in ancestry and ancestor in definitions:
@@ -497,6 +577,8 @@ def _write_custom(
     *,
     expected_revision: str | None = None,
     reference_preferences_update: dict[str, dict[str, list[str]]] | None = None,
+    common_custom_references_update: dict[str, list[dict[str, str]]] | None = None,
+    builtin_custom_references_update: dict[str, dict[str, list[dict[str, str]]]] | None = None,
 ) -> None:
     path = _store_path()
     lock_fd = os.open(
@@ -515,18 +597,40 @@ def _write_custom(
             raise ProjectError(
                 "Project types changed in another window; reload and review before saving"
             )
+        existing_catalog = _read_catalog()
+        saved_custom_common = _validate_common_custom_references(
+            existing_catalog.get("common_custom_references", {})
+            if common_custom_references_update is None
+            else common_custom_references_update
+        )
+        saved_builtin_custom = _validate_builtin_custom_references(
+            existing_catalog.get("builtin_custom_references", {})
+            if builtin_custom_references_update is None
+            else builtin_custom_references_update
+        )
+        curated_common = curated_common_references()
+        effective_common = {
+            field: [*curated_common[field], *saved_custom_common[field]]
+            for field in REFERENCE_FIELDS
+        }
         current_preferences = (
-            _read_catalog().get("reference_preferences", _default_reference_preferences())
+            existing_catalog.get("reference_preferences", _default_reference_preferences())
             if reference_preferences_update is None
             else reference_preferences_update
         )
         preferences = _validate_reference_preferences(
-            current_preferences, items, drop_removed=reference_preferences_update is None
+            current_preferences,
+            items,
+            drop_removed=(reference_preferences_update is None),
+            common_override=effective_common,
+            builtin_override=saved_builtin_custom,
         )
         document = {
             "schema_version": 1,
             "project_types": [item.record() for item in items],
             "reference_preferences": preferences,
+            "common_custom_references": saved_custom_common,
+            "builtin_custom_references": saved_builtin_custom,
         }
         payload = json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
         if len(payload.encode("utf-8")) > 16_000_000:
@@ -602,6 +706,8 @@ def replace_custom_types(
     expected_revision: str | None = None,
     confirmed_removals: dict[str, int] | None = None,
     reference_preferences_update: dict[str, dict[str, list[str]]] | None = None,
+    common_custom_references_update: dict[str, list[dict[str, str]]] | None = None,
+    builtin_custom_references_update: dict[str, dict[str, list[dict[str, str]]]] | None = None,
 ) -> list[ProjectType]:
     if len(records) > 500:
         raise ProjectError("Too many custom project types")
@@ -647,5 +753,7 @@ def replace_custom_types(
         result,
         expected_revision=expected_revision,
         reference_preferences_update=reference_preferences_update,
+        common_custom_references_update=common_custom_references_update,
+        builtin_custom_references_update=builtin_custom_references_update,
     )
     return sorted(result, key=lambda item: item.name.casefold())
