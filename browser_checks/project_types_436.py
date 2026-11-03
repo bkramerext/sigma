@@ -126,8 +126,8 @@ with sync_playwright() as playwright:
     common_new = common_section.get_by_role("button", name="New", exact=True).first
     common_toggle = common_section.locator(".pt-reference-toggle").first
     page.mouse.move(1, 1)  # Clear the previous toggle's hover before checking idle colors.
-    for action in (common_new, common_toggle):
-        expect(action).to_have_css("color", "rgb(237, 195, 141)")
+    expect(common_new).to_have_css("color", "rgb(244, 204, 105)")
+    expect(common_toggle).to_have_css("color", "rgb(237, 195, 141)")
     common_link_box = common_link.bounding_box()
     common_new_box = common_new.bounding_box()
     assert common_link_box and common_new_box
