@@ -9,10 +9,10 @@ the compiler without counting it as an Investigator/Skeptic turn.
 from __future__ import annotations
 
 import asyncio
-from contextlib import nullcontext
 import json
 import os
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -31,6 +31,8 @@ async def verify_compilation(
     *,
     multiple_strategies: bool = False,
     compiler_rejection: bool = False,
+    compiler_server_error: bool = False,
+    pause_during_compilation: bool = False,
     skip_compiler: bool = False,
 ) -> None:
     view, strategy, credential, config = await fixture.setup(path)
@@ -92,6 +94,8 @@ async def verify_compilation(
             await compilation_release.wait()
             if compiler_rejection:
                 return httpx.Response(400, json={"error": {"message": "Compiler unavailable"}})
+            if compiler_server_error:
+                return httpx.Response(503, json={"error": {"message": "Provider overloaded"}})
             assert payload["store"] is False
             sources = json.loads(payload["input"])["uninspected_methodology_sources"]
             assert len(sources) >= 2
@@ -157,7 +161,25 @@ async def verify_compilation(
             assert compiling["steps"] == []
             assert calls == ["research_reference_compilation"], calls
             assert all(branch["status"] == "queued" for branch in compiling["strategy_runs"])
-            compilation_release.set()
+            if pause_during_compilation:
+                await research_sessions.control_session(str(path), started["id"], "pause")
+                uncertain = research_sessions._read(str(path), started["id"])
+                assert uncertain["status"] == "paused"
+                assert uncertain["reference_compilation"]["status"] == "interrupted"
+                if isinstance(uncertain.get("hard_budget_ledger"), dict):
+                    assert uncertain["hard_budget_ledger"]["blocked_reason"]
+                await research_sessions.control_session(str(path), started["id"], "resume")
+                recovered = research_sessions._read(str(path), started["id"])
+                assert recovered["reference_compilation"]["status"] == "fallback"
+                if isinstance(recovered.get("hard_budget_ledger"), dict):
+                    assert recovered["hard_budget_ledger"]["blocked_reason"] is None
+                compilation_release.set()
+            else:
+                compilation_release.set()
+                if compiler_server_error:
+                    interrupted = await fixture.wait_for(path, started["id"])
+                    assert interrupted["status"] == "paused"
+                    await research_sessions.control_session(str(path), started["id"], "resume")
         finished = await fixture.wait_for(path, started["id"])
 
     assert finished["status"] in {"ended", "completed"}, finished.get("message")
@@ -173,13 +195,14 @@ async def verify_compilation(
     assert {step["role"] for step in finished["steps"]} == {"investigator", "skeptic"}
     saved = research_sessions._read(str(path), started["id"])
     stage = saved["reference_compilation"]
-    expected_status = (
-        "skipped" if skip_compiler else "fallback" if compiler_rejection else "completed"
+    compiled_ok = not (
+        compiler_rejection or compiler_server_error or pause_during_compilation or skip_compiler
     )
+    expected_status = "skipped" if skip_compiler else "completed" if compiled_ok else "fallback"
     assert stage["status"] == expected_status, stage
     assert stage["source_sha256"] == saved["research_method_sources"]["sha256"]
     assert stage["status"] != "pending"
-    if not compiler_rejection and not skip_compiler:
+    if compiled_ok:
         assert stage["selected_source_ids"] == selection
         assert stage["omitted_source_ids"]
         assert stage["guidance_sha256"]
@@ -190,13 +213,13 @@ async def verify_compilation(
     assert len(role_requests) == 2 * expected_roles
     assert len(saved["artifacts"]) == expected_roles
     for request in role_requests:
-        if compiler_rejection or skip_compiler:
+        if not compiled_ok:
             assert "Mathematics proof methods" in request
             assert "Check induction, boundary cases" in request
         else:
             assert stage["guidance"] in request
             assert all(url not in request for url in omitted_urls), omitted_urls
-    if not compiler_rejection and not skip_compiler:
+    if compiled_ok:
         assert saved["outcome"]["source_material"]["compilation"]["guidance"] == stage["guidance"]
         assert (
             sum(
@@ -208,12 +231,16 @@ async def verify_compilation(
         )
     ledger = saved.get("hard_budget_ledger")
     if isinstance(ledger, dict):
-        assert (
-            len(ledger["calls"]) == (0 if skip_compiler else 1) + 2 * expected_roles
-        ), ledger["calls"]
-        assert all(item["status"] in {"settled", "rejected"} for item in ledger["calls"])
+        assert len(ledger["calls"]) == (0 if skip_compiler else 1) + 2 * expected_roles, ledger[
+            "calls"
+        ]
+        if compiler_server_error or pause_during_compilation:
+            assert ledger["calls"][0]["status"] == "unknown"
+            assert ledger["blocked_reason"] is None
+        else:
+            assert all(item["status"] in {"settled", "rejected"} for item in ledger["calls"])
 
-    if not compiler_rejection and not skip_compiler:
+    if compiled_ok:
         # A saved session-wide compilation must be used by every strategy and
         # both roles, at every round, even after reloading the frozen record.
         for branch in saved["strategy_runs"]:
@@ -227,9 +254,7 @@ async def verify_compilation(
         before_calls = list(calls)
         # Simulate a resumed queued snapshot without touching the completed
         # test session: successful compilation must never be replayed.
-        with patch.object(
-            research_sessions, "_read", return_value={**saved, "status": "queued"}
-        ):
+        with patch.object(research_sessions, "_read", return_value={**saved, "status": "queued"}):
             assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
         assert calls == before_calls
 
@@ -347,6 +372,19 @@ def verify_hard_budget_compiler_does_not_steal_first_turn() -> None:
             compiler_output_bound=4000,
         )
         assert ledger["calls"] == []
+        ledger["call_limit"] = 2
+        ledger["cost_limit_usd"] = 1.33
+        # Personal ChatGPT also has a hard ledger; compilation may not
+        # consume its first Investigator's conservative call allowance.
+        personal = {**record, "mode": "chatgpt"}
+        assert not research_sessions._optional_reference_compilation_headroom(
+            personal,
+            0.06,
+            0.12,
+            compiler_request_body=b"x" * 512,
+            compiler_output_bound=4000,
+        )
+        assert ledger["calls"] == []
 
 
 async def main() -> None:
@@ -357,10 +395,12 @@ async def main() -> None:
         await verify_compilation(root / "compiled.sigma")
         await verify_compilation(root / "multi.sigma", multiple_strategies=True)
         await verify_compilation(root / "fallback.sigma", compiler_rejection=True)
+        await verify_compilation(root / "server.sigma", compiler_server_error=True)
+        await verify_compilation(root / "paused.sigma", pause_during_compilation=True)
         await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
     print(
-        "PASS: pre-fanout barrier, two-round strategy reuse, frozen reload, "
-        "funded and failed fallback"
+        "PASS: pre-fanout barrier, two-round reuse, frozen reload, "
+        "funding guard, HTTP 503 and interrupted compiler recovery"
     )
 
 

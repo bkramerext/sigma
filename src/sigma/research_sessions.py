@@ -37,6 +37,7 @@ from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
 from sigma.research_budget import (
+    authorize_reference_compiler_recovery_after_unknown,
     BudgetExceeded,
     authorize_independent_review_after_unknown,
     cancel_before_dispatch,
@@ -5847,6 +5848,37 @@ async def control_session(
                 record["provider_limit_recovery_ready"] = False
                 record.pop("terminal_reason", None)
                 record.pop("termination_reason_code", None)
+            compiler = record.get("reference_compilation")
+            if isinstance(compiler, dict) and compiler.get("status") in {
+                "running",
+                "interrupted",
+            }:
+                # Explicit user resume: never replay an uncertain compiler call.
+                # Preserve its full spend liability and use original notes.
+                attempt_id = compiler.get("attempt_id")
+                if not isinstance(attempt_id, str) or not attempt_id:
+                    raise ProjectError("Cannot safely recover an unidentified compiler attempt.")
+                ledger = record.get("hard_budget_ledger")
+                if isinstance(ledger, dict):
+                    try:
+                        authorize_reference_compiler_recovery_after_unknown(
+                            ledger, call_id=attempt_id
+                        )
+                    except BudgetExceeded as exc:
+                        raise ProjectError(str(exc)) from exc
+                if cloud_research.billing_enabled():
+                    try:
+                        cloud_research.mark_call_unknown(record["id"], attempt_id)
+                    except cloud_research.CloudResearchUnavailable as exc:
+                        raise ProjectError(str(exc)) from exc
+                compiler["status"] = "fallback"
+                compiler["finished_at"] = compiler.get("finished_at") or _now()
+                compiler["reason"] = (
+                    "Previous compilation delivery or usage was uncertain. "
+                    "It was not retried; research resumes with frozen original notes "
+                    "while its full budget reservation remains held."
+                )
+                _event(record, "references.compilation.recovered", compiler["reason"])
             record["status"] = "queued"
             for branch in record.get("strategy_runs", []):
                 if branch.get("status") in {"paused", "stopped"}:
@@ -12455,7 +12487,11 @@ def _optional_reference_compilation_headroom(
     the shared provider exposure uses full model-output liability. A failed
     funding inspection disables only compilation, never the research session.
     """
-    if record.get("cloud_sponsored") is not True and record.get("mode") != "api_key":
+    if (
+        record.get("cloud_sponsored") is not True
+        and record.get("mode") != "api_key"
+        and not isinstance(record.get("hard_budget_ledger"), dict)
+    ):
         return True
     try:
         branch = next(
@@ -12535,7 +12571,25 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         if not isinstance(compilation, dict):
             return True  # Legacy session: preserve exact accepted prompts.
         state = compilation.get("status")
-        if state in {"not_needed", "completed", "fallback", "skipped"}:
+        if state in {"not_needed", "fallback", "skipped"}:
+            return True
+        if state == "completed":
+            try:
+                frozen = record["research_method_sources"]
+                verified = research_reference_compiler.validate_result(
+                    compilation, frozen["sources"]
+                )
+                if (
+                    verified["guidance_sha256"] == compilation.get("guidance_sha256")
+                    and compilation.get("source_sha256") == frozen["sha256"]
+                ):
+                    return True
+            except (ProjectError, KeyError, TypeError, ValueError):
+                pass
+            compilation["status"] = "fallback"
+            compilation["reason"] = "Saved reference compilation failed integrity checks."
+            _event(record, "references.compilation.skipped", compilation["reason"])
+            _save(path, record)
             return True
         if state in {"running", "interrupted"}:
             # Unknown provider delivery must never be automatically replayed.
@@ -12550,6 +12604,10 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             _save(path, record)
             return False
         if state != "pending":
+            compilation["status"] = "fallback"
+            compilation["reason"] = "Unrecognized reference compilation state; frozen notes retained."
+            _event(record, "references.compilation.skipped", compilation["reason"])
+            _save(path, record)
             return True
         try:
             payload = research_reference_compiler.build_request(record)
@@ -12619,15 +12677,17 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         quote = full_liability if record.get("mode") == "api_key" else practical_cost
         paid = record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
         if (
-            paid
-            and quote is not None
-            and full_liability is not None
-            and not _optional_reference_compilation_headroom(
-                record,
-                quote,
-                full_liability,
-                compiler_request_body=encoded,
-                compiler_output_bound=output_bound,
+            (paid or isinstance(record.get("hard_budget_ledger"), dict))
+            and (
+                quote is None
+                or full_liability is None
+                or not _optional_reference_compilation_headroom(
+                    record,
+                    quote,
+                    full_liability,
+                    compiler_request_body=encoded,
+                    compiler_output_bound=output_bound,
+                )
             )
         ):
             compilation["status"] = "skipped"
@@ -12758,7 +12818,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
                     raise ProjectError("Reference compiler response exceeded the 8 MB safety bound")
             if response.status_code != 200:
-                rejected = True
+                # 5xx/timeout-like responses do not prove zero billable usage.
+                # Only known pre-inference 4xx rejections release the reservation.
+                rejected = response.status_code in {400, 401, 403, 404, 422, 429}
                 raise ProjectError(
                     f"Reference compilation provider rejected the request (HTTP {response.status_code})."
                 )
@@ -12853,7 +12915,14 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 latest["estimated_cost_usd"] = round(
                     float(latest.get("estimated_cost_usd", 0.0)) + estimated, 9
                 )
-            if compiled is not None and call_error is None:
+            ledger_blocked = isinstance(ledger, dict) and bool(ledger.get("blocked_reason"))
+            metering_required = isinstance(ledger, dict) or cloud_research.billing_enabled()
+            if (
+                compiled is not None
+                and call_error is None
+                and not ledger_blocked
+                and (estimated is not None or not metering_required)
+            ):
                 stage.update(compiled)
                 stage["status"] = "completed"
                 stage["reason"] = (
@@ -12867,14 +12936,16 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 )
             else:
                 stage["status"] = (
-                    "fallback" if (estimated is not None or rejected) else "interrupted"
+                    "fallback"
+                    if (estimated is not None or rejected) and not ledger_blocked
+                    else "interrupted"
                 )
                 stage["reason"] = (
                     "Compilation unavailable after a known provider response; using original references."
                     if stage["status"] == "fallback"
                     else "Compilation outcome or usage is uncertain. The call was not retried."
                 )
-                stage["failure_type"] = call_error
+                stage["failure_type"] = call_error or "unknown_usage_or_budget"
                 _event(latest, "references.compilation.failed", stage["reason"])
             stage["finished_at"] = _now()
             if latest["status"] not in {"stopped", "paused", "failed", "ended", "completed"}:
