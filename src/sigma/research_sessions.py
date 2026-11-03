@@ -59,6 +59,8 @@ from sigma.research_context_budget import (
     restrict_obligation_citations_to_supplied_context,
 )
 from sigma.research_epistemics import (
+    OUTCOME_POLICY_VERSION,
+    objective_obligation_impacts,
     argument_availability,
     execution_provenance,
     verification_label,
@@ -251,6 +253,23 @@ class ObligationReview(BaseModel):
     rationale: str = Field(min_length=1, max_length=500)
 
 
+class ScientificObligationImpact(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    obligation_text: str = Field(min_length=1, max_length=1600)
+    impact: Literal["objective_blocking", "nonblocking_followup"]
+    dependency_rationale: str = Field(min_length=24, max_length=1200)
+    basis_step_numbers: list[int] = Field(max_length=24)
+
+
+class ScientificEvidenceReview(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    sufficiency: Literal["sufficient_for_scoped_claim", "insufficient", "unassessed"]
+    claim_kind: Literal["theoretical", "empirical", "computational", "interpretive", "planning", "unassessed"] = "unassessed"
+    objective_requirements: list[str] = Field(max_length=24)
+    basis_artifact_ids: list[str] = Field(max_length=24)
+    rationale: str = Field(min_length=24, max_length=1600)
+
+
 class Skeptic(BaseModel):
     computation_feedback: ComputationFeedback | None = None
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -278,6 +297,12 @@ class Skeptic(BaseModel):
     retracted_cross_strategy_source_artifact_ids: list[str] = Field(max_length=12)
     peer_handoff_reviews: list[PeerHandoffReview] = Field(max_length=12)
     obligation_reviews: list[ObligationReview] = Field(max_length=12)
+    obligation_impacts: list[ScientificObligationImpact] = Field(default_factory=list, max_length=24)
+    scientific_evidence_review: ScientificEvidenceReview | None = None
+    negative_target: Literal['project_objective', 'strategy_claim', 'undetermined'] = 'undetermined'
+    negative_evidence_basis_artifact_ids: list[str] = Field(default_factory=list, max_length=12)
+    negative_rationale: str = Field(default='', max_length=1600)
+    objective_retracted: bool = False
     human_guidance_reviews: list[HumanGuidanceReview] = Field(max_length=24)
     computational_citations: list[ComputationCitation] = Field(max_length=12)
     continuation_reviews: list[ContinuationReview] = Field(default_factory=list, max_length=8)
@@ -947,7 +972,15 @@ def _strategy_findings(
                     else ["No research artifact was saved for this strategy."]
                 ),
             }
-    for artifact in artifacts:
+    for artifact in sorted(
+        artifacts,
+        key=lambda item: (
+            str(item.get("strategy_id") or record.get("strategy_id") or "legacy"),
+            int(item.get("strategy_cycle") or item.get("sequence") or 0),
+            int(item.get("sequence") or 0),
+            str(item.get("id") or ""),
+        ),
+    ):
         strategy_id = str(artifact.get("strategy_id") or record.get("strategy_id") or "legacy")
         finding = findings.setdefault(
             strategy_id,
@@ -976,7 +1009,14 @@ def _strategy_findings(
                 "strategy_title": str(
                     artifact.get("strategy_title") or finding.get("strategy_title") or "Strategy"
                 ),
-                "status": str((artifact.get("objective_review") or {}).get("status") or "partial"),
+                "status": (
+                    "achieved"
+                    if _scientific_candidate_evaluation(record, artifact)["candidate_complete"]
+                    else "partial"
+                    if isinstance(artifact.get("skeptic_output"), dict)
+                    and (artifact.get("objective_review") or {}).get("status") == "achieved"
+                    else str((artifact.get("objective_review") or {}).get("status") or "partial")
+                ),
                 "claim": str(
                     (artifact.get("objective_review") or {}).get("claim")
                     or artifact.get("claim_or_question")
@@ -1015,11 +1055,17 @@ def _conclusion_strategy_rows(record: dict[str, Any]) -> list[dict[str, Any]]:
         branch_artifact_ids = (
             set(branch_artifact_values) if isinstance(branch_artifact_values, list) else set()
         )
-        linked = [
-            item
-            for item in artifacts
-            if item.get("strategy_id") == identifier or item.get("id") in branch_artifact_ids
-        ]
+        linked = sorted(
+            (
+                item
+                for item in artifacts
+                if item.get("strategy_id") == identifier or item.get("id") in branch_artifact_ids
+            ),
+            key=lambda item: (
+                int(item.get("strategy_cycle") or item.get("sequence") or 0),
+                int(item.get("sequence") or 0), str(item.get("id") or ""),
+            ),
+        )
         review = next(
             (
                 item.get("objective_review")
@@ -1041,6 +1087,12 @@ def _conclusion_strategy_rows(record: dict[str, Any]) -> list[dict[str, Any]]:
         if isinstance(review, dict):
             claim = str(review.get("claim") or review.get("argument_summary") or "").strip()
             finding_status = str(review.get("status") or "unresolved")
+            if linked:
+                eligibility = _scientific_candidate_evaluation(record, linked[-1])
+                if eligibility["candidate_complete"]:
+                    finding_status = "achieved"
+                elif isinstance(linked[-1].get("skeptic_output"), dict) and finding_status == "achieved":
+                    finding_status = "partial"
         if not claim and linked:
             claim = str(linked[-1].get("claim_or_question") or "").strip()
         if not claim:
@@ -1077,13 +1129,10 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
     assessment = outcome.get("assessment")
     review_status = review.get("status")
     strategy_rows = _conclusion_strategy_rows(record)
-    achieved_strategy_claims = [
-        row["claim"]
-        for row in strategy_rows
-        if row["finding_status"] == "achieved" and row["claim"]
-    ]
+    # Different phrasing is not a scientific contradiction. The portfolio
+    # assessor uses explicit cited cross-strategy contradiction evidence.
     conflicting_strategy_claims = (
-        len({" ".join(value.casefold().split()) for value in achieved_strategy_claims}) > 1
+        outcome.get("label") == "Mixed · conflicting findings, unresolved"
     )
 
     if not artifacts:
@@ -1105,7 +1154,7 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
                 "",
                 "The session ended without a complete saved finding. No answer to the project question is established.",
             ]
-    elif status == "failed":
+    elif status == "failed" and assessment not in {"positive", "negative"}:
         lines = ["### Failed investigation", ""]
         if claim:
             lines.append(f"Saved findings include this candidate claim: {claim}")
@@ -1134,12 +1183,15 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
         if argument:
             lines += ["", argument]
     elif assessment == "negative":
+        supported = outcome.get("label") == "Negative · supported negative finding (unverified)"
         lines = [
-            "### Counterexample reported",
+            "### Supported negative finding (unverified)" if supported else "### Counterexample reported",
             "",
             summary or "The Skeptic reported a counterexample in the saved findings.",
             "",
-            "This agent-reported counterexample has not been independently verified; the session does not establish a complete answer beyond the claim it challenges.",
+            "This finding is agent-reviewed and has not been independently verified."
+            if supported else
+            "This agent-reported counterexample has not been independently verified; its objective-level relevance is not established.",
         ]
     elif review_status == "partial" or claim or argument:
         lines = ["### Partial finding", ""]
@@ -1297,6 +1349,317 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
     return conclusion
 
 
+
+def _scientific_candidate_evaluation(
+    record: dict[str, Any], artifact: dict[str, Any]
+) -> dict[str, Any]:
+    """Admit an agent-reviewed *candidate*, never a verified scientific result.
+
+    In particular, scheduling decisions and peer-only inspections do not
+    determine whether the objective's actual argument is complete.
+    """
+    skeptic = artifact.get("skeptic_output")
+    investigation = artifact.get("investigator_output")
+    review = artifact.get("objective_review")
+    review = review if isinstance(review, dict) else {}
+    steps = artifact.get("reasoning_steps")
+    steps = steps if isinstance(steps, list) else review.get("argument_steps", [])
+    steps = steps if isinstance(steps, list) else []
+    issues: list[str] = []
+    impacts: list[dict[str, Any]] = []
+    if isinstance(skeptic, dict) and isinstance(investigation, dict):
+        mathematical = _mathematical_session(record)
+        notes = [
+            *(skeptic.get("remaining_obligations") or []),
+            *(skeptic.get("unresolved_objections") or []),
+            *(artifact.get("open_obligations") or []),
+        ]
+        impacts = objective_obligation_impacts(
+            notes, skeptic=skeptic, reviewed_steps=steps, mathematical=mathematical,
+        )
+        if skeptic.get("objective_status") != "achieved":
+            issues.append("objective_not_achieved")
+        if skeptic.get("verification_status") != "convincing_unverified":
+            issues.append("candidate_evidence_incomplete")
+        if (
+            review.get("status") == "achieved"
+            and review.get("verification_status") != "convincing_unverified"
+        ) or review.get("verification_status") not in {
+            None, "incomplete", "convincing_unverified"
+        }:
+            issues.append("saved_verification_provenance_disputed")
+        if not str(skeptic.get("solution_claim") or "").strip():
+            issues.append("solution_claim_missing")
+        if not str(skeptic.get("argument_summary") or "").strip():
+            issues.append("argument_summary_missing")
+        if not skeptic.get("proof_obligations"):
+            issues.append("objective_requirements_unrecorded")
+        scope = _claim_scope(investigation, skeptic)
+        if scope == "disputed":
+            issues.append("claim_scope_disputed")
+        if not _argument_is_complete(
+            steps, mathematical_proof=mathematical,
+            claim_is_conditional=scope == "conditional",
+            declared_assumptions=investigation.get("assumptions", []),
+            reviewed_assumptions=skeptic.get("assumptions_reviewed", []),
+        ):
+            issues.append("critical_reasoning_incomplete")
+        if not (skeptic.get("supporting_cycles") or review.get("basis_artifact_ids")):
+            issues.append("supporting_cycles_missing")
+        if any(row["impact"] != "nonblocking_followup" for row in impacts):
+            issues.append("objective_dependency_open")
+        if skeptic.get("objective_retracted"):
+            issues.append("objective_claim_retracted")
+        same_strategy_history = [
+            prior for prior in record.get("artifacts", [])
+            if isinstance(prior, dict)
+            and prior.get("strategy_id") == artifact.get("strategy_id")
+            and prior.get("id") != artifact.get("id")
+        ]
+        if any(
+            prior.get("coordinator_decision") == "stop_decisive_counterexample"
+            and prior.get("objections")
+            and not _retracted_counterexample(str(prior.get("skeptic_response") or ""))
+            for prior in same_strategy_history
+        ) and not _retracted_counterexample(str(skeptic.get("response") or "")):
+            # Withdrawing a peer handoff is not retraction of a counterexample.
+            issues.append("historical_counterexample_unresolved")
+        if (
+            skeptic.get("stop_reason") == "decisive_counterexample"
+            and skeptic.get("objections")
+            and not _retracted_counterexample(str(skeptic.get("response") or ""))
+        ):
+            issues.append("decisive_counterexample_unresolved")
+        # For nonmathematical work a completed agent narrative is not a
+        # substitute for a documented fit between the claim and its evidence.
+        # The review links concrete supporting artifacts to stated requirements.
+        if not mathematical:
+            evidence = skeptic.get("scientific_evidence_review") or {}
+            linked = {
+                str(item.get("id"))
+                for item in record.get("artifacts", [])
+                if isinstance(item, dict) and item.get("id")
+            }
+            linked.add(str(artifact.get("id") or ""))
+            basis = evidence.get("basis_artifact_ids") or []
+            if not (
+                evidence.get("sufficiency") == "sufficient_for_scoped_claim"
+                and evidence.get("objective_requirements")
+                and basis
+                and all(identifier in linked for identifier in basis)
+                and len(str(evidence.get("rationale") or "").strip()) >= 24
+            ):
+                issues.append("discipline_evidence_unassessed")
+            kind = evidence.get("claim_kind") or "unassessed"
+            if kind == "unassessed":
+                issues.append("scientific_claim_kind_unknown")
+            if kind == "theoretical" and any(
+                item.get("epistemic_status") not in {"deduction", "assumption"}
+                for item in steps
+            ):
+                issues.append("theoretical_inference_not_established")
+            if kind in {"theoretical", "planning"} and (
+                set(investigation.get("assumptions") or [])
+                - set(skeptic.get("assumptions_reviewed") or [])
+            ):
+                issues.append("scientific_assumptions_unreviewed")
+            # Prose, source URLs, and successful executions are not independent
+            # verification. An empirical claim additionally needs recorded
+            # empirical evidence, not a theoretical step or a fetched citation.
+            if kind in {"empirical", "computational"}:
+                examined = []
+                for item in record.get("artifacts", []):
+                    if not isinstance(item, dict) or item.get("id") not in basis:
+                        continue
+                    investigator = item.get("investigator_output")
+                    if not isinstance(investigator, dict):
+                        continue
+                    execution = investigator.get("python_execution")
+                    if investigator.get("observed_data") or (
+                        isinstance(execution, dict)
+                        and execution.get("status") == "completed"
+                        and isinstance(execution.get("source"), str)
+                        and any(key in execution for key in ("stdout", "stderr", "artifacts"))
+                    ):
+                        examined.append(item)
+                if not examined:
+                    issues.append(
+                        "empirical_observations_not_recorded"
+                        if kind == "empirical"
+                        else "computational_output_not_recorded"
+                    )
+            if kind == "interpretive":
+                # A URL or citation is not a saved inspection of the text.
+                inspected = any(
+                    isinstance(item, dict)
+                    and item.get("id") in basis
+                    and (
+                        item.get("inspected_primary_text")
+                        or (item.get("investigator_output") or {}).get("inspected_primary_text")
+                    )
+                    for item in record.get("artifacts", [])
+                )
+                if not inspected:
+                    issues.append("primary_text_not_inspected")
+    else:
+        # Compatibility with archived objective reviews that predate separate
+        # raw role output. Absence of structured review must fail closed.
+        if review.get("status") != "achieved":
+            issues.append("objective_not_achieved")
+        if review.get("verification_status") != "convincing_unverified":
+            issues.append("candidate_evidence_incomplete")
+        if not _argument_is_complete(steps):
+            issues.append("critical_reasoning_incomplete")
+        if review.get("unresolved_objections") or artifact.get("open_obligations"):
+            issues.append("objective_dependency_open")
+    return {
+        "candidate_complete": not issues,
+        "blocking_reasons": list(dict.fromkeys(issues)),
+        "obligation_impacts": impacts,
+        "policy_version": OUTCOME_POLICY_VERSION,
+    }
+
+
+def _scientific_portfolio_assessment(
+    record: dict[str, Any], artifacts: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Reconcile final strategy findings without depending on finish order."""
+    latest: dict[str, dict[str, Any]] = {}
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        strategy = str(artifact.get("strategy_id") or "legacy")
+        previous = latest.get(strategy)
+        key = lambda item: (
+            int(item.get("strategy_cycle") or item.get("sequence") or 0),
+            int(item.get("sequence") or 0), str(item.get("id") or ""),
+        )
+        if previous is None or key(artifact) > key(previous):
+            latest[strategy] = artifact
+    rows: list[tuple[dict[str, Any], dict[str, Any]]] = sorted(
+        ((artifact, _scientific_candidate_evaluation(record, artifact))
+         for artifact in latest.values()),
+        key=lambda pair: (str(pair[0].get("strategy_id") or ""), str(pair[0].get("id") or "")),
+    )
+    candidates = [item for item in rows if item[1]["candidate_complete"]]
+     # A claimed contradiction requires an exact source artifact and an
+    # affected strategy still represented by a live final finding. It is not
+    # deduced merely because two claims are worded differently.
+    conflicts: list[str] = []
+    for artifact, _ in rows:
+        skeptic = artifact.get("skeptic_output") or {}
+        if not isinstance(skeptic, dict):
+            continue
+        retracted_ids = set(skeptic.get("retracted_cross_strategy_source_artifact_ids") or [])
+        for relation in skeptic.get("cross_strategy_relations", []) or []:
+            if not isinstance(relation, dict) or relation.get("relation") != "contradicts":
+                continue
+            target_id = str(relation.get("artifact_id") or "")
+            target = next(
+                (item for item in artifacts if str(item.get("id")) == target_id), None
+            )
+            if not isinstance(target, dict):
+                continue
+            target_strategy = str(target.get("strategy_id") or "legacy")
+            if (
+                target_id not in retracted_ids
+                and target_strategy in latest
+                and not (latest[target_strategy].get("skeptic_output") or {}).get("objective_retracted")
+                and target_strategy != str(artifact.get("strategy_id") or "legacy")
+            ):
+                conflicts.append(target_id)
+    negatives: list[dict[str, Any]] = []
+    reported: list[dict[str, Any]] = []
+    retracted: list[dict[str, Any]] = []
+    for artifact, assessment in rows:
+        skeptic = artifact.get("skeptic_output") or {}
+        if not isinstance(skeptic, dict):
+            skeptic = {}
+        if skeptic.get("objective_retracted") or artifact.get("coordinator_decision") == "stop_retracted_claim":
+            retracted.append(artifact)
+            continue
+        decisive = (
+            artifact.get("coordinator_decision") == "stop_decisive_counterexample"
+            or skeptic.get("stop_reason") == "decisive_counterexample"
+        )
+        if not decisive or _retracted_counterexample(str(skeptic.get("response") or artifact.get("skeptic_response") or "")):
+            continue
+        if not (skeptic.get("objections") or artifact.get("objections")):
+            continue
+        if (
+            skeptic.get("negative_target") == "project_objective"
+            and skeptic.get("negative_evidence_basis_artifact_ids")
+            and all(
+                str(identifier) in {str(item.get("id")) for item in artifacts}
+                for identifier in skeptic["negative_evidence_basis_artifact_ids"]
+            )
+            and len(str(skeptic.get("negative_rationale") or "").strip()) >= 24
+            and bool(artifact.get("reasoning_steps"))
+            and _argument_is_complete(artifact["reasoning_steps"])
+        ):
+            negatives.append(artifact)
+        elif skeptic.get("negative_target") == "project_objective" or (
+            not skeptic and artifact.get("coordinator_decision") == "stop_decisive_counterexample"
+        ):
+            # An unknown target or failed strategy cannot settle the objective.
+            reported.append(artifact)
+    default = (rows[0][0] if rows else artifacts[-1])
+    if conflicts or (candidates and (negatives or reported)):
+        label = "Mixed · conflicting findings, unresolved"
+        assessment = "mixed"
+        selected = candidates[0][0] if candidates else default
+        summary = "Saved strategies contain materially conflicting research findings; the stated objective remains unresolved."
+    elif candidates:
+        label, assessment = "Positive · solution candidate (unverified)", "positive"
+        selected = candidates[0][0]
+        summary = str((selected.get("objective_review") or {}).get("claim")
+                      or (selected.get("skeptic_output") or {}).get("solution_claim")
+                      or selected.get("claim_or_question") or "A reviewed solution candidate was recorded.")
+    elif negatives:
+        label, assessment = "Negative · supported negative finding (unverified)", "negative"
+        selected = negatives[0]
+        summary = str((selected.get("skeptic_output") or {}).get("negative_rationale")
+                      or selected.get("skeptic_response") or "An objective-level negative finding was recorded.")
+    elif reported:
+        label, assessment = "Negative · counterexample reported", "negative"
+        selected = reported[0]
+        summary = "A counterexample was reported but has not been independently verified or established as objective-settling."
+    elif retracted:
+        label, assessment = "Mixed · claim retracted", "mixed"
+        selected = retracted[0]
+        summary = "A previous candidate was retracted; remaining saved evidence does not establish the objective."
+    elif any(
+        (item.get("skeptic_output") or {}).get("objective_status") == "achieved"
+        for item, _ in rows
+    ):
+        label, assessment = "Mixed · promising finding; validation needed", "mixed"
+        selected = next(item for item, _ in rows if (item.get("skeptic_output") or {}).get("objective_status") == "achieved")
+        summary = "A substantial candidate was reported, but an essential evidence or dependency requirement remains unresolved."
+    elif any((item.get("objective_review") or {}).get("status") == "partial" for item, _ in rows):
+        label, assessment = "Mixed · partial progress, unresolved", "mixed"
+        selected = default
+        summary = str((selected.get("objective_review") or {}).get("claim")
+                      or selected.get("claim_or_question") or "The objective is not established.")
+    else:
+        label, assessment = "Mixed · inconclusive", "mixed"
+        selected = default
+        summary = "Saved evidence does not establish a supported objective-level conclusion."
+    matched = next(
+        (evaluation for artifact, evaluation in rows if artifact is selected),
+        {"candidate_complete": False, "obligation_impacts": [], "blocking_reasons": []},
+    )
+    return {
+        "assessment": assessment, "label": label, "summary": summary,
+        "selected": selected, "evaluation": matched, "conflicting_artifact_ids": sorted(set(conflicts)),
+        "strategy_evaluations": [
+            {"strategy_id": artifact.get("strategy_id"),
+             "artifact_id": artifact.get("id"), **evaluation}
+            for artifact, evaluation in rows
+        ],
+        "policy_version": OUTCOME_POLICY_VERSION,
+    }
+
+
 def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
     artifacts = record.get("artifacts", [])
     status = record.get("status")
@@ -1344,22 +1707,6 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         }
         outcome["conclusion"] = _outcome_conclusion(record, outcome)
         return outcome
-    decisive = next(
-        (
-            a
-            for a in reversed(artifacts)
-            if a["coordinator_decision"] == "stop_decisive_counterexample"
-        ),
-        None,
-    )
-    productive = next(
-        (
-            a
-            for a in reversed(artifacts)
-            if a["coordinator_decision"] == "stop_productive_conclusion"
-        ),
-        None,
-    )
     objective_review = next(
         (
             artifact["objective_review"]
@@ -1368,64 +1715,46 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         ),
         None,
     )
-    if record.get("assessment_error") and not (
-        objective_review and objective_review.get("status") == "achieved"
+    scientific = _scientific_portfolio_assessment(record, artifacts)
+    selected = scientific["selected"]
+    selected_review = selected.get("objective_review")
+    if isinstance(selected_review, dict):
+        objective_review = dict(selected_review)
+        evaluated = scientific["evaluation"]
+        if evaluated["candidate_complete"]:
+            objective_review["status"] = "achieved"
+            objective_review["verification_status"] = "convincing_unverified"
+        elif isinstance(selected.get("skeptic_output"), dict):
+            # Historical snapshots keep their original claimed status; this
+            # read-only projection independently checks scientific eligibility.
+            if objective_review.get("status") == "achieved":
+                objective_review["status"] = "partial"
+                if objective_review.get("verification_status") in {
+                    "incomplete", "convincing_unverified"
+                }:
+                    objective_review["verification_status"] = "incomplete"
+        objective_review["obligation_impacts"] = evaluated["obligation_impacts"]
+        objective_review["blocking_reasons"] = evaluated["blocking_reasons"]
+        objective_review["policy_version"] = OUTCOME_POLICY_VERSION
+    assessment = scientific["assessment"]
+    label = scientific["label"]
+    summary = scientific["summary"]
+    if (
+        selected_review
+        and selected_review.get("status") == "achieved"
+        and not selected_review.get("argument_steps")
     ):
-        assessment, label = "mixed", "Mixed · assessment incomplete"
-        summary = "Research notes were retained, but the objective assessment did not complete."
-    elif decisive:
-        assessment, label = "negative", "Negative · counterexample reported"
-        summary = f"The Skeptic reported a decisive counterexample: {decisive['skeptic_response']}"
-    elif (
-        objective_review
-        and objective_review.get("status") == "achieved"
-        and not objective_review.get("argument_steps")
-    ):
-        availability = argument_availability(objective_review, artifacts)
+        availability = argument_availability(selected_review, artifacts)
         assessment = "mixed"
         label = (
             "Mixed · unstructured argument, unassessed"
             if availability["status"] == "narrative"
             else "Mixed · argument not recorded"
         )
-        summary = f"A solution candidate was recorded. {availability['label']}"
-    elif (
-        objective_review
-        and objective_review.get("status") == "achieved"
-        and objective_review.get("verification_status") != "convincing_unverified"
-    ):
-        assessment = "mixed"
-        label = (
-            "Mixed · candidate assessment incomplete"
-            if objective_review.get("verification_status") == "incomplete"
-            else "Mixed · candidate verification unassessed"
-        )
-        summary = str(objective_review.get("claim") or "A candidate was reported.")
-    elif objective_review and objective_review.get("status") == "achieved":
-        assessment = "positive"
-        label = "Positive · solution candidate (unverified)"
-        summary = str(
-            objective_review.get("claim")
-            or objective_review.get("argument_summary")
-            or "Saved evidence presents a solution candidate for the stated objective."
-        )
-    elif objective_review:
-        assessment, label = "mixed", "Mixed · partial progress, unresolved"
-        summary = str(
-            objective_review.get("claim")
-            or objective_review.get("argument_summary")
-            or "The saved research does not yet establish the objective."
-        )
-    elif productive:
-        assessment, label = "mixed", "Mixed · useful result reported"
-        summary = f"The roles reported a useful result, but no saved objective assessment establishes completion: {productive['claim_or_question']}"
-    elif artifacts[-1]["coordinator_decision"] == "stop_no_progress":
-        assessment, label = "mixed", "Mixed · no next path; objective unknown"
-        summary = f"The latest review found no concrete next question, but no durable objective assessment is available: {artifacts[-1]['skeptic_response']}"
-    else:
-        assessment, label = "mixed", "Mixed · partial progress, unresolved"
-        latest = artifacts[-1]
-        summary = f"Latest result: {latest['claim_or_question']} Skeptic review: {latest['skeptic_response']}"
+        summary = availability["label"]
+    if record.get("assessment_error") and assessment != "positive":
+        assessment, label = "mixed", "Mixed · assessment incomplete"
+        summary = "Research notes were retained, but the objective assessment did not complete."
     caveats = ["Agent-reported evidence is unverified; agreement is not independent verification."]
     historical_omissions = record.get("prior_session_obligations_omitted", 0)
     if isinstance(historical_omissions, int) and historical_omissions > 0:
@@ -1511,6 +1840,9 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         "assessment": assessment,
         "label": label,
         "summary": summary[:1600],
+        "policy_version": OUTCOME_POLICY_VERSION,
+        "strategy_evaluations": scientific["strategy_evaluations"],
+        "conflicting_artifact_ids": scientific["conflicting_artifact_ids"],
         "caveats": caveats,
         "basis_artifact_ids": [a["id"] for a in artifacts],
         "provisional": status in {"queued", "running", "paused"},
@@ -2641,6 +2973,21 @@ SKEPTIC_GUIDANCE = (
     "objection remains, use partial/not_achieved. A complete argument without an independent "
     "proof checker is convincing_unverified; never claim verified. An empty next-step list is not "
     "evidence of failure. "
+    "For each open obligation and unresolved objection, distinguish a genuine objective dependency from optional "
+    "peer-source inspection, provenance, publication, or future investigation. In obligation_impacts "
+    "identify the exact note text, classify objective_blocking or nonblocking_followup, and cite accepted "
+    "reasoning step numbers with a dependency rationale. Do not mark an open obligation addressed merely "
+    "because the objective is reported achieved. If its dependency is uncertain, leave it blocking; "
+    "do not classify by keywords alone. A local proof may be complete despite independent peer "
+    "inspections remaining open, but a novelty claim can depend on literature inspection. "
+    "For nonmathematical completed claims, scientific_evidence_review must enumerate project-objective "
+    "requirements and linked saved evidence, distinguishing theoretical reasoning from physical "
+    "realizability, observations, empirical controls, simulations, text inspection, or planned actions. "
+    "Do not report sufficient evidence if the required observations or sources were not inspected. "
+    "For a negative result, set negative_target to project_objective only for an objective-settling "
+    "counterexample or impossibility finding; a failed strategy is strategy_claim, not a negative "
+    "answer to the project. Cite negative_evidence_basis_artifact_ids and explain negative_rationale. "
+    "Use objective_retracted when withdrawing an earlier conclusion; do not silently omit it. "
     "For every current Investigator reasoning_steps entry, return exactly one reasoning_assessments entry with its 1-based step_number. Independently check each inference against the supplied argument and cited artifacts. Accept only if the justification entails the step under explicit assumptions; otherwise use challenged or unresolved, explain the precise gap in objection, and do not promote the objective to achieved. Accepted rationale must explain the check, not merely agree. Set claim_is_conditional=true only if the solution_claim is explicitly conditional on the Investigator's listed assumptions; it must equal the Investigator's value. An accepted assumption step is a premise, never an established theorem: allow it only when the claim is explicitly conditional on that exact premise and assumptions_reviewed includes it. If the explanation appears compressed, a material inference is missing, or the 24-step/12,000-character bounds would hide work, identify the exact omitted obligation and keep the result partial. If a complete proof is not supported, preserve the strongest partial derivation, failed approaches, counterexamples and remaining proof obligations. The outcome is agent-reviewed and unverified, not independently verified; computation does not prove a universal statement."
 )
 
@@ -7699,45 +8046,14 @@ def _reconcile_skeptic_obligations(
         if isinstance(item, dict)
     }
     raw_remaining = list(skeptic.get("remaining_obligations", []))
-    global_closure = (
-        skeptic.get("objective_status") == "achieved"
-        and skeptic.get("verification_status") == "convincing_unverified"
-        and not raw_remaining
-        and not skeptic.get("unresolved_objections")
-    )
-    skeptic_step_id = next(
-        (
-            step.get("id")
-            for step in reversed(record.get("steps", []))
-            if step.get("role") == "skeptic"
-            and step.get("cycle") == cycle
-            and step.get("strategy_id", strategy_id) == strategy_id
-        ),
-        None,
-    )
-    closed_current_investigator_obligations = [
-        {
-            "obligation_id": item["obligation_id"],
-            "basis_step_ids": [skeptic_step_id] if isinstance(skeptic_step_id, str) else [],
-            "rationale": "Coordinator accepted the Skeptic's explicit achieved review with no remaining obligations or unresolved objections; this is a model-reported, unverified closure.",
-        }
-        for item in ledger
-        if global_closure
-        and item.get("status") == "unresolved"
-        and (
-            not item.get("source_refs")
-            or any(
-                isinstance(ref, dict) and ref.get("strategy_id") == strategy_id
-                for ref in item["source_refs"]
-            )
-        )
-    ]
+    # A model's global "achieved" declaration is not an evidence-backed
+    # disposition of the Investigator's outstanding obligations. Preserve
+    # every unresolved entry; explicit reviewed obligation IDs may close it.
     skeptic["coordinator_global_closure"] = {
-        "accepted": global_closure,
-        "basis": "objective achieved; no remaining obligations; no unresolved objections"
-        if global_closure
-        else "not established",
+        "accepted": False,
+        "basis": "Scientific obligations require individually evidenced dispositions.",
     }
+    closed_current_investigator_obligations: list[dict[str, Any]] = []
     skeptic["coordinator_closed_obligations"] = closed_current_investigator_obligations
     unresolved_investigator_notes = [
         item["text"]
@@ -7780,11 +8096,22 @@ def _reconcile_skeptic_obligations(
     skeptic["coordinator_added_obligations"] = added
     skeptic["remaining_obligations"] = list(dict.fromkeys(reconciled_remaining + added))
     if added and not raw_remaining and skeptic.get("stop_reason") == "productive_conclusion":
-        skeptic["model_assessment"] = skeptic.get("assessment")
-        skeptic["model_stop_reason"] = skeptic.get("stop_reason")
-        skeptic["assessment"] = "revise"
-        skeptic["stop_reason"] = "recoverable_objection"
-        skeptic["next_question"] = skeptic.get("next_question", "").strip() or added[0]
+        # Scheduling may continue, but nonblocking work must not rewrite the
+        # scientific result or masquerade as an objection to a complete proof.
+        evidence = _scientific_candidate_evaluation(
+            record,
+            {
+                "investigator_output": investigation,
+                "skeptic_output": skeptic,
+                "reasoning_steps": _reviewed_argument(investigation, skeptic),
+            },
+        )
+        if not evidence["candidate_complete"]:
+            skeptic["model_assessment"] = skeptic.get("assessment")
+            skeptic["model_stop_reason"] = skeptic.get("stop_reason")
+            skeptic["assessment"] = "revise"
+            skeptic["stop_reason"] = "recoverable_objection"
+            skeptic["next_question"] = skeptic.get("next_question", "").strip() or added[0]
 
 
 def _artifact_is_critical(artifact: dict[str, Any]) -> bool:
@@ -9070,36 +9397,15 @@ def _commit_portfolio_review(
         record.get("call_limit", CALL_LIMIT),
     )
     reviewed_argument = _reviewed_argument(investigation, output)
-    objective_candidate = (
-        output["objective_status"] == "achieved"
-        and output["assessment"] == "stop"
-        and not output["next_question"].strip()
-        and output["verification_status"] == "convincing_unverified"
-        and bool(output["solution_claim"].strip())
-        and bool(output["argument_summary"].strip())
-        and bool(output["proof_obligations"])
-        and _claim_scope(investigation, output) != "disputed"
-        and _argument_is_complete(
-            reviewed_argument,
-            mathematical_proof=_mathematical_session(record),
-            claim_is_conditional=_claim_scope(investigation, output) == "conditional",
-            declared_assumptions=investigation.get("assumptions", []),
-            reviewed_assumptions=output.get("assumptions_reviewed", []),
-        )
-        and not output["unresolved_objections"]
-        and not output["remaining_obligations"]
-        and not (
-            output["stop_reason"] == "decisive_counterexample"
-            and output["objections"]
-            and not _retracted_counterexample(output["response"])
-        )
-        and not any(
-            item.get("coordinator_decision") == "stop_decisive_counterexample"
-            and item.get("objections")
-            and not _retracted_counterexample(str(item.get("skeptic_response", "")))
-            for item in branch_artifacts
-        )
+    scientific_review = _scientific_candidate_evaluation(
+        record,
+        {
+            "investigator_output": investigation,
+            "skeptic_output": output,
+            "reasoning_steps": reviewed_argument,
+        },
     )
+    objective_candidate = scientific_review["candidate_complete"]
     # A model's "stop"/"productive conclusion" verdict is not itself proof that
     # the project objective has been met. If the saved, reviewed argument still
     # has unresolved obligations, schedule another strategy round when the
@@ -9358,6 +9664,7 @@ def _commit_portfolio_review(
         "skeptic_response": output["response"],
         "objections": output["objections"],
         "open_obligations": list(output["remaining_obligations"]),
+        "scientific_objective_review": scientific_review,
         "investigator_output": investigation,
         "skeptic_output": output,
         "reasoning_steps": [
@@ -9391,6 +9698,9 @@ def _commit_portfolio_review(
         "unresolved_objections": [] if objective_complete else output["unresolved_objections"],
         "resolved_objections": resolved_review_notes if objective_complete else [],
         "basis_artifact_ids": referenced_ids,
+        "obligation_impacts": scientific_review["obligation_impacts"],
+        "blocking_reasons": scientific_review["blocking_reasons"],
+        "policy_version": OUTCOME_POLICY_VERSION,
     }
     if not objective_complete and output["objective_status"] == "achieved":
         artifact["objective_review"]["status"] = "partial"
