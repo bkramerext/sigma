@@ -27,7 +27,7 @@ from uuid import UUID, uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import cloud_research, cloud_workspaces, session_log
+from sigma import cloud_research, cloud_workspaces, research_reference_compiler, session_log
 from sigma.build_info import build_commit
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
@@ -2172,6 +2172,16 @@ def _outcome(record: dict[str, Any]) -> dict[str, Any]:
     # an Investigator retrieved a domain source or independently checked it.
     if isinstance(record.get("research_method_sources"), dict):
         outcome["source_material"] = record["research_method_sources"]
+        if isinstance(record.get("reference_compilation"), dict):
+            outcome["source_material"] = {
+                **outcome["source_material"],
+                "compilation": {
+                    key: value
+                    for key, value in record["reference_compilation"].items()
+                    if key
+                    not in {"attempt_id", "budget_reservation", "cost_reserve", "token_reservation"}
+                },
+            }
     review = outcome.get("solution_review")
     outcome["verification_label"] = verification_label(review)
     outcome["argument_availability"] = argument_availability(review, record.get("artifacts", []))
@@ -3091,6 +3101,15 @@ def _potential_truncation_fields(role: str, output: dict[str, Any]) -> list[str]
 def _refresh_token_accounting(record: dict[str, Any]) -> None:
     """Aggregate call usage without presenting missing usage as a zero total."""
     steps = [step for step in record.get("steps", []) if isinstance(step, dict)]
+    compiler = record.get("reference_compilation")
+    if isinstance(compiler, dict) and isinstance(compiler.get("token_usage"), dict):
+        steps = [
+            *steps,
+            {
+                "status": "completed" if compiler.get("status") == "completed" else "incomplete",
+                "token_usage": compiler["token_usage"],
+            },
+        ]
     # A provider can complete and report billable tokens even when the
     # returned answer fails a local content/acknowledgment check. Include
     # these securely metered failed attempts, but never infer token usage
@@ -5253,6 +5272,38 @@ async def start_session(
             record["research_method_sources"]["sha256"] = methodology_digest(
                 record["research_method_sources"]
             )
+            source_count = len(record["research_method_sources"].get("sources", []))
+            # Keep legacy provider-fixture tests and staged rollouts explicit.
+            # Live sessions compile by default; disabling preserves the old
+            # request/session behavior without modifying frozen references.
+            compilation_enabled = os.environ.get(
+                "SIGMA_REFERENCE_COMPILATION_ENABLED", "true"
+            ).strip().lower() in {"1", "true", "yes", "on"}
+            if compilation_enabled:
+                record["reference_compilation"] = {
+                    "version": research_reference_compiler.VERSION,
+                    "status": "pending" if source_count else "not_needed",
+                    "source_sha256": record["research_method_sources"]["sha256"],
+                    "source_count": source_count,
+                    "created_at": _now(),
+                }
+            if (
+                compilation_enabled
+                and source_count
+                and isinstance(record.get("hard_budget_ledger"), dict)
+            ):
+                # One separately identified compilation call, not an Investigator/
+                # Skeptic turn. Existing total input and spend ceilings stay fixed.
+                increase_call_limit(
+                    record["hard_budget_ledger"],
+                    int(record["hard_budget_ledger"]["call_limit"]) + 1,
+                )
+            if compilation_enabled and source_count:
+                _event(
+                    record,
+                    "references.compilation.queued",
+                    "Preparing one-time AI compilation of research references.",
+                )
             # _outcome was initialized before all session metadata existed.
             record["outcome"] = _outcome(record)
             obligation_source_ids = {
@@ -6658,7 +6709,18 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             else None
         ),
         "methodology_source_material": (
-            record.get("research_method_sources", {}).get("sources", [])
+            [
+                {
+                    "id": "compiled-methodology-guide",
+                    "title": "Session-compiled research methods (selected uninspected annotations)",
+                    "notes": record["reference_compilation"]["guidance"],
+                    "source_ids": record["reference_compilation"]["selected_source_ids"],
+                    "provenance_sha256": record["reference_compilation"]["source_sha256"],
+                }
+            ]
+            if isinstance(record.get("reference_compilation"), dict)
+            and record["reference_compilation"].get("status") == "completed"
+            else record.get("research_method_sources", {}).get("sources", [])
             if isinstance(record.get("research_method_sources"), dict)
             else []
         ),
@@ -6735,6 +6797,18 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             for ref in method_references[:20]
             if isinstance(ref, str) or (isinstance(ref, dict) and isinstance(ref.get("url"), str))
         ]
+        if (
+            isinstance(record.get("reference_compilation"), dict)
+            and record["reference_compilation"].get("status") == "completed"
+        ):
+            retained = set(record["reference_compilation"].get("selected_source_ids", []))
+            frozen = record.get("research_method_sources", {}).get("sources", [])
+            retained_urls = {
+                row.get("url")
+                for row in frozen
+                if isinstance(row, dict) and row.get("id") in retained
+            }
+            named = [ref for ref in named if ref["url"] in retained_urls]
         context["research_method_references"] = named
         context["research_method_reference_urls"] = [ref["url"] for ref in named]
         context["research_method_references_omitted"] = max(0, len(method_references) - 20)
@@ -12367,6 +12441,347 @@ def _mark_protocol_complete(record: dict[str, Any]) -> bool:
     return True
 
 
+async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
+    """One durable, non-replayed AI method-compilation stage before research.
+
+    This is an additional metered call, not one of the Investigator/Skeptic
+    protocol slots. Its own persisted state and write-ahead spend reservation
+    survive worker restarts. Missing source material and old sessions continue
+    without retroactively recompiling anything.
+    """
+    state_lock = _session_state_lock(session_id)
+    async with state_lock:
+        record = _read(path, session_id)
+        if record["status"] in {"stopped", "paused", "ended", "completed", "failed"}:
+            return False
+        compilation = record.get("reference_compilation")
+        if not isinstance(compilation, dict):
+            return True  # Legacy session: preserve exact accepted prompts.
+        state = compilation.get("status")
+        if state in {"not_needed", "completed", "fallback", "skipped"}:
+            return True
+        if state in {"running", "interrupted"}:
+            # Unknown provider delivery must never be automatically replayed.
+            compilation["status"] = "interrupted"
+            compilation["reason"] = (
+                "Reference compilation may have reached the provider; it was not retried."
+            )
+            record["status"] = "paused"
+            record["current_action"] = "Paused · reference compilation"
+            record["message"] = compilation["reason"]
+            _event(record, "references.compilation.interrupted", record["message"])
+            _save(path, record)
+            return False
+        if state != "pending":
+            return True
+        try:
+            payload = research_reference_compiler.build_request(record)
+            _assert_safe_role_request(payload)
+        except (ProjectError, ValueError, TypeError, KeyError) as exc:
+            compilation["status"] = "fallback"
+            compilation["reason"] = str(exc)[:400]
+            _event(
+                record,
+                "references.compilation.skipped",
+                "Reference compilation unavailable; using the frozen method notes.",
+            )
+            _save(path, record)
+            return True
+        credential = await auth_context()
+        if (
+            credential["mode"] != record["mode"]
+            or _digest(credential["identity"]) != record["identity_hash"]
+        ):
+            record["status"] = "paused"
+            record["current_action"] = "Paused · AI account changed"
+            record["message"] = (
+                "Account changed before reference compilation; no provider call was made."
+            )
+            _save(path, record)
+            return False
+        _assert_safe_role_request(payload, credential.get("token"))
+        encoded = _serialized_role_request(payload)
+        input_bound = len(encoded) + 8192
+        # Personal ChatGPT streams cannot set max_output_tokens. Reserve
+        # the full provider/model output ceiling rather than the compiler's
+        # preferred 4K response size; never under-reserve unbounded output.
+        output_bound = (
+            MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
+            if record["mode"] == "chatgpt"
+            else research_reference_compiler.OUTPUT_TOKEN_BOUND
+        )
+        if output_bound is None:
+            compilation["status"] = "skipped"
+            compilation["reason"] = "No safe output-token bound for the compiler model."
+            _event(record, "references.compilation.skipped", compilation["reason"])
+            _save(path, record)
+            return True
+        token_reserve = input_bound + output_bound
+        prices = TOKEN_PRICES_PER_MILLION.get(record["model"])
+        quote = (
+            (
+                input_bound * max(prices["input"], prices["cache_write"])
+                + output_bound * prices["output"]
+            )
+            / 1_000_000
+            if prices is not None
+            else None
+        )
+        paid = record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
+        limit = record.get("maximum_estimated_cost_usd")
+        if (paid and quote is None) or (
+            paid
+            and limit is not None
+            and (
+                record.get("cost_status") != "available"
+                or float(record.get("estimated_cost_usd") or 0.0)
+                + float(record.get("estimated_cost_reserved_usd") or 0.0)
+                + float(quote or 0.0)
+                > limit
+            )
+        ):
+            compilation["status"] = "skipped"
+            compilation["reason"] = "No safe cost reservation for compilation."
+            _event(
+                record,
+                "references.compilation.skipped",
+                "Reference compilation skipped within spending limits; original references retained.",
+            )
+            _save(path, record)
+            return True
+        attempt_id = str(uuid4())
+        reservation = None
+        hard = record.get("hard_budget_ledger")
+        if isinstance(hard, dict):
+            try:
+                reservation = reserve_before_dispatch(
+                    hard,
+                    call_id=attempt_id,
+                    request_body=encoded,
+                    output_token_reservation=output_bound,
+                )
+            except BudgetExceeded:
+                compilation["status"] = "skipped"
+                compilation["reason"] = (
+                    "Compiling references would exceed the frozen research budget."
+                )
+                _event(record, "references.compilation.skipped", compilation["reason"])
+                _save(path, record)
+                return True
+        if cloud_research.billing_enabled():
+            try:
+                if quote is None:
+                    raise cloud_research.CloudResearchUnavailable(
+                        "Compilation cost cannot be bounded."
+                    )
+                cloud_research.reserve_call(
+                    session_id,
+                    attempt_id,
+                    quote,
+                    token_reserve,
+                    maximum_liability_usd=quote,
+                )
+            except cloud_research.CloudResearchUnavailable as exc:
+                if isinstance(hard, dict) and reservation is not None:
+                    cancel_before_dispatch(hard, call_id=attempt_id)
+                compilation["status"] = "skipped"
+                compilation["reason"] = str(exc)[:400]
+                _event(
+                    record,
+                    "references.compilation.skipped",
+                    "Reference compilation not funded; frozen references will be used.",
+                )
+                _save(path, record)
+                return True
+        compilation.update(
+            {
+                "status": "running",
+                "started_at": _now(),
+                "attempt_id": attempt_id,
+                "request_sha256": hashlib.sha256(encoded).hexdigest(),
+                "token_reservation": token_reserve,
+                "cost_reserve": quote,
+                "budget_reservation": reservation,
+            }
+        )
+        if reservation is not None or cloud_research.billing_enabled():
+            record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
+        if paid and quote is not None:
+            record["estimated_cost_reserved_usd"] = (
+                float(record.get("estimated_cost_reserved_usd", 0.0)) + quote
+            )
+        record["status"] = "running"
+        record["current_action"] = "Compiling research references"
+        record["message"] = "Compiling selected references once before Investigator/Skeptic turns."
+        _event(record, "references.compilation.started", record["message"])
+        _save(path, record)
+
+    raw: dict[str, Any] | None = None
+    compiled: dict[str, Any] | None = None
+    call_error: str | None = None
+    rejected = False
+    try:
+        timeout_seconds = min(120.0, _call_timeout_seconds(record))
+        if timeout_seconds <= 0:
+            raise TimeoutError("Reference compilation reached its session time ceiling.")
+        headers = {
+            "Authorization": "Bearer " + credential["token"],
+            "Content-Type": "application/json",
+        }
+        if credential["mode"] == "chatgpt":
+            headers["Accept"] = "text/event-stream"
+        async with (
+            _portfolio_global_gate(session_id),
+            asyncio.timeout(timeout_seconds),
+            httpx.AsyncClient(
+                timeout=timeout_seconds, follow_redirects=False, trust_env=False
+            ) as client,
+            client.stream(
+                "POST",
+                "https://api.openai.com/v1/responses",
+                headers=headers,
+                content=encoded,
+            ) as response,
+        ):
+            wire = bytearray()
+            async for chunk in response.aiter_bytes():
+                wire.extend(chunk)
+                if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
+                    raise ProjectError("Reference compiler response exceeded the 8 MB safety bound")
+            if response.status_code != 200:
+                rejected = True
+                raise ProjectError(
+                    f"Reference compilation provider rejected the request (HTTP {response.status_code})."
+                )
+            if credential["mode"] == "chatgpt":
+                raw = await completed(
+                    httpx.Response(
+                        response.status_code, headers=response.headers, content=bytes(wire)
+                    ),
+                    "research",
+                    max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
+                )
+            else:
+                raw = json.loads(wire)
+        if not isinstance(raw, dict) or raw.get("status") != "completed":
+            raise ProjectError("Reference compiler did not complete.")
+        texts = [
+            part["text"]
+            for item in raw.get("output", [])
+            if isinstance(item, dict)
+            for part in item.get("content", [])
+            if isinstance(part, dict)
+            and part.get("type") == "output_text"
+            and isinstance(part.get("text"), str)
+        ]
+        if len(texts) != 1:
+            raise ProjectError("Reference compiler returned an invalid response.")
+        data = json.loads(texts[0])
+        frozen_sources = record["research_method_sources"]["sources"]
+        compiled = research_reference_compiler.validate_result(data, frozen_sources)
+    except (Exception, asyncio.CancelledError) as exc:
+        # No automatic retry: provider delivery/usage can be uncertain.
+        call_error = type(exc).__name__
+        if isinstance(exc, asyncio.CancelledError):
+            raise
+    finally:
+        async with state_lock:
+            latest = _read(path, session_id)
+            stage = latest.get("reference_compilation")
+            if not isinstance(stage, dict) or stage.get("attempt_id") != attempt_id:
+                raise ProjectError("Reference compilation checkpoint was replaced unexpectedly.")
+            usage = _usage(raw) if isinstance(raw, dict) else None
+            estimated = _estimate_cost(latest["model"], usage) if usage is not None else None
+            if usage is not None:
+                stage["token_usage"] = usage
+            if cloud_research.billing_enabled():
+                if rejected:
+                    cloud_research.mark_call_provider_rejected(session_id, attempt_id)
+                else:
+                    cloud_research.settle_call(
+                        session_id,
+                        attempt_id,
+                        input_tokens=usage.get("input_tokens") if usage else None,
+                        output_tokens=usage.get("output_tokens") if usage else None,
+                        estimated_cost_usd=estimated,
+                    )
+            ledger = latest.get("hard_budget_ledger")
+            if isinstance(ledger, dict) and reservation is not None:
+                if rejected:
+                    settle_rejected(ledger, call_id=attempt_id)
+                elif (
+                    usage is not None
+                    and type(usage.get("input_tokens")) is int
+                    and type(usage.get("output_tokens")) is int
+                ):
+                    try:
+                        settle_after_response(
+                            ledger,
+                            call_id=attempt_id,
+                            input_tokens=cast(int, usage["input_tokens"]),
+                            output_tokens=cast(int, usage["output_tokens"]),
+                        )
+                    except BudgetExceeded as exc:
+                        call_error = str(exc)
+                else:
+                    mark_unknown(ledger, call_id=attempt_id)
+            if estimated is not None or rejected:
+                latest["tokens_reserved"] = max(
+                    0,
+                    int(latest.get("tokens_reserved", 0))
+                    - (
+                        token_reserve
+                        if reservation is not None or cloud_research.billing_enabled()
+                        else 0
+                    ),
+                )
+                if quote is not None:
+                    latest["estimated_cost_reserved_usd"] = max(
+                        0.0,
+                        float(latest.get("estimated_cost_reserved_usd", 0.0)) - quote,
+                    )
+            if estimated is not None and latest.get("cost_status") == "available":
+                latest["estimated_cost_usd"] = round(
+                    float(latest.get("estimated_cost_usd", 0.0)) + estimated, 9
+                )
+            if compiled is not None and call_error is None:
+                stage.update(compiled)
+                stage["status"] = "completed"
+                stage["reason"] = (
+                    "AI selected relevant methodological notes; original source records remain durable."
+                )
+                _event(
+                    latest,
+                    "references.compilation.completed",
+                    f"Compiled references: {len(compiled['selected_source_ids'])} retained, "
+                    f"{len(compiled['omitted_source_ids'])} omitted.",
+                )
+            else:
+                stage["status"] = (
+                    "fallback" if (estimated is not None or rejected) else "interrupted"
+                )
+                stage["reason"] = (
+                    "Compilation unavailable after a known provider response; using original references."
+                    if stage["status"] == "fallback"
+                    else "Compilation outcome or usage is uncertain. The call was not retried."
+                )
+                stage["failure_type"] = call_error
+                _event(latest, "references.compilation.failed", stage["reason"])
+            stage["finished_at"] = _now()
+            if latest["status"] not in {"stopped", "paused", "failed", "ended", "completed"}:
+                if stage["status"] == "interrupted":
+                    latest["status"] = "paused"
+                    latest["current_action"] = "Paused · reference compilation"
+                    latest["message"] = stage["reason"]
+                else:
+                    latest["status"] = "queued"
+                    latest["current_action"] = "References ready"
+                    latest["message"] = "Reference preparation finished. Research may proceed."
+            latest["updated_at"] = _now()
+            _save(path, latest)
+    return latest["status"] in {"queued", "running"}
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -12387,6 +12802,8 @@ async def _worker(session_id: str, path: str) -> None:
         # one-strategy session. The legacy worker below remains only for
         # persisted records created before per-strategy state existed.
         if initial.get("strategy_runs"):
+            if not await _ensure_reference_compilation(session_id, path):
+                return
             await _portfolio_worker(session_id, path)
             return
         while True:

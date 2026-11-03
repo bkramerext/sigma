@@ -18,6 +18,9 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
+# This historical accounting suite tests exactly the Investigator/Skeptic calls.
+os.environ.setdefault("SIGMA_REFERENCE_COMPILATION_ENABLED", "false")
+
 from sigma import cloud_research, cloud_workspaces, openai_connection, research_sessions
 from sigma.projects import (
     ProjectError,

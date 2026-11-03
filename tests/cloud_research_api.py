@@ -25,6 +25,7 @@ def main() -> None:
         for name in ("workspaces", "local-projects", "local-state"):
             (root / name).mkdir(mode=0o700)
         environment = {
+            "SIGMA_REFERENCE_COMPILATION_ENABLED": "false",
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
             "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
             "GOOGLE_OIDC_CLIENT_SECRET": "fixture-secret",
