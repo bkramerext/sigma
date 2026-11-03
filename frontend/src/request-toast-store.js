@@ -2,6 +2,17 @@ export const REQUEST_TOAST_LIFETIME_MS = 60_000;
 export const REQUEST_TOAST_EXIT_MS = 960;
 export const MAX_REQUEST_TOAST_MESSAGE_LENGTH = 600;
 
+/**
+ * The global fetch handler and local UI handlers may report the same failure
+ * with different HTTP envelopes. Compare only the user-facing detail so one
+ * provider/billing outage does not fill the toast stack with copies.
+ */
+function failureKey(message) {
+  return message.trim()
+    .replace(/^HTTP \d{3}(?: [^:\n]*)?:\s*/i, '')
+    .replace(/\s+/g, ' ');
+}
+
 export class RequestToastStore {
   constructor({
     setTimer = globalThis.setTimeout.bind(globalThis),
@@ -29,6 +40,12 @@ export class RequestToastStore {
     const shortened = text.length > MAX_REQUEST_TOAST_MESSAGE_LENGTH
       ? `${text.slice(0, MAX_REQUEST_TOAST_MESSAGE_LENGTH - 22).trimEnd()}… [message shortened]`
       : text;
+    // One active notification per distinct error. Keep the original expiry
+    // rather than extending it on every background poll or repeated callback.
+    const key = failureKey(shortened);
+    const existing = this.failures.find(failure => failureKey(failure.message) === key);
+    if (existing) return existing;
+
     const failure = { id: ++this.nextId, message: shortened, phase: 'visible' };
     const overflow = this.failures.slice(0, Math.max(0, this.failures.length + 1 - this.maxVisible));
     for (const old of overflow) this.clearTimers(old.id);
