@@ -88,6 +88,7 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
             },
         ],
         "investigator_step_id": "current-step",
+        "scheduler_note": "Research round 1/3; Investigator/Skeptic pair 1/3",
         "obligation_ledger": [
             {
                 "obligation_id": "obligation-1",
@@ -109,6 +110,15 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
         "basis_step_ids": ["current-step"],
     }
     research_sessions._validate_obligation_review_basis(context, good)
+    # Legacy v1 requests must not accept cross-strategy obligation evidence.
+    legacy_context = {key: value for key, value in context.items() if key != "scheduler_note"}
+    try:
+        research_sessions._validate_obligation_review_basis(legacy_context, good)
+    except ProjectError as exc:
+        assert "visible-peer" in str(exc)
+    else:
+        raise AssertionError("Legacy v1 obligation review accepted peer-only evidence")
+
     for bad in ("pointer-peer", "fabricated-artifact"):
         try:
             research_sessions._validate_obligation_review_basis(
