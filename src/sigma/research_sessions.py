@@ -240,6 +240,16 @@ class PeerHandoffReview(BaseModel):
     rationale: str = Field(min_length=10, max_length=600)
 
 
+class VerificationFollowup(BaseModel):
+    """Saved peer-source inspection that does not substitute for proof."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    text: str = Field(min_length=8, max_length=1000)
+    kind: str = Field(pattern="^peer_source_inspection$")
+    basis_artifact_ids: list[str] = Field(min_length=1, max_length=8)
+    rationale: str = Field(min_length=24, max_length=600)
+
+
 class ObligationReview(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     # Opaque references: compact local IDs, saved SHA-256 IDs and UUIDs
@@ -261,6 +271,9 @@ class Skeptic(BaseModel):
     response: str = Field(min_length=1, max_length=6000)
     objections: list[str] = Field(max_length=12)
     remaining_obligations: list[str] = Field(max_length=12)
+    verification_followups: list[VerificationFollowup] = Field(
+        default_factory=list, max_length=12
+    )
     next_question: str = Field(max_length=1000)
     objective_status: str = Field(pattern="^(achieved|partial|not_achieved)$")
     solution_claim: str = Field(max_length=2000)
@@ -389,6 +402,103 @@ def _claim_for_review(investigation: dict[str, Any], skeptic: dict[str, Any]) ->
     if scope == "disputed":
         return f"Claim scope disputed by Investigator and Skeptic: {claim}"
     return claim
+
+
+def _objective_verification_followups(
+    record: dict[str, Any], output: dict[str, Any], strategy_id: str
+) -> set[str] | None:
+    """Recognize only typed, peer-artifact-backed duties; never keyword-guess."""
+    declared = output.get("verification_followups", [])
+    if not isinstance(declared, list):
+        return None
+    peer_ids = {
+        item.get("id")
+        for item in record.get("artifacts", [])
+        if isinstance(item, dict)
+        and item.get("strategy_id") != strategy_id
+        and isinstance(item.get("id"), str)
+    }
+    pending = {
+        item.strip()
+        for field in ("remaining_obligations", "unresolved_objections", "objections")
+        for item in output.get(field, [])
+        if isinstance(item, str) and item.strip()
+    }
+    question = str(output.get("next_question", "")).strip()
+    if question:
+        pending.add(question)
+    allowed: set[str] = set()
+    for entry in declared:
+        if not isinstance(entry, dict):
+            return None
+        text = str(entry.get("text", "")).strip()
+        source_ids = entry.get("basis_artifact_ids")
+        if (
+            entry.get("kind") != "peer_source_inspection"
+            or not text
+            or text not in pending
+            or text in allowed
+            or not isinstance(source_ids, list)
+            or not source_ids
+            or any(source not in peer_ids for source in source_ids)
+            or len(str(entry.get("rationale", "")).strip()) < 24
+        ):
+            return None
+        allowed.add(text)
+    return allowed
+
+
+def _reviewed_objective_candidate(
+    record: dict[str, Any],
+    branch: dict[str, Any],
+    investigation: dict[str, Any],
+    output: dict[str, Any],
+    reviewed_argument: list[dict[str, Any]],
+    branch_artifacts: list[dict[str, Any]],
+) -> tuple[bool, list[str]]:
+    """Distinguish unresolved proof conditions from post-proof peer inspection."""
+    followups = _objective_verification_followups(record, output, branch["strategy_id"])
+    if followups is None:
+        return False, []
+    outstanding = {
+        note.strip()
+        for field in ("remaining_obligations", "unresolved_objections", "objections")
+        for note in output.get(field, [])
+        if isinstance(note, str) and note.strip()
+    }
+    next_question = str(output.get("next_question", "")).strip()
+    if next_question:
+        outstanding.add(next_question)
+    complete = (
+        output.get("objective_status") == "achieved"
+        and output.get("assessment") in {"stop", "continue"}
+        and (output.get("assessment") == "stop" or bool(followups))
+        and not (outstanding - followups)
+        and output.get("verification_status") == "convincing_unverified"
+        and bool(str(output.get("solution_claim", "")).strip())
+        and bool(str(output.get("argument_summary", "")).strip())
+        and bool(output.get("proof_obligations"))
+        and _claim_scope(investigation, output) != "disputed"
+        and _argument_is_complete(
+            reviewed_argument,
+            mathematical_proof=_mathematical_session(record),
+            claim_is_conditional=_claim_scope(investigation, output) == "conditional",
+            declared_assumptions=investigation.get("assumptions", []),
+            reviewed_assumptions=output.get("assumptions_reviewed", []),
+        )
+        and not (
+            output.get("stop_reason") == "decisive_counterexample"
+            and output.get("objections")
+            and not _retracted_counterexample(str(output.get("response", "")))
+        )
+        and not any(
+            item.get("coordinator_decision") == "stop_decisive_counterexample"
+            and item.get("objections")
+            and not _retracted_counterexample(str(item.get("skeptic_response", "")))
+            for item in branch_artifacts
+        )
+    )
+    return bool(complete), sorted(followups) if complete else []
 
 
 def _mathematical_session(record: dict[str, Any]) -> bool:
@@ -1060,15 +1170,22 @@ def _conclusion_strategy_rows(record: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _ordered_outcome_artifacts(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read historical artifacts in their recorded order, without rewriting them."""
+    items = record.get("artifacts", [])
+    if not isinstance(items, list):
+        return []
+    if not all(isinstance(item, dict) for item in items):
+        return [item for item in items if isinstance(item, dict)]
+    if all(type(item.get("sequence")) is int for item in items):
+        return sorted(items, key=lambda item: (item["sequence"], str(item.get("id", ""))))
+    return items
+
+
 def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
     """Build bounded Markdown that answers only as far as saved reviewed findings allow."""
     status = str(record.get("status") or "unknown")
-    artifact_values = record.get("artifacts", [])
-    artifacts = (
-        [item for item in artifact_values if isinstance(item, dict)]
-        if isinstance(artifact_values, list)
-        else []
-    )
+    artifacts = _ordered_outcome_artifacts(record)
     review = outcome.get("solution_review")
     review = review if isinstance(review, dict) else {}
     claim = str(review.get("claim") or "").strip()
@@ -1188,6 +1305,17 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
                 )
             lines.append(entry)
 
+    if review.get("independent_verification_followups"):
+        lines += [
+            "",
+            "### Independent verification still needed",
+            "",
+            "The following peer-source inspections remain open. They do not by themselves "
+            "refute the reviewed argument, but they cannot certify it.",
+        ]
+        lines.extend(
+            f"- {item}" for item in review["independent_verification_followups"][:8]
+        )
     unresolved_values = review.get("unresolved_objections", [])
     unresolved = list(unresolved_values) if isinstance(unresolved_values, list) else []
     open_obligations = review.get("open_obligations", [])
@@ -1298,7 +1426,7 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
 
 
 def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
-    artifacts = record.get("artifacts", [])
+    artifacts = _ordered_outcome_artifacts(record)
     status = record.get("status")
     if not artifacts:
         branch_findings = _strategy_findings(record, artifacts)
@@ -1360,14 +1488,37 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         ),
         None,
     )
-    objective_review = next(
-        (
-            artifact["objective_review"]
-            for artifact in reversed(artifacts)
-            if isinstance(artifact.get("objective_review"), dict)
-        ),
-        None,
+    # Only the latest review of each strategy can establish a candidate:
+    # a later retraction/revision on the same strategy overrides earlier claims.
+    # A separate partial strategy does not erase a completed reviewed candidate.
+    latest_by_strategy: dict[str, dict[str, Any]] = {}
+    for artifact in artifacts:
+        if isinstance(artifact.get("objective_review"), dict):
+            latest_by_strategy[str(artifact.get("strategy_id", "legacy"))] = artifact
+    reviewed = list(latest_by_strategy.values())
+    candidates = [
+        artifact
+        for artifact in reviewed
+        if artifact["objective_review"].get("status") == "achieved"
+        and artifact["objective_review"].get("verification_status")
+        == "convincing_unverified"
+    ]
+    material_contradiction = any(
+        isinstance(artifact.get("skeptic_output"), dict)
+        and any(
+            isinstance(relation, dict) and relation.get("relation") == "contradicts"
+            for relation in artifact["skeptic_output"].get("cross_strategy_relations", [])
+        )
+        for artifact in artifacts
     )
+    selected = (
+        candidates[-1]
+        if candidates and not material_contradiction
+        else reviewed[-1]
+        if reviewed
+        else None
+    )
+    objective_review = selected.get("objective_review") if selected else None
     if record.get("assessment_error") and not (
         objective_review and objective_review.get("status") == "achieved"
     ):
@@ -1410,7 +1561,18 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             or "Saved evidence presents a solution candidate for the stated objective."
         )
     elif objective_review:
-        assessment, label = "mixed", "Mixed · partial progress, unresolved"
+        reported_achieved = any(
+            isinstance(item, dict)
+            and isinstance(item.get("skeptic_output"), dict)
+            and item["skeptic_output"].get("objective_status") == "achieved"
+            for item in artifacts
+        )
+        assessment = "mixed"
+        label = (
+            "Mixed · candidate reported; objective review incomplete"
+            if reported_achieved
+            else "Mixed · partial progress, unresolved"
+        )
         summary = str(
             objective_review.get("claim")
             or objective_review.get("argument_summary")
@@ -1435,6 +1597,11 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             "complete historical obligation ledger; saved originals remain available."
         )
     if objective_review:
+        if objective_review.get("independent_verification_followups"):
+            caveats.append(
+                "Peer/source inspection remains open. This is an agent-reviewed "
+                "candidate, not an independently verified proof."
+            )
         if objective_review.get("status") == "achieved" and not objective_review.get(
             "argument_steps"
         ):
@@ -2641,6 +2808,16 @@ SKEPTIC_GUIDANCE = (
     "objection remains, use partial/not_achieved. A complete argument without an independent "
     "proof checker is convincing_unverified; never claim verified. An empty next-step list is not "
     "evidence of failure. "
+    "In verification_followups, include only *post-proof* peer-source inspections "
+    "that are not needed as premises, missing inferences, or contradiction checks. "
+    "Copy each exact task text from remaining_obligations, objections, "
+    "unresolved_objections or next_question; use kind peer_source_inspection, "
+    "cite one or more already saved, supplied peer artifact IDs in basis_artifact_ids, "
+    "and explain why the task does not change the fully reviewed reasoning. "
+    "If the missing source may affect the proof, the source is not supplied, or "
+    "the task is an unresolved substantive objection, do not designate it as "
+    "a verification followup. Preserve all original duties, never mark them "
+    "performed or independently verified, and return [] if none qualifies. "
     "For every current Investigator reasoning_steps entry, return exactly one reasoning_assessments entry with its 1-based step_number. Independently check each inference against the supplied argument and cited artifacts. Accept only if the justification entails the step under explicit assumptions; otherwise use challenged or unresolved, explain the precise gap in objection, and do not promote the objective to achieved. Accepted rationale must explain the check, not merely agree. Set claim_is_conditional=true only if the solution_claim is explicitly conditional on the Investigator's listed assumptions; it must equal the Investigator's value. An accepted assumption step is a premise, never an established theorem: allow it only when the claim is explicitly conditional on that exact premise and assumptions_reviewed includes it. If the explanation appears compressed, a material inference is missing, or the 24-step/12,000-character bounds would hide work, identify the exact omitted obligation and keep the result partial. If a complete proof is not supported, preserve the strongest partial derivation, failed approaches, counterexamples and remaining proof obligations. The outcome is agent-reviewed and unverified, not independently verified; computation does not prove a universal statement."
 )
 
@@ -7713,6 +7890,7 @@ def _reconcile_skeptic_obligations(
         and skeptic.get("verification_status") == "convincing_unverified"
         and not raw_remaining
         and not skeptic.get("unresolved_objections")
+        and not skeptic.get("verification_followups")
     )
     skeptic_step_id = next(
         (
@@ -9079,35 +9257,8 @@ def _commit_portfolio_review(
         record.get("call_limit", CALL_LIMIT),
     )
     reviewed_argument = _reviewed_argument(investigation, output)
-    objective_candidate = (
-        output["objective_status"] == "achieved"
-        and output["assessment"] == "stop"
-        and not output["next_question"].strip()
-        and output["verification_status"] == "convincing_unverified"
-        and bool(output["solution_claim"].strip())
-        and bool(output["argument_summary"].strip())
-        and bool(output["proof_obligations"])
-        and _claim_scope(investigation, output) != "disputed"
-        and _argument_is_complete(
-            reviewed_argument,
-            mathematical_proof=_mathematical_session(record),
-            claim_is_conditional=_claim_scope(investigation, output) == "conditional",
-            declared_assumptions=investigation.get("assumptions", []),
-            reviewed_assumptions=output.get("assumptions_reviewed", []),
-        )
-        and not output["unresolved_objections"]
-        and not output["remaining_obligations"]
-        and not (
-            output["stop_reason"] == "decisive_counterexample"
-            and output["objections"]
-            and not _retracted_counterexample(output["response"])
-        )
-        and not any(
-            item.get("coordinator_decision") == "stop_decisive_counterexample"
-            and item.get("objections")
-            and not _retracted_counterexample(str(item.get("skeptic_response", "")))
-            for item in branch_artifacts
-        )
+    objective_candidate, verification_followups = _reviewed_objective_candidate(
+        record, branch, investigation, output, reviewed_argument, branch_artifacts
     )
     # A model's "stop"/"productive conclusion" verdict is not itself proof that
     # the project objective has been met. If the saved, reviewed argument still
@@ -9136,7 +9287,6 @@ def _commit_portfolio_review(
             next_question = ""
     if (
         objective_candidate
-        and not output["next_question"].strip()
         and output["assessment"] in {"stop", "continue"}
     ):
         decision, next_question = coordinate_decision(
@@ -9348,7 +9498,7 @@ def _commit_portfolio_review(
             for review in all_reviews
             for key in ("objections", "unresolved_objections", "remaining_obligations")
             for note in review.get(key, [])
-            if str(note).strip()
+            if str(note).strip() and str(note).strip() not in verification_followups
         )
     )
     artifact = {
@@ -9398,6 +9548,9 @@ def _commit_portfolio_review(
         if objective_complete
         else "incomplete",
         "unresolved_objections": [] if objective_complete else output["unresolved_objections"],
+        "independent_verification_followups": (
+            verification_followups if objective_complete else []
+        ),
         "resolved_objections": resolved_review_notes if objective_complete else [],
         "basis_artifact_ids": referenced_ids,
     }

@@ -248,7 +248,9 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str, str]:
             # each category; B retains defaults and disables only Math publication.
             common = a_catalog["common_references"]
             a_pref = request(
-                user_a, "PUT", "/api/project-types",
+                user_a,
+                "PUT",
+                "/api/project-types",
                 json={
                     "project_types": [private_type],
                     "expected_revision": saved_types.json()["revision"],
@@ -260,27 +262,31 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str, str]:
                 row for row in b_catalog["project_types"] if row["id"] == "mathematical"
             )["publication_standards_references"][0]["url"]
             b_pref = request(
-                user_b, "PUT", "/api/project-types",
+                user_b,
+                "PUT",
+                "/api/project-types",
                 json={
                     "project_types": [],
                     "expected_revision": b_catalog["revision"],
                     "reference_preferences": {
                         "common": {
                             field: [ref["url"] for ref in common[field]]
-                            for field in ("research_standards_references",
-                                          "publication_standards_references")
+                            for field in (
+                                "research_standards_references",
+                                "publication_standards_references",
+                            )
                         },
-                        "mathematical": {
-                            "publication_standards_references": [math_publication]
-                        },
+                        "mathematical": {"publication_standards_references": [math_publication]},
                     },
                 },
             )
             assert b_pref.status_code == 200, b_pref.text
-            assert request(user_a, "GET", "/api/project-types").json()["reference_preferences"] == {}
-            assert request(user_b, "GET", "/api/project-types").json()[
-                "reference_preferences"
-            ]["mathematical"] == {"publication_standards_references": [math_publication]}
+            assert (
+                request(user_a, "GET", "/api/project-types").json()["reference_preferences"] == {}
+            )
+            assert request(user_b, "GET", "/api/project-types").json()["reference_preferences"][
+                "mathematical"
+            ] == {"publication_standards_references": [math_publication]}
 
             local_project = root / "local-projects" / "local-only.sigma"
             assert (local_project / "project.json").is_file()
@@ -317,12 +323,10 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str, str]:
             # discipline source for research and publication under A.
             for field in ("research_standards_references", "publication_standards_references"):
                 actual = a_project["project"]["project_type_snapshot"][field]
-                curated = {
-                    row["url"] for row in common[field]
-                } | {
-                    next(
-                        row for row in a_catalog["project_types"] if row["id"] == "literature"
-                    )[field][0]["url"]
+                curated = {row["url"] for row in common[field]} | {
+                    next(row for row in a_catalog["project_types"] if row["id"] == "literature")[
+                        field
+                    ][0]["url"]
                 }
                 assert len(actual) == len(curated) == 3
                 assert {row["url"] for row in actual} == curated
@@ -764,9 +768,10 @@ def main() -> None:
                     item["id"] != private_type_id
                     for item in request(user_b, "GET", "/api/project-types").json()["project_types"]
                 )
-                assert "mathematical" in request(
-                    user_b, "GET", "/api/project-types"
-                ).json()["reference_preferences"]
+                assert (
+                    "mathematical"
+                    in request(user_b, "GET", "/api/project-types").json()["reference_preferences"]
+                )
             with httpx.Client(base_url=restarted.url, headers=identity("subject-a")) as user_a:
                 paper = request(
                     user_a,
@@ -783,15 +788,26 @@ def main() -> None:
                     user_a, "GET", "/api/projects/inspect", params={"path": a_path}
                 ).json()
                 assert reloaded_project["project"]["project_type_snapshot"]["id"] == private_type_id
-                assert request(user_a, "GET", "/api/project-types").json()[
-                    "reference_preferences"
-                ] == {}
-                assert len(
-                    reloaded_project["project"]["project_type_snapshot"]["research_standards_references"]
-                ) == 3
-                assert len(
-                    reloaded_project["project"]["project_type_snapshot"]["publication_standards_references"]
-                ) == 3
+                assert (
+                    request(user_a, "GET", "/api/project-types").json()["reference_preferences"]
+                    == {}
+                )
+                assert (
+                    len(
+                        reloaded_project["project"]["project_type_snapshot"][
+                            "research_standards_references"
+                        ]
+                    )
+                    == 3
+                )
+                assert (
+                    len(
+                        reloaded_project["project"]["project_type_snapshot"][
+                            "publication_standards_references"
+                        ]
+                    )
+                    == 3
+                )
         finally:
             restarted.stop()
 

@@ -4359,10 +4359,15 @@ class CloudAuthTests(TestCase):
                 a_saved = self.client.put(
                     "/api/project-types",
                     json={
-                        "project_types": [{
-                            "id": "e2-a-type", "name": "A private type", "scope": "A only",
-                            "icon": a_before["icons"]["placeholder"], "user_defined": True
-                        }],
+                        "project_types": [
+                            {
+                                "id": "e2-a-type",
+                                "name": "A private type",
+                                "scope": "A only",
+                                "icon": a_before["icons"]["placeholder"],
+                                "user_defined": True,
+                            }
+                        ],
                         "expected_revision": a_before["revision"],
                         "common_custom_references": {
                             "research_standards_references": [
@@ -4373,15 +4378,19 @@ class CloudAuthTests(TestCase):
                             ],
                         },
                         "builtin_custom_references": {
-                            "mathematical": {"publication_standards_references": [
-                                {"name": "A math", "url": a_math_p}
-                            ]}
+                            "mathematical": {
+                                "publication_standards_references": [
+                                    {"name": "A math", "url": a_math_p}
+                                ]
+                            }
                         },
                         # Only the two curated Common links are enabled.
-                        "reference_preferences": {"common": {
-                            "research_standards_references": [a_extra_r],
-                            "publication_standards_references": [a_extra_p],
-                        }},
+                        "reference_preferences": {
+                            "common": {
+                                "research_standards_references": [a_extra_r],
+                                "publication_standards_references": [a_extra_p],
+                            }
+                        },
                     },
                     headers=headers,
                 )
@@ -4395,10 +4404,15 @@ class CloudAuthTests(TestCase):
                 b_saved = client_b.put(
                     "/api/project-types",
                     json={
-                        "project_types": [{
-                            "id": "e2-b-type", "name": "B private type", "scope": "B only",
-                            "icon": b_before["icons"]["placeholder"], "user_defined": True
-                        }],
+                        "project_types": [
+                            {
+                                "id": "e2-b-type",
+                                "name": "B private type",
+                                "scope": "B only",
+                                "icon": b_before["icons"]["placeholder"],
+                                "user_defined": True,
+                            }
+                        ],
                         "expected_revision": b_before["revision"],
                         "common_custom_references": {
                             "publication_standards_references": [
@@ -4406,9 +4420,8 @@ class CloudAuthTests(TestCase):
                             ]
                         },
                         "reference_preferences": {
-                            **defaults, "mathematical": {
-                                "publication_standards_references": [math_p]
-                            }
+                            **defaults,
+                            "mathematical": {"publication_standards_references": [math_p]},
                         },
                     },
                     headers=headers,
@@ -4432,7 +4445,8 @@ class CloudAuthTests(TestCase):
                 a_created = self.client.post(
                     "/api/projects/create",
                     json={
-                        "title": "E2 Crucible A", "problem": "Methodology",
+                        "title": "E2 Crucible A",
+                        "problem": "Methodology",
                         "investigation_type": "literature",
                     },
                     headers=headers,
@@ -4440,7 +4454,8 @@ class CloudAuthTests(TestCase):
                 b_created = client_b.post(
                     "/api/projects/create",
                     json={
-                        "title": "E2 Mathematics B", "problem": "Methodology",
+                        "title": "E2 Mathematics B",
+                        "problem": "Methodology",
                         "investigation_type": "mathematical",
                     },
                     headers=headers,
@@ -4464,22 +4479,31 @@ class CloudAuthTests(TestCase):
                 ):
                     self.assertEqual({ref["url"] for ref in a_snapshot[field]}, expected)
                 self.assertEqual(
-                    {ref["url"] for ref in b_created.json()["project"]["project_type_snapshot"]["publication_standards_references"]},
+                    {
+                        ref["url"]
+                        for ref in b_created.json()["project"]["project_type_snapshot"][
+                            "publication_standards_references"
+                        ]
+                    },
                     {b_extra_p},
                 )
                 b_research = {
-                    next(item for item in project_types.builtin_types()
-                         if item.id == "mathematical")
-                    .research_standards_references[0]["url"]
+                    next(
+                        item for item in project_types.builtin_types() if item.id == "mathematical"
+                    ).research_standards_references[0]["url"]
                 }
                 for principal, path, research_urls, publication_urls in (
                     (
                         cloud_auth.Principal("google-sub-1", "admin@example.org", "admin"),
-                        a_created.json()["path"], expected_research, expected_publication,
+                        a_created.json()["path"],
+                        expected_research,
+                        expected_publication,
                     ),
                     (
                         cloud_auth.Principal("e2-user-b", "e2-member@example.org", "member"),
-                        b_created.json()["path"], b_research, {b_extra_p},
+                        b_created.json()["path"],
+                        b_research,
+                        {b_extra_p},
                     ),
                 ):
                     context = cloud_auth._CURRENT_PRINCIPAL.set(principal)

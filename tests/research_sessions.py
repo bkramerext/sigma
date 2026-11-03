@@ -5604,6 +5604,180 @@ def test_deliberate_argument_gap_is_preserved_and_not_complete():
     )
 
 
+def test_e1_peer_inspection_does_not_hide_complete_unverified_candidate():
+    """Maximum Regions E1: no retroactive evidence mutation or paid requests."""
+    from copy import deepcopy
+
+    peer_note = "Inspect the saved peer proof artifact before independent verification."
+    followup = {
+        "text": peer_note,
+        "kind": "peer_source_inspection",
+        "basis_artifact_ids": ["peer-artifact"],
+        "rationale": (
+            "The independent peer inspection does not supply a premise or inference "
+            "in the self-contained reviewed derivation."
+        ),
+    }
+    argument = [
+        {
+            "epistemic_status": "deduction",
+            "argument": "The insertion bound and attaining construction agree.",
+            "review": {
+                "disposition": "accepted",
+                "rationale": "The lower and upper region bounds follow from the recorded construction.",
+                "objection": "",
+            },
+        }
+    ]
+    investigation = {"claim_is_conditional": False, "assumptions": []}
+    record = {
+        "investigation_type": "mathematical",
+        "artifacts": [{"id": "peer-artifact", "strategy_id": "euler"}],
+    }
+    branch = {"strategy_id": "incremental"}
+    output = {
+        "objective_status": "achieved",
+        "assessment": "continue",
+        "stop_reason": "recoverable_objection",
+        "next_question": peer_note,
+        "verification_status": "convincing_unverified",
+        "solution_claim": "R(n) = 1 + n(n+1)/2.",
+        "argument_summary": "Upper bound and explicit attainment.",
+        "proof_obligations": ["Insertion bound reviewed", "Attainment reviewed"],
+        "claim_is_conditional": False,
+        "remaining_obligations": [peer_note],
+        "unresolved_objections": [peer_note],
+        "objections": [peer_note],
+        "verification_followups": [followup],
+        "response": "The proof is a convincing but unverified candidate.",
+    }
+    classify = lambda value, steps=argument, inv=investigation, rec=record: (
+        research_sessions._reviewed_objective_candidate(
+            rec, branch, inv, value, steps, []
+        )
+    )
+    assert classify(output) == (True, [peer_note])
+    assert "verification_followups" in research_sessions._research_schema(
+        research_sessions.Skeptic
+    )["required"]
+
+    # None of these substantive/ungrounded cases may be waived.
+    bad = deepcopy(output)
+    bad["remaining_obligations"].append("Prove the missing lower-bound step.")
+    assert classify(bad)[0] is False
+    bad = deepcopy(output)
+    bad["verification_followups"][0]["basis_artifact_ids"] = ["invented-source"]
+    assert classify(bad)[0] is False
+    bad = deepcopy(output)
+    bad["verification_followups"][0]["text"] = "A different task"
+    assert classify(bad)[0] is False
+    bad = deepcopy(output)
+    bad["verification_status"] = "incomplete"
+    assert classify(bad)[0] is False
+    bad = deepcopy(output)
+    bad["objective_status"] = "partial"
+    assert classify(bad)[0] is False
+    bad = deepcopy(output)
+    bad["claim_is_conditional"] = True
+    assert classify(bad)[0] is False
+    bad = deepcopy(output)
+    bad["stop_reason"] = "decisive_counterexample"
+    assert classify(bad)[0] is False
+    bad = deepcopy(output)
+    bad["verification_followups"] = []
+    assert classify(bad)[0] is False
+    challenged = deepcopy(argument)
+    challenged[0]["review"]["disposition"] = "challenged"
+    challenged[0]["review"]["objection"] = "This inference is missing a premise."
+    assert classify(output, challenged)[0] is False
+    bad = deepcopy(record)
+    bad["artifacts"].append(
+        {
+            "id": "counterexample",
+            "strategy_id": "incremental",
+            "coordinator_decision": "stop_decisive_counterexample",
+            "objections": ["A genuine counterexample"],
+        }
+    )
+    # Branch-local decisive counterexamples cannot be erased by peer followups.
+    assert (
+        research_sessions._reviewed_objective_candidate(
+            bad, branch, investigation, output, argument, [bad["artifacts"][-1]]
+        )[0]
+        is False
+    )
+
+    achieved_review = {
+        "status": "achieved",
+        "claim": output["solution_claim"],
+        "argument_summary": output["argument_summary"],
+        "argument_steps": argument,
+        "verification_status": "convincing_unverified",
+        "unresolved_objections": [],
+        "independent_verification_followups": [peer_note],
+        "basis_artifact_ids": ["accepted-artifact"],
+    }
+    accepted = {
+        "id": "accepted-artifact",
+        "strategy_id": "incremental",
+        "sequence": 2,
+        "coordinator_decision": "stop_productive_conclusion",
+        "objective_review": achieved_review,
+        "skeptic_output": {"objective_status": "achieved"},
+        "skeptic_response": "Convincing but unverified",
+        "open_obligations": [peer_note],
+    }
+    partial = {
+        "id": "partial-artifact",
+        "strategy_id": "euler",
+        "sequence": 3,
+        "coordinator_decision": "stop_round_limit",
+        "objective_review": {
+            "status": "partial",
+            "claim": "A second route is unfinished.",
+            "verification_status": "incomplete",
+        },
+        "skeptic_output": {"objective_status": "partial"},
+        "skeptic_response": "Peer review remains open",
+        "open_obligations": [],
+    }
+    saved = {
+        "status": "ended",
+        "strategy_runs": [],
+        "artifacts": [accepted, partial],
+    }
+    positive = research_sessions._outcome_without_metrics(saved)
+    assert positive["assessment"] == "positive"
+    assert positive["solution_review"]["independent_verification_followups"] == [peer_note]
+    assert "independently verified" in " ".join(positive["caveats"])
+    assert peer_note in positive["conclusion"]
+    reversed_record = {**saved, "artifacts": list(reversed(saved["artifacts"]))}
+    reversed_result = research_sessions._outcome_without_metrics(reversed_record)
+    assert reversed_result["assessment"] == positive["assessment"]
+    assert reversed_result["solution_review"] == positive["solution_review"]
+    assert reversed_result["conclusion"] == positive["conclusion"]
+
+    historical = {**saved, "artifacts": [{
+        **accepted,
+        "objective_review": {
+            "status": "partial",
+            "claim": output["solution_claim"],
+            "verification_status": "incomplete",
+        },
+    }]}
+    old = research_sessions._outcome_without_metrics(historical)
+    assert old["assessment"] == "mixed"
+    assert "candidate reported" in old["label"]
+    # The historical frozen record was never rewritten.
+    assert historical["artifacts"][0]["objective_review"]["status"] == "partial"
+    contradictory = deepcopy(saved)
+    contradictory["artifacts"][1]["skeptic_output"] = {
+        "objective_status": "partial",
+        "cross_strategy_relations": [{"relation": "contradicts"}],
+    }
+    assert research_sessions._outcome_without_metrics(contradictory)["assessment"] == "mixed"
+
+
 async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
     problem = (
         "For each integer n >= 0, determine the maximum number of regions formed by n lines. "
@@ -12917,6 +13091,7 @@ def main():
         asyncio.run(test_storage_limit_pauses_without_artifact(root / "storage.sigma"))
         asyncio.run(test_remove_terminal_and_monotonic_number(root / "removal.sigma"))
         test_deliberate_argument_gap_is_preserved_and_not_complete()
+        test_e1_peer_inspection_does_not_hide_complete_unverified_candidate()
         asyncio.run(
             test_maximum_regions_solution_and_frozen_attribution(root / "maximum-regions.sigma")
         )
