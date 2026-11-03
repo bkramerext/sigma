@@ -245,6 +245,28 @@ with sync_playwright() as playwright:
     first_entry.get_by_role("button", name="Edit").click()
     page.unroute("**/api/reference-title?*badbadbad.bad*", invalid_domain)
     url_input = parent.get_by_label("Research reference URL 1")
+
+    # A bare "google.com" is stored as HTTPS, then the retrieved page title
+    # replaces the raw address in the link label without a paid AI request.
+    def google_title(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"title":"Google","domain_status":"valid"}',
+        )
+
+    page.route("**/api/reference-title?*google.com*", google_title)
+    url_input.fill("google.com")
+    url_input.press("Enter")
+    expect(first_entry.locator(".pt-reference-link a")).to_have_attribute(
+        "href", "https://google.com"
+    )
+    expect(first_entry.locator(".pt-reference-link a")).to_have_text("Google")
+    first_entry.get_by_role("button", name="Edit").click()
+    url_input = parent.get_by_label("Research reference URL 1")
+    expect(url_input).to_have_value("google.com")
+    page.unroute("**/api/reference-title?*google.com*", google_title)
+
     url_input.fill("example.org/research-standard")
     expect(url_input).to_have_attribute("aria-invalid", "false")
     expect(parent.get_by_text("Enter a valid public website address", exact=False)).to_have_count(0)
