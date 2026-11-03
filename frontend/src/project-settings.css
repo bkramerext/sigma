@@ -424,3 +424,7 @@
 .project-settings-dialog.ai-paper-dialog .saved-paper-card .ai-paper-eli5-output {
   min-width: 0; max-width: 100%; overflow-wrap: anywhere;
 }
+
+.project-references-usage { margin-top: 18px; padding-top: 12px; border-top: 1px solid #36404a; }
+.project-references-usage p { margin: 0 0 9px; color: #cbd5dd; line-height: 1.55; }
+.project-references-usage .text-view-link { width: fit-content; }
