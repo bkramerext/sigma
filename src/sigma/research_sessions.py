@@ -12446,7 +12446,8 @@ def _optional_reference_compilation_headroom(
     compiler_cost: float,
     compiler_liability: float,
     *,
-    compiler_input_bound: int = 0,
+    compiler_request_body: bytes = b"",
+    compiler_output_bound: int = 0,
 ) -> bool:
     """Do not spend optional compilation funding needed by the first research turn.
 
@@ -12484,24 +12485,34 @@ def _optional_reference_compilation_headroom(
                 return False
         hard = record.get("hard_budget_ledger")
         if isinstance(hard, dict):
-            role_input_bound = (
-                len(
-                    _serialized_role_request(_role_request_payload(record, "investigator", context))
-                )
-                + 8192
-            )
-            used_input = sum(
-                int(
-                    item.get("input_tokens", 0)
-                    if item.get("status") in {"settled", "rejected"}
-                    else item.get("input_token_bound", 0)
-                )
-                for item in hard.get("calls", [])
-            )
-            if used_input + compiler_input_bound + role_input_bound > int(
-                hard["input_token_limit"]
-            ):
+            # A compiler request is additional to the configured agent turns.
+            # Simulate BOTH admissions on a copy of the frozen ledger, using
+            # full provider output ceilings. Input-only checks missed output
+            # liability, cumulative cost, and the call-count limit. Those
+            # omissions could strand an otherwise admissible first turn.
+            if not compiler_request_body or compiler_output_bound < 1:
                 return False
+            preview = deepcopy(hard)
+            reserve_before_dispatch(
+                preview,
+                call_id="preflight-reference-compilation",
+                request_body=compiler_request_body,
+                output_token_reservation=compiler_output_bound,
+                allow_concurrent=True,
+            )
+            provider_output_bound = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
+            if provider_output_bound is None:
+                return False
+            role_request = _serialized_role_request(
+                _role_request_payload(record, "investigator", context)
+            )
+            reserve_before_dispatch(
+                preview,
+                call_id="preflight-first-investigator",
+                request_body=role_request,
+                output_token_reservation=provider_output_bound,
+                allow_concurrent=True,
+            )
     except Exception:  # noqa: BLE001 — optional step must never block research
         return False
     return True
@@ -12612,7 +12623,8 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             and quote is not None
             and full_liability is not None
             and not _optional_reference_compilation_headroom(
-                record, quote, full_liability, compiler_input_bound=input_bound
+                record, quote, full_liability,
+                compiler_request_body=encoded, compiler_output_bound=output_bound,
             )
         ):
             compilation["status"] = "skipped"
