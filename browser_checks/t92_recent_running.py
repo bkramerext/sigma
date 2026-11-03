@@ -194,9 +194,11 @@ with sync_playwright() as playwright:
     expect(unpin).to_be_visible()
     assert unpin.get_attribute("data-tooltip") == "Show all versions of this project"
     assert unpin.get_attribute("title") is None
+    # Pin and Unpin keep the same idle color, and both brighten on hover.
+    page.mouse.move(1, 1)
     assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
     unpin.hover()
-    assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
+    assert unpin.evaluate("node => getComputedStyle(node).color") == "rgb(245, 213, 147)"
 
     page.reload()
     recent = page.get_by_role("tabpanel", name="Saved")
