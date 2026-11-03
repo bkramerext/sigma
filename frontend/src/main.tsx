@@ -1947,7 +1947,11 @@ function paperProgressOperation(progress: PaperProgress): string {
     case 'evidence': return `${milestone ? 'Evidence extracted' : 'Extracting evidence'}${count}`;
     case 'consolidation': return 'Consolidating findings';
     case 'planning': return milestone ? 'Paper plan ready' : 'Planning the paper';
-    case 'sections': return `${milestone ? 'Section written' : 'Writing sections'}${count}`;
+    case 'sections': {
+      if (progress.current === null || progress.total === null) return 'Sections remaining';
+      const remaining = Math.max(0, progress.total - progress.current);
+      return `${remaining} section${remaining === 1 ? '' : 's'} remaining`;
+    }
     case 'validation': return milestone ? 'Paper validated' : 'Validating the paper';
     case 'proofreading': return 'Proofreading TeX';
     case 'compile': return `Compiling PDF${pdfPass}`;

@@ -3888,6 +3888,7 @@ def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
     assert ("evidence", 1, 1, "milestone") in progress_events
     assert ("planning", None, None, "active") in progress_events
     assert ("planning", None, None, "milestone") in progress_events
+    assert ("sections", 0, 6, "active") in progress_events
     section_milestones = [
         item[1:3] for item in progress_events if item[0] == "sections" and item[3] == "milestone"
     ]
