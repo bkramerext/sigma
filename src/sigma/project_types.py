@@ -249,6 +249,16 @@ def common_references() -> dict[str, list[dict[str, str]]]:
     return {field: list(_validate_references(raw[field], field)) for field in REFERENCE_FIELDS}
 
 
+def _default_reference_preferences() -> dict[str, dict[str, list[str]]]:
+    """Per-user default: omit shared guides, retain discipline-specific guides."""
+    return {
+        "common": {
+            field: [ref["url"] for ref in refs]
+            for field, refs in common_references().items()
+        }
+    }
+
+
 def _validate_reference_preferences(
     value: Any,
     custom: list[ProjectType],
@@ -303,7 +313,7 @@ def reference_preferences() -> dict[str, dict[str, list[str]]]:
     """Persisted, private presentation-independent reference usage switches."""
     catalog = _read_catalog()
     return _validate_reference_preferences(
-        catalog.get("reference_preferences", {}), custom_types()
+        catalog.get("reference_preferences", _default_reference_preferences()), custom_types()
     )
 
 
@@ -406,21 +416,25 @@ def get_type(identifier: str) -> ProjectType | None:
     if item is None:
         return None
     common = common_references()
-    disabled = reference_preferences()
+    preferences = reference_preferences()
+    # Disabling a reference on a parent also applies to derived types.
+    definitions = {row.id: row for row in [*builtin_types(), *custom_types()]}
+    ancestry = {identifier}
+    ancestor = definitions[identifier].based_on
+    while ancestor and ancestor not in ancestry and ancestor in definitions:
+        ancestry.add(ancestor)
+        ancestor = definitions[ancestor].based_on
     combined = {}
     for field in REFERENCE_FIELDS:
-        shared_off = set(disabled.get("common", {}).get(field, []))
-        type_off = set(disabled.get(identifier, {}).get(field, []))
+        disabled = set(preferences.get("common", {}).get(field, []))
+        for ancestor_id in ancestry:
+            disabled.update(preferences.get(ancestor_id, {}).get(field, []))
         by_url = {
             ref["url"]: ref
-            for ref in [*(ref for ref in common[field] if ref["url"] not in shared_off), *getattr(item, field)]
-            if ref["url"] not in type_off
+            for ref in [*common[field], *getattr(item, field)]
+            if ref["url"] not in disabled
         }
-        # Shared disable applies to the same URL even if inherited or repeated.
-        combined[field] = tuple(
-            sorted((ref for url, ref in by_url.items() if url not in shared_off),
-                   key=lambda ref: ref["url"].casefold())
-        )
+        combined[field] = tuple(sorted(by_url.values(), key=lambda ref: ref["url"].casefold()))
     return replace(item, **combined)
 
 
@@ -499,7 +513,7 @@ def _write_custom(
                 "Project types changed in another window; reload and review before saving"
             )
         current_preferences = (
-            _read_catalog().get("reference_preferences", {})
+            _read_catalog().get("reference_preferences", _default_reference_preferences())
             if reference_preferences_update is None
             else reference_preferences_update
         )
