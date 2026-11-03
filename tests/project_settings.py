@@ -311,12 +311,20 @@ def main():
             )
             limits_url = "/api/projects/research-limits"
             defaults = client.get(limits_url, params={"path": str(path)}).json()
-            assert defaults == {**research_sessions.NEW_DEFAULT_LIMITS, "max_concurrent_sessions": "1"}
+            assert defaults == {
+                **research_sessions.NEW_DEFAULT_LIMITS,
+                "max_concurrent_sessions": "1",
+            }
             assert defaults["research_rounds"] == 3
             assert defaults["model_calls"] == 18
             assert defaults["session_duration_minutes"] == 60
             assert defaults["output_tokens_per_call"] == 4000
-            changed_limits = {**research_sessions.DEFAULT_LIMITS, "max_concurrent_sessions": "1", "research_rounds": 2, "model_calls": 4}
+            changed_limits = {
+                **research_sessions.DEFAULT_LIMITS,
+                "max_concurrent_sessions": "1",
+                "research_rounds": 2,
+                "model_calls": 4,
+            }
             saved_limits = client.put(limits_url, json={"path": str(path), **changed_limits})
             assert saved_limits.status_code == 200 and saved_limits.json() == changed_limits
             assert client.get(limits_url, params={"path": str(path)}).json() == changed_limits
@@ -389,7 +397,8 @@ def main():
             assert finite_again.status_code == 200, finite_again.text
             assert finite_again.json()["session_duration_minutes"] == 60
             assert (
-                research_sessions.get_limits(str(sibling.path)) == research_sessions.NEW_DEFAULT_LIMITS
+                research_sessions.get_limits(str(sibling.path))
+                == research_sessions.NEW_DEFAULT_LIMITS
             )
         expected = asdict(project_settings(inspect_project(path).project))
         result = subprocess.run(

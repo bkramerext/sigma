@@ -638,9 +638,7 @@ def prepare_job(record: dict[str, Any]) -> None:
     # New sessions have an explicit, versioned per-strategy pair-slot ceiling.
     # 12 is the maximum permitted selected-strategy count in start_session.
     call_ceiling = (
-        12 * 60 * 20 * 2
-        if record.get("scheduler_version") == 2
-        else session_call_ceiling()
+        12 * 60 * 20 * 2 if record.get("scheduler_version") == 2 else session_call_ceiling()
     )
     if (
         type(call_limit) is not int

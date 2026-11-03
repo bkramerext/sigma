@@ -3869,7 +3869,10 @@ async def test_pause_counts_interrupted_call(path: Path):
         )
         await asyncio.wait_for(started_call.wait(), 2)
         progress = research_sessions.get_session(str(path), started["id"])
-        assert "Investigator agent turn 1/12 in progress" in progress["message"]
+        if progress.get("scheduler_version") == 2:
+            assert "Investigator agent call 1/" in progress["message"]
+        else:
+            assert "Investigator agent turn 1/12 in progress" in progress["message"]
         await research_sessions.control_session(str(path), started["id"], "pause")
         await asyncio.sleep(0.02)
         paused = research_sessions.get_session(str(path), started["id"])
@@ -13565,7 +13568,6 @@ def main():
     print("Persistent research session scenarios passed.")  # CI retrigger
 
 
-
 def test_e001_research_reference_content_frozen_and_in_both_role_requests(monkeypatch):
     """No provider usage: retrieved excerpts are frozen, hashed and auditable."""
     import hashlib
@@ -13684,4 +13686,3 @@ def test_e001_reference_fetch_rejects_private_hosts_and_downgrade(monkeypatch):
 
 if __name__ == "__main__":
     main()
-
