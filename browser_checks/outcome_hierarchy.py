@@ -64,6 +64,24 @@ with sync_playwright() as playwright:
             current_row = rows.nth(index)
             expand(current_row)
             outcome = current_row.locator(".session-outcome")
+            if index == 0:
+                format_button = outcome.locator(".outcome-heading-title > .sigma-render-toggle")
+                expect(format_button).to_be_visible()
+                assert format_button.get_attribute("title") is None
+                expect(format_button).to_have_css("color", "rgb(199, 161, 109)")
+                format_button.hover()
+                expect(format_button).to_have_css("color", "rgb(255, 242, 233)")
+                assert (
+                    format_button.evaluate("element => getComputedStyle(element).backgroundImage")
+                    != "none"
+                )
+                assert (
+                    format_button.evaluate(
+                        "element => getComputedStyle(element).borderTopLeftRadius"
+                    )
+                    == "6px"
+                )
+                page.mouse.move(0, 0)
             simple = outcome.locator(".outcome-simple")
             expect(simple).to_be_visible()
             expect(outcome.locator(".outcome-subsection")).to_have_count(0)

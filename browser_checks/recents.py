@@ -38,6 +38,13 @@ with sync_playwright() as playwright:
 
     page.route("**/api/**", forward)
     page.goto(UI_ORIGIN + "/")
+    project_actions = page.locator(".home-projects-heading .home-project-action")
+    expect(project_actions).to_have_count(2)
+    for label in ("New", "Import"):
+        action = project_actions.get_by_role("button", name=label, exact=True)
+        expect(action).to_have_css("color", "rgb(241, 197, 141)")
+        action.hover()
+        expect(action).to_have_css("color", "rgb(255, 224, 171)")
     page.get_by_role("button", name="New", exact=True).hover()
     expect(page.get_by_role("tooltip")).to_have_text("Create a project")
     page.get_by_role("button", name="Open", exact=True).hover()
@@ -138,6 +145,9 @@ with sync_playwright() as playwright:
     if scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"]:
         scroller.evaluate("e=>e.scrollTop=e.scrollHeight")
         assert scroller.evaluate("e=>e.scrollTop") > 0
+        bottom_inset = scroller.evaluate("e => e.scrollHeight - e.scrollTop - e.clientHeight")
+        assert abs(bottom_inset) < 2, bottom_inset
+        assert scroller.evaluate("e => parseFloat(getComputedStyle(e).paddingBottom)") >= 32
         scroller.evaluate("e=>e.scrollTop=0")
     assert (
         samples_panel.locator(".sample-open strong").all_text_contents()[-1]

@@ -956,7 +956,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const markdownSymbol = <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>;
   const markdownButton = (label: string, active: boolean, onClick: () => void) =>
     <button type="button" className="sigma-render-toggle" aria-label={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
-      aria-pressed={active} title={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
+      aria-pressed={active}
       data-tooltip={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
       onClick={onClick}>{markdownSymbol}</button>;
   const outcomeFormatToggle = markdownButton('all research sections', (['conclusion', 'reasoning', 'citations', 'assessments'] as OutcomeMarkdownSection[]).every(section => activeSections.has(section)), toggleAllMarkdown);
@@ -2719,7 +2719,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }} title={renderTooltip}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
+      }}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
   const markdownControl = <span className="text-view-format-control">
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
@@ -2731,7 +2731,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {editing ? combinedEditMode ? null : <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" title={`Save ${name}`} disabled={busy || !draft.trim()}>Save</button>
       <button type="button" className="text-view-link" title={`Cancel editing ${name}`} disabled={busy} onClick={() => cancelBodyEdit()}>Cancel</button>
-      </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} title={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
+      </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
 
     {!hideProjectActions && scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-export-trigger workspace-icon-button" aria-label="Export project" title="Export project" data-tooltip="Export project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
     {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" title="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><SettingsGearIcon /></button>}
@@ -2788,7 +2788,7 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
       <button type="submit" className="text-view-link" title="Save project title" disabled={busy}>Save</button><button type="button" className="text-view-link" title="Cancel editing the project title" disabled={busy} onClick={() => cancel()}>Cancel</button>
       {error && <p role="alert" className="project-title-error">{error}</p>}
     </form> : <><h3 className="current-project">{view.project.title}</h3>
-      <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} data-tooltip-disabled disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
+      <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} data-tooltip="Edit text and description" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg>
       </button><span id="project-markdown-slot-copy" className="project-copy-slot"/> </>}
   </div>;
@@ -3859,8 +3859,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         <p className="settings-hint">When enabled, each saved outcome opens with its conclusion and provides expandable reasoning, evidence, metrics and session details. When disabled, SIGMA shows a concise result with its qualifications.</p>
       </fieldset>
       <div className="project-references-usage">
-        <p>Reference manuals used for research and publication can increase AI input tokens and usage costs. Shared references are disabled by default for each user; subject-specific references remain enabled. Choose which references to use for future work in Project Types.</p>
-        <button type="button" className="text-view-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Adjust now</button>
+        <p>Research and publication references may increase AI usage costs. <button type="button" className="project-reference-adjust-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Adjust now</button></p>
       </div>
       {error && <p role="alert" className="error">{error}</p>}
     </section>}
@@ -4282,7 +4281,7 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptio
       <button type="button" className="text-view-link" title="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
       <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
-      <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and description: ${shownTitle}`} data-tooltip-disabled disabled={modeDisabled}
+      <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and approach: ${shownTitle}`} data-tooltip="Edit strategy title and approach" disabled={modeDisabled}
         onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`strategy-markdown-slot-${strategy.id}-copy`} className="strategy-copy-slot"/>
       {commands}
     </div>}

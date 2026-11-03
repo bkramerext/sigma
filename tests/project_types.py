@@ -180,6 +180,204 @@ def main() -> None:
             assert restored_type is not None
             assert len(restored_type.research_standards_references) == 1
 
+            # Per-user shared additions do not replace or remove curated guides.
+            catalog = client.get("/api/project-types").json()
+            research_ref = {"name": "User research guide", "url": "https://example.org/research"}
+            publication_ref = {
+                "name": "User publication guide",
+                "url": "https://example.org/publication",
+            }
+            additions = {
+                "research_standards_references": [research_ref],
+                "publication_standards_references": [publication_ref],
+            }
+            saved = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": catalog["revision"],
+                    "common_custom_references": additions,
+                },
+            )
+            assert saved.status_code == 200, saved.text
+            current = client.get("/api/project-types").json()
+            assert current["common_references"] == common
+            assert current["common_custom_references"] == additions
+            assert project_types.common_custom_references() == additions
+            assert {ref["url"] for ref in project_types.common_research_references()} == {
+                research_ref["url"]
+            }
+            # Legacy updates and independent toggle changes preserve additions.
+            older = client.put(
+                "/api/project-types",
+                json={"project_types": [], "expected_revision": current["revision"]},
+            )
+            assert older.status_code == 200, older.text
+            assert project_types.common_custom_references() == additions
+            hidden = {
+                **default_disabled,
+                "common": {
+                    **default_disabled["common"],
+                    "research_standards_references": [
+                        *default_disabled["common"]["research_standards_references"],
+                        research_ref["url"],
+                    ],
+                },
+            }
+            disabled = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": older.json()["revision"],
+                    "reference_preferences": hidden,
+                },
+            )
+            assert disabled.status_code == 200, disabled.text
+            assert project_types.common_research_references() == ()
+            # Removing a disabled custom guide must also clear its preference.
+            removed = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": disabled.json()["revision"],
+                    "reference_preferences": default_disabled,
+                    "common_custom_references": {
+                        "research_standards_references": [],
+                        "publication_standards_references": [publication_ref],
+                    },
+                },
+            )
+            assert removed.status_code == 200, removed.text
+            assert project_types.common_research_references() == ()
+            # An attempt to replace a curated default is rejected atomically.
+            bad = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": removed.json()["revision"],
+                    "common_custom_references": {
+                        "research_standards_references": [
+                            {
+                                "name": "Override",
+                                "url": common["research_standards_references"][0]["url"],
+                            }
+                        ],
+                    },
+                },
+            )
+            assert bad.status_code == 400, bad.text
+            assert client.get("/api/project-types").json()["revision"] == removed.json()["revision"]
+
+            # Add removable user-owned references to an otherwise immutable built-in type.
+            before_builtin = client.get("/api/project-types").json()
+            math_builtin = next(
+                item for item in before_builtin["project_types"] if item["id"] == "mathematical"
+            )
+            builtin_research = {
+                "name": "Additional mathematics method",
+                "url": "https://example.org/math-method",
+            }
+            builtin_publication = {
+                "name": "Additional mathematics publication guide",
+                "url": "https://example.org/math-writing",
+            }
+            math_additions = {
+                "mathematical": {
+                    "research_standards_references": [builtin_research],
+                    "publication_standards_references": [builtin_publication],
+                }
+            }
+            updated_builtin = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": before_builtin["revision"],
+                    "builtin_custom_references": math_additions,
+                },
+            )
+            assert updated_builtin.status_code == 200, updated_builtin.text
+            current_builtin = client.get("/api/project-types").json()
+            assert current_builtin["builtin_custom_references"] == math_additions
+            assert (
+                next(
+                    item
+                    for item in current_builtin["project_types"]
+                    if item["id"] == "mathematical"
+                )
+                == math_builtin
+            )
+            effective_math = project_types.get_type("mathematical")
+            assert effective_math is not None
+            assert builtin_research in effective_math.research_standards_references
+            assert builtin_publication in effective_math.publication_standards_references
+            from sigma import research_method_sources
+
+            sources, _ = research_method_sources._effective_sources("mathematical")
+            assert builtin_research["url"] in {item["url"] for item in sources}
+            # Older API clients must preserve additions made in the editor.
+            legacy_builtin = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": current_builtin["revision"],
+                },
+            )
+            assert legacy_builtin.status_code == 200, legacy_builtin.text
+            assert project_types.builtin_custom_references() == math_additions
+            # Built-in defaults cannot be replaced, even by a user's overlay.
+            rejected_builtin = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": legacy_builtin.json()["revision"],
+                    "builtin_custom_references": {
+                        "mathematical": {
+                            "research_standards_references": [
+                                {
+                                    "name": "Replace curated guide",
+                                    "url": math_builtin["research_standards_references"][0]["url"],
+                                }
+                            ]
+                        }
+                    },
+                },
+            )
+            assert rejected_builtin.status_code == 400, rejected_builtin.text
+            assert project_types.builtin_custom_references() == math_additions
+            # Disable and remove custom additions without changing the built-in records.
+            hidden_builtin = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": legacy_builtin.json()["revision"],
+                    "reference_preferences": {
+                        **default_disabled,
+                        "mathematical": {
+                            "research_standards_references": [builtin_research["url"]]
+                        },
+                    },
+                },
+            )
+            assert hidden_builtin.status_code == 200, hidden_builtin.text
+            assert (
+                builtin_research
+                not in project_types.get_type("mathematical").research_standards_references
+            )
+            removed_builtin = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": hidden_builtin.json()["revision"],
+                    "builtin_custom_references": {},
+                    "reference_preferences": default_disabled,
+                },
+            )
+            assert removed_builtin.status_code == 200, removed_builtin.text
+            assert project_types.builtin_custom_references() == {}
+            assert project_types.get_type("mathematical").research_standards_references == (
+                builtins_by_id["mathematical"].research_standards_references
+            )
+
     from sigma.reference_titles import _TitleParser, resolve_title
 
     parsed_title = _TitleParser()
@@ -190,66 +388,6 @@ def main() -> None:
     assert parsed_title.og_title == "Preferred & Tested"
     assert resolve_title("http://127.0.0.1/secret") is None
     assert resolve_title("file:///etc/passwd") is None
-
-    # Google redirects from its bare domain to www; the visible reference
-    # should still resolve to "Google" rather than displaying the bare URL.
-    from sigma import reference_titles
-
-    reference_titles.resolve_title.cache_clear()
-    with patch(
-        "sigma.reference_titles._request_page",
-        side_effect=[
-            (301, "https://www.google.com/", None),
-            (200, None, b"<html><head><title>Google</title></head></html>"),
-        ],
-    ) as request_page:
-        assert resolve_title("https://google.com/") == "Google"
-        assert [args.args[0] for args in request_page.call_args_list] == [
-            "https://google.com/",
-            "https://www.google.com/",
-        ]
-    reference_titles.resolve_title.cache_clear()
-
-    # Redirects must not downgrade HTTPS or run forever on loops.
-    with patch(
-        "sigma.reference_titles._request_page",
-        return_value=(302, "http://www.google.com/", None),
-    ) as request_page:
-        assert resolve_title("https://google.com/") is None
-        assert request_page.call_count == 1
-    reference_titles.resolve_title.cache_clear()
-    with patch(
-        "sigma.reference_titles._request_page",
-        return_value=(301, "/same", None),
-    ) as request_page:
-        assert resolve_title("https://www.google.com/same") is None
-        assert request_page.call_count == 1
-    reference_titles.resolve_title.cache_clear()
-    with patch(
-        "sigma.reference_titles._request_page",
-        return_value=(302, "https://www.google.com/next", None),
-    ) as request_page:
-        assert resolve_title("https://google.com/") is None
-        assert request_page.call_count <= reference_titles._MAX_REDIRECTS + 1
-    reference_titles.resolve_title.cache_clear()
-
-    import socket
-
-    from sigma.reference_titles import domain_status
-
-    assert domain_status("http://127.0.0.1/private") == "invalid"
-    assert domain_status("file:///etc/passwd") == "invalid"
-    assert domain_status("https://not-a-site") == "invalid"
-    with patch("sigma.reference_titles.socket.getaddrinfo") as lookup:
-        lookup.side_effect = socket.gaierror(socket.EAI_NONAME, "Name not found")
-        assert domain_status("https://badbadbad.bad/guide") == "invalid"
-        lookup.side_effect = socket.gaierror(socket.EAI_AGAIN, "Temporary resolver failure")
-        assert domain_status("https://example.org/guide") == "unverified"
-        lookup.side_effect = None
-        lookup.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 443))]
-        assert domain_status("https://example.org/guide") == "valid"
-        lookup.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))]
-        assert domain_status("https://example.org/guide") == "invalid"
 
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()

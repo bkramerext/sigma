@@ -370,6 +370,96 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible(timeout=15000)
         expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
+        # The Markdown icon must match the title pencil at rest and on hover.
+        markdown_button = page.locator(
+            ".project-pane-title-line .project-markdown-slot .sigma-render-toggle"
+        )
+        pencil_button = page.locator(".project-pane-title-line .project-title-pencil")
+        expect(markdown_button).to_be_visible()
+        expect(markdown_button).to_be_enabled()
+        expect(pencil_button).to_be_visible()
+        icon_style = (
+            "element => { const s = getComputedStyle(element); "
+            "return [s.color, s.backgroundImage, s.borderTopColor, "
+            "s.borderTopLeftRadius, s.boxShadow, s.textShadow]; }"
+        )
+        assert markdown_button.evaluate(icon_style) == pencil_button.evaluate(icon_style)
+        pencil_button.hover()
+        expect(pencil_button).to_have_css("color", "rgb(255, 242, 233)")
+        pencil_hover = pencil_button.evaluate(icon_style)
+        markdown_button.hover()
+        expect(markdown_button).to_have_css("color", "rgb(255, 242, 233)")
+        assert markdown_button.evaluate(icon_style) == pencil_hover
+        assert markdown_button.get_attribute("title") is None
+        markdown_tooltip = markdown_button.get_attribute("data-tooltip")
+        assert markdown_tooltip
+        expect(page.locator("#sigma-ui-tooltip")).to_have_text(markdown_tooltip)
+        # The SVG viewBox contains blank space on the right: test the painted
+        # paths, not just the SVG element's rectangular layout box.
+        center_offset = markdown_button.locator("svg.markdown-logo").evaluate(
+            """svg => {
+              const box = svg.getBBox();
+              const matrix = svg.getScreenCTM();
+              const center = new DOMPoint(box.x + box.width / 2, box.y + box.height / 2)
+                .matrixTransform(matrix);
+              const button = svg.closest('button').getBoundingClientRect();
+              return [center.x - (button.left + button.right) / 2,
+                      center.y - (button.top + button.bottom) / 2];
+            }"""
+        )
+        assert all(abs(offset) < 1 for offset in center_offset), center_offset
+        markdown_box = markdown_button.bounding_box()
+        pencil_box = pencil_button.bounding_box()
+        assert markdown_box and pencil_box
+        assert (
+            abs(
+                (markdown_box["y"] + markdown_box["height"] / 2)
+                - (pencil_box["y"] + pencil_box["height"] / 2)
+            )
+            < 1.5
+        )
+        pencil_button.hover()
+        expect(page.locator("#sigma-ui-tooltip")).to_have_text("Edit text and description")
+        assert pencil_button.get_attribute("title") is None
+        strategy_pencils = page.locator(".strategy-title-pencil")
+        assert strategy_pencils.count() > 0
+        assert all(
+            value == "Edit strategy title and approach"
+            for value in strategy_pencils.evaluate_all(
+                "buttons => buttons.map(button => button.dataset.tooltip)"
+            )
+        )
+        assert all(
+            value is None
+            for value in strategy_pencils.evaluate_all(
+                "buttons => buttons.map(button => button.getAttribute('title'))"
+            )
+        )
+        strategy_markdown = page.locator(
+            ".strategy-title-line .strategy-markdown-slot .sigma-render-toggle"
+        ).first
+        strategy_pencil = strategy_pencils.first
+        expect(strategy_markdown).to_be_visible()
+        assert strategy_markdown.get_attribute("title") is None
+        assert strategy_markdown.evaluate(icon_style) == strategy_pencil.evaluate(icon_style)
+        strategy_pencil.hover()
+        expect(strategy_pencil).to_have_css("color", "rgb(255, 242, 233)")
+        strategy_hover_style = strategy_pencil.evaluate(icon_style)
+        strategy_markdown.hover()
+        expect(strategy_markdown).to_have_css("color", "rgb(255, 242, 233)")
+        assert strategy_markdown.evaluate(icon_style) == strategy_hover_style
+        strategy_offset = strategy_markdown.locator("svg.markdown-logo").evaluate(
+            """svg => {
+              const bounds = svg.getBBox();
+              const midpoint = new DOMPoint(bounds.x + bounds.width / 2,
+                bounds.y + bounds.height / 2).matrixTransform(svg.getScreenCTM());
+              const button = svg.closest('button').getBoundingClientRect();
+              return [midpoint.x - (button.left + button.right) / 2,
+                      midpoint.y - (button.top + button.bottom) / 2];
+            }"""
+        )
+        assert all(abs(offset) < 1 for offset in strategy_offset), strategy_offset
+        page.mouse.move(0, 0)
         project_google = page.get_by_role("link", name="Sign in with Google")
         expect(project_google).to_be_visible()
         # Guests have not selected a verified Google account, so they cannot
