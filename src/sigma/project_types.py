@@ -208,7 +208,46 @@ def builtin_types() -> list[ProjectType]:
 
 
 def _store_path() -> Path:
-    return projects_root() / ".sigma-project-types.json"
+    """Use verified identity for private catalogs, even in shared-root local mode.
+
+    Hosted workspaces retain their existing private catalog path. The legacy
+    shared catalog is not silently attributed to a signed-in local account.
+    """
+    from sigma import cloud_auth, cloud_workspaces
+
+    workspace = cloud_workspaces.current()
+    if workspace is not None:
+        return workspace.path / ".sigma-project-types.json"
+
+    principal = cloud_auth.current_principal()
+    if principal is None or not cloud_auth.config().enabled:
+        # Single-user, anonymous local SIGMA and trusted offline tools retain
+        # the established legacy path without migrating historical data.
+        return projects_root() / ".sigma-project-types.json"
+    if principal.role == "guest":
+        raise ProjectError("Project type changes require member access")
+    if not cloud_auth.config().local:
+        raise ProjectError("Private project type workspace is unavailable")
+    if (
+        not isinstance(principal.subject, str)
+        or not principal.subject
+        or len(principal.subject) > 255
+    ):
+        raise ProjectError("Verified project type identity is unavailable")
+
+    import hashlib
+
+    from sigma.ui_instance import private_directory
+
+    root = projects_root() / ".sigma-project-types-users"
+    private_directory(root)
+    # Domain-separated subject hash; never trust a browser ID, email, or path.
+    subject_hash = hashlib.sha256(
+        b"sigma-local-project-types-v1\0" + principal.subject.encode("utf-8")
+    ).hexdigest()
+    owner = root / subject_hash
+    private_directory(owner)
+    return owner / ".sigma-project-types.json"
 
 
 def _read_catalog() -> dict[str, Any]:

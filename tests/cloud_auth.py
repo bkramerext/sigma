@@ -4298,6 +4298,242 @@ class CloudAuthTests(TestCase):
             4.0,
         )
 
+    def test_e2_local_subject_catalog_and_crucible_reference_snapshots(self):
+        """Real local sign-ins must not share custom types or URL switches."""
+        from sigma import papers, project_types, research_sessions
+        from sigma.projects import create_strategy
+
+        local_root = Path(self.temp.name) / "e2-local-projects"
+        local_root.mkdir(mode=0o700)
+        old_catalog = local_root / ".sigma-project-types.json"
+        legacy_bytes = json.dumps({"schema_version": 1, "project_types": []}).encode()
+        old_catalog.write_bytes(legacy_bytes)
+        old_catalog.chmod(0o600)
+        origin = "http://127.0.0.1:5173"
+        headers = {"Origin": origin}
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": origin,
+                "SIGMA_PROJECTS_ROOT": str(local_root),
+                "SIGMA_MOCK_AUTH": "0",
+            },
+        ):
+            from sigma import cloud_workspaces
+
+            self.assertFalse(cloud_workspaces.enabled())
+            with TestClient(app, base_url="http://127.0.0.1") as guest:
+                public = guest.get("/api/project-types").json()
+                self.assertEqual(public["reference_preferences"], {})
+                self.assertFalse(any(row["user_defined"] for row in public["project_types"]))
+            login_a = self.finish()
+            self.assertEqual(login_a.status_code, 303, login_a.text)
+            self.client.cookies.set("sigma_session", login_a.cookies["sigma_session"])
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": "email", "value": "e2-member@example.org", "role": "member"},
+                headers=headers,
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            with TestClient(app, base_url="http://127.0.0.1") as client_b:
+                login_b = self.finish(
+                    client=client_b, email="e2-member@example.org", subject="e2-user-b"
+                )
+                self.assertEqual(login_b.status_code, 303, login_b.text)
+                client_b.cookies.set("sigma_session", login_b.cookies["sigma_session"])
+                a_before = self.client.get("/api/project-types").json()
+                b_before = client_b.get("/api/project-types").json()
+                self.assertEqual(a_before, b_before)
+                common = a_before["common_references"]
+                defaults = {
+                    "common": {
+                        field: [ref["url"] for ref in common[field]]
+                        for field in project_types.REFERENCE_FIELDS
+                    }
+                }
+                self.assertEqual(a_before["reference_preferences"], defaults)
+                a_extra_r = "https://a.example.invalid/research"
+                a_extra_p = "https://a.example.invalid/publication"
+                a_math_p = "https://a.example.invalid/math"
+                a_saved = self.client.put(
+                    "/api/project-types",
+                    json={
+                        "project_types": [
+                            {
+                                "id": "e2-a-type",
+                                "name": "A private type",
+                                "scope": "A only",
+                                "icon": a_before["icons"]["placeholder"],
+                                "user_defined": True,
+                            }
+                        ],
+                        "expected_revision": a_before["revision"],
+                        "common_custom_references": {
+                            "research_standards_references": [
+                                {"name": "A research", "url": a_extra_r}
+                            ],
+                            "publication_standards_references": [
+                                {"name": "A publication", "url": a_extra_p}
+                            ],
+                        },
+                        "builtin_custom_references": {
+                            "mathematical": {
+                                "publication_standards_references": [
+                                    {"name": "A math", "url": a_math_p}
+                                ]
+                            }
+                        },
+                        # Only the two curated Common links are enabled.
+                        "reference_preferences": {
+                            "common": {
+                                "research_standards_references": [a_extra_r],
+                                "publication_standards_references": [a_extra_p],
+                            }
+                        },
+                    },
+                    headers=headers,
+                )
+                self.assertEqual(a_saved.status_code, 200, a_saved.text)
+                self.assertEqual(client_b.get("/api/project-types").json(), b_before)
+                a_current = self.client.get("/api/project-types").json()
+                math_p = next(
+                    item for item in project_types.builtin_types() if item.id == "mathematical"
+                ).publication_standards_references[0]["url"]
+                b_extra_p = "https://b.example.invalid/publication"
+                b_saved = client_b.put(
+                    "/api/project-types",
+                    json={
+                        "project_types": [
+                            {
+                                "id": "e2-b-type",
+                                "name": "B private type",
+                                "scope": "B only",
+                                "icon": b_before["icons"]["placeholder"],
+                                "user_defined": True,
+                            }
+                        ],
+                        "expected_revision": b_before["revision"],
+                        "common_custom_references": {
+                            "publication_standards_references": [
+                                {"name": "B publication", "url": b_extra_p}
+                            ]
+                        },
+                        "reference_preferences": {
+                            **defaults,
+                            "mathematical": {"publication_standards_references": [math_p]},
+                        },
+                    },
+                    headers=headers,
+                )
+                self.assertEqual(b_saved.status_code, 200, b_saved.text)
+                self.assertEqual(self.client.get("/api/project-types").json(), a_current)
+                b_current = client_b.get("/api/project-types").json()
+                self.assertIn("e2-a-type", str(a_current))
+                self.assertNotIn("e2-a-type", str(b_current))
+                self.assertIn("e2-b-type", str(b_current))
+                self.assertNotIn("e2-b-type", str(a_current))
+                self.assertNotIn(a_math_p, str(b_current))
+                self.assertNotIn(b_extra_p, str(a_current))
+                # Fresh browser/client and switching back preserve own state.
+                with TestClient(app, base_url="http://127.0.0.1") as reopened:
+                    reopened.cookies.set("sigma_session", login_a.cookies["sigma_session"])
+                    self.assertEqual(reopened.get("/api/project-types").json(), a_current)
+                self.assertEqual(client_b.get("/api/project-types").json(), b_current)
+                self.assertEqual(old_catalog.read_bytes(), legacy_bytes)
+
+                a_created = self.client.post(
+                    "/api/projects/create",
+                    json={
+                        "title": "E2 Crucible A",
+                        "problem": "Methodology",
+                        "investigation_type": "literature",
+                    },
+                    headers=headers,
+                )
+                b_created = client_b.post(
+                    "/api/projects/create",
+                    json={
+                        "title": "E2 Mathematics B",
+                        "problem": "Methodology",
+                        "investigation_type": "mathematical",
+                    },
+                    headers=headers,
+                )
+                self.assertEqual(a_created.status_code, 201, a_created.text)
+                self.assertEqual(b_created.status_code, 201, b_created.text)
+                literature = next(
+                    item for item in project_types.builtin_types() if item.id == "literature"
+                )
+                expected_research = {
+                    ref["url"] for ref in common["research_standards_references"]
+                } | {literature.research_standards_references[0]["url"]}
+                expected_publication = {
+                    ref["url"] for ref in common["publication_standards_references"]
+                } | {literature.publication_standards_references[0]["url"]}
+                self.assertEqual((len(expected_research), len(expected_publication)), (3, 3))
+                a_snapshot = a_created.json()["project"]["project_type_snapshot"]
+                for field, expected in (
+                    ("research_standards_references", expected_research),
+                    ("publication_standards_references", expected_publication),
+                ):
+                    self.assertEqual({ref["url"] for ref in a_snapshot[field]}, expected)
+                self.assertEqual(
+                    {
+                        ref["url"]
+                        for ref in b_created.json()["project"]["project_type_snapshot"][
+                            "publication_standards_references"
+                        ]
+                    },
+                    {b_extra_p},
+                )
+                b_research = {
+                    next(
+                        item for item in project_types.builtin_types() if item.id == "mathematical"
+                    ).research_standards_references[0]["url"]
+                }
+                for principal, path, research_urls, publication_urls in (
+                    (
+                        cloud_auth.Principal("google-sub-1", "admin@example.org", "admin"),
+                        a_created.json()["path"],
+                        expected_research,
+                        expected_publication,
+                    ),
+                    (
+                        cloud_auth.Principal("e2-user-b", "e2-member@example.org", "member"),
+                        b_created.json()["path"],
+                        b_research,
+                        {b_extra_p},
+                    ),
+                ):
+                    context = cloud_auth._CURRENT_PRINCIPAL.set(principal)
+                    try:
+                        strategy = create_strategy(path, "Test methodology", "Inspect evidence")
+                        frozen_paper, _ = papers._snapshot(path)
+                        project_source = next(
+                            row for row in frozen_paper["sources"] if row["kind"] == "project"
+                        )
+                        self.assertEqual(
+                            set(project_source["data"]["publication_reference_urls"]),
+                            publication_urls,
+                        )
+                        session = research_sessions.mock_session(
+                            path, strategy.project.strategies[0].id, str(uuid4()), "completed"
+                        )
+                        frozen_research = research_sessions._read(path, session["id"])
+                        self.assertEqual(
+                            {ref["url"] for ref in frozen_research["research_method_references"]},
+                            research_urls,
+                        )
+                        self.assertEqual(frozen_research["calls_used"], 0)
+                    finally:
+                        cloud_auth._CURRENT_PRINCIPAL.reset(context)
+                # Preserved historical file and two private, 0700, subject dirs.
+                self.assertEqual(old_catalog.read_bytes(), legacy_bytes)
+                scopes = list((local_root / ".sigma-project-types-users").iterdir())
+                self.assertEqual(len(scopes), 2)
+                self.assertTrue(all(p.stat().st_mode & 0o077 == 0 for p in scopes))
+
     def test_explicit_local_google_mode_accepts_only_loopback_http_and_preserves_local_projects(
         self,
     ):
