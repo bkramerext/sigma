@@ -1,5 +1,31 @@
 # Reference curation audit — 2026-11-02
 
+## Reference selection and account ownership (E2)
+
+The built-in Common and discipline-specific catalog definitions are shared, but
+custom project types, custom Common/discipline references, and disabled research
+and publication URL choices belong to the verified signed-in user. Hosted
+accounts keep their existing per-workspace `.sigma-project-types.json`. Local
+Google-authenticated users now have per-subject catalogs under
+`SIGMA_PROJECTS_ROOT/.sigma-project-types-users/`, indexed by domain-separated
+subject hashes. The old shared `.sigma-project-types.json` remains unchanged
+for unsigned single-user mode; it is never copied into an authenticated account
+because its owner cannot be established. Any operator-assisted recovery must
+verify ownership first and be performed with SIGMA stopped. Existing research
+session and paper snapshots retain their frozen references.
+
+New accounts start with the two curated Common research references and the two
+curated Common publication references **disabled**, while their discipline's
+own research and publication guide remains enabled. This is intentional, not
+proof of account leakage; saved per-user choices always take precedence.
+
+For **The Crucible (Literature)**, the executing user must explicitly enable
+both curated Common research and Common publication references, retain the
+Literature reference for each, and verify **three distinct research URLs and
+three distinct publication URLs** before a new session. This does not rewrite
+the frozen Maximum Regions v4 record or any existing paper.
+
+
 This audit applies to the curated project-type links in `src/sigma/data/builtin_project_types.json`. It evaluates **source fitness for SIGMA's AI agents**, not the scientific standing of the authors or correctness of any research conclusion. See #468 for extracting, synthesizing and reviewing source-controlled digests.
 
 ## Rubric

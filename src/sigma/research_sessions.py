@@ -4058,6 +4058,15 @@ def mock_session(
             "problem": view.project.problem,
             "investigation_type": view.project.investigation_type,
             "project_type_snapshot": view.project.project_type_snapshot,
+            # The provider-free mock uses the same frozen effective reference
+            # selection as a real new research session, enabling E2 assertions.
+            "research_method_references": list(
+                current_type.research_standards_references
+                if (current_type := project_types.get_type(view.project.investigation_type))
+                else (view.project.project_type_snapshot or {}).get(
+                    "research_standards_references", []
+                )
+            ),
             "use_saved_project_type_settings": project_types.get_type(
                 view.project.investigation_type
             )

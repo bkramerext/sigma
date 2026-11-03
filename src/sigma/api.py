@@ -179,7 +179,7 @@ class ProjectTypeDeleteBody(BaseModel):
 @app.get("/api/project-types")
 def list_project_types_view(request: Request):
     principal = getattr(request.state, "cloud_principal", None)
-    if cloud_workspaces.enabled() and (principal is None or principal.role == "guest"):
+    if cloud_auth.config().enabled and (principal is None or principal.role == "guest"):
         # Public guests can render sample/type metadata without enumerating a
         # member's private custom catalog. Writes remain authenticated.
         builtins = [item.record() for item in project_types.builtin_types()]
