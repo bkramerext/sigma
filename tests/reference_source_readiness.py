@@ -17,8 +17,8 @@ import research_sessions as fixture
 
 from sigma import research_reference_compiler, research_sessions
 from sigma.openai_connection import AuthContext
-from sigma.projects import ProjectError
 from sigma.project_types import builtin_types, curated_common_references
+from sigma.projects import ProjectError
 from sigma.research_method_sources import retrieval_readiness_errors
 
 
