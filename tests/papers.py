@@ -314,6 +314,62 @@ def test_unexpected_paper_exception_yields_sanitized_sse_error() -> None:
     asyncio.run(check())
 
 
+def test_paper_terminal_sse_event_without_final_separator() -> None:
+    """A complete EOF terminal is valid; a truncated final JSON is not."""
+    created = (
+        b'data: {"type":"response.created","sequence_number":0,"response":{"id":"paper-test"}}\n\n'
+    )
+    delta = (
+        b'data: {"type":"response.output_text.delta","sequence_number":1,'
+        b'"delta":"finished section"}\n\n'
+    )
+    terminal = (
+        b'data: {"type":"response.completed","sequence_number":2,'
+        b'"response":{"id":"paper-test","status":"completed","output":[]}}'
+    )
+
+    class EOFStream:
+        def __init__(self, tail: bytes) -> None:
+            self.headers = {"content-type": "text/event-stream"}
+            self.tail = tail
+
+        async def aiter_bytes(self):
+            yield created
+            yield delta
+            yield self.tail
+
+    for tail in (terminal, terminal + b"\n", terminal + b"\r\n"):
+        result = asyncio.run(
+            completed(
+                cast(httpx.Response, EOFStream(tail)),
+                max_stream_bytes=None,
+                max_event_chars=4_000_000,
+                max_text_bytes=papers.MAX_RESPONSE_BYTES,
+            )
+        )
+        assert result["status"] == "completed"
+        assert result["output"][0]["content"][0]["text"] == "finished section"
+
+    # A partially delivered terminal must never certify paid work as complete.
+    truncated = terminal[:-9]
+    try:
+        asyncio.run(
+            completed(
+                cast(httpx.Response, EOFStream(truncated)),
+                max_stream_bytes=None,
+                incomplete_message="Paper stream ended before a valid response.completed.",
+            )
+        )
+    except ProjectError as exc:
+        assert "before a valid response.completed" in str(exc)
+        assert "SSE events: 2" in str(exc)
+        assert "last event: response.output_text.delta" in str(exc)
+        assert "response started: yes" in str(exc)
+        assert "finished section" not in str(exc)
+    else:
+        raise AssertionError("A truncated terminal must not be accepted")
+
+
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
     events = [
         {"type": "response.created", "sequence_number": 0, "response": {"id": "resp-paper"}},
@@ -3864,6 +3920,76 @@ def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
     assert attempt_counts == before
 
 
+def test_parallel_section_failure_drains_dispatched_siblings() -> None:
+    """One broken stream must not cancel other paid, in-flight section work."""
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    dispatched: list[int] = []
+    saves: list[set[str]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        assert schema_name == "sigma_long_paper_section"
+        number = input_value["section_number"]
+        dispatched.append(number)
+        if number == 1:
+            await asyncio.sleep(0.01)
+            raise ProjectError("fixture incomplete SSE terminal")
+        if number == 5:
+            raise AssertionError("Queued section dispatched after a known failure")
+        await asyncio.sleep(0.05)
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved independent section {number}."]
+        ), "fixture-model"
+
+    async def first_attempt() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda value: saves.append(set(value.get("section_drafts", {}))),
+                    structured_fast_path=True,
+                )
+            except ProjectError as exc:
+                assert "incomplete SSE terminal" in str(exc)
+            else:
+                raise AssertionError("The broken stream must stop publication")
+
+    asyncio.run(first_attempt())
+    assert set(dispatched) == {1, 2, 3, 4}
+    assert set(state["section_drafts"]) == {"2", "3", "4"}
+    assert {"2", "3", "4"} in saves
+    assert state["provider_calls"] == 5  # plan + four dispatched sections
+
+    async def resume_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        assert schema_name == "sigma_long_paper_section"
+        number = input_value["section_number"]
+        assert number in {1, 5}, "Saved siblings must not be regenerated"
+        dispatched.append(number)
+        return papers.LongSectionDraft(paragraphs=[f"Recovered section {number}."]), "fixture-model"
+
+    async def resume() -> None:
+        with patch.object(papers, "_provider_structured", new=resume_provider):
+            result, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda value: saves.append(set(value.get("section_drafts", {}))),
+                structured_fast_path=True,
+            )
+        assert calls == 7  # two further, explicitly resumed section calls
+        assert len(result.sections) == 5
+
+    asyncio.run(resume())
+    assert set(state["section_drafts"]) == {"1", "2", "3", "4", "5"}
+    assert dispatched.count(2) == dispatched.count(3) == dispatched.count(4) == 1
+
+
 def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
     package, plan = fast_package(section_count=2)
     project_ref = "project:fast-fixture"
@@ -6590,6 +6716,7 @@ def main() -> None:
     test_structured_evidence_short_tail_does_not_crash()
     test_readable_paper_download_names_keep_stable_versions_and_server_headers()
     test_unexpected_paper_exception_yields_sanitized_sse_error()
+    test_paper_terminal_sse_event_without_final_separator()
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_api_provider_failure_classification_is_safe_and_actionable()
     test_chatgpt_schema_rejection_is_actionable_and_redacted()
@@ -6622,6 +6749,7 @@ def main() -> None:
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
     test_paper_failure_reason_survives_reopen()
     test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
+    test_parallel_section_failure_drains_dispatched_siblings()
     test_fast_checkpoint_resume_replays_only_incomplete_section()
     test_fast_long_draft_cancellation_keeps_completed_sections()
     test_paper_generation_rejects_concurrent_duplicate_request()
