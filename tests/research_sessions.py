@@ -5970,8 +5970,30 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
     provider_requests = []
 
     async def handler(request):
-        provider_requests.append(json.loads(request.content))
-        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+        payload = json.loads(request.content)
+        provider_requests.append(payload)
+        response = outputs.pop(0)
+        # In the final aggregate proof cycle the saved ledger must receive
+        # explicit, evidence-linked dispositions. Model agreement alone no
+        # longer globally closes previous Investigator obligations.
+        context = json.loads(payload["input"])
+        if context.get("cycle") == 3 and response.get("objective_status") == "achieved":
+            basis_ids = context.get("context_artifact_ids", [])[-3:]
+            response["obligation_reviews"] = [
+                {
+                    "obligation_id": item["obligation_id"],
+                    "status": "addressed",
+                    "basis_artifact_ids": basis_ids,
+                    "basis_step_ids": [],
+                    "rationale": (
+                        "The accepted saved upper-bound, attaining-construction, "
+                        "and boundary-case proof steps establish this obligation."
+                    ),
+                }
+                for item in context.get("obligation_ledger", [])
+                if item.get("status") == "unresolved"
+            ]
+        return httpx.Response(200, json=provider_response(response))
 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),

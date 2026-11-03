@@ -263,7 +263,6 @@ def test_saved_counterexample_not_automatically_negative_when_objective_solved()
     assert research_sessions._outcome(_record(a))["assessment"] == "positive"
 
 
-
 def test_e2_typed_peer_followup_requires_cited_saved_peer_artifact():
     note = "Inspect the independent peer proof source for future publication."
     complete = _artifact("a", "incremental", notes=[note])

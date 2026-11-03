@@ -1480,7 +1480,6 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
     return conclusion
 
 
-
 def _scientific_candidate_evaluation(
     record: dict[str, Any], artifact: dict[str, Any]
 ) -> dict[str, Any]:
