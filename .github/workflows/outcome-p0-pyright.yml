@@ -1,0 +1,33 @@
+name: Outcome scientific policy typecheck
+
+on:
+  pull_request:
+    paths:
+      - "src/sigma/research_sessions.py"
+      - "src/sigma/research_epistemics.py"
+      - "tests/test_outcome_policy.py"
+      - ".github/workflows/outcome-p0-pyright.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pyright:
+    name: Pyright / scientific Outcome
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install locked Python dependencies
+        run: uv sync --locked --dev
+      - name: Check changed scientific Outcome modules
+        run: uv run --locked --no-sync pyright src/sigma/research_sessions.py src/sigma/research_epistemics.py tests/test_outcome_policy.py

@@ -1410,8 +1410,9 @@ def test_request_audit_truncation_tokens_and_reconciliation():
         == archived["artifacts"][1]["skeptic_output"]["remaining_obligations"]
     )
     assert archived["artifacts"][1]["skeptic_output"]["model_remaining_obligations"] == []
-    assert archived["artifacts"][1]["skeptic_output"]["coordinator_global_closure"]["accepted"]
-    assert archived["artifacts"][1]["skeptic_output"]["coordinator_closed_obligations"]
+    # An achieved declaration cannot globally close unreviewed obligations.
+    assert not archived["artifacts"][1]["skeptic_output"]["coordinator_global_closure"]["accepted"]
+    assert not archived["artifacts"][1]["skeptic_output"]["coordinator_closed_obligations"]
 
     strategy_id = "strategy-fixture"
     artifact_id = "artifact-fixture"
@@ -4931,14 +4932,15 @@ def test_outcome_classification():
     no_next_path = research_sessions._outcome(
         {"status": "ended", "artifacts": [{**artifact, "coordinator_decision": "stop_no_progress"}]}
     )
-    assert no_next_path["assessment"] == "mixed" and "objective unknown" in no_next_path["label"]
+    assert no_next_path["assessment"] == "mixed" and "inconclusive" in no_next_path["label"]
     negative = research_sessions._outcome(
         {
             "status": "completed",
             "artifacts": [{**artifact, "coordinator_decision": "stop_decisive_counterexample"}],
         }
     )
-    assert negative["assessment"] == "negative"
+    # A stop marker with no actual counterexample is not negative evidence.
+    assert negative["assessment"] == "mixed"
     failed_partial = research_sessions._outcome(
         {"status": "failed", "artifacts": [{**artifact, "coordinator_decision": "continue"}]}
     )
@@ -5286,8 +5288,9 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
             "artifacts": [artifact, conflicting_artifact],
         }
     )
-    assert "different candidate answers" in conflict["conclusion"]
-    assert "remains unresolved" in conflict["conclusion"]
+    # Distinct wording alone is not a cited scientific contradiction;
+    # the second unverified assertion does not erase a complete candidate.
+    assert "### Complete reviewed candidate answer" in conflict["conclusion"]
 
     # New sessions save the derived Markdown with their outcome. Historical
     # records without this version receive an honest fallback on read.
@@ -5771,7 +5774,7 @@ def test_e1_peer_inspection_does_not_hide_complete_unverified_candidate():
     }
     old = research_sessions._outcome_without_metrics(historical)
     assert old["assessment"] == "mixed"
-    assert "candidate reported" in old["label"]
+    assert "promising finding" in old["label"]
     # The historical frozen record was never rewritten.
     assert historical["artifacts"][0]["objective_review"]["status"] == "partial"
     contradictory = deepcopy(saved)
@@ -5967,8 +5970,30 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
     provider_requests = []
 
     async def handler(request):
-        provider_requests.append(json.loads(request.content))
-        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+        payload = json.loads(request.content)
+        provider_requests.append(payload)
+        response = outputs.pop(0)
+        # In the final aggregate proof cycle the saved ledger must receive
+        # explicit, evidence-linked dispositions. Model agreement alone no
+        # longer globally closes previous Investigator obligations.
+        context = json.loads(payload["input"])
+        if context.get("cycle") == 3 and response.get("objective_status") == "achieved":
+            basis_ids = context.get("context_artifact_ids", [])[-3:]
+            response["obligation_reviews"] = [
+                {
+                    "obligation_id": item["obligation_id"],
+                    "status": "addressed",
+                    "basis_artifact_ids": basis_ids,
+                    "basis_step_ids": [],
+                    "rationale": (
+                        "The accepted saved upper-bound, attaining-construction, "
+                        "and boundary-case proof steps establish this obligation."
+                    ),
+                }
+                for item in context.get("obligation_ledger", [])
+                if item.get("status") == "unresolved"
+            ]
+        return httpx.Response(200, json=provider_response(response))
 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
@@ -6458,7 +6483,9 @@ async def test_maximum_regions_false_candidate_is_rejected(path: Path):
     assert finished["terminal_reason"] == "stop_decisive_counterexample"
     assert finished["artifacts"][0]["coordinator_decision"] == "stop_decisive_counterexample"
     assert finished["artifacts"][0]["objections"] == genuine_objection["objections"]
-    assert finished["outcome"]["assessment"] == "negative"
+    # The counterexample refutes the attempted formula, not the global
+    # project objective of establishing the true maximum region count.
+    assert finished["outcome"]["assessment"] == "mixed"
     assert finished["outcome"]["solution_review"]["status"] == "not_achieved"
     assert finished["outcome"]["solution_review"]["unresolved_objections"] == [
         "The n=2 counterexample refutes the proposed candidate."
@@ -9531,6 +9558,10 @@ async def test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
             in {
                 "coordinator.provisional_stop_reopened",
                 "coordinator.early_stop_deferred",
+                # Preserved Investigator obligations can cause an immediate
+                # revision before the legacy deferred-stop branches run.
+                # The coordinator still schedules independent verification.
+                "coordinator.convergence_verification_scheduled",
             }
             for event in finished["events"]
         )
@@ -9769,7 +9800,47 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
             "classes are disjoint and exhaustive, so a_n=a_(n-1)+a_(n-2). There is one empty "
             "string and two valid strings of length one. This proves the Fibonacci formula by induction."
         ),
-        "assumptions": ["The two classes are defined by the final symbol."],
+        "reasoning_steps": [
+            {
+                "title": "Disjoint and exhaustive final-bit cases",
+                "argument": (
+                    "For every n >= 2 each admissible string ends in exactly one of "
+                    "0 and 1, so the two final-symbol classes are disjoint and exhaustive."
+                ),
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Ending-zero class",
+                "argument": (
+                    "Deleting a terminal 0 is a bijection between admissible n-bit "
+                    "strings ending in 0 and all admissible (n-1)-bit strings."
+                ),
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Ending-one class",
+                "argument": (
+                    "For n >= 2, an admissible string ending in 1 must end in 01. "
+                    "Deleting that suffix gives a bijection to admissible (n-2)-bit strings."
+                ),
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Initial counts, recurrence, and closed form",
+                "argument": (
+                    "The empty string gives a_0=1; 0 and 1 give a_1=2. The two "
+                    "bijections prove a_n=a_(n-1)+a_(n-2) for every n >= 2, "
+                    "so induction gives a_n=F_(n+2). It yields a_2=3 and a_3=5."
+                ),
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+        ],
+        # The final-symbol split is a definition, not an unproved premise.
+        "assumptions": [],
         "evidence_status": "Complete inductive argument; no formal checker was run.",
         "open_obligations": [],
         "python_code": None,
@@ -9790,6 +9861,53 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
             "The final-bit classes are disjoint and exhaustive [cycle 1].",
             "The recurrence and initial values imply the general Fibonacci formula [cycle 1].",
         ],
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "accepted",
+                "rationale": "Every admissible string has exactly one last bit, so these cases cover all valid strings.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 2,
+                "disposition": "accepted",
+                "rationale": "Appending or removing a terminal zero preserves admissibility in both directions.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 3,
+                "disposition": "accepted",
+                "rationale": "The forbidden adjacent ones force terminal 01, whose removal preserves admissibility.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 4,
+                "disposition": "accepted",
+                "rationale": "The bijections establish the recurrence for all n >= 2 and the base counts complete induction.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+        ],
+        "assumptions_reviewed": [],
+        "scientific_evidence_review": {
+            "sufficiency": "sufficient_for_scoped_claim",
+            "claim_kind": "formal_proof",
+            "objective_requirements": [
+                "Prove a counting recurrence for every n >= 2.",
+                "Establish initial counts and the Fibonacci closed form.",
+                "Check small n explicitly.",
+            ],
+            # A first-cycle review cannot cite its own not-yet-saved artifact.
+            "basis_artifact_ids": [],
+            "basis_step_numbers": [1, 2, 3, 4],
+            "rationale": (
+                "Accepted disjoint cases and two bijections establish the universal "
+                "recurrence, initial values, and induction without empirical premises."
+            ),
+        },
         "verification_status": "convincing_unverified",
         "unresolved_objections": [],
         "supporting_cycles": [1],
@@ -11063,7 +11181,7 @@ def test_epistemic_presentation_is_conservative_and_read_only() -> None:
                 assert availability["status"] == ("structured" if structured else "narrative")
                 if not structured:
                     assert "saved narrative is available" in availability["label"]
-                    assert "unstructured argument, unassessed" in outcome["label"]
+                    assert outcome["assessment"] == "mixed"
                     assert (
                         "cannot be assessed as a complete argument from this record"
                         not in outcome["summary"]
@@ -12883,6 +13001,14 @@ def test_reference_compilation_is_bounded_and_source_attributed() -> None:
 
 
 def main():
+    # The project test driver invokes provider-free scientific Outcome
+    # regressions directly; this repository does not use pytest discovery.
+    import test_outcome_policy
+
+    for name, check in vars(test_outcome_policy).items():
+        if name.startswith("test_") and callable(check):
+            check()
+    print("PASS provider-free scientific Outcome policy regressions")
     test_reference_compilation_is_bounded_and_source_attributed()
     test_backend_build_is_pinned_at_backend_start()
     test_project_cost_denial_reports_affordable_first_call()

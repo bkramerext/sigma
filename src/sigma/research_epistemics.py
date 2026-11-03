@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal, TypedDict
 
@@ -160,3 +161,157 @@ def execution_provenance(record: Mapping[str, Any]) -> dict[str, Any]:
             "executions establish no measured result."
         ),
     }
+
+
+# Outcome policy v2: scientific dependency assessment, not a truth oracle.
+# These helpers operate only on frozen evidence; they do not modify sessions.
+
+OUTCOME_POLICY_VERSION = "scientific-v2"
+
+
+def _normalized_obligation(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def objective_obligation_impact(
+    note: str,
+    *,
+    skeptic: Mapping[str, Any],
+    reviewed_steps: Sequence[Mapping[str, Any]],
+    mathematical: bool,
+) -> dict[str, Any]:
+    """Classify *dependency*, separately from whether an obligation is open.
+
+    A typed review must cite the reviewed argument steps that justify the lack
+    of dependency. Historical mathematics has a narrow explicit-disavowal
+    compatibility path, never a rule that sources/peer work are optional.
+    Ambiguity blocks objective completion.
+    """
+    text = str(note).strip()
+    normalized = _normalized_obligation(text)
+    for row in skeptic.get("obligation_impacts", []) or []:
+        if (
+            not isinstance(row, Mapping)
+            or _normalized_obligation(str(row.get("obligation_text") or "")) != normalized
+        ):
+            continue
+        impact = row.get("impact")
+        rationale = str(row.get("dependency_rationale") or "").strip()
+        numbers = row.get("basis_step_numbers")
+        numbers = numbers if isinstance(numbers, list) else []
+        accepted = {
+            item.get("number")
+            for item in reviewed_steps
+            if isinstance(item, Mapping)
+            and isinstance(item.get("review"), Mapping)
+            and item["review"].get("disposition") == "accepted"
+            and not str(item["review"].get("objection") or "").strip()
+        }
+        valid = (
+            len(rationale) >= 24
+            and bool(numbers)
+            and all(type(n) is int and n in accepted for n in numbers)
+        )
+        if impact == "objective_blocking":
+            return {
+                "text": text,
+                "impact": impact,
+                "rationale": rationale,
+                "basis_step_numbers": numbers,
+            }
+        if impact == "nonblocking_followup" and valid:
+            return {
+                "text": text,
+                "impact": impact,
+                "rationale": rationale,
+                "basis_step_numbers": numbers,
+            }
+        # Explicit nonblocking without reviewed dependency evidence is unsafe.
+        return {
+            "text": text,
+            "impact": "undetermined",
+            "rationale": "Dependency review lacks accepted supporting steps.",
+            "basis_step_numbers": numbers,
+        }
+
+    # Historical E1 compatibility: only a mathematical argument with every
+    # critical step accepted, and a note explicitly disavowing a dependency
+    # on that argument, can retain optional peer-source inspection.
+    complete_steps = bool(reviewed_steps) and all(
+        isinstance(step, Mapping)
+        and isinstance(step.get("review"), Mapping)
+        and step["review"].get("disposition") == "accepted"
+        and not str(step["review"].get("objection") or "").strip()
+        for step in reviewed_steps
+    )
+    is_inspection = re.search(
+        r"\b(?:peer|source|reference|citation|literature|bibliograph)\w*\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    cites_argument = re.search(
+        r"\b(?:proof|derivation|argument|construction|theorem)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    explicit_independence = re.search(
+        r"\b(?:non[- ]?blocking|independent of|unrelated to|not (?:needed|required|"
+        r"necessary|a premise)|does not (?:affect|alter|undermine|bear on)|"
+        r"no (?:mathematical|logical|proof) (?:dependency|obligation|gap))\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if (
+        mathematical
+        and complete_steps
+        and is_inspection
+        and cites_argument
+        and explicit_independence
+    ):
+        return {
+            "text": text,
+            "impact": "nonblocking_followup",
+            "rationale": (
+                "The saved note explicitly disavows dependence of the reviewed "
+                "mathematical argument on this external inspection. "
+                "This is agent-reported, not independent verification."
+            ),
+            "basis_step_numbers": [
+                step["number"] for step in reviewed_steps if type(step.get("number")) is int
+            ],
+            "historical_explicit_disavowal": True,
+        }
+    return {
+        "text": text,
+        "impact": "undetermined",
+        "rationale": "No evidence-backed determination that this open item is independent of the objective.",
+        "basis_step_numbers": [],
+    }
+
+
+def objective_obligation_impacts(
+    notes: Sequence[str],
+    *,
+    skeptic: Mapping[str, Any],
+    reviewed_steps: Sequence[Mapping[str, Any]],
+    mathematical: bool,
+) -> list[dict[str, Any]]:
+    """Preserve every distinct open note; never silently clear it."""
+    seen: set[str] = set()
+    results: list[dict[str, Any]] = []
+    for value in notes:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        normalized = _normalized_obligation(value)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        results.append(
+            objective_obligation_impact(
+                value,
+                skeptic=skeptic,
+                reviewed_steps=reviewed_steps,
+                mathematical=mathematical,
+            )
+        )
+    return results
