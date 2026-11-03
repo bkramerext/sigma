@@ -278,6 +278,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   function removeDraft(id: string) {
     setError('');
     setDrafts(previous => previous.filter(candidate => candidate.id !== id));
+    setReferencePreferences(previous => {
+      if (!previous[id]) return previous;
+      const next = { ...previous };
+      delete next[id];
+      return next;
+    });
     setAddingId(previous => previous === id ? null : previous);
     setOpen(previous => previous === id ? null : previous);
   }
