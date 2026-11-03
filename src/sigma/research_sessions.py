@@ -66,7 +66,11 @@ from sigma.research_epistemics import (
     verification_label,
 )
 from sigma.research_feedback import ComputationFeedback, validate_feedback
-from sigma.research_method_sources import methodology_digest, select_method_sources
+from sigma.research_method_sources import (
+    methodology_digest,
+    retrieval_readiness_errors,
+    select_method_sources,
+)
 from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
@@ -6114,6 +6118,24 @@ async def start_session(
                 records,
                 fetch_content=True,
             )
+            # The acceptance pilot may require actual, hash-verified content
+            # for *every* configured method reference. Enforce this before
+            # persisting a session or dispatching any billable provider call.
+            # Production research can retain the existing explicit degraded
+            # state unless the operator activates the strict admission gate.
+            if os.environ.get(
+                "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS", ""
+            ).strip().lower() in {"1", "true", "yes", "on"}:
+                reference_issues = retrieval_readiness_errors(
+                    record["research_method_sources"]
+                )
+                if reference_issues:
+                    raise ProjectError(
+                        "Research-reference admission blocked before provider dispatch: "
+                        + "; ".join(reference_issues)[:1600]
+                        + " Replace inaccessible references or repair source retrieval "
+                        "before this acceptance run."
+                    )
             record["research_method_sources"]["sha256"] = methodology_digest(
                 record["research_method_sources"]
             )
