@@ -167,6 +167,7 @@ with sync_playwright() as playwright:
         "button", name="New"
     )
     expect(add_button).to_be_enabled()
+    assert add_button.evaluate("e => getComputedStyle(e).color") == "rgb(244, 204, 105)"
     add_button.focus()
     page.keyboard.press("Tab")
     assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
@@ -214,28 +215,54 @@ with sync_playwright() as playwright:
     parent.get_by_role("button", name="New", exact=True).first.click()
     # The next New remains unavailable until the just-created row contains a URL.
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_disabled()
+    assert parent.get_by_role("button", name="New", exact=True).first.evaluate(
+        "e => getComputedStyle(e).color"
+    ) == "rgb(244, 204, 105)"
     # Editable references show URL fields without duplicate title/URL captions.
     expect(parent.locator(".pt-reference-link")).to_have_count(0)
     url_input = parent.get_by_label("Research reference URL 1")
     url_input.fill("not-a-url")
     expect(url_input).to_have_attribute("aria-invalid", "true")
-    expect(parent.get_by_text("Use an HTTP or HTTPS URL with a host.")).to_be_visible()
+    expect(parent.get_by_text("Enter a valid public website address", exact=False)).to_be_visible()
     expect(save).to_be_disabled()
-    url_input.fill("https://example.org/research-standard")
+
+    # DNS verifies syntactically plausible domains before they may be saved.
+    # The injected NXDOMAIN response is deterministic and costs no AI usage.
+    def invalid_domain(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"title":null,"domain_status":"invalid"}',
+        )
+
+    page.route("**/api/reference-title?*badbadbad.bad*", invalid_domain)
+    url_input.fill("badbadbad.bad")
+    expect(url_input).to_have_value("badbadbad.bad")
+    url_input.press("Enter")
+    expect(parent.get_by_text("Website could not be found. Check the address.")).to_be_visible()
+    expect(save).to_be_disabled()
+    first_entry = parent.locator(".pt-reference-entry").first
+    first_entry.get_by_role("button", name="Edit").click()
+    page.unroute("**/api/reference-title?*badbadbad.bad*", invalid_domain)
+    url_input = parent.get_by_label("Research reference URL 1")
+    url_input.fill("example.org/research-standard")
     expect(url_input).to_have_attribute("aria-invalid", "false")
-    expect(parent.get_by_text("Use an HTTP or HTTPS URL with a host.")).to_have_count(0)
+    expect(parent.get_by_text("Enter a valid public website address", exact=False)).to_have_count(0)
     expect(save).to_be_enabled()
-    expect(url_input).to_have_value("https://example.org/research-standard")
+    expect(url_input).to_have_value("example.org/research-standard")
     # URL edits commit on Enter; no Done or Remove button while typing.
     first_entry = parent.locator(".pt-reference-entry").first
     expect(first_entry.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(1)
     url_input.press("Enter")
     expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
-    expect(first_entry.locator(".pt-reference-link a")).to_have_count(1)
+    expect(first_entry.locator(".pt-reference-link a")).to_have_attribute(
+        "href", "https://example.org/research-standard"
+    )
     expect(first_entry.get_by_role("button", name="Edit")).to_be_visible()
     expect(first_entry.get_by_role("button", name="Remove")).to_be_visible()
     first_entry.get_by_role("button", name="Edit").click()
     url_input = parent.get_by_label("Research reference URL 1")
+    expect(url_input).to_have_value("example.org/research-standard")
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_enabled()
     assert url_input.evaluate("element => document.activeElement === element"), (
         "URL input remounted during typing"
