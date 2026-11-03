@@ -2768,7 +2768,7 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
         evidence = [item for item in stage_events if item[0] == "evidence"]
         assert evidence == [("evidence", 1, 1, "active"), ("evidence", 1, 1, "milestone")]
         sections = [item for item in stage_events if item[0] == "sections"]
-        assert [item[1:3] for item in sections if item[3] == "active"] == [(1, 2), (2, 2)]
+        assert [item[1:3] for item in sections if item[3] == "active"] == [(0, 2), (1, 2)]
         assert any(item[0] == "planning" and item[3] == "active" for item in stage_events)
         assert any(item[0] == "consolidation" and item[3] == "active" for item in stage_events)
         assert all(item[0] != "index" for item in stage_events)
@@ -3888,6 +3888,7 @@ def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
     assert ("evidence", 1, 1, "milestone") in progress_events
     assert ("planning", None, None, "active") in progress_events
     assert ("planning", None, None, "milestone") in progress_events
+    assert ("sections", 0, 6, "active") in progress_events
     section_milestones = [
         item[1:3] for item in progress_events if item[0] == "sections" and item[3] == "milestone"
     ]

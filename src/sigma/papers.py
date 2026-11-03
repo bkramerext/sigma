@@ -5844,7 +5844,7 @@ or document markup."""
                 examples=section_draft.examples,
             )
         if progress and not fast_path:
-            await progress("sections", section_number, len(long_plan.sections), "active")
+            await progress("sections", section_number - 1, len(long_plan.sections), "active")
         relevant = [
             note.model_dump()
             for note in notes
@@ -5926,9 +5926,7 @@ or document markup."""
             if str(number) not in saved_sections
         ]
         if pending and progress:
-            await progress(
-                "sections", max(1, len(saved_sections)), len(long_plan.sections), "active"
-            )
+            await progress("sections", len(saved_sections), len(long_plan.sections), "active")
         semaphore = asyncio.Semaphore(FAST_SECTION_CONCURRENCY)
         first_failure: Exception | None = None
 
