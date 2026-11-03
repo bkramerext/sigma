@@ -17,14 +17,18 @@ from uuid import uuid4
 
 # Usage: python tests/strategy_scheduler_parity.py CODE_ROOT OUTPUT.json
 code_root = Path(sys.argv[1]).resolve()
-sys.path.insert(0, str(code_root / "src"))
+# Each revision must use its own historical fixture helpers as well as its
+# own production code. Mixing candidate tests with old backend APIs breaks
+# before parity can examine scheduling behavior.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(code_root / "src"))
+sys.path.insert(0, str(code_root / "tests"))
 
 import httpx
 import research_sessions as fixture
 
 from sigma import research_sessions
-from sigma.projects import create_strategy
+from sigma.projects import create_strategy, set_strategy_enabled
 
 UUID_RE = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
@@ -32,6 +36,8 @@ UUID_RE = re.compile(
 )
 TIMESTAMP_RE = re.compile(r"20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|\+00:00)?")
 ROLE_ORDER = {"research_investigator": 0, "research_skeptic": 1}
+MODE = sys.argv[3] if len(sys.argv) > 3 else "legacy-v1"
+assert MODE in {"legacy-v1", "paired-v2", "paired-v2-resume"}, MODE
 
 
 def canonicalize(value, names: dict[str, str]):
@@ -97,9 +103,44 @@ async def snapshot():
         second = create_strategy(
             path, "Independent peer", "Derive a complementary invariant."
         ).project.strategies[-1]
-        limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 3, "model_calls": 12}
-        research_sessions.save_limits(str(path), limits)
+        paired = MODE.startswith("paired-v2")
+        third = None
+        if paired:
+            third = create_strategy(
+                path, "Disabled independent peer", "Never dispatch this excluded strategy."
+            ).project.strategies[-1]
+            set_strategy_enabled(str(path), third.id, False)
+            limits = {
+                **research_sessions.NEW_DEFAULT_LIMITS,
+                "research_rounds": 2,
+                "turns_per_round": 2,
+                "model_calls": 8,
+            }
+            pair_slots, expected_calls = 4, 16
+        else:
+            limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 3, "model_calls": 12}
+            pair_slots, expected_calls = 3, 12
+        limits = research_sessions.save_limits(str(path), limits)
         requests = []
+        pause_requested = asyncio.Event()
+        pause_once = False
+
+        async def configuration_gate(*_args, **_kwargs):
+            nonlocal pause_once
+            if (
+                MODE == "paired-v2-resume"
+                and not pause_once
+                and any(
+                    len(row.get("artifacts", [])) >= 2
+                    for row in research_sessions._all(str(path))
+                )
+            ):
+                pause_once = True
+                pause_requested.set()
+                # A synthetic preflight pause; stop cancels the worker without
+                # losing committed evidence or consuming provider capacity.
+                await asyncio.Event().wait()
+            return config
         first_investigator_active = False
         fast_skeptic_overlap = False
 
@@ -130,11 +171,11 @@ async def snapshot():
             else:
                 answer = fixture.skeptic(
                     cycle,
-                    "stop" if cycle == 3 else "revise",
-                    "productive_conclusion" if cycle == 3 else "recoverable_objection",
+                    "stop" if cycle == pair_slots else "revise",
+                    "productive_conclusion" if cycle == pair_slots else "recoverable_objection",
                 )
                 answer["next_question"] = (
-                    "Test peer evidence on the next round." if cycle < 3 else ""
+                    "Test peer evidence on the next round." if cycle < pair_slots else ""
                 )
                 if title == first.title and cycle == 2:
                     peers = context["other_strategy_evidence"]
@@ -161,7 +202,11 @@ async def snapshot():
 
         with (
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
-            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(
+                research_sessions,
+                "configuration",
+                new=configuration_gate if MODE == "paired-v2-resume" else AsyncMock(return_value=config),
+            ),
             patch.object(research_sessions, "execution_capabilities", return_value=[]),
             patch(
                 "sigma.research_sessions.httpx.AsyncClient",
@@ -170,6 +215,22 @@ async def snapshot():
                 ),
             ),
         ):
+            if paired:
+                assert third is not None
+                try:
+                    await research_sessions.start_session(
+                        str(path),
+                        first.id,
+                        str(uuid4()),
+                        view.project.id,
+                        credential["identity"],
+                        expected_limits=limits,
+                        strategy_ids=[first.id, third.id],
+                    )
+                except Exception as exc:
+                    assert "Disabled strategies" in str(exc), str(exc)
+                else:
+                    raise AssertionError("Disabled strategy entered a version-2 session")
             started = await research_sessions.start_session(
                 str(path),
                 first.id,
@@ -179,12 +240,65 @@ async def snapshot():
                 expected_limits=limits,
                 strategy_ids=[first.id, second.id],
             )
-            final = await asyncio.wait_for(fixture.wait_for(path, started["id"]), timeout=12)
+            if MODE == "paired-v2-resume":
+                await asyncio.wait_for(pause_requested.wait(), timeout=8)
+                before_stop = research_sessions._read(str(path), started["id"])
+                committed = {artifact["id"] for artifact in before_stop["artifacts"]}
+                assert len(committed) >= 2
+                stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+                assert stopped["status"] in {"stopped", "paused"}, stopped.get("message")
+                assert committed <= {
+                    artifact["id"]
+                    for artifact in research_sessions._read(str(path), started["id"])["artifacts"]
+                }
+                resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+                assert resumed["status"] in {"queued", "running"}, resumed.get("message")
+            final = await asyncio.wait_for(fixture.wait_for(path, started["id"]), timeout=20)
 
         assert final["status"] == "ended", final.get("message")
-        assert final["calls_used"] == 12, final.get("message")
-        assert len(requests) == 12
-        assert len(final["artifacts"]) == 6
+        assert final["calls_used"] == expected_calls, final.get("message")
+        assert len(requests) == expected_calls
+        assert len(final["artifacts"]) == expected_calls // 2
+        stored = research_sessions._read(str(path), started["id"])
+        assert stored["call_limit"] == expected_calls
+        assert stored["cycle_limit"] == pair_slots
+        assert len(stored["steps"]) == expected_calls
+        for title in (first.title, second.title):
+            observed = [(cycle, role) for name, cycle, role, _ in requests if name == title]
+            assert observed == [
+                (cycle, role)
+                for cycle in range(1, pair_slots + 1)
+                for role in ("research_investigator", "research_skeptic")
+            ], (title, observed)
+        if paired:
+            assert stored["scheduler_version"] == 2
+            assert stored["research_round_limit"] == 2
+            assert stored["turns_per_round"] == 2
+            assert len(stored["strategy_ids"]) == 2
+            assert third is not None and third.id not in stored["strategy_ids"]
+            for row in [*stored["steps"], *stored["artifacts"]]:
+                slot = row.get("strategy_cycle", row.get("cycle"))
+                assert 1 <= slot <= 4
+                assert (
+                    row["research_round"], row["paired_turn_in_round"]
+                ) == ((slot - 1) // 2 + 1, (slot - 1) % 2 + 1), row
+            assert all(
+                row.get("strategy_id") != third.id
+                for row in [*stored["steps"], *stored["artifacts"]]
+            )
+            assert any(
+                context["other_strategy_evidence"]
+                for _, _, _, payload in requests
+                for context in [payload["input"]]
+            ), "Paired scheduler lost cross-strategy evidence"
+            assert any(
+                context.get("peer_handoffs")
+                for _, _, _, payload in requests
+                for context in [payload["input"]]
+            ), "Paired scheduler lost cross-strategy handoff"
+            assert stored.get("termination_reason_code") in {
+                "round_limit_reached", "protocol_complete", "productive_conclusion"
+            }, stored.get("termination_reason_code")
         titles = {first.id: first.title, second.id: second.title}
         names = {
             first.id: "<strategy-1>",
@@ -248,6 +362,14 @@ async def snapshot():
                 names,
             ),
             "diagnostic_overlap": fast_skeptic_overlap,
+            "scheduler_mode": MODE,
+            "counts": {
+                "calls": stored["calls_used"],
+                "artifacts": len(stored["artifacts"]),
+                "pair_slots": stored["cycle_limit"],
+                "enabled_strategies": len(stored["strategy_ids"]),
+                "resumed": MODE == "paired-v2-resume",
+            },
         }
 
 
@@ -278,7 +400,7 @@ if __name__ == "__main__":
     output = asyncio.run(snapshot())
     Path(sys.argv[2]).write_text(json.dumps(output, sort_keys=True, indent=2) + "\n")
     print(
-        f"Wrote {sys.argv[2]}; provider requests: "
+        f"Wrote {sys.argv[2]} ({MODE}); provider requests: "
         f"{len(output['semantic']['provider_requests'])}; "
         f"fast-Skeptic/slow-Investigator overlap: {output['diagnostic_overlap']}"
     )

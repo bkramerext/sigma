@@ -35,11 +35,17 @@ jobs:
         with:
           path: candidate
           persist-credentials: false
-      - name: Check out immutable sequential baseline (original main for #423; current main for #426)
+      - name: Check out immutable original sequential v1 baseline
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.number == 426 && 'a49c17f4bb7f30256d90a522422d3979e694c126' || '48c1fb2322a95ddcb5a218cca29fcba59c4f8108' }}
+          ref: 48c1fb2322a95ddcb5a218cca29fcba59c4f8108
           path: research-baseline
+          persist-credentials: false
+      - name: Check out immutable pre-v2 main baseline for full v1 request comparison
+        uses: actions/checkout@v4
+        with:
+          ref: 156a13d6536e73ccafeaf0aa9d5f2e6a3bb2b176
+          path: v1-main
           persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -49,16 +55,51 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Install synthetic-test dependencies, no live API
         run: uv sync --project candidate --locked --no-dev
+      - name: Compile parity harness before executing it
+        run: python -m py_compile candidate/tests/strategy_scheduler_parity.py
       - name: Run actual baseline scheduler against deterministic synthetic provider
         run: |
           PYTHONPATH="$GITHUB_WORKSPACE/research-baseline/src" \
             uv run --project candidate --locked --no-sync python \
             candidate/tests/strategy_scheduler_parity.py research-baseline baseline-parity.json
+      - name: Run pre-v2 main against deterministic synthetic provider
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/v1-main/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py v1-main v1-main-parity.json legacy-v1
       - name: Run candidate parallel scheduler against identical synthetic provider
         run: |
           PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
             uv run --project candidate --locked --no-sync python \
             candidate/tests/strategy_scheduler_parity.py candidate parallel-parity.json
+      - name: Verify actual v2 paired-turn session, enabled selection and peer transfers
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py candidate paired-v2-parity.json paired-v2
+      - name: Verify v2 stopped session resumes without losing committed pairs
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py candidate paired-v2-resume-parity.json paired-v2-resume
+      - name: Verify failed calls cannot falsely complete v2 and no pair is skipped
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src:$GITHUB_WORKSPACE/candidate/tests" \
+            uv run --project candidate --locked --no-sync python - <<'PY'
+          from research_sessions import (
+              test_paired_round_protocol_requires_every_accepted_role,
+              test_paired_round_pipeline_orders_roles_without_paid_calls,
+              test_paired_round_positions_are_explicit_and_legacy_is_unchanged,
+              test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs,
+              test_paired_round_defaults_and_enabled_call_ceiling,
+          )
+          test_paired_round_defaults_and_enabled_call_ceiling()
+          test_paired_round_positions_are_explicit_and_legacy_is_unchanged()
+          test_paired_round_protocol_requires_every_accepted_role()
+          test_paired_round_pipeline_orders_roles_without_paid_calls()
+          test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs()
+          print("PASS: v2 paired-turn accounting, failed/missing calls, and recovery budget invariants.")
+          PY
       - name: Compare complete provider inputs and reviewed research outputs
         run: |
           python - <<'PY'
@@ -67,20 +108,41 @@ jobs:
           from pathlib import Path
 
           baseline = json.loads(Path("baseline-parity.json").read_text())
+          v1_main = json.loads(Path("v1-main-parity.json").read_text())
           parallel = json.loads(Path("parallel-parity.json").read_text())
+          v2 = json.loads(Path("paired-v2-parity.json").read_text())
+          v2_resumed = json.loads(Path("paired-v2-resume-parity.json").read_text())
           if baseline["diagnostic_overlap"] or not parallel["diagnostic_overlap"]:
               raise AssertionError(
                   "The original/main and parallel runs did not exercise different dispatch ordering."
               )
-          if baseline["semantic"] != parallel["semantic"]:
-              left = json.dumps(baseline["semantic"], sort_keys=True, indent=2).splitlines()
-              right = json.dumps(parallel["semantic"], sort_keys=True, indent=2).splitlines()
-              print("\n".join(list(difflib.unified_diff(
-                  left, right, fromfile="baseline", tofile="parallel", lineterm=""
-              ))[:250]))
-              raise AssertionError("Research semantics changed under strategy parallelization.")
-          print("PASS: baseline and candidate have identical canonical provider requests, "
-                "peer handoffs, reviewed artifacts, coordinator decisions, and outcomes.")
+          if not v1_main["diagnostic_overlap"]:
+              raise AssertionError("The pre-v2 baseline should have independent strategy pipelines.")
+          for name, pair in [
+              ("pre-v2 main versus current v1", (v1_main["semantic"], parallel["semantic"])),
+              ("original sequential v1 versus current v1", (baseline["semantic"], parallel["semantic"])),
+          ]:
+              left_data, right_data = pair
+              if left_data != right_data:
+                  left = json.dumps(left_data, sort_keys=True, indent=2).splitlines()
+                  right = json.dumps(right_data, sort_keys=True, indent=2).splitlines()
+                  print("\n".join(list(difflib.unified_diff(
+                      left, right, fromfile=name + " baseline", tofile=name + " candidate",
+                      lineterm=""
+                  ))[:300]))
+                  raise AssertionError("Legacy research semantics differ: " + name)
+          for item in (v2, v2_resumed):
+              if not item["diagnostic_overlap"] or item["counts"] != {
+                  "calls": 16, "artifacts": 8, "pair_slots": 4, "enabled_strategies": 2,
+                  "resumed": item["scheduler_mode"] == "paired-v2-resume",
+              }:
+                  raise AssertionError("V2 paired-turn run did not preserve complete accepted pairs.")
+          assert v2["semantic"]["artifacts"] == v2_resumed["semantic"]["artifacts"], (
+              "Resuming changes the saved reviewed research or decisions."
+          )
+          print("PASS: original sequential v1, pre-v2 main, current v1, and both "
+                "v2 paired-turn runs retain provider inputs, peer handoffs, "
+                "reviewed artifacts, coordinator decisions and outcomes.")
           PY
       - name: Verify real local admission and 32 global provider slots across processes
         run: |
@@ -89,7 +151,7 @@ jobs:
             candidate/tests/strategy_global_slots.py
       - name: Validate stop/resume on baseline revision
         run: |
-          PYTHONPATH="$GITHUB_WORKSPACE/research-baseline/src:$GITHUB_WORKSPACE/candidate/tests" uv run --project candidate --locked --no-sync python - <<'PY'
+          PYTHONPATH="$GITHUB_WORKSPACE/research-baseline/src:$GITHUB_WORKSPACE/research-baseline/tests" uv run --project candidate --locked --no-sync python - <<'PY'
           import asyncio
           from pathlib import Path
           from tempfile import TemporaryDirectory
