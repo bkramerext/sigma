@@ -11067,7 +11067,10 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
                     else min(max(0, failed_attempts - 1), MAX_TRANSIENT_AUTO_RETRIES)
                 )
                 if automatic_retries:
-                    failure_text += f" after {automatic_retries} automatic retry"
+                    retry_count = {1: "one", 2: "two"}.get(
+                        automatic_retries, str(automatic_retries)
+                    )
+                    failure_text += f" after {retry_count} automatic retry"
                     if automatic_retries != 1:
                         failure_text += "s"
             reasons.append(f"{branch.get('strategy_title') or 'Strategy'}: {failure_text}")
