@@ -7675,7 +7675,7 @@ async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_p
     ).project.strategies[-1]
     project_before = (path / "project.json").read_bytes()
     limits = research_sessions.get_limits(str(path))
-    limits["model_calls"] = 12
+    limits.update(research_rounds=2, model_calls=12)
     limits = research_sessions.save_limits(str(path), limits)
 
     async def handler(request):
@@ -7725,11 +7725,12 @@ async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_p
         )
         finished = await wait_for(path, started["id"])
 
-    assert finished["status"] == "ended" and finished["calls_used"] == 12
+    assert finished["status"] == "ended" and finished["calls_used"] == 8
+    assert finished["termination_reason_code"] == "protocol_complete"
     branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
     assert branches[first.id]["status"] == "ended"
     assert branches[first.id]["last_decision"] == "stop_no_progress"
-    assert len(branches[first.id]["artifacts"]) == 3
+    assert len(branches[first.id]["artifacts"]) == 2
     assert any(event["kind"] == "coordinator.early_stop_deferred" for event in finished["events"])
     actions = {
         item["strategy_id"]: item for item in finished["portfolio_decision"]["strategy_actions"]
