@@ -161,9 +161,7 @@ async def verify_provider_free_admission() -> None:
             )
             research_sessions._save(str(path), saved)
 
-        with patch.object(
-            research_sessions, "_portfolio_worker", new=AsyncMock()
-        ) as portfolio:
+        with patch.object(research_sessions, "_portfolio_worker", new=AsyncMock()) as portfolio:
             await research_sessions._worker(started["id"], str(path))
             portfolio.assert_not_awaited()
         blocked = research_sessions._read(str(path), started["id"])

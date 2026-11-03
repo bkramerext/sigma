@@ -14506,17 +14506,14 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
 
 def _strict_compilation_block_reason(compilation: Any) -> str | None:
     """A pilot that required references cannot quietly use uncompiled notes."""
-    if (
-        not isinstance(compilation, dict)
-        or compilation.get("required_for_acceptance") is not True
-    ):
+    if not isinstance(compilation, dict) or compilation.get("required_for_acceptance") is not True:
         return None
     if compilation.get("status") == "completed":
         return None
     status = str(compilation.get("status") or "unknown")[:50]
-    reason = str(
-        compilation.get("reason") or "No successful reference compilation was saved."
-    )[:400]
+    reason = str(compilation.get("reason") or "No successful reference compilation was saved.")[
+        :400
+    ]
     return (
         f"Research was not started: required reference compilation is {status}. "
         f"{reason} Review Outcome → Research References, correct the cause, "
@@ -14550,9 +14547,7 @@ async def _worker(session_id: str, path: str) -> None:
             # before any Investigator wave, including after worker restarts.
             async with _session_state_lock(session_id):
                 latest = _read(path, session_id)
-                blocked = _strict_compilation_block_reason(
-                    latest.get("reference_compilation")
-                )
+                blocked = _strict_compilation_block_reason(latest.get("reference_compilation"))
                 if blocked:
                     if latest["status"] not in {
                         "paused",
