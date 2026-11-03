@@ -19,7 +19,9 @@ type Reference = { name: string; url: string };
 type ReferenceField = 'research_standards_references' | 'publication_standards_references';
 type ReferenceFields = Pick<ProjectTypeRecord, ReferenceField>;
 type ReferencePreferences = Record<string, Partial<Record<ReferenceField, string[]>>>;
-const titleCache = new Map<string, string | null>();
+type DomainStatus = 'valid' | 'invalid' | 'unverified';
+type TitleResult = { title: string | null; status: DomainStatus };
+const titleCache = new Map<string, TitleResult>();
 const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
 const handledErrorHeaders = { 'X-Sigma-Error-Handled': 'true' };
 // Mirror the server's URL canonicalization so switches on newly edited custom
@@ -31,38 +33,55 @@ function preferenceUrl(raw: string): string {
     return `${parsed.protocol}//${parsed.host}${parsed.pathname || '/'}${parsed.search}`;
   } catch { return raw.trim(); }
 }
-// Keep validation aligned with server-side _validate_references. Empty edit rows
-// are deliberately ignored on Save. Nonempty malformed URLs are not.
+// Store the complete URL, but let people type a normal website address.
+// When editing, preserve the original protocol invisibly; new links use HTTPS.
+function editableReferenceUrl(value: string): string {
+  return value.replace(/^https?:\/\//i, '');
+}
+function completeReferenceUrl(value: string, previous = ''): string {
+  if (!value.trim()) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.includes('://') || /^[a-z][a-z\d+.-]*:(?!\d)/i.test(value)) return value;
+  const protocol = previous.toLowerCase().startsWith('http://') ? 'http://' : 'https://';
+  return protocol + value;
+}
+// Bad domain syntax is rejected immediately; DNS checks also catch domains
+// that look plausible (such as badbadbad.bad) but do not actually resolve.
 function referenceUrlError(value: string): string | null {
   const candidate = value.trim();
   if (!candidate) return null;
   if (value.length > 2048) return 'URL must be at most 2,048 characters.';
-  if (!/^https?:\/\//i.test(candidate)) return 'Use an HTTP or HTTPS URL with a host.';
+  if (!/^https?:\/\//i.test(candidate)) return 'Enter a website address, such as example.org.';
   try {
     const parsed = new URL(candidate);
-    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) {
-      return 'Use an HTTP or HTTPS URL with a host, without sign-in credentials.';
+    const host = parsed.hostname;
+    const domain = /^(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i;
+    if (!['http:', 'https:'].includes(parsed.protocol) || !domain.test(host) || parsed.username || parsed.password) {
+      return 'Enter a valid public website address, such as example.org.';
+    }
+    if (parsed.port && (Number(parsed.port) < 1 || Number(parsed.port) > 65535)) {
+      return 'Enter a valid port number.';
     }
   } catch {
-    return 'Enter a valid HTTP or HTTPS URL with a host.';
+    return 'Enter a valid public website address, such as example.org.';
   }
   return null;
 }
 
-
-function ReferenceLink({ reference, onResolved, editing = false }: { reference: Reference; onResolved?: (name: string) => void; editing?: boolean }) {
+function ReferenceLink({ reference, onResolved, onChecked }: { reference: Reference; onResolved?: (name: string) => void; onChecked?: (status: DomainStatus) => void }) {
   const candidate = reference.url.trim();
   const knownName = reference.name.trim() || candidate;
-  const [resolvedTitle, setResolvedTitle] = useState<string | null>(() => titleCache.get(candidate) ?? null);
+  const [resolvedTitle, setResolvedTitle] = useState<string | null>(() => titleCache.get(candidate)?.title ?? null);
   useEffect(() => {
     if (!candidate || referenceUrlError(candidate) || knownName !== candidate) {
       setResolvedTitle(null);
       return;
     }
     if (titleCache.has(candidate)) {
-      const cached = titleCache.get(candidate) ?? null;
-      setResolvedTitle(cached);
-      if (cached) onResolved?.(cached);
+      const cached = titleCache.get(candidate)!;
+      setResolvedTitle(cached.title);
+      onChecked?.(cached.status);
+      if (cached.title) onResolved?.(cached.title);
       return;
     }
     setResolvedTitle(null);
@@ -70,15 +89,22 @@ function ReferenceLink({ reference, onResolved, editing = false }: { reference: 
     const timer = window.setTimeout(() => {
       void fetch(`/api/reference-title?url=${encodeURIComponent(candidate)}`, { signal: controller.signal, headers: handledErrorHeaders })
         .then(response => response.ok ? response.json() : Promise.reject())
-        .then((data: { title: string | null }) => {
+        .then((data: { title: string | null; domain_status?: string }) => {
           const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : null;
-          titleCache.set(candidate, title);
+          const status: DomainStatus = data.domain_status === 'invalid' ? 'invalid'
+            : data.domain_status === 'valid' ? 'valid' : 'unverified';
+          titleCache.set(candidate, { title, status });
           if (!controller.signal.aborted) {
             setResolvedTitle(title);
+            onChecked?.(status);
             if (title) onResolved?.(title);
           }
         }).catch(() => {
-          if (!controller.signal.aborted) { titleCache.set(candidate, null); setResolvedTitle(null); }
+          if (!controller.signal.aborted) {
+            titleCache.set(candidate, { title: null, status: 'unverified' });
+            setResolvedTitle(null);
+            onChecked?.('unverified');
+          }
         });
     }, 350);
     return () => { window.clearTimeout(timer); controller.abort(); };
@@ -148,6 +174,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(initialOpenTypeId);
   const [editingReferences, setEditingReferences] = useState<Set<string>>(() => new Set());
+  const [urlValidation, setUrlValidation] = useState<Record<string, DomainStatus>>({});
 
   function close() {
     if (dialog.current?.open) dialog.current.close();
@@ -310,6 +337,35 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     if (!hasChanges || invalidDraft) return;
     setBusy(true); setError('');
     try {
+      // Validate changed domains, even when Save is clicked before the title
+      // lookup has finished. A definite NXDOMAIN is rejected; transient DNS
+      // outages must not destroy a valid user-created reference.
+      const previousUrls = new Set((savedDrafts ?? []).flatMap(type =>
+        [...type.research_standards_references, ...type.publication_standards_references].map(ref => ref.url)));
+      const newUrls = new Set(drafts.flatMap(type =>
+        [...type.research_standards_references, ...type.publication_standards_references]
+          .map(ref => ref.url).filter(url => url.trim() && !previousUrls.has(url))));
+      for (const url of newUrls) {
+        const cached = titleCache.get(url)?.status ?? urlValidation[url];
+        if (cached === 'invalid') throw new Error(`Website could not be found: ${editableReferenceUrl(url)}. Check the address.`);
+        if (cached === 'valid') continue;
+        try {
+          const check = await fetch(`/api/reference-title?url=${encodeURIComponent(url)}`, { headers: handledErrorHeaders });
+          if (!check.ok) continue;
+          const metadata = await check.json() as { domain_status?: DomainStatus; title?: string | null };
+          if (metadata.domain_status === 'invalid') {
+            setUrlValidation(previous => ({ ...previous, [url]: 'invalid' }));
+            throw new Error(`Website could not be found: ${editableReferenceUrl(url)}. Check the address.`);
+          }
+          if (metadata.domain_status === 'valid') {
+            titleCache.set(url, { status: 'valid', title: metadata.title || null });
+            setUrlValidation(previous => ({ ...previous, [url]: 'valid' }));
+          }
+        } catch (cause) {
+          if (cause instanceof Error && cause.message.startsWith('Website could not be found:')) throw cause;
+          // A network or DNS outage is not proof that the URL is invalid.
+        }
+      }
       const removed = initialCustomIds.current.filter(id => !drafts.some(draft => draft.id === id));
       const confirmedRemovals: Record<string, number> = {};
       for (const id of removed) {
@@ -332,12 +388,16 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const listEditor = (item: ProjectTypeRecord, field: ReferenceField, readonly: boolean) => {
     const references = item[field];
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
-    const setAt = (index: number, url: string) => edit(item.id, { [field]: references.map((reference, i) =>
-      i === index ? { name: url, url } : reference) });
+    const setAt = (index: number, typed: string) => edit(item.id, { [field]: references.map((reference, i) =>
+      i === index ? { name: completeReferenceUrl(typed, reference.url), url: completeReferenceUrl(typed, reference.url) } : reference) });
     if (readonly && references.length === 0) return null;
     return <table className="pt-reference-table"><tbody>
       {references.map((reference, index) => {
-        const urlError = !readonly && referenceUrlError(reference.url);
+        const urlError = !readonly && (
+          referenceUrlError(reference.url) || (
+            urlValidation[reference.url] === 'invalid' ? 'Website could not be found. Check the address.' : null
+          )
+        );
         const errorId = `pt-reference-error-${item.id}-${field}-${index}`;
         const setResolved = (name: string) => setDrafts(previous => previous.map(draft => draft.id !== item.id ? draft : {
           ...draft,
@@ -347,11 +407,23 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
           )),
         }));
         const rowKey = `${item.id}:${field}:${index}`;
+        // Enter, Escape and clicking outside are all ways to finish a valid
+        // reference edit. Rendering ReferenceLink then starts title lookup.
+        const commitReference = () => {
+          if (!reference.url.trim() || urlError) return;
+          setEditingReferences(previous => {
+            if (!previous.has(rowKey)) return previous;
+            const next = new Set(previous);
+            next.delete(rowKey);
+            return next;
+          });
+        };
         const editing = editingReferences.has(rowKey) || !reference.url.trim();
         return <tr key={index}><td>
           {readonly ? <div className="pt-reference-entry"><div className={referenceDisabled(item.id, field, reference.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={reference}/></div>{referenceToggle(item.id, field, reference)}</div> : <div className="pt-reference-entry">
             <div className="pt-reference-field">
-              {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
+              {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="text" inputMode="url"
+                placeholder="example.org/guide" value={editableReferenceUrl(reference.url)}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
                 autoFocus={editingReferences.has(rowKey)}
                 onChange={event => {
@@ -359,16 +431,14 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
                   setEditingReferences(previous => new Set(previous).add(rowKey));
                   setAt(index, event.target.value);
                 }}
+                onBlur={commitReference}
                 onKeyDown={event => {
-                  if (event.key !== 'Enter') return;
+                  if (event.key !== 'Enter' && event.key !== 'Escape') return;
                   event.preventDefault();
-                  if (!reference.url.trim() || urlError) return;
-                  setEditingReferences(previous => {
-                    const next = new Set(previous);
-                    next.delete(rowKey);
-                    return next;
-                  });
-                }}/> : <ReferenceLink reference={reference} onResolved={setResolved}/>}
+                  commitReference();
+                }}/> : <ReferenceLink reference={reference} onResolved={setResolved}
+                  onChecked={status => setUrlValidation(previous => previous[reference.url] === status
+                    ? previous : { ...previous, [reference.url]: status })}/>}
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
             {referenceToggle(item.id, field, reference)}
@@ -380,7 +450,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         </td></tr>;
       })}
       {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || references.some(reference => !reference.url.trim())}
-        onClick={() => edit(item.id, { [field]: [...references, { name: '', url: '' }] })}>New</button></td></tr>}
+        onClick={() => edit(item.id, { [field]: [...references, { name: '', url: '' }] })} className="pt-new-action">New</button></td></tr>}
     </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" data-project-type-id={item.id} key={item.id} open={open === item.id}>
@@ -405,7 +475,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
     item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
-    [...item.research_standards_references, ...item.publication_standards_references].some(ref => !!referenceUrlError(ref.url))
+    [...item.research_standards_references, ...item.publication_standards_references].some(ref =>
+      !!referenceUrlError(ref.url) || urlValidation[ref.url] === 'invalid')
   );
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); }} onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
@@ -424,7 +495,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <p className="pt-usage-notice">Reference manuals can increase AI input tokens and usage costs. Shared research and publication references are disabled by default; subject-specific guides remain enabled. Enable only the references you want SIGMA to use for future sessions and papers.</p>
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <h4>Research standards references for all project types</h4>
