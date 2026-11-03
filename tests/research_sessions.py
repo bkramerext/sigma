@@ -8653,6 +8653,9 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
 ):
     view, first, credential, config = await setup(path)
     credential["mode"] = "chatgpt"
+    # Preserve this historical v1 recovery contract with its spare attempt budget.
+    # Version-2 sessions instead have exact paired-call ceilings.
+    research_sessions.save_limits(str(path), dict(research_sessions.DEFAULT_LIMITS))
     second = create_strategy(
         path, "Independent approach", "Use a different derivation."
     ).project.strategies[-1]

@@ -3773,6 +3773,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   }
   const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 3, turns_per_round: 3, scheduler_version: 2, model_calls: 18, session_duration_minutes: 60, output_tokens_per_call: 4000, maximum_estimated_cost_usd: null, maximum_input_tokens_per_session: null, max_concurrent_sessions: '1' }));
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
+  const [loadedLimitDraft, setLoadedLimitDraft] = useState<ResearchLimitsDraft | null>(null);
   const limitValidation = validateLimitDraft(
     limitDraft,
   );
@@ -3782,7 +3783,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
     const controller = new AbortController();
     fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`, { signal: controller.signal }).then(async response => {
       const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read');
-      setLimitDraft(draftLimits(data)); setLimitsLoaded(true);
+      const loaded = draftLimits(data); setLimitDraft(loaded); setLoadedLimitDraft(loaded); setLimitsLoaded(true);
     }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
     return () => controller.abort();
   }, [initial?.path]);
@@ -3835,10 +3836,11 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
       if (!initial) {
         try { window.localStorage.setItem(NEW_PROJECT_VALUES_KEY, JSON.stringify(values)); } catch { /* Project creation must not depend on browser storage availability. */ }
       }
-      if (initial) {
+      // Unrelated settings changes must not rewrite historical v1 research limits.
+      if (initial && loadedLimitDraft && JSON.stringify(limitDraft) !== JSON.stringify(loadedLimitDraft)) {
         const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
         const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Research limits were not saved');
-        setLimitDraft(draftLimits(result));
+        const saved = draftLimits(result); setLimitDraft(saved); setLoadedLimitDraft(saved);
       }
       onSaved(next);
     }
