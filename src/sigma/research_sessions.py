@@ -27,7 +27,13 @@ from uuid import UUID, uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import cloud_research, cloud_workspaces, research_reference_compiler, session_log
+from sigma import (
+    cloud_research,
+    cloud_workspaces,
+    reference_efficiency,
+    research_reference_compiler,
+    session_log,
+)
 from sigma.build_info import build_commit, local_build_mismatch
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
@@ -64,7 +70,7 @@ from sigma.research_tools import capability_guidance, execution_capabilities
 CALL_LIMIT = 6
 # Only known, settled clipped responses may be retried automatically.
 MAX_CLIPPED_AUTO_RETRIES = 1
-MAX_TRANSIENT_AUTO_RETRIES = 1
+MAX_TRANSIENT_AUTO_RETRIES = 2
 MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60
 # A 54-turn portfolio stores full audited prompts, provider attempts and
 # source-linked evidence. The old 2 MB per-session limit was nearly exhausted
@@ -2111,6 +2117,28 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         {"label": "Provider failures / retries", "value": provider_value},
         {"label": "Estimated monetary cost", "value": cost_value},
     ]
+    reference_comparison = _research_reference_compilation_efficiency(record)
+    if reference_comparison is not None:
+        before = reference_comparison["original_estimated_tokens"]
+        after = reference_comparison["compiled_estimated_tokens"]
+        difference = reference_comparison["estimated_tokens_avoided_per_use"]
+        reduction = reference_comparison["estimated_reduction_percent"]
+        operational.insert(
+            4,
+            {
+                "label": "Reference compilation · estimated tokens",
+                "value": (
+                    f"≈{before:,} before / ≈{after:,} after "
+                    f"({difference:+,} tokens/use; {reduction:+.1f}%)"
+                ),
+                "detail": (
+                    "Estimated methodology_source_material JSON size using four UTF-8 "
+                    "bytes per token, before and after compilation. This is a per-agent "
+                    "reference-payload estimate, not measured provider usage or net "
+                    "savings after the compilation request."
+                ),
+            },
+        )
     sage_statuses: dict[str, int] = {}
     for execution in executions.values():
         if execution.get("runtime") == "sagemath":
@@ -2165,6 +2193,38 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
             "strategy_ids": sorted(strategies),
         },
     }
+
+
+def _research_reference_compilation_efficiency(
+    record: Mapping[str, Any],
+) -> reference_efficiency.ReferenceTokenComparison | None:
+    """Estimate reference-only input reduction; never claim provider-billed savings."""
+    stage = record.get("reference_compilation")
+    frozen = record.get("research_method_sources")
+    if not (
+        isinstance(stage, dict)
+        and stage.get("status") == "completed"
+        and isinstance(stage.get("guidance"), str)
+        and isinstance(stage.get("selected_source_ids"), list)
+        and isinstance(stage.get("source_sha256"), str)
+        and isinstance(frozen, dict)
+        and isinstance(frozen.get("sources"), list)
+        and frozen["sources"]
+    ):
+        return None
+    compiled = [
+        {
+            "id": "compiled-methodology-guide",
+            "title": "Session-compiled research methods (selected uninspected annotations)",
+            "notes": stage["guidance"],
+            "source_ids": stage["selected_source_ids"],
+            "provenance_sha256": stage["source_sha256"],
+        }
+    ]
+    return reference_efficiency.compare(
+        {"methodology_source_material": frozen["sources"]},
+        {"methodology_source_material": compiled},
+    )
 
 
 def _outcome(record: dict[str, Any]) -> dict[str, Any]:
@@ -10978,9 +11038,13 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
             failure_text = failure_labels.get(
                 str(branch.get("termination_reason_code")), "strategy could not complete"
             )
-            failed_attempts = sum(
-                step.get("strategy_id") == branch.get("strategy_id")
-                and step.get("cycle") == branch.get("cycle")
+            # Investigator failures can leave branch.cycle at the last
+            # accepted round (often zero). Derive the failed attempt group
+            # from the persisted steps rather than the branch cursor.
+            attempted = [
+                step
+                for step in record.get("steps", [])
+                if step.get("strategy_id") == branch.get("strategy_id")
                 and step.get("failure_kind")
                 in {
                     "timeout",
@@ -10989,10 +11053,23 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
                     "provider_rate_limited",
                     "stream_incomplete",
                 }
-                for step in record.get("steps", [])
+            ]
+            latest_failed = attempted[-1] if attempted else {}
+            failed_attempts = sum(
+                step.get("role") == latest_failed.get("role")
+                and step.get("cycle") == latest_failed.get("cycle")
+                for step in attempted
             )
             if branch.get("recovery_attempts_exhausted") or failed_attempts > 1:
-                failure_text += " after one automatic retry"
+                automatic_retries = (
+                    MAX_TRANSIENT_AUTO_RETRIES
+                    if branch.get("recovery_attempts_exhausted")
+                    else min(max(0, failed_attempts - 1), MAX_TRANSIENT_AUTO_RETRIES)
+                )
+                if automatic_retries:
+                    failure_text += f" after {automatic_retries} automatic retry"
+                    if automatic_retries != 1:
+                        failure_text += "s"
             reasons.append(f"{branch.get('strategy_title') or 'Strategy'}: {failure_text}")
 
         saved = sum(len(item.get("artifacts", [])) for item in runs)

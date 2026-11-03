@@ -37,9 +37,10 @@ from sigma import (
     cloud_workspaces,
     paper_writing_sources,
     publication_reference_compiler,
+    reference_efficiency,
 )
 from sigma.openai_connection import auth_context, cloud_credential
-from sigma.plan_stream import completed, failure
+from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
 from sigma.project_reports import _compile_pdf, _latex
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
@@ -173,11 +174,33 @@ class PaperSnapshotConflict(ProjectError):
 
 
 class PaperConnectionFailure(ProjectError):
-    """Only a connection-phase failure, before request bytes were delivered.
+    """Provider connection failed before request delivery; safe for bounded retry."""
 
-    It is safe to retry this error; read/write timeouts, HTTP status failures,
-    malformed provider output and lost streams are NOT automatically retried.
+
+class PaperTransientFailure(ProjectError):
+    """A transient provider failure eligible for bounded, accounted replay.
+
+    The prior attempt may have consumed model allowance. Retried responses
+    only commit once a complete validated paper stage has been received.
     """
+
+
+def _retryable_paper_response_failure(exc: ProjectError) -> bool:
+    """Classify transient Responses failures without retrying permanent rejections."""
+    if isinstance(exc, ChatGPTProviderRejection):
+        if exc.code == "subscription_sharing_usage_limit_exceeded":
+            return False
+        return exc.http_status in {429, 500, 502, 503, 504}
+    message = str(exc)
+    # HTTP 429 can also signal exhausted paid quota rather than rate limiting.
+    if "code=insufficient_quota" in message or "code=billing_hard_limit_reached" in message:
+        return False
+    return message.startswith("Paper stream ended before a valid response.completed.") or bool(
+        re.search(
+            r"OpenAI API request failed \(HTTP (?:429|500|502|503|504)\)",
+            message,
+        )
+    )
 
 
 class PublicationChecklist(BaseModel):
@@ -4045,6 +4068,7 @@ def _tex(
     research_diagnostics: list[dict[str, str]] | None = None,
     source_reference_map: Mapping[str, str] | None = None,
     writing_sources: list[dict[str, Any]] | None = None,
+    reference_comparison: Mapping[str, Any] | None = None,
 ) -> str:
     # Research detail controls the content of the article. The claim ledger
     # and validation notes are separate publication choices: requesting a
@@ -4574,6 +4598,23 @@ def _tex(
             parts.append(r"\end{itemize}")
         else:
             parts.append(prose_text("No external writing-guidance sources were recorded."))
+        if reference_comparison:
+            before = reference_comparison.get("original_estimated_tokens")
+            after = reference_comparison.get("compiled_estimated_tokens")
+            difference = reference_comparison.get("estimated_tokens_avoided_per_use")
+            reduction = reference_comparison.get("estimated_reduction_percent")
+            if all(type(item) in {int, float} for item in (before, after, difference, reduction)):
+                parts.append(r"\subsection{Reference compilation efficiency (estimated)}")
+                parts.append(
+                    prose_text(
+                        f"Writing-reference payload: approximately {before:,} tokens before "
+                        f"compilation and {after:,} after, a reduction of {difference:,} "
+                        f"estimated tokens per reuse ({reduction:.1f}%). Token counts are "
+                        "approximated from serialized reference-only JSON at four UTF-8 "
+                        "bytes per token. These are not provider-measured billable tokens "
+                        "or net savings after compilation cost."
+                    )
+                )
     if include_research_excerpts and integrity_records:
         parts += [
             r"\appendix",
@@ -4838,7 +4879,7 @@ async def _provider(
                     max_text_bytes=MAX_RESPONSE_BYTES,
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
-                        "Completed sections remain saved; no uncertain call was replayed."
+                        "Completed work is saved; transient errors may be retried up to three attempts."
                     ),
                 )
             else:
@@ -4872,15 +4913,19 @@ async def _provider(
         if len(texts) != 1:
             raise ProjectError("Provider returned no single structured paper draft")
         return PaperDraft.model_validate_json(texts[0]), config["model"]
-    except ProjectError:
+    except ProjectError as exc:
+        if _retryable_paper_response_failure(exc):
+            raise PaperTransientFailure(
+                "Temporary paper-provider failure; completed work remains checkpointed."
+            ) from exc
         raise
     except (TimeoutError, httpx.TimeoutException) as exc:
-        raise ProjectError(
-            "Paper generation timed out. No PDF was published; retry explicitly."
+        raise PaperTransientFailure(
+            "Paper generation timed out; completed work remains checkpointed."
         ) from exc
     except httpx.HTTPError as exc:
-        raise ProjectError(
-            "Could not reach the AI provider. No PDF was published; retry explicitly."
+        raise PaperTransientFailure(
+            "The paper provider connection was interrupted; saved work is intact."
         ) from exc
     except (ValueError, KeyError, TypeError, ValidationError) as exc:
         raise ProjectError(
@@ -4977,7 +5022,7 @@ async def _provider_structured(
                     max_text_bytes=MAX_RESPONSE_BYTES,
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
-                        "Completed sections remain saved; no uncertain call was replayed."
+                        "Completed work is saved; transient errors may be retried up to three attempts."
                     ),
                 )
             else:
@@ -5036,20 +5081,24 @@ async def _provider_structured(
                     usage_sink.update(measured)
                     usage_sink["estimated_cost_usd"] = _estimate_cost(config["model"], measured)
         return parsed_response, config["model"]
-    except ProjectError:
+    except ProjectError as exc:
+        if _retryable_paper_response_failure(exc):
+            raise PaperTransientFailure(
+                "Temporary paper-stage provider failure; completed sections remain saved."
+            ) from exc
         raise
     except (httpx.ConnectTimeout, httpx.ConnectError) as exc:
         raise PaperConnectionFailure(
             "Could not establish a provider connection for a paper stage. "
-            "The request was not delivered; automatic connection retries are bounded."
+            "The request was not delivered; automatic retries are bounded."
         ) from exc
     except (TimeoutError, httpx.TimeoutException) as exc:
-        raise ProjectError(
-            "A long-paper stage timed out. No paper was published; retry explicitly."
+        raise PaperTransientFailure(
+            "Paper stage timed out; completed sections remain saved."
         ) from exc
     except httpx.HTTPError as exc:
-        raise ProjectError(
-            "Could not reach the AI provider for a long-paper stage. No paper was published."
+        raise PaperTransientFailure(
+            "Paper-stage connection interrupted; completed sections remain saved."
         ) from exc
     except (ValueError, KeyError, TypeError, ValidationError) as exc:
         raise ProjectError(
@@ -5347,14 +5396,13 @@ async def _generate_long_draft(
         max_input_bytes: int,
         legacy: bool = False,
     ) -> tuple[BaseModel, str]:
-        """Retry only connection failures known to precede provider delivery.
+        """Retry a stage at most three times for transient provider failures.
 
-        Every attempt is accounted for before dispatch. A timeout after a
-        request may have been delivered, a refused response, invalid JSON or
-        a provider 429 are deliberately NOT retried: allowance consumption
-        cannot be assumed to be zero.
+        Every attempt is checkpointed and accounted for before dispatch.
+        Replays may consume allowance, but successful section drafts are never
+        regenerated and permanent provider rejections are not retried.
         """
-        maximum = 1 if legacy else 3
+        maximum = 3
         for attempt_number in range(1, maximum + 1):
             before_provider_call(
                 reserve,
@@ -5378,12 +5426,21 @@ async def _generate_long_draft(
                         and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
                     ),
                 )
-            except PaperConnectionFailure:
+            except (PaperConnectionFailure, PaperTransientFailure):
                 if attempt_number == maximum:
                     raise
                 if progress:
-                    await progress("retry", attempt_number, maximum, "active")
-                # A short bounded backoff; cancellation remains responsive.
+                    section_number = (
+                        input_value.get("section_number") if isinstance(input_value, dict) else None
+                    )
+                    detail = (
+                        f"Retrying section {section_number} "
+                        f"(attempt {attempt_number + 1} of {maximum})."
+                        if type(section_number) is int
+                        else f"Retrying paper stage (attempt {attempt_number + 1} of {maximum})."
+                    )
+                    await progress("retry", attempt_number, maximum, "active", detail=detail)
+                # Short bounded backoff; cancellation remains responsive.
                 await asyncio.sleep(0.4 * attempt_number)
         raise AssertionError("Safe retry loop exhausted without raising")
 
@@ -7366,6 +7423,18 @@ async def _generate_impl(
         compiled_writing_methodology = publication_reference_compiler.guidance(
             compilation, writing_sources
         )
+        reference_comparison = (
+            reference_efficiency.compare(
+                {
+                    "paper_writing_methodology": paper_writing_sources.prompt_material(
+                        writing_sources
+                    )
+                },
+                {"paper_writing_methodology": compiled_writing_methodology},
+            )
+            if compilation.get("status") == "completed"
+            else None
+        )
         used_writing_sources = [
             item for item in writing_sources if item["url"] in compilation["retained_urls"]
         ]
@@ -7431,17 +7500,41 @@ async def _generate_impl(
                 work["provider_calls_total"] = int(work.get("provider_calls_total", 0)) + 1
                 _save_work(path, work)
                 await report("writing", None, None)
-                draft, model = await _provider(
-                    {
-                        **package,
-                        "paper_writing_methodology": compiled_writing_methodology,
-                    },
-                    initial_auth,
-                    config,
-                    view.project.id,
-                    path,
-                    include_diagrams,
-                )
+                draft: PaperDraft | None = None
+                model = config["model"]
+                for attempt_number in range(1, 4):
+                    if attempt_number > 1:
+                        # An in-flight request may have consumed allowance;
+                        # record each authorized replay before dispatch.
+                        await asyncio.sleep(0.4 * (attempt_number - 1))
+                        work["provider_calls"] = int(work["provider_calls"]) + 1
+                        work["provider_calls_total"] = int(work["provider_calls_total"]) + 1
+                        _save_work(path, work)
+                        await report(
+                            "retry",
+                            attempt_number,
+                            3,
+                            detail=f"Retrying paper writing (attempt {attempt_number} of 3).",
+                        )
+                    try:
+                        draft, model = await _provider(
+                            {
+                                **package,
+                                "paper_writing_methodology": compiled_writing_methodology,
+                            },
+                            initial_auth,
+                            config,
+                            view.project.id,
+                            path,
+                            include_diagrams,
+                        )
+                    except (PaperConnectionFailure, PaperTransientFailure):
+                        if attempt_number == 3:
+                            raise
+                    else:
+                        break
+                if draft is None:
+                    raise ProjectError("Paper writing ended without a complete provider draft")
                 # A complete structured author response is valuable paid work.
                 # Save it before any local reference repair, logical checks or
                 # TeX compilation so a recoverable defect cannot trigger
@@ -7601,6 +7694,7 @@ async def _generate_impl(
                 "writing_sources": writing_sources,
                 "writing_source_selection": writing_selection,
                 "publication_compilation": compilation,
+                "reference_compilation_efficiency": reference_comparison,
                 "publication_compiler_calls": int(work.get("publication_compiler_calls", 0)),
                 "publication_references_used": [
                     {"title": item["title"], "url": item["url"], "tier": item["tier"]}
@@ -7676,6 +7770,7 @@ async def _generate_impl(
                 ),
                 "source_reference_map": source_reference_map,
                 "writing_sources": used_writing_sources,
+                "reference_comparison": reference_comparison,
             }
             tex = _tex(draft, warnings, snapshot_hash, **tex_options)
             saved_proofreading = work.get("proofreading")
