@@ -92,16 +92,28 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
-    # Standard Common and discipline guidance is visible but cannot be edited.
+    # Shared references start disabled per user; subject-specific references
+    # start enabled. Catalog names/URLs remain immutable, but usage is editable.
     common_section = dialog.locator(".pt-common-references")
     expect(common_section.locator(".pt-reference-link")).to_have_count(4)
-    expect(common_section.locator("input, button")).to_have_count(0)
+    expect(common_section.locator("input")).to_have_count(0)
+    expect(common_section.get_by_role("button", name="Enable", exact=True)).to_have_count(4)
     expect(common_section.locator(".pt-reference-url")).to_have_count(0)
     expect(common_section.locator(".pt-reference-link a")).to_have_count(4)
+    common_section.get_by_role("button", name="Enable", exact=True).first.click()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
+    expect(common_section.get_by_role("button", name="Disable", exact=True)).to_have_count(1)
+    common_section.get_by_role("button", name="Disable", exact=True).first.click()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     math_card = dialog.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
     math_card.locator("summary").click()
     expect(math_card.locator(".pt-reference-link")).to_have_count(2)
-    expect(math_card.locator("input:not([disabled]), button")).to_have_count(0)
+    expect(math_card.locator("input:not([disabled])")).to_have_count(0)
+    expect(math_card.get_by_role("button", name="Disable", exact=True)).to_have_count(2)
+    math_card.get_by_role("button", name="Disable", exact=True).first.click()
+    expect(math_card.get_by_role("button", name="Enable", exact=True)).to_have_count(1)
+    math_card.get_by_role("button", name="Enable", exact=True).first.click()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     math_card.locator("summary").click()
     expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_have_count(0)
     expect(dialog.get_by_text("(cannot be modified)", exact=True)).to_be_visible()
@@ -116,10 +128,11 @@ with sync_playwright() as playwright:
     literature.locator("summary").click()
     expect(literature).to_have_attribute("open", "")
     expect(literature.locator(".project-type-card-icon svg")).to_be_visible()
-    # Literature now has a curated research and publication reference pair.
+    # Literature retains its subject-specific curated pair as enabled defaults.
     expect(literature.get_by_text("Research standards references")).to_have_count(1)
     expect(literature.get_by_text("Publication standards references")).to_have_count(1)
     expect(literature.locator(".pt-reference-link a")).to_have_count(2)
+    expect(literature.get_by_role("button", name="Disable", exact=True)).to_have_count(2)
     expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(0)
     expect(literature.get_by_role("columnheader", name="URL")).to_have_count(0)
     builtin_names = (
@@ -211,7 +224,7 @@ with sync_playwright() as playwright:
     expect(url_input).to_have_value("https://example.org/research-standard")
     # URL edits commit on Enter; no Done or Remove button while typing.
     first_entry = parent.locator(".pt-reference-entry").first
-    expect(first_entry.locator("button")).to_have_count(0)
+    expect(first_entry.get_by_role("button", name="Disable", exact=True)).to_have_count(1)
     url_input.press("Enter")
     expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
     expect(first_entry.locator(".pt-reference-link a")).to_have_count(1)
@@ -241,7 +254,7 @@ with sync_playwright() as playwright:
     assert all(
         row["paddingTop"] == "4px" and row["borderBottom"] == "0px" for row in reference_layout
     ), reference_layout
-    expect(first_entry.locator("button")).to_have_count(0)
+    expect(first_entry.get_by_role("button", name="Disable", exact=True)).to_have_count(1)
     # A new draft uses local Cancel, not Remove or a second Save.
     expect(
         dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")
