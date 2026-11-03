@@ -1930,7 +1930,7 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 }
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[] } };
-type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'source_material' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
+type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function paperProgressOperation(progress: PaperProgress): string {
@@ -1942,6 +1942,7 @@ function paperProgressOperation(progress: PaperProgress): string {
   switch (progress.stage) {
     case 'snapshot': return 'Preparing research evidence';
     case 'source_material': return milestone ? 'Writing references selected' : 'Selecting usable writing references';
+    case 'publication_compilation': return progress.detail || (milestone ? 'Publication references ready' : 'Compiling publication references…');
     case 'writing': return 'Writing the paper';
     case 'evidence': return `${milestone ? 'Evidence extracted' : 'Extracting evidence'}${count}`;
     case 'consolidation': return 'Consolidating findings';
@@ -2254,7 +2255,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   async function generatePaper() {
     if (busy || !binding) return;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Preparing research evidence…'); setError(''); setSuccess('');
+    setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
     let requestDispatched = false;
@@ -2274,7 +2275,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.draft_recovery_available
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
-        : 'Generating paper…');
+        : 'Compiling publication references…');
       requestDispatched = true;
       window.localStorage.setItem(paperRecoveryKey(projectId), '1');
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
