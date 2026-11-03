@@ -12441,6 +12441,69 @@ def _mark_protocol_complete(record: dict[str, Any]) -> bool:
     return True
 
 
+def _optional_reference_compilation_headroom(
+    record: dict[str, Any], compiler_cost: float, compiler_liability: float
+) -> bool:
+    """Do not spend optional compilation funding needed by the first research turn.
+
+    For sponsored accounts, actual per-user admission uses practical estimates;
+    the shared provider exposure uses full model-output liability. A failed
+    funding inspection disables only compilation, never the research session.
+    """
+    if record.get("cloud_sponsored") is not True and record.get("mode") != "api_key":
+        return True
+    try:
+        branch = next(
+            item for item in record.get("strategy_runs", []) if item.get("status") == "queued"
+        )
+        context = _portfolio_context(record, branch, "investigator", 1)
+        role_estimate = _reserve_cost(
+            record, context, "investigator", estimate=record.get("cloud_sponsored") is True
+        )
+        role_liability = _reserve_cost(record, context, "investigator", estimate=False)
+        if role_estimate is None or role_liability is None:
+            return False
+        limit = record.get("maximum_estimated_cost_usd")
+        if limit is not None and (
+            float(record.get("estimated_cost_usd") or 0.0)
+            + float(record.get("estimated_cost_reserved_usd") or 0.0)
+            + compiler_cost
+            + role_estimate
+            > float(limit)
+        ):
+            return False
+        if record.get("cloud_sponsored") is True:
+            funding = cloud_research.snapshot()
+            if float(funding["remaining_usd"]) + 1e-9 < compiler_cost + role_estimate:
+                return False
+            if (
+                float(funding["global_remaining_usd"]) + 1e-9
+                < compiler_liability + role_liability
+            ):
+                return False
+        hard = record.get("hard_budget_ledger")
+        if isinstance(hard, dict):
+            role_input_bound = len(
+                _serialized_role_request(_role_request_payload(record, "investigator", context))
+            ) + 8192
+            compiler_input_bound = int(record.get("_compiler_input_bound", 0))
+            used_input = sum(
+                int(
+                    item.get("input_tokens", 0)
+                    if item.get("status") in {"settled", "rejected"}
+                    else item.get("input_token_bound", 0)
+                )
+                for item in hard.get("calls", [])
+            )
+            if used_input + compiler_input_bound + role_input_bound > int(
+                hard["input_token_limit"]
+            ):
+                return False
+    except Exception:  # noqa: BLE001 — optional step must never block research
+        return False
+    return True
+
+
 async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
     """One durable, non-replayed AI method-compilation stage before research.
 
@@ -12518,7 +12581,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             return True
         token_reserve = input_bound + output_bound
         prices = TOKEN_PRICES_PER_MILLION.get(record["model"])
-        quote = (
+        full_liability = (
             (
                 input_bound * max(prices["input"], prices["cache_write"])
                 + output_bound * prices["output"]
@@ -12527,7 +12590,37 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             if prices is not None
             else None
         )
+        # Sponsored accounts reserve realistic compiler usage against the
+        # member allowance but retain the full provider ceiling globally.
+        practical_cost = (
+            (
+                input_bound * max(prices["input"], prices["cache_write"])
+                + min(output_bound, research_reference_compiler.OUTPUT_TOKEN_BOUND)
+                * prices["output"]
+            )
+            / 1_000_000
+            if prices is not None
+            else None
+        )
+        quote = (
+            full_liability
+            if record.get("mode") == "api_key"
+            else practical_cost
+        )
         paid = record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
+        if (
+            paid
+            and quote is not None
+            and full_liability is not None
+            and not _optional_reference_compilation_headroom(
+                {**record, "_compiler_input_bound": input_bound}, quote, full_liability
+            )
+        ):
+            compilation["status"] = "skipped"
+            compilation["reason"] = "Research turns take priority over optional reference compilation."
+            _event(record, "references.compilation.skipped", compilation["reason"])
+            _save(path, record)
+            return True
         limit = record.get("maximum_estimated_cost_usd")
         if (paid and quote is None) or (
             paid
@@ -12579,7 +12672,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     attempt_id,
                     quote,
                     token_reserve,
-                    maximum_liability_usd=quote,
+                    maximum_liability_usd=full_liability,
                 )
             except cloud_research.CloudResearchUnavailable as exc:
                 if isinstance(hard, dict) and reservation is not None:
