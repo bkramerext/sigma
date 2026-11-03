@@ -215,9 +215,12 @@ with sync_playwright() as playwright:
     parent.get_by_role("button", name="New", exact=True).first.click()
     # The next New remains unavailable until the just-created row contains a URL.
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_disabled()
-    assert parent.get_by_role("button", name="New", exact=True).first.evaluate(
-        "e => getComputedStyle(e).color"
-    ) == "rgb(244, 204, 105)"
+    assert (
+        parent.get_by_role("button", name="New", exact=True).first.evaluate(
+            "e => getComputedStyle(e).color"
+        )
+        == "rgb(244, 204, 105)"
+    )
     # Editable references show URL fields without duplicate title/URL captions.
     expect(parent.locator(".pt-reference-link")).to_have_count(0)
     url_input = parent.get_by_label("Research reference URL 1")
