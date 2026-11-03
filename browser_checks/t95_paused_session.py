@@ -335,7 +335,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             row.locator(".session-row-disclosure").click()
             expect(row.locator(".stopped-session-guidance")).to_be_visible()
             expect(row.locator(".stopped-session-guidance .session-notice-title")).to_have_text(
-                "Session stopped"
+                "Research interrupted"
             )
             expect(
                 row.get_by_role("complementary", name="Session status and next steps")
