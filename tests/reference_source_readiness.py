@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -14,7 +15,7 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import research_sessions as fixture
 
-from sigma import research_sessions
+from sigma import research_reference_compiler, research_sessions
 from sigma.openai_connection import AuthContext
 from sigma.projects import ProjectError
 
@@ -39,6 +40,33 @@ def source(title: str, *, status: str = "retrieved", reason: str | None = None) 
         )
     return {"title": title, "url": retrieval["url"], "retrieval": retrieval}
 
+
+
+def verify_compiler_receives_verified_excerpts() -> None:
+    configured = [source("UConn"), source("Close-reading"), source("Source-synthesis")]
+    snapshot = {
+        "research_method_sources": {"sources": configured},
+        "project_title": "Crucible",
+        "problem": "Interpret a play using three research methods.",
+        "investigation_type": "literature",
+        "strategy_runs": [],
+    }
+    payload = json.loads(research_reference_compiler.compile_input(snapshot))
+    supplied = payload["retrieved_methodology_excerpts"]
+    assert len(supplied) == 3, supplied
+    assert {row["id"] for row in supplied} == {""}
+    assert all(
+        row["excerpt_sha256"]
+        == hashlib.sha256(row["excerpt"].encode("utf-8")).hexdigest()
+        for row in supplied
+    )
+    configured[1]["retrieval"]["excerpt"] = "Tampered source text"
+    altered = json.loads(research_reference_compiler.compile_input(snapshot))
+    assert len(altered["retrieved_methodology_excerpts"]) == 2
+    assert not any(
+        row["excerpt"] == "Tampered source text"
+        for row in altered["retrieved_methodology_excerpts"]
+    )
 
 
 async def verify_provider_free_admission() -> None:
@@ -147,6 +175,7 @@ def main() -> None:
     # An empty selection is not evidence that all configured methods were read.
     assert retrieval_readiness_errors({"sources": []})
     assert retrieval_readiness_errors({"sources": "invalid"})
+    verify_compiler_receives_verified_excerpts()
     asyncio.run(verify_provider_free_admission())
     print("PASS: research-reference admission / all-3 retrievable / 403 / no provider dispatch")
 
