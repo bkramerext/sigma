@@ -556,6 +556,41 @@ with sync_playwright() as playwright:
     ).json()
     assert replaced["project"]["investigation_type"] == "mathematical"
     assert replaced["project"]["project_type_snapshot"]["id"] == "mathematical"
+
+    # Preferences warns about extra token usage, then Adjust now navigates
+    # to Project Types with this project's discipline already expanded.
+    page.get_by_role("button", name="Project settings", exact=True).click()
+    settings = page.get_by_role("dialog", name="Project Settings")
+    settings.get_by_role("tab", name="Preferences").click()
+    expect(
+        settings.get_by_text("Reference manuals used for research and publication", exact=False)
+    ).to_be_visible()
+    settings.get_by_role("button", name="Adjust now").click()
+    expect(settings).not_to_be_visible()
+    types_dialog = page.get_by_role("dialog", name="Project Types")
+    expect(types_dialog).to_be_visible()
+    selected_type = types_dialog.locator(
+        '.project-type-card:has(> summary strong:text-is("Mathematics"))'
+    )
+    expect(selected_type).to_have_attribute("open", "")
+    research_toggle = selected_type.get_by_role(
+        "button", name="Disable research reference", exact=False
+    )
+    expect(research_toggle).to_have_count(1)
+    research_toggle.click()
+    expect(
+        selected_type.get_by_role("button", name="Enable research reference", exact=False)
+    ).to_have_count(1)
+    types_dialog.locator("header").get_by_role("button", name="Save", exact=True).click()
+    expect(types_dialog).not_to_be_visible()
+    preferences = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
+    math_ref = next(
+        item for item in preferences["project_types"] if item["id"] == "mathematical"
+    )["research_standards_references"][0]["url"]
+    assert preferences["reference_preferences"]["mathematical"][
+        "research_standards_references"
+    ] == [math_ref]
+
     assert not errors, errors
     browser.close()
 
