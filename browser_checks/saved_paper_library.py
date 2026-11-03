@@ -131,6 +131,17 @@ with sync_playwright() as playwright:
     page.mouse.move(1, 1)
     title_line.screenshot(path="docs/evaluations/research_qa/tex-title-normal.png")
     copy_button = title_line.get_by_role("button", name="Copy paper text")
+    # Paper glyph actions match the scoring star's hover/focus highlight.
+    normal_color = copy_button.evaluate("element => getComputedStyle(element).color")
+    copy_button.hover()
+    assert copy_button.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
+    assert normal_color != "rgb(245, 213, 147)"
+    balloon = title_line.locator(".ai-paper-eli5-balloon")
+    expect(balloon).to_be_visible()
+    balloon.hover()
+    assert balloon.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
+    assert balloon.evaluate("element => getComputedStyle(element).backgroundColor") == "rgba(0, 0, 0, 0)"
+    page.mouse.move(1, 1)
     normal_copy_box = copy_button.bounding_box()
     normal_icon_box = copy_button.locator("svg").bounding_box()
     copy_button.click()
