@@ -9,6 +9,7 @@ the compiler without counting it as an Investigator/Skeptic turn.
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 import json
 import os
 import sys
@@ -26,11 +27,13 @@ from sigma import research_sessions
 
 
 async def verify_compilation(
-    path: Path, *, multiple_strategies: bool = False, compiler_rejection: bool = False
+    path: Path, *, multiple_strategies: bool = False, compiler_rejection: bool = False,
+    skip_compiler: bool = False
 ) -> None:
     view, strategy, credential, config = await fixture.setup(path)
     limits = research_sessions.get_limits(str(path))
-    limits.update(research_rounds=1, model_calls=4 if multiple_strategies else 2)
+    rounds = 2 if multiple_strategies else 1
+    limits.update(research_rounds=rounds, model_calls=2 * rounds * (2 if multiple_strategies else 1))
     research_sessions.save_limits(str(path), limits)
     strategy_ids = [strategy.id]
     if multiple_strategies:
@@ -71,12 +74,16 @@ async def verify_compilation(
     role_requests: list[str] = []
     selection: list[str] = []
     omitted_urls: list[str] = []
+    compilation_started = asyncio.Event()
+    compilation_release = asyncio.Event()
 
     async def provider(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         name = payload["text"]["format"]["name"]
         calls.append(name)
         if name == "research_reference_compilation":
+            compilation_started.set()
+            await compilation_release.wait()
             if compiler_rejection:
                 return httpx.Response(400, json={"error": {"message": "Compiler unavailable"}})
             assert payload["store"] is False
@@ -93,10 +100,15 @@ async def verify_compilation(
         elif name in {"research_investigator", "research_skeptic"}:
             body = json.dumps(payload)
             role_requests.append(body)
+            cycle = int(json.loads(payload["input"])["cycle"])
             result = (
-                fixture.investigation(1)
+                fixture.investigation(cycle)
                 if name == "research_investigator"
-                else fixture.skeptic(1, "stop", "no_progress")
+                else fixture.skeptic(
+                    cycle,
+                    "stop" if cycle == rounds else "continue",
+                    "no_progress" if cycle == rounds else "recoverable_objection",
+                )
             )
         else:
             raise AssertionError(f"Unexpected provider request: {name}")
@@ -107,6 +119,10 @@ async def verify_compilation(
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(research_sessions, "select_method_sources", return_value=source_catalog),
+        (
+            patch.object(research_sessions, "_optional_reference_compilation_headroom", return_value=False)
+            if skip_compiler else nullcontext()
+        ),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: fixture.REAL_CLIENT(
@@ -123,23 +139,36 @@ async def verify_compilation(
             expected_limits=limits,
             strategy_ids=strategy_ids,
         )
+        if not skip_compiler:
+            await asyncio.wait_for(compilation_started.wait(), timeout=5.0)
+            compiling = research_sessions._read(str(path), started["id"])
+            assert compiling["reference_compilation"]["status"] == "running"
+            assert compiling["current_action"] == "Compiling research references"
+            assert compiling["calls_used"] == 0
+            assert compiling["steps"] == []
+            assert calls == ["research_reference_compilation"], calls
+            assert all(branch["status"] == "queued" for branch in compiling["strategy_runs"])
+            compilation_release.set()
         finished = await fixture.wait_for(path, started["id"])
 
     assert finished["status"] in {"ended", "completed"}, finished.get("message")
-    assert calls.count("research_reference_compilation") == 1, calls
-    assert calls.count("research_investigator") == len(strategy_ids), calls
-    assert calls.count("research_skeptic") == len(strategy_ids), calls
-    assert calls[0] == "research_reference_compilation", calls
-    assert finished["calls_used"] == 2 * len(strategy_ids)
-    assert len(finished["steps"]) == 2 * len(strategy_ids)
+    assert calls.count("research_reference_compilation") == (0 if skip_compiler else 1), calls
+    expected_roles = rounds * len(strategy_ids)
+    assert calls.count("research_investigator") == expected_roles, calls
+    assert calls.count("research_skeptic") == expected_roles, calls
+    if not skip_compiler:
+        assert calls[0] == "research_reference_compilation", calls
+    assert finished["calls_used"] == 2 * expected_roles
+    assert len(finished["steps"]) == 2 * expected_roles
     assert {step["strategy_id"] for step in finished["steps"]} == set(strategy_ids)
     assert {step["role"] for step in finished["steps"]} == {"investigator", "skeptic"}
     saved = research_sessions._read(str(path), started["id"])
     stage = saved["reference_compilation"]
-    assert stage["status"] == ("fallback" if compiler_rejection else "completed"), stage
+    expected_status = "skipped" if skip_compiler else "fallback" if compiler_rejection else "completed"
+    assert stage["status"] == expected_status, stage
     assert stage["source_sha256"] == saved["research_method_sources"]["sha256"]
     assert stage["status"] != "pending"
-    if not compiler_rejection:
+    if not compiler_rejection and not skip_compiler:
         assert stage["selected_source_ids"] == selection
         assert stage["omitted_source_ids"]
         assert stage["guidance_sha256"]
@@ -147,16 +176,16 @@ async def verify_compilation(
         assert stage["token_usage"]["output_tokens"] == 80
     assert saved["research_method_sources"]["sha256"] == stage["source_sha256"]
     assert len(saved["research_method_sources"]["sources"]) >= 2
-    assert len(role_requests) == 2 * len(strategy_ids)
-    assert len(saved["artifacts"]) == len(strategy_ids)
+    assert len(role_requests) == 2 * expected_roles
+    assert len(saved["artifacts"]) == expected_roles
     for request in role_requests:
-        if compiler_rejection:
+        if compiler_rejection or skip_compiler:
             assert "Mathematics proof methods" in request
             assert "Check induction, boundary cases" in request
         else:
             assert stage["guidance"] in request
             assert all(url not in request for url in omitted_urls), omitted_urls
-    if not compiler_rejection:
+    if not compiler_rejection and not skip_compiler:
         assert saved["outcome"]["source_material"]["compilation"]["guidance"] == stage["guidance"]
         assert (
             sum(
@@ -168,8 +197,28 @@ async def verify_compilation(
         )
     ledger = saved.get("hard_budget_ledger")
     if isinstance(ledger, dict):
-        assert len(ledger["calls"]) == 1 + 2 * len(strategy_ids), ledger["calls"]
+        assert len(ledger["calls"]) == (0 if skip_compiler else 1) + 2 * expected_roles, ledger["calls"]
         assert all(item["status"] in {"settled", "rejected"} for item in ledger["calls"])
+
+    if not compiler_rejection and not skip_compiler:
+        # A saved session-wide compilation must be used by every strategy and
+        # both roles, at every round, even after reloading the frozen record.
+        for branch in saved["strategy_runs"]:
+            for cycle in range(1, rounds + 1):
+                for role in ("investigator", "skeptic"):
+                    context = research_sessions._portfolio_context(saved, branch, role, cycle)
+                    method = context["methodology_source_material"]
+                    assert len(method) == 1
+                    assert method[0]["notes"] == stage["guidance"]
+                    assert method[0]["source_ids"] == selection
+        before_calls = list(calls)
+        # Simulate a resumed queued snapshot without touching the completed
+        # test session: successful compilation must never be replayed.
+        with patch.object(
+            research_sessions, "_read", return_value={**saved, "status": "queued"}
+        ):
+            assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
+        assert calls == before_calls
 
 
 def verify_compilation_preserves_first_turn_funding() -> None:
@@ -277,7 +326,8 @@ async def main() -> None:
         await verify_compilation(root / "compiled.sigma")
         await verify_compilation(root / "multi.sigma", multiple_strategies=True)
         await verify_compilation(root / "fallback.sigma", compiler_rejection=True)
-    print("PASS: durable reference compilation, multi-strategy reuse, fallback and metering")
+        await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
+    print("PASS: pre-fanout barrier, two-round strategy reuse, frozen reload, funded and failed fallback")
 
 
 if __name__ == "__main__":
