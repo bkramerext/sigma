@@ -174,6 +174,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(initialOpenTypeId);
   const [editingReferences, setEditingReferences] = useState<Set<string>>(() => new Set());
+  const [urlValidation, setUrlValidation] = useState<Record<string, DomainStatus>>({});
 
   function close() {
     if (dialog.current?.open) dialog.current.close();
@@ -336,6 +337,35 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     if (!hasChanges || invalidDraft) return;
     setBusy(true); setError('');
     try {
+      // Validate changed domains, even when Save is clicked before the title
+      // lookup has finished. A definite NXDOMAIN is rejected; transient DNS
+      // outages must not destroy a valid user-created reference.
+      const previousUrls = new Set((savedDrafts ?? []).flatMap(type =>
+        [...type.research_standards_references, ...type.publication_standards_references].map(ref => ref.url)));
+      const newUrls = new Set(drafts.flatMap(type =>
+        [...type.research_standards_references, ...type.publication_standards_references]
+          .map(ref => ref.url).filter(url => url.trim() && !previousUrls.has(url))));
+      for (const url of newUrls) {
+        const cached = titleCache.get(url)?.status ?? urlValidation[url];
+        if (cached === 'invalid') throw new Error(`Website could not be found: ${editableReferenceUrl(url)}. Check the address.`);
+        if (cached === 'valid') continue;
+        try {
+          const check = await fetch(`/api/reference-title?url=${encodeURIComponent(url)}`, { headers: handledErrorHeaders });
+          if (!check.ok) continue;
+          const metadata = await check.json() as { domain_status?: DomainStatus; title?: string | null };
+          if (metadata.domain_status === 'invalid') {
+            setUrlValidation(previous => ({ ...previous, [url]: 'invalid' }));
+            throw new Error(`Website could not be found: ${editableReferenceUrl(url)}. Check the address.`);
+          }
+          if (metadata.domain_status === 'valid') {
+            titleCache.set(url, { status: 'valid', title: metadata.title || null });
+            setUrlValidation(previous => ({ ...previous, [url]: 'valid' }));
+          }
+        } catch (cause) {
+          if (cause instanceof Error && cause.message.startsWith('Website could not be found:')) throw cause;
+          // A network or DNS outage is not proof that the URL is invalid.
+        }
+      }
       const removed = initialCustomIds.current.filter(id => !drafts.some(draft => draft.id === id));
       const confirmedRemovals: Record<string, number> = {};
       for (const id of removed) {
@@ -358,12 +388,16 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const listEditor = (item: ProjectTypeRecord, field: ReferenceField, readonly: boolean) => {
     const references = item[field];
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
-    const setAt = (index: number, url: string) => edit(item.id, { [field]: references.map((reference, i) =>
-      i === index ? { name: url, url } : reference) });
+    const setAt = (index: number, typed: string) => edit(item.id, { [field]: references.map((reference, i) =>
+      i === index ? { name: completeReferenceUrl(typed, reference.url), url: completeReferenceUrl(typed, reference.url) } : reference) });
     if (readonly && references.length === 0) return null;
     return <table className="pt-reference-table"><tbody>
       {references.map((reference, index) => {
-        const urlError = !readonly && referenceUrlError(reference.url);
+        const urlError = !readonly && (
+          referenceUrlError(reference.url) || (
+            urlValidation[reference.url] === 'invalid' ? 'Website could not be found. Check the address.' : null
+          )
+        );
         const errorId = `pt-reference-error-${item.id}-${field}-${index}`;
         const setResolved = (name: string) => setDrafts(previous => previous.map(draft => draft.id !== item.id ? draft : {
           ...draft,
@@ -377,7 +411,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         return <tr key={index}><td>
           {readonly ? <div className="pt-reference-entry"><div className={referenceDisabled(item.id, field, reference.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={reference}/></div>{referenceToggle(item.id, field, reference)}</div> : <div className="pt-reference-entry">
             <div className="pt-reference-field">
-              {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
+              {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="text" inputMode="url"
+                placeholder="example.org/guide" value={editableReferenceUrl(reference.url)}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
                 autoFocus={editingReferences.has(rowKey)}
                 onChange={event => {
@@ -394,7 +429,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
                     next.delete(rowKey);
                     return next;
                   });
-                }}/> : <ReferenceLink reference={reference} onResolved={setResolved}/>}
+                }}/> : <ReferenceLink reference={reference} onResolved={setResolved}
+                  onChecked={status => setUrlValidation(previous => previous[reference.url] === status
+                    ? previous : { ...previous, [reference.url]: status })}/>}
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
             {referenceToggle(item.id, field, reference)}
@@ -406,7 +443,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         </td></tr>;
       })}
       {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || references.some(reference => !reference.url.trim())}
-        onClick={() => edit(item.id, { [field]: [...references, { name: '', url: '' }] })}>New</button></td></tr>}
+        onClick={() => edit(item.id, { [field]: [...references, { name: '', url: '' }] })} className="pt-new-action">New</button></td></tr>}
     </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" data-project-type-id={item.id} key={item.id} open={open === item.id}>
@@ -431,7 +468,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
     item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
-    [...item.research_standards_references, ...item.publication_standards_references].some(ref => !!referenceUrlError(ref.url))
+    [...item.research_standards_references, ...item.publication_standards_references].some(ref =>
+      !!referenceUrlError(ref.url) || urlValidation[ref.url] === 'invalid')
   );
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); }} onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
@@ -450,7 +488,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <p className="pt-usage-notice">Reference manuals can increase AI input tokens and usage costs. Shared research and publication references are disabled by default; subject-specific guides remain enabled. Enable only the references you want SIGMA to use for future sessions and papers.</p>
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <h4>Research standards references for all project types</h4>
