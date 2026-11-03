@@ -220,8 +220,27 @@ function sessionEstimatedCostLabel(session: ResearchSession): string {
   return cost > 0 && cost < 0.001 ? `${label} <$0.001` : `${label} ${amount}`;
 }
 
+function compilationBarrierActive(session: ResearchSession): boolean {
+  if (session.status !== 'queued' && session.status !== 'running') return false;
+  const status = session.outcome.source_material?.compilation?.status;
+  if (typeof status === 'string') return status === 'pending' || status === 'running';
+  // A pre-compiler or partially migrated session may expose only its action.
+  // Never let stale action text override a persisted completed/fallback state.
+  return /compiling research references/i.test(session.current_action);
+}
+
 function parallelSessionActivity(session: ResearchSession): string | null {
-  if (session.status !== 'running') return null;
+  if (session.status !== 'running' || compilationBarrierActive(session)) return null;
+  if (!session.strategy_runs || session.strategy_runs.length <= 1) return null;
+  const active = new Set((session.steps ?? []).filter(step => step.status === 'running').map(step => step.strategy_id));
+  const waiting = session.strategy_runs.filter(branch =>
+    (branch.status === 'queued' || branch.status === 'running') && !active.has(branch.strategy_id),
+  ).length;
+  return `${active.size} in flight · ${waiting} waiting`;
+}
+
+function parallelSessionActivity(session: ResearchSession): string | null {
+  if (session.status !== 'running' || compilationBarrierActive(session)) return null;
   if (!session.strategy_runs || session.strategy_runs.length <= 1) return null;
   const active = new Set((session.steps ?? []).filter(step => step.status === 'running').map(step => step.strategy_id));
   const waiting = session.strategy_runs.filter(branch =>
@@ -231,10 +250,14 @@ function parallelSessionActivity(session: ResearchSession): string | null {
 }
 
 function strategyLiveStatusLines(session: ResearchSession): { id: string; label: string; detail: string }[] {
-  // Compilation is session-wide and precedes strategy fanout. Do not
-  // misleadingly display concurrent strategy statuses before this barrier.
-  if (['running', 'queued'].includes(session.status) && /compiling research references/i.test(session.current_action)) {
-    return [{ id: 'reference-compilation', label: 'Compiling references', detail: 'Preparing shared guidance for all strategies…' }];
+  // Compilation is the session-wide barrier before any strategy fanout.
+  const compilation = session.outcome.source_material?.compilation;
+  if (compilationBarrierActive(session)) {
+    return [{
+      id: 'reference-compilation',
+      label: compilation?.status === 'pending' ? 'Preparing references' : 'Compiling references',
+      detail: 'Preparing shared guidance for all strategies…',
+    }];
   }
   if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
   const active = new Map(
