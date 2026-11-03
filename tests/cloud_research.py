@@ -1376,6 +1376,95 @@ def test_monthly_global_budget_retains_unknown_provider_holds(
             cloud_workspaces._CURRENT.reset(context)
 
 
+def test_e006_local_admin_unlimited_does_not_consume_member_default_global_pool(
+    root: Path, ledger_root: Path
+) -> None:
+    """Verified local admins can run past $50; ordinary members still have a pool.
+
+    Explicit operator global ceilings always bind admins, including their prior
+    exempt calls. No provider is contacted by this accounting test.
+    """
+    admin = workspace(root / "local-admin", "a" * 32)
+    member = workspace(root / "local-member", "m" * 32)
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+            },
+        ),
+        patch.object(cloud_workspaces, "enabled", return_value=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch("sigma.cloud_auth.local_sponsored_principal", return_value=object()),
+        patch("sigma.cloud_sponsor.inference_provider", return_value="api_key"),
+        patch.object(
+            cloud_research, "_effective_user_spend_ceiling_decimal", return_value=Decimal("10.00")
+        ),
+        patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": ""}),
+    ):
+        os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
+        binding = cloud_workspaces._CURRENT.set(admin)
+        try:
+            with patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=True):
+                record = job(admin.workspace_id)
+                record["maximum_estimated_cost_usd"] = None
+                cloud_research.prepare_job(record)
+                assert cloud_research.claim_job(record["id"])
+                cloud_research.reserve_call(
+                    record["id"],
+                    "admin-default-exempt",
+                    0.10,
+                    100,
+                    maximum_liability_usd=65.00,
+                )
+                summary = cloud_research.snapshot()
+                assert summary["global_cap_exempt"] is True
+                assert summary["remaining_usd"] is None
+                assert summary["global_remaining_usd"] == 50.00
+                with cloud_research._connect() as db:
+                    row = db.execute(
+                        "SELECT global_cap_exempt FROM calls WHERE call_id=?",
+                        ("admin-default-exempt",),
+                    ).fetchone()
+                    assert row["global_cap_exempt"] == 1
+                    assert cloud_research._global_call_amount_units(db) == 0
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            with patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=False):
+                member_job = job(member.workspace_id)
+                cloud_research.prepare_job(member_job)
+                assert cloud_research.claim_job(member_job["id"])
+                cloud_research.reserve_call(
+                    member_job["id"], "member-not-charged-for-admin", 0.50, 100
+                )
+                assert cloud_research.snapshot()["global_remaining_usd"] == 49.50
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00"}):
+            binding = cloud_workspaces._CURRENT.set(admin)
+            try:
+                with patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=True):
+                    assert cloud_research._local_default_admin_global_exempt() is False
+                    with cloud_research._connect() as db:
+                        assert cloud_research._global_call_amount_units(db) > 50 * 10**9
+                    try:
+                        cloud_research.reserve_call(
+                            record["id"], "admin-explicit-global-block", 0.10, 100
+                        )
+                    except cloud_research.CloudResearchUnavailable as exc:
+                        assert "global inference-spend ceiling" in str(exc)
+                    else:
+                        raise AssertionError("Explicit global ceiling was bypassed")
+            finally:
+                cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_admin_unlimited_allowance_survives_monthly_global_renewal(
     root: Path, ledger_root: Path
 ) -> None:
@@ -3639,6 +3728,11 @@ def main() -> None:
         admin_monthly_ledger = root / "admin-monthly-ledger"
         admin_monthly_ledger.mkdir(mode=0o700)
         test_admin_unlimited_allowance_survives_monthly_global_renewal(root, admin_monthly_ledger)
+        local_admin_ledger = root / "local-admin-global-exempt-ledger"
+        local_admin_ledger.mkdir(mode=0o700)
+        test_e006_local_admin_unlimited_does_not_consume_member_default_global_pool(
+            root, local_admin_ledger
+        )
 
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"

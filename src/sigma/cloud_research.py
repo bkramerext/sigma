@@ -171,6 +171,22 @@ def _admin_has_unlimited_spend() -> bool:
     )
 
 
+def _local_default_admin_global_exempt() -> bool:
+    """Local verified admins are unlimited only under the default pilot budget.
+
+    An explicitly configured global spending ceiling remains binding for *all*
+    principals, including admins. Hosted billing never receives this exemption.
+    """
+    from sigma import cloud_auth
+
+    return (
+        not cloud_workspaces.enabled()
+        and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+        and cloud_auth.local_sponsored_principal(require_selected=False) is not None
+        and _admin_has_unlimited_spend()
+    )
+
+
 def _effective_user_spend_ceiling_decimal() -> Decimal:
     from sigma import cloud_auth
 
@@ -275,12 +291,23 @@ def _next_global_reset_at() -> str | None:
 def _global_call_amount_units(db: sqlite3.Connection) -> int:
     """Reserve worst-case liability globally; user allowances remain estimates."""
     window_start = _global_window_start()
+    # Local default pilot admin calls are excluded from the *default* shared
+    # ceiling. Explicit or hosted operator caps always count all calls, even
+    # those previously exempt under the local default. Legacy rows from
+    # before this schema migration are non-exempt and remain fully accounted.
+    explicit_or_hosted = (
+        bool(os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip())
+        or cloud_workspaces.enabled()
+    )
     query = "SELECT amount_usd, maximum_liability_usd, status FROM calls"
+    filters = ["global_cap_exempt=0"] if not explicit_or_hosted else []
     params: tuple[Any, ...] = ()
     if window_start is not None:
         # An unsettled request remains an obligation across month boundaries.
-        query += " WHERE created_at>=? OR status IN ('reserved','unknown')"
+        filters.append("(created_at>=? OR status IN ('reserved','unknown'))")
         params = (window_start,)
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
     return sum(
         _usd_units(
             max(row["amount_usd"], row["maximum_liability_usd"])
@@ -374,7 +401,8 @@ def _connect() -> sqlite3.Connection:
                 output_tokens INTEGER,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                maximum_liability_usd REAL NOT NULL DEFAULT 0
+                maximum_liability_usd REAL NOT NULL DEFAULT 0,
+                global_cap_exempt INTEGER NOT NULL DEFAULT 0 CHECK(global_cap_exempt IN (0,1))
             );
             CREATE TABLE IF NOT EXISTS allowance_windows (
                 workspace_id TEXT PRIMARY KEY,
@@ -398,14 +426,18 @@ def _connect() -> sqlite3.Connection:
         if "job_kind" not in columns:
             db.execute("ALTER TABLE jobs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'research'")
         call_columns = {row["name"] for row in db.execute("PRAGMA table_info(calls)")}
-        if "maximum_liability_usd" not in call_columns:
-            # Serialize the one-time migration across backend processes.
+        if "maximum_liability_usd" not in call_columns or "global_cap_exempt" not in call_columns:
+            # Serialize one-time additive schema migrations across backend processes.
             db.execute("BEGIN IMMEDIATE")
             try:
                 columns = {row["name"] for row in db.execute("PRAGMA table_info(calls)")}
                 if "maximum_liability_usd" not in columns:
                     db.execute(
                         "ALTER TABLE calls ADD COLUMN maximum_liability_usd REAL NOT NULL DEFAULT 0"
+                    )
+                if "global_cap_exempt" not in columns:
+                    db.execute(
+                        "ALTER TABLE calls ADD COLUMN global_cap_exempt INTEGER NOT NULL DEFAULT 0"
                     )
                 db.commit()
             except sqlite3.Error:
@@ -597,6 +629,7 @@ def prepare_job(record: dict[str, Any]) -> None:
     # default only when resolving an account that has no specific allowance.
     user_ceiling_units = _ceiling_units(_effective_user_spend_ceiling_decimal())
     unlimited_admin = _admin_has_unlimited_spend()
+    global_exempt = _local_default_admin_global_exempt()
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
     call_limit = record.get("call_limit")
     duration_limit = record.get("duration_limit_minutes")
@@ -698,7 +731,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                     # Resuming a saved session must not silently queue work
                     # when its funding is already exhausted. Keep the saved
                     # terminal/interrupted state intact for playback.
-                    if _global_call_amount_units(db) >= global_ceiling_units:
+                    if not global_exempt and _global_call_amount_units(db) >= global_ceiling_units:
                         raise CloudResearchUnavailable(_global_ceiling_failure_message())
                     if (
                         not unlimited_admin
@@ -722,7 +755,7 @@ def prepare_job(record: dict[str, Any]) -> None:
             # Reject the request *before* creating a saved zero-call session.
             # A nonzero remainder may still be too small for this model's
             # actual first-call reservation; reserve_call remains authoritative.
-            if _global_call_amount_units(db) >= global_ceiling_units:
+            if not global_exempt and _global_call_amount_units(db) >= global_ceiling_units:
                 raise CloudResearchUnavailable(_global_ceiling_failure_message())
             if not unlimited_admin and _user_call_amount_units(db, owner) >= user_ceiling_units:
                 raise CloudResearchUnavailable(
@@ -1304,6 +1337,7 @@ def reserve_call(
     global_ceiling_units = _ceiling_units(global_ceiling)
     user_ceiling_units = _ceiling_units(user_ceiling)
     unlimited_admin = _admin_has_unlimited_spend()
+    global_exempt = _local_default_admin_global_exempt()
     amount_units = _usd_units(amount_usd)
     liability_units = _usd_units(
         amount_usd if maximum_liability_usd is None else maximum_liability_usd
@@ -1312,7 +1346,7 @@ def reserve_call(
         raise CloudResearchUnavailable("Provider liability cannot be below estimated usage.")
     reserved_amount = amount_units / USD_UNITS
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
-    if amount_units <= 0 or liability_units > global_ceiling_units:
+    if amount_units <= 0 or (not global_exempt and liability_units > global_ceiling_units):
         raise CloudResearchUnavailable(
             "The next provider call cannot be reserved within the global spend ceiling."
         )
@@ -1341,7 +1375,7 @@ def reserve_call(
                     "This provider attempt was already reserved and cannot be replayed."
                 )
             used_units = _global_call_amount_units(db)
-            if used_units + liability_units > global_ceiling_units:
+            if not global_exempt and used_units + liability_units > global_ceiling_units:
                 remaining_units = max(0, global_ceiling_units - used_units)
                 requirement = (
                     f"next call requires ${amount_units / USD_UNITS:.4f}"
@@ -1370,7 +1404,8 @@ def reserve_call(
                 "INSERT INTO calls "
                 "(call_id,session_id,workspace_id,amount_usd,status,"
                 "token_reservation,input_tokens,output_tokens,created_at,"
-                "updated_at,maximum_liability_usd) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "updated_at,maximum_liability_usd,global_cap_exempt) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     call_id,
                     session_id,
@@ -1383,6 +1418,7 @@ def reserve_call(
                     now,
                     now,
                     liability_units / USD_UNITS,
+                    int(global_exempt),
                 ),
             )
     except sqlite3.Error as exc:
@@ -1492,6 +1528,7 @@ def snapshot() -> dict[str, Any]:
     allowance = _effective_user_spend_ceiling_decimal()
     allowance_units = _ceiling_units(allowance)
     unlimited_admin = _admin_has_unlimited_spend()
+    global_exempt = _local_default_admin_global_exempt()
     try:
         with _connect() as db:
             own = db.execute(
@@ -1526,15 +1563,20 @@ def snapshot() -> dict[str, Any]:
                 "global_remaining_usd": to_usd(global_remaining_units),
                 "global_ceiling_usd": float(_spend_ceiling_decimal()),
                 "global_spend_period": _global_spend_period(),
+                "global_cap_exempt": global_exempt,
                 "global_reset_at": _next_global_reset_at(),
                 "allowance_usd": float(allowance),
                 "estimated_usage_usd": to_usd(estimated_units),
                 "held_usd": to_usd(held_units),
                 "reserved_and_estimated_usd": to_usd(total_units),
-                "remaining_usd": to_usd(
-                    global_remaining_units
-                    if unlimited_admin
-                    else max(0, allowance_units - total_units)
+                "remaining_usd": (
+                    None
+                    if global_exempt
+                    else to_usd(
+                        global_remaining_units
+                        if unlimited_admin
+                        else max(0, allowance_units - total_units)
+                    )
                 ),
                 # Kept for existing audit consumers; new clients use the explicit name.
                 "user_reserved_and_estimated_usd": to_usd(total_units),

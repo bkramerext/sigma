@@ -4148,7 +4148,8 @@ type CloudResearchBudget = {
   estimated_usage_usd: number;
   held_usd: number;
   reserved_and_estimated_usd: number;
-  remaining_usd: number;
+  remaining_usd: number | null;
+  global_cap_exempt?: boolean;
   global_remaining_usd?: number;
   global_ceiling_usd?: number;
   global_spend_period?: 'cumulative' | 'calendar_month';
@@ -5469,7 +5470,7 @@ function ReloadMeAction({ connectionPill = false }: { connectionPill?: boolean }
   const cloud = useCloudIdentity();
   const [state, setState] = useState<'idle' | 'sending' | 'requested' | 'error'>('idle');
   const budget = cloud?.funding.budget;
-  if (!cloud?.authenticated || cloud.user?.role === 'admin' || !cloud.funding.sponsorshipEligible || !budget || budget.remaining_usd >= 0.05) return null;
+  if (!cloud?.authenticated || cloud.user?.role === 'admin' || !cloud.funding.sponsorshipEligible || !budget || budget.remaining_usd === null || budget.remaining_usd >= 0.05) return null;
   async function requestReload() {
     setState('sending');
     try {

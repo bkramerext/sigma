@@ -388,12 +388,12 @@ async def test_transient_timeout_retries_as_a_new_accounted_turn(path: Path):
     assert [step["status"] for step in finished["steps"]] == ["failed", "completed", "completed"]
     assert finished["steps"][0]["failure_kind"] == "timeout"
     assert len(finished["artifacts"]) == 1
-    assert finished["termination_reason_code"] == "round_limit_reached"
-    assert "configured round limit" in finished["message"]
-    assert "incomplete" in finished["message"]
+    assert finished["termination_reason_code"] == "protocol_complete"
+    assert "All 2 configured Investigator/Skeptic role turns" in finished["message"]
+    assert "incomplete" not in finished["message"]
     assert finished["strategy_runs"][0]["status"] == "ended"
     assert finished["strategy_runs"][0]["last_decision"] == "stop_budget_exhausted"
-    assert "1 finding was preserved" in finished["message"]
+    assert "saved findings remain unverified research notes" in finished["message"]
 
 
 async def test_repeated_transient_failures_are_isolated_and_explained(path: Path):
@@ -688,6 +688,38 @@ def test_backend_build_is_pinned_at_backend_start() -> None:
             assert build_commit() == "a" * 40
     finally:
         build_commit.cache_clear()
+
+
+def test_e002_stale_managed_backend_guard_blocks_paid_research() -> None:
+    from sigma import build_info
+
+    with patch.dict("os.environ", {"SIGMA_UI_INSTANCE_ID": "managed-instance"}):
+        build_info.build_commit.cache_clear()
+        try:
+            with (
+                patch.object(build_info, "build_commit", return_value="3" * 40),
+                patch.object(build_info, "checkout_commit", return_value="4" * 40),
+            ):
+                assert build_info.local_build_mismatch() == ("3" * 40, "4" * 40)
+            with patch.object(
+                research_sessions, "local_build_mismatch", return_value=("3" * 40, "4" * 40)
+            ):
+                try:
+                    research_sessions._require_current_local_backend()
+                except ProjectError as exc:
+                    assert "backend is stale" in str(exc)
+                    assert "no research provider call" in str(exc)
+                else:
+                    raise AssertionError("Stale managed backend did not block research")
+            with (
+                patch.object(build_info, "build_commit", return_value="4" * 40),
+                patch.object(build_info, "checkout_commit", return_value="4" * 40),
+            ):
+                assert build_info.local_build_mismatch() is None
+        finally:
+            build_info.build_commit.cache_clear()
+    with patch.object(build_info, "checkout_commit", return_value="4" * 40):
+        assert build_info.local_build_mismatch() is None
 
 
 def provider_response(value):
@@ -2567,6 +2599,11 @@ async def test_portfolio_python_queue_and_stop(path: Path):
 
 async def test_new_session_receives_prior_saved_findings(path: Path):
     view, strategy, credential, config = await setup(path)
+    # This test exercises cross-session finding transfer, not early research
+    # termination. Give the source session a complete one-round protocol.
+    limits = research_sessions.get_limits(str(path))
+    limits.update(research_rounds=1, model_calls=2)
+    research_sessions.save_limits(str(path), limits)
     outputs = [investigation(1), skeptic(1, "stop", "decisive_counterexample")]
     contexts = []
     continuation_started = asyncio.Event()
@@ -3945,6 +3982,28 @@ def test_protocol_completion_label_requires_every_configured_role_turn():
     assert "All 12 configured" in record["message"]
     assert "unverified research notes" in record["message"]
     assert record["events"][-1]["kind"] == "session.protocol_complete"
+
+    # Operation Narrow Passage: two strategies and two rounds produce
+    # eight accepted role turns, even if twelve attempts are permitted.
+    narrow = {
+        **record,
+        "id": str(uuid4()),
+        "cycle_limit": 2,
+        "call_limit": 12,
+        "calls_used": 8,
+        "steps": [step for step in steps if step["cycle"] <= 2],
+        "events": [],
+        "termination_reason_code": "round_limit_reached",
+        "message": "The research is incomplete.",
+        "current_action": "Ended · research incomplete",
+    }
+    assert research_sessions._mark_protocol_complete(narrow)
+    assert narrow["status"] == "ended"
+    assert narrow["termination_reason_code"] == "protocol_complete"
+    assert narrow["current_action"] == "Completed · configured protocol"
+    assert "All 8 configured" in narrow["message"]
+    assert "incomplete" not in narrow["message"]
+    assert len(narrow["steps"]) == 8
 
     incomplete = dict(record)
     incomplete["events"] = []
@@ -5567,6 +5626,18 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "status": "connected",
     }
     config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+    # A positive candidate can terminate only the configured final round.
+    # This fixture intentionally schedules one round; live Golden 9 math uses three.
+    research_sessions.save_limits(
+        str(path),
+        {
+            "research_rounds": 1,
+            "model_calls": 2,
+            "session_duration_minutes": 10,
+            "output_tokens_per_call": 4000,
+            "maximum_estimated_cost_usd": None,
+        },
+    )
     proof = {
         "claim": "R(n) = 1 + n(n+1)/2 for every n >= 0.",
         "method": "Each region is an intersection of open half-planes: points with a fixed choice of side for every line form a convex set, and different side choices cannot belong to the same component. The kth line meets at most k-1 earlier lines, so adds at most k regions. Two different pieces of an inserted line cannot lie in the same region, since convexity would put an intervening point on an earlier line in that region. Each encountered region is open, so a small disk around an intersection has points on both sides of the inserted line. Lines y=kx+k^2 meet each earlier line at distinct x coordinates, attaining k increments. Summing gives the formula; the empty arrangement has one region.",
@@ -5768,10 +5839,10 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         assert paper_artifact["data"]["reasoning_steps"][1]["title"] == "At most n new regions"
         assert "Attaining every increment" in json.dumps(paper_snapshot, ensure_ascii=False)
         assert finished["status"] == "ended"
-        assert finished["termination_reason_code"] == "research_completed_early"
-        assert finished["current_action"] == "Completed · early research conclusion"
-        assert "reviews supported stopping" in finished["message"]
-        assert "unverified research results" in finished["message"]
+        assert finished["termination_reason_code"] == "protocol_complete"
+        assert finished["current_action"] == "Completed · configured protocol"
+        assert "All 2 configured" in finished["message"]
+        assert "unverified research notes" in finished["message"]
         assert finished["outcome"]["assessment"] == "positive"
         assert finished["outcome"]["solution_review"]["claim_scope"] == "conditional"
         assert finished["outcome"]["solution_review"]["claim"].startswith(
@@ -6128,6 +6199,12 @@ async def test_maximum_regions_false_candidate_is_rejected(path: Path):
         "Test the insertion estimate",
         "Check small arrangements, then look for a general upper bound and a matching construction.",
     ).project.strategies[0]
+    # The counterexample must be reviewed on the final configured round.
+    # Earlier rounds deliberately continue under PR #476's protocol policy.
+    research_sessions.save_limits(
+        str(path),
+        {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2},
+    )
     credential = {
         "identity": "fixture-account",
         "mode": "api_key",
@@ -7598,7 +7675,7 @@ async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_p
     ).project.strategies[-1]
     project_before = (path / "project.json").read_bytes()
     limits = research_sessions.get_limits(str(path))
-    limits["model_calls"] = 6
+    limits.update(research_rounds=2, model_calls=12)
     limits = research_sessions.save_limits(str(path), limits)
 
     async def handler(request):
@@ -7648,15 +7725,20 @@ async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_p
         )
         finished = await wait_for(path, started["id"])
 
-    assert finished["status"] == "ended" and finished["calls_used"] == 6
+    assert finished["status"] == "ended" and finished["calls_used"] == 8
+    assert finished["termination_reason_code"] == "protocol_complete"
     branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
     assert branches[first.id]["status"] == "ended"
-    assert branches[first.id]["last_decision"] == "stop_no_progress"
+    # The Skeptic's unproductive assessment remains saved, but the protocol
+    # continues through the configured final round before reporting its limit.
+    assert branches[first.id]["last_decision"] == "stop_budget_exhausted"
+    assert len(branches[first.id]["artifacts"]) == 2
+    assert any(event["kind"] == "coordinator.early_stop_deferred" for event in finished["events"])
     actions = {
         item["strategy_id"]: item for item in finished["portfolio_decision"]["strategy_actions"]
     }
-    assert actions[first.id]["action"] == "abandon_for_session"
-    assert "no concrete next step" in actions[first.id]["rationale"]
+    assert actions[first.id]["action"] == "hold_for_limits"
+    assert "configured budget" in actions[first.id]["rationale"]
     assert actions[first.id]["basis_artifact_ids"]
     assert branches[second.id]["artifacts"]
     assert (path / "project.json").read_bytes() == project_before
@@ -9203,6 +9285,91 @@ async def test_three_strategies_launch_under_three_turn_shared_ceiling(path: Pat
     assert "incomplete" in finished["message"].lower()
 
 
+async def test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
+    path: Path, *, unproductive_no_progress: bool = False
+):
+    """An early claimed solution or unproductive report cannot truncate the protocol."""
+    view, strategy, credential, config = await setup(path)
+    limits = research_sessions.get_limits(str(path))
+    limits.update(research_rounds=3, model_calls=6)
+    limits = research_sessions.save_limits(str(path), limits)
+    dispatched = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        role = payload["text"]["format"]["name"]
+        context = json.loads(payload["input"])
+        cycle = context["cycle"]
+        dispatched.append((role, cycle))
+        if role == "research_investigator":
+            response = investigation(cycle)
+        else:
+            response = {
+                **skeptic(cycle, "stop", "no_progress"),
+                "objective_status": "not_achieved" if unproductive_no_progress else "achieved",
+                "remaining_obligations": [],
+                "unresolved_objections": [],
+                "next_question": "",
+                "strategy_contribution": "unproductive" if unproductive_no_progress else "solution",
+                "objections": [],
+                "response": "The proposed result seems to cover the objective, but its proof premises are unreviewed.",
+            }
+        return httpx.Response(200, json=provider_response(response))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 6
+    assert finished["termination_reason_code"] == "protocol_complete"
+    assert [artifact["strategy_cycle"] for artifact in finished["artifacts"]] == [1, 2, 3]
+    assert [artifact["coordinator_decision"] for artifact in finished["artifacts"][:2]] == [
+        "revise",
+        "revise",
+    ]
+    assert len(dispatched) == 6
+    if not unproductive_no_progress:
+        # An unsupported positive claim is explicitly reopened. An unproductive
+        # stop may already have been converted into a revision without a
+        # distinct deferred-stop event; the six accepted turns prove continuity.
+        assert any(
+            event["kind"]
+            in {
+                "coordinator.provisional_stop_reopened",
+                "coordinator.early_stop_deferred",
+            }
+            for event in finished["events"]
+        )
+        assert finished["convergence_status"] == "model_reported_unverified"
+        assert all(artifact["convergence"]["reported"] for artifact in finished["artifacts"])
+        assert any(event["kind"] == "research.convergence_reported" for event in finished["events"])
+        assert "independent" in finished["artifacts"][0]["next_question"].lower()
+    else:
+        assert finished.get("convergence_status") is None
+        assert not any(artifact["convergence"]["reported"] for artifact in finished["artifacts"])
+    # Reaching the configured protocol is not a certification of the model's claim.
+    assert finished["outcome"]["assessment"] != "positive"
+    assert finished["outcome"]["solution_review"]["status"] != "achieved"
+    assert finished["outcome"]["solution_review"]["verification_status"] == "incomplete"
+
+
 async def test_incomplete_productive_stop_uses_remaining_round(path: Path):
     view, strategy, credential, config = await setup(path)
     limits = research_sessions.get_limits(str(path))
@@ -9510,6 +9677,11 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
 
 async def test_remove_terminal_and_monotonic_number(path: Path):
     view, strategy, credential, config = await setup(path)
+    # The test concerns terminal-session removal and numbering, not an
+    # early model-decided research stop. Configure a complete single round.
+    limits = research_sessions.get_limits(str(path))
+    limits.update(research_rounds=1, model_calls=2)
+    limits = research_sessions.save_limits(str(path), limits)
     terminal_review = skeptic(1, "stop", "no_progress")
     terminal_review["remaining_obligations"] = []
     terminal_review["next_question"] = ""
@@ -9551,7 +9723,7 @@ async def test_remove_terminal_and_monotonic_number(path: Path):
         assert removed == {"removed": True, "id": first["id"], "session_number": 1}
         assert research_sessions.list_sessions(str(path)) == []
         assert (path / "project.json").exists()
-        assert research_sessions.get_limits(str(path)) == research_sessions.DEFAULT_LIMITS
+        assert research_sessions.get_limits(str(path)) == limits
         second_terminal_review = skeptic(2, "stop", "no_progress")
         second_terminal_review["remaining_obligations"] = []
         second_terminal_review["next_question"] = ""
@@ -11481,6 +11653,132 @@ def _test_obligation_dispatch_request_contains_only_supplied_citations(path: Pat
     assert record["prior_session_obligations"][0] == original_obligation
 
 
+def test_e004_e005_e006_e009_e010_e011_saved_protocol_recovery_plans() -> None:
+    """Sanitized six-pilot shapes: do not replay accepted, rejected or unknown calls."""
+
+    def step(sid: str, role: str, cycle: int, status: str = "completed", *, kind=""):
+        item = {
+            "id": f"{sid}-{role}-{cycle}-{status}",
+            "strategy_id": sid,
+            "role": role,
+            "cycle": cycle,
+            "status": status,
+        }
+        if status == "failed":
+            item.update(
+                failure_kind=kind,
+                attempt_status="not_dispatched" if kind == "budget_denied" else "usage_estimated",
+                provider_input_audit={
+                    "status": "prepared_before_dispatch"
+                    if kind == "budget_denied"
+                    else "provider_response_invalid"
+                },
+            )
+        if status == "interrupted":
+            item.update(
+                failure_kind="interrupted",
+                attempt_status="unknown",
+                provider_input_audit={"status": "call_interrupted_dispatch_unknown"},
+            )
+        return item
+
+    def done(sid: str, through: list[tuple[str, int]]):
+        return [step(sid, role, cycle) for role, cycle in through]
+
+    def branch(sid: str, status: str, cycle: int, pending: bool = False):
+        return {
+            "strategy_id": sid,
+            "status": status,
+            "cycle": cycle,
+            "pending_investigation": {"claim": "saved argument"} if pending else None,
+        }
+
+    full = [(role, cycle) for cycle in (1, 2, 3) for role in ("investigator", "skeptic")]
+    cases = [
+        (
+            "E-004 Maximum Regions",
+            "ended",
+            [branch("math", "ended", 1)],
+            done("math", full[:2]),
+            4,
+            2,
+        ),
+        (
+            "E-005 Nonconsecutive Subsets",
+            "ended",
+            [branch("generating", "ended", 1), branch("matrix", "failed", 1)],
+            done("generating", full[:2])
+            + [step("matrix", "investigator", 1, "failed", kind="response_invalid")],
+            10,
+            2,
+        ),
+        (
+            "E-006/E-011 Warp",
+            "ended",
+            [branch("geometry", "ended", 3), branch("physical", "failed", 2, True)],
+            done("geometry", full[:4])
+            + done("physical", full[:3])
+            + [
+                step("physical", "skeptic", 2, "failed", kind="response_invalid"),
+                step("physical", "investigator", 3, "failed", kind="budget_denied"),
+            ],
+            5,
+            7,
+        ),
+        (
+            "E-009 AI Agent",
+            "stopped",
+            [branch("failure", "failed", 1, True), branch("recovery", "paused", 2)],
+            done("failure", full[:1])
+            + done("recovery", full[:2])
+            + [
+                step("recovery", "investigator", 2, "failed", kind="budget_denied"),
+                step("recovery", "investigator", 2, "interrupted"),
+            ],
+            9,
+            3,
+        ),
+        (
+            "E-010 Sovereign",
+            "ended",
+            [branch("federation", "failed", 3, True), branch("governance", "ended", 3)],
+            done("federation", full[:5])
+            + done("governance", full)
+            + [step("federation", "skeptic", 3, "failed", kind="response_invalid")],
+            1,
+            11,
+        ),
+    ]
+    for name, status, branches, steps, expected_missing, expected_accepted in cases:
+        record = {
+            "status": status,
+            "cycle_limit": 3,
+            "call_limit": 30,
+            "calls_used": expected_accepted + len(steps) - expected_accepted,
+            "strategy_runs": branches,
+            "steps": steps,
+        }
+        plan, error = research_sessions._protocol_completion_recovery_plan(record)
+        assert error is None and plan is not None, (name, error)
+        assert plan["completed_turns"] == expected_accepted, name
+        assert plan["required_calls"] == expected_missing, (name, plan)
+        assert all(item["recovery_context"]["new_request"] for item in plan["branches"])
+        assert record["steps"] == steps
+    unknown_plan, unknown_error = research_sessions._protocol_completion_recovery_plan(
+        {
+            "status": "stopped",
+            "cycle_limit": 3,
+            "call_limit": 18,
+            "calls_used": 4,
+            "strategy_runs": [branch("recovery", "paused", 2)],
+            "steps": done("recovery", full[:2])
+            + [step("recovery", "investigator", 2, "interrupted")],
+        }
+    )
+    assert unknown_error is None and unknown_plan is not None
+    assert any(item["role"] == "investigator" for item in unknown_plan["branches"])
+
+
 def test_terminal_protocol_completion_plan_preserves_attempt_history() -> None:
     def branch(identifier: str, *, status: str = "ended", cycle: int = 3, pending=None):
         return {
@@ -11673,6 +11971,86 @@ def test_terminal_protocol_completion_allows_known_invalid_response_replacement(
     record["call_limit"] = 12
     assert record["call_limit"] - record["calls_used"] == 8
     assert plan["required_calls"] - (record["call_limit"] - record["calls_used"]) == 2
+
+
+async def test_e009_stopped_unknown_investigator_explicit_repair(path: Path) -> None:
+    """Normal Resume is not a protocol repair; explicit Repair keeps unknown usage held."""
+    view, strategy, credential, config = await setup(path)
+
+    async def idle_worker(*_args):
+        return None
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(
+            research_sessions, "_frozen_session_configuration", new=AsyncMock(return_value=config)
+        ),
+        patch.object(research_sessions, "_worker", new=idle_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        branch = record["strategy_runs"][0]
+        unknown_id = str(uuid4())
+        record.update(
+            {
+                "status": "stopped",
+                "stopped_at": datetime.now(UTC).isoformat(),
+                "cycle_limit": 3,
+                "call_limit": 7,
+                "calls_used": 1,
+                "deadline_at": (datetime.now(UTC) - timedelta(minutes=2)).isoformat(),
+                "duration_limit_minutes": 60,
+                "steps": [
+                    {
+                        "id": unknown_id,
+                        "strategy_id": strategy.id,
+                        "role": "investigator",
+                        "cycle": 1,
+                        "status": "interrupted",
+                        "failure_kind": "interrupted",
+                        "attempt_status": "unknown",
+                        "provider_input_audit": {"status": "call_interrupted_dispatch_unknown"},
+                    }
+                ],
+            }
+        )
+        branch.update(
+            {
+                "status": "stopped",
+                "cycle": 1,
+                "calls_used": 1,
+                "pending_investigation": None,
+            }
+        )
+        ledger = new_ledger(
+            call_limit=7,
+            input_token_limit=400_000,
+            output_tokens_per_call=4_000,
+            cost_limit_usd=100.0,
+            input_price_per_million=1.0,
+            output_price_per_million=2.0,
+        )
+        reserve_before_dispatch(ledger, call_id=unknown_id, request_body=b"unknown investigator")
+        mark_unknown(ledger, call_id=unknown_id)
+        record["hard_budget_ledger"] = ledger
+        research_sessions._save(str(path), record)
+
+        repaired = await research_sessions.control_session(str(path), started["id"], "repair")
+        assert repaired["status"] == "queued"
+        assert repaired["calls_used"] == 1
+        assert repaired["call_limit"] == 7
+        saved = research_sessions._read(str(path), started["id"])
+        assert len(saved["steps"]) == 1
+        assert saved["steps"][0]["status"] == "interrupted"
+        assert saved["hard_budget_ledger"]["calls"][0]["status"] == "unknown"
+        assert saved["hard_budget_ledger"]["blocked_reason"] is None
+        assert saved["strategy_runs"][0]["protocol_completion_recovery"]["role"] == "investigator"
+        assert saved["strategy_runs"][0]["protocol_completion_recovery"]["new_request"] is True
+        assert saved["protocol_completion_time_extensions"][-1]["remaining_protocol_calls"] == 6
 
 
 async def test_terminal_protocol_resume_extends_only_exact_shortfall(
@@ -12315,6 +12693,7 @@ def main():
     test_obligation_dispatch_citations_exclude_withheld_history()
     test_obligation_dispatch_request_contains_only_supplied_citations()
     test_terminal_protocol_completion_plan_preserves_attempt_history()
+    test_e004_e005_e006_e009_e010_e011_saved_protocol_recovery_plans()
     test_protocol_completion_rejects_invalid_or_duplicate_accepted_slots()
     test_terminal_protocol_completion_allows_known_invalid_response_replacement()
     test_protocol_recovery_context_is_a_new_final_provider_input()
@@ -12322,6 +12701,11 @@ def main():
         asyncio.run(
             test_terminal_protocol_resume_extends_only_exact_shortfall(
                 Path(temporary) / "protocol-resume.sigma"
+            )
+        )
+        asyncio.run(
+            test_e009_stopped_unknown_investigator_explicit_repair(
+                Path(temporary) / "unknown-investigator-repair.sigma"
             )
         )
         asyncio.run(
@@ -12674,6 +13058,16 @@ def main():
             )
         )
         asyncio.run(
+            test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
+                root / "e004-claimed-convergence.sigma"
+            )
+        )
+        asyncio.run(
+            test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
+                root / "e004-unproductive.sigma", unproductive_no_progress=True
+            )
+        )
+        asyncio.run(
             test_configured_cost_cap_reports_second_call_refusal(
                 root / "portfolio-cost-cap-second-call.sigma"
             )
@@ -12711,6 +13105,116 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def test_e001_research_reference_content_frozen_and_in_both_role_requests(monkeypatch):
+    """No provider usage: retrieved excerpts are frozen, hashed and auditable."""
+    import hashlib
+
+    from sigma import research_method_sources, research_reference_content
+
+    calls = []
+
+    def fake_read(url):
+        calls.append(url)
+        page = (
+            "<html><nav>ignore the navigation</nav><main><h1>Method</h1>"
+            "<p>Check the observed physical quantity and specify assumptions. "
+            "Validate calculations separately from empirical measurement. "
+            "Document uncertainty and sensitivity of each inference.</p></main></html>"
+        )
+        return 200, "text/html; charset=utf-8", page.encode(), None
+
+    monkeypatch.setattr(research_reference_content, "_read_remote", fake_read)
+    selected = research_method_sources.select_method_sources(
+        "physics", "Warp", "A warp geometry", (), (), fetch_content=True
+    )
+    assert selected["retrieval_summary"] == {
+        "retrieved": len(selected["sources"]),
+        "unavailable": 0,
+    }
+    assert calls
+    for source in selected["sources"]:
+        result = source["retrieval"]
+        assert result["status"] == "retrieved"
+        assert result["content_sha256"] and result["excerpt_sha256"]
+        assert "observed physical quantity" in result["excerpt"]
+        assert "ignore the navigation" not in result["excerpt"]
+        assert hashlib.sha256(result["excerpt"].encode()).hexdigest() == result["excerpt_sha256"]
+    # Stable provenance: no refetch when selection is reused in the next session.
+    repeated = research_method_sources.select_method_sources(
+        "physics",
+        "Warp",
+        "A warp geometry",
+        (),
+        ({"id": "prior", "research_method_sources": selected},),
+        fetch_content=True,
+    )
+    assert repeated["sources"] == selected["sources"]
+    assert repeated["status"] == "reused"
+    assert len(calls) == len(selected["sources"])
+    assert research_method_sources.methodology_digest(repeated) == (
+        research_method_sources.methodology_digest(selected)
+    )
+    context = {
+        "problem": "Evaluate physical feasibility.",
+        "research_method_version": research_sessions.RESEARCH_METHOD_VERSION,
+        "methodology_source_catalog_version": selected["version"],
+        "methodology_source_material": selected["sources"],
+    }
+    record = {"mode": "chatgpt", "model": MODEL, "reasoning_effort": "high"}
+    for role in ("investigator", "skeptic"):
+        request = research_sessions._role_request_payload(record, role, context)
+        assert request["model"] == MODEL
+        assert request["reasoning"] == {"effort": "high"}
+        assert "observed physical quantity" in request["input"][0]["content"]
+        assert "frozen, bounded excerpt" in request["instructions"]
+        audit = research_sessions._role_input_audit(record, role, context, None)
+        research_sessions._expand_role_input_audit(audit)
+        assert audit["request_body"] == request
+
+
+def test_e001_reference_fetch_failure_is_honest_and_nonblocking(monkeypatch):
+    from sigma import research_method_sources, research_reference_content
+
+    def fail(_url):
+        return 403, "text/html", b"", None
+
+    monkeypatch.setattr(research_reference_content, "_read_remote", fail)
+    selection = research_method_sources.select_method_sources(
+        "physics", "Warp", "", (), (), fetch_content=True
+    )
+    assert selection["retrieval_summary"] == {
+        "retrieved": 0,
+        "unavailable": len(selection["sources"]),
+    }
+    assert all(item["retrieval"]["status"] == "unavailable" for item in selection["sources"])
+    assert all(item["retrieval"]["excerpt"] is None for item in selection["sources"])
+    assert all(item["retrieval"]["reason"] == "http_403" for item in selection["sources"])
+
+
+def test_e001_reference_fetch_rejects_private_hosts_and_downgrade(monkeypatch):
+    import socket
+
+    from sigma import research_reference_content as reference
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, type: [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", port))],
+    )
+    assert (
+        reference.freeze_reference_content("https://localhost/private")["status"] == "unavailable"
+    )
+    assert reference.freeze_reference_content("https://localhost/private")["reason"] == (
+        "private_or_unroutable_address"
+    )
+    assert reference.freeze_reference_content("http://example.com/unsafe")["reason"] == (
+        "non_https_or_credential_url"
+    )
+    assert reference.freeze_reference_content("https://user:password@example.com/")["status"] == (
+        "unavailable"
+    )
     # The new provider stage is tested separately with the feature explicitly
     # enabled, so the long-standing role protocol fixtures remain unchanged.
     subprocess.run(

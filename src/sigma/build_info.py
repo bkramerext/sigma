@@ -36,3 +36,36 @@ def build_commit() -> str:
         return value.lower() if _COMMIT.fullmatch(value) else "unknown"
     except (OSError, subprocess.SubprocessError):
         return "unknown"
+
+
+def checkout_commit() -> str | None:
+    """Read the *current* checkout HEAD, never the cached process-build SHA."""
+    try:
+        checkout = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=checkout,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=True,
+        )
+        candidate = result.stdout.strip().lower()
+        return candidate if _COMMIT.fullmatch(candidate) else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def local_build_mismatch() -> tuple[str, str] | None:
+    """Detect updated checkout with an older managed local backend still alive.
+
+    Only managed local UI servers have SIGMA_UI_INSTANCE_ID. Cloud deployments
+    may intentionally run immutable builds outside a Git checkout.
+    """
+    if not os.environ.get("SIGMA_UI_INSTANCE_ID"):
+        return None
+    running = build_commit()
+    current = checkout_commit()
+    if running != "unknown" and current and running != current:
+        return running, current
+    return None

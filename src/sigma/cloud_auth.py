@@ -964,12 +964,17 @@ async def middleware(request: Request, call_next):
     path = request.url.path
     if public_sample_paper_path(request.method, path):
         return await call_next(request)
-    public = path == "/api/ui-instance" or path in {
-        "/api/cloud-auth/status",
-        "/api/cloud-auth/login",
-        "/api/cloud-auth/callback",
-        "/api/cloud-auth/denied",
-    }
+    public = (
+        path == "/api/ui-instance"
+        or (cfg.local and path == "/api/local-runtime/build" and request.method == "GET")
+        or path
+        in {
+            "/api/cloud-auth/status",
+            "/api/cloud-auth/login",
+            "/api/cloud-auth/callback",
+            "/api/cloud-auth/denied",
+        }
+    )
     public = public or (request.method == "GET" and path.startswith("/api/ai/auth/callback/"))
     public = public or (path == "/api/cloud-auth/mock/select" and _mock_enabled(cfg))
     public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
