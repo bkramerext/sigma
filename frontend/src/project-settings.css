@@ -8,6 +8,14 @@
 .project-settings-dialog .settings-tabs [role="tab"][aria-selected="true"] { border-bottom-color: #d9a66c; color: #f0cca0; }
 .project-settings-dialog .settings-tabs [role="tab"]:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .project-settings-dialog .research-limits-panel { max-height: min(62dvh, 620px); overflow: auto; }
+/* Keep limit inputs, help, and calculated maxima compact without affecting other settings tabs. */
+.project-settings-dialog .research-limits-panel > p { margin: 0 0 8px; line-height: 1.45; }
+.project-settings-dialog .research-limits-panel fieldset > label { margin: 12px 0 5px; }
+.project-settings-dialog .research-limits-panel fieldset > label:first-child { margin-top: 0; }
+.project-settings-dialog .research-limits-panel fieldset > .settings-hint { margin: 4px 0 0; line-height: 1.45; }
+.project-settings-dialog .research-call-calculation { margin: 10px 0 6px; font-size: 12px; line-height: 1.45; }
+.project-settings-dialog .research-call-calculation p { margin: 0 0 4px; white-space: normal; overflow-wrap: anywhere; }
+.project-settings-dialog .research-call-calculation .settings-hint { margin: 4px 0 0; line-height: 1.45; }
 .project-settings-dialog .research-limits-panel input:not([type="checkbox"]) { box-sizing: border-box; width: 12ch; max-width: 100%; }
 .project-settings-dialog .research-limits-panel .research-duration-controls input { flex: 0 0 12ch; width: 12ch; max-width: 100%; }
 .project-settings-dialog .research-duration-controls { display: flex; align-items: stretch; gap: 10px; max-width: 360px; }
