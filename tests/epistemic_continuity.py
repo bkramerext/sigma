@@ -140,7 +140,7 @@ async def parity_project(path: Path, capture: list[dict]) -> dict:
         "status": "connected",
     }
     config = {"available": True, "model": "gpt-6.1-sol", "reasoning_effort": "high"}
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=2, model_calls=4)
     research_sessions.save_limits(str(path), limits)
     phase = "first"
@@ -259,7 +259,7 @@ async def parity_project(path: Path, capture: list[dict]) -> dict:
         assert (
             first_artifact_id in first["artifacts"][1]["reasoning_steps"][0]["basis_artifact_ids"]
         )
-        limits = research_sessions.get_limits(str(path))
+        limits = dict(research_sessions.DEFAULT_LIMITS)
         limits.update(research_rounds=1, model_calls=2)
         research_sessions.save_limits(str(path), limits)
         phase = "later_session"
@@ -401,7 +401,7 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
         "status": "connected",
     }
     config = {"available": True, "model": "gpt-6.1-sol", "reasoning_effort": "high"}
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=1 if withheld else 2, model_calls=2 if withheld else 4)
     research_sessions.save_limits(str(path), limits)
     phase = "initial"
@@ -563,7 +563,7 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
                 first_execution["status"] == "failed" and second_execution["status"] == "completed"
             )
             assert "witness" in second_execution["stdout"]
-            limits = research_sessions.get_limits(str(path))
+            limits = dict(research_sessions.DEFAULT_LIMITS)
             limits.update(research_rounds=1, model_calls=2)
             research_sessions.save_limits(str(path), limits)
             phase = "followup"

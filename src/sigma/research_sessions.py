@@ -125,6 +125,15 @@ DEFAULT_LIMITS = {
     "maximum_estimated_cost_usd": None,
     "maximum_input_tokens_per_session": None,
 }
+# Historical and explicit legacy project settings remain version 1.
+NEW_DEFAULT_LIMITS = {
+    **DEFAULT_LIMITS,
+    "research_rounds": 3,
+    "turns_per_round": 3,
+    "scheduler_version": 2,
+    "model_calls": 18,
+}
+
 TOKEN_PRICES_PER_MILLION = {
     # OpenAI published Standard pricing, short context, checked 2026-10-23:
     # https://developers.openai.com/api/docs/pricing
@@ -831,6 +840,40 @@ def _directory(path: str | Path) -> Path:
     return directory
 
 
+def _new_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
+    """New sessions default to paired 3/3 without modifying old stored settings."""
+    if limits.get("scheduler_version") == 2:
+        return limits
+    return {
+        **limits,
+        "scheduler_version": 2,
+        "research_rounds": 3,
+        "turns_per_round": 3,
+        "model_calls": 18,
+    }
+
+
+def _paired_call_limit(limits: dict[str, Any], enabled_count: int) -> int:
+    """Individual provider-call ceiling; disabled strategies are excluded."""
+    return 2 * limits["research_rounds"] * limits["turns_per_round"] * enabled_count
+
+
+def _research_round_label(record: dict[str, Any], cycle: int) -> str:
+    """Show human research rounds without altering durable pair-slot identities."""
+    if record.get("scheduler_version") == 2:
+        round_number, paired_turn = _paired_round_position(record, cycle)
+        return f"Research round {round_number}, turn {paired_turn}"
+    return f"Research round {cycle}"
+
+
+def _paired_round_position(record: dict[str, Any], pair_slot: int) -> tuple[int, int]:
+    """Translate durable pair slots to (research round, paired turn in round)."""
+    if record.get("scheduler_version") != 2:
+        return pair_slot, 1
+    turns = int(record["turns_per_round"])
+    return (max(1, pair_slot) - 1) // turns + 1, (max(1, pair_slot) - 1) % turns + 1
+
+
 def _effective_limits(limits: dict[str, Any]) -> dict[str, Any]:
     if cloud_workspaces.enabled():
         return cloud_research.evaluation_session_limits(limits)
@@ -847,14 +890,14 @@ def get_limits(path: str) -> dict[str, Any]:
 
         members = read_bundle(path)["files"]
         if "research-sessions/limits.json" not in members:
-            limits = dict(DEFAULT_LIMITS)
+            limits = dict(NEW_DEFAULT_LIMITS)
         else:
             data = base64.b64decode(members["research-sessions/limits.json"], validate=True)
             if len(data) > 4096:
                 raise ProjectError("Research limits file is unsafe or too large")
             try:
                 raw = json.loads(data)
-                if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
+                if not isinstance(raw, dict) or not set(raw) <= set(NEW_DEFAULT_LIMITS):
                     raise ValueError("Invalid limits")
                 # Read old oversized values safely without changing the saved file.
                 raw["max_concurrent_sessions"] = _legacy_project_concurrency(raw)
@@ -874,15 +917,15 @@ def get_limits(path: str) -> dict[str, Any]:
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
-        limits = dict(DEFAULT_LIMITS)
-        return limits
+        limits = dict(NEW_DEFAULT_LIMITS)
+        return _new_session_limits(limits)
     if target.is_symlink() or not target.is_file() or target.stat().st_size > 4096:
         raise ProjectError("Research limits file is unsafe or too large")
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise ProjectError("Research limits are unreadable") from exc
-    if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
+    if not isinstance(raw, dict) or not set(raw) <= set(NEW_DEFAULT_LIMITS):
         raise ProjectError("Research limits are invalid")
     # Read old oversized values safely without changing the saved file.
     raw["max_concurrent_sessions"] = _legacy_project_concurrency(raw)
@@ -975,9 +1018,22 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     if type(concurrency) is not int or not 1 <= concurrency <= 4:
         raise ProjectError("Maximum concurrent sessions must be between 1 and 4")
     result["max_concurrent_sessions"] = concurrency
+    paired = result.get("scheduler_version") == 2
+    if "scheduler_version" in result and not paired:
+        raise ProjectError("Unsupported research scheduler version")
+    if paired:
+        turns = result.get("turns_per_round")
+        if type(turns) is not int or not 1 <= turns <= 20:
+            raise ProjectError("Turns per round must be 1–20")
+        expected = 2 * result.get("research_rounds", 0) * turns
+        # model_calls is a derived per-strategy display value in version 2.
+        # No API client may choose the aggregate shared attempt ceiling.
+        if "model_calls" in result and result["model_calls"] != expected:
+            raise ProjectError("Agent call maximum is calculated from rounds and turns per round")
+        result["model_calls"] = expected
     bounds = {
         "research_rounds": (1, 60),
-        "model_calls": (2, 120),
+        "model_calls": (2, 2400 if paired else 120),
         "output_tokens_per_call": (256, 20000),
     }
     if "session_duration_minutes" not in result:
@@ -1011,7 +1067,7 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     if input_limit is not None and cost is None:
         raise ProjectError("An input-token limit requires a maximum estimated session cost")
     if result["model_calls"] < 2:
-        raise ProjectError("Maximum agent turns must allow one Investigator/Skeptic pair")
+        raise ProjectError("Research must allow one Investigator/Skeptic pair")
     return result
 
 
@@ -4322,6 +4378,28 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             "outcome_conclusion_version",
         }
     }
+    if record.get("scheduler_version") == 2:
+        round_number, pair_number = _paired_round_position(record, int(record.get("cycle", 0)))
+        result["research_round"] = round_number if record.get("cycle", 0) else 0
+        result["paired_turn_in_round"] = pair_number if record.get("cycle", 0) else 0
+        result["research_round_limit"] = record["research_round_limit"]
+        result["strategy_runs"] = [
+            {
+                **branch,
+                "research_round": (
+                    _paired_round_position(record, int(branch.get("cycle", 0)))[0]
+                    if branch.get("cycle", 0)
+                    else 0
+                ),
+                "paired_turn_in_round": (
+                    _paired_round_position(record, int(branch.get("cycle", 0)))[1]
+                    if branch.get("cycle", 0)
+                    else 0
+                ),
+                "completed_pairs": len(branch.get("artifacts", [])),
+            }
+            for branch in record.get("strategy_runs", [])
+        ]
     result["recoverable_clipped_response"] = (
         record.get("status") == "ended"
         and record.get("terminal_reason") == "Provider response clipped at max_output_tokens."
@@ -5838,9 +5916,17 @@ async def start_session(
                     "A cumulative input-token ceiling requires API-key billing, a maximum estimated session cost, and a model with a reviewed price."
                 )
             price = TOKEN_PRICES_PER_MILLION.get(config["model"])
+            # New sessions use independent, complete pair slots. All historical
+            # records retain their original shared call_limit and cycle.
+            paired_scheduler = limits.get("scheduler_version") == 2
+            call_ceiling = (
+                _paired_call_limit(limits, len(selected_ids))
+                if paired_scheduler
+                else limits["model_calls"]
+            )
             hard_budget_ledger = (
                 new_ledger(
-                    call_limit=limits["model_calls"],
+                    call_limit=call_ceiling,
                     input_token_limit=limits["maximum_input_tokens_per_session"],
                     output_tokens_per_call=limits["output_tokens_per_call"],
                     cost_limit_usd=float(limits.get("maximum_estimated_cost_usd") or 0.0),
@@ -5852,6 +5938,15 @@ async def start_session(
             )
             record = {
                 "schema_version": 1,
+                **(
+                    {
+                        "scheduler_version": 2,
+                        "turns_per_round": limits["turns_per_round"],
+                        "research_round_limit": limits["research_rounds"],
+                    }
+                    if paired_scheduler
+                    else {}
+                ),
                 "backend_build_commit": build_commit(),
                 "obligation_id_format": "compact-v1",
                 "id": str(uuid4()),
@@ -5935,13 +6030,19 @@ async def start_session(
                     else None
                 ),
                 "calls_used": 0,
-                "call_limit": limits["model_calls"],
+                "call_limit": call_ceiling,
                 "max_concurrent_sessions": limits["max_concurrent_sessions"],
-                "cycle_limit": limits["research_rounds"],
+                # Internal cycle is a unique pair-slot for role dispatch and
+                # obligation identity. Exposed research rounds are derived.
+                "cycle_limit": (
+                    limits["research_rounds"] * limits["turns_per_round"]
+                    if paired_scheduler
+                    else limits["research_rounds"]
+                ),
                 "configured_duration_limit_minutes": limits["session_duration_minutes"],
                 "duration_limit_minutes": runtime_limits["session_duration_minutes"],
                 "output_token_limit": limits["output_tokens_per_call"],
-                "total_token_limit": limits["model_calls"]
+                "total_token_limit": call_ceiling
                 * (MAX_AGENT_CONTEXT_BYTES + 65_536 + limits["output_tokens_per_call"]),
                 "maximum_input_tokens_per_session": limits.get("maximum_input_tokens_per_session"),
                 "hard_budget_ledger": hard_budget_ledger,
@@ -9039,6 +9140,22 @@ def _portfolio_context(
         "protocol_completion_recovery": branch.get("protocol_completion_recovery"),
     }
     context = _agent_context(branch_record, role, cycle)
+    if record.get("scheduler_version") == 2:
+        research_round, paired_turn = _paired_round_position(record, cycle)
+        context["research_round"] = research_round
+        context["paired_turn_in_round"] = paired_turn
+        context["paired_turn_limit"] = record["turns_per_round"]
+        context["scheduler_note"] = (
+            "Research round {}/{}; Investigator/Skeptic pair {}/{} "
+            "in this round. The internal cycle identifier {} is a unique pair slot, "
+            "not a separate research round."
+        ).format(
+            research_round,
+            record["research_round_limit"],
+            paired_turn,
+            record["turns_per_round"],
+            cycle,
+        )
     peer_candidates = [
         artifact for artifact in record["artifacts"] if artifact.get("strategy_id") != strategy_id
     ]
@@ -9972,6 +10089,14 @@ def _commit_portfolio_review(
         "strategy_title": branch["strategy_title"],
         "sequence": len(record["artifacts"]) + 1,
         "strategy_cycle": cycle,
+        **(
+            {
+                "research_round": _paired_round_position(record, cycle)[0],
+                "paired_turn_in_round": _paired_round_position(record, cycle)[1],
+            }
+            if record.get("scheduler_version") == 2
+            else {}
+        ),
         "created_at": _now(),
         "claim_or_question": investigation["claim"],
         "method": investigation["method"],
@@ -10459,7 +10584,7 @@ async def _portfolio_role_call(
             record["current_action"] = f"{role.title()} · {branch['strategy_title']}"
             record["current_question"] = branch["current_question"]
             record["message"] = (
-                f"Research round {cycle}: {role.title()} agent turn "
+                f"{_research_round_label(record, cycle)}: {role.title()} agent call "
                 f"{record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} in progress."
                 if len(record["strategy_runs"]) == 1
                 else f"{role.title()} agent turn {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} is running for {branch['strategy_title']}."
@@ -10476,6 +10601,14 @@ async def _portfolio_role_call(
                 "attempt_id": step_id,
                 "attempt_status": "preparing" if cloud_research.billing_enabled() else None,
                 "cycle": cycle,
+                **(
+                    {
+                        "research_round": _paired_round_position(record, cycle)[0],
+                        "paired_turn_in_round": _paired_round_position(record, cycle)[1],
+                    }
+                    if record.get("scheduler_version") == 2
+                    else {}
+                ),
                 "role": role,
                 "strategy_id": strategy_id,
                 "strategy_title": branch["strategy_title"],
@@ -11806,6 +11939,7 @@ def _provider_limit_recovery_plan(
         for step in record.get("steps", [])
         if step.get("role") in {"investigator", "skeptic"} and step.get("status") != "completed"
     ]
+    # cycle_limit is role-pair slots for v2, rounds for historical v1.
     target_turns_per_strategy = max(1, int(record.get("cycle_limit", 1))) * 2
     steps_by_strategy: dict[str, list[dict[str, Any]]] = {}
     for step in record.get("steps", []):

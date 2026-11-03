@@ -560,12 +560,13 @@ def main() -> None:
             )
             from sigma.research_sessions import (
                 DEFAULT_LIMITS,
+                NEW_DEFAULT_LIMITS,
                 _allocate_session_number,
                 get_limits,
                 save_limits,
             )
 
-            assert get_limits(created.path) == dict(DEFAULT_LIMITS)
+            assert get_limits(created.path) == dict(NEW_DEFAULT_LIMITS)
             # Existing malformed limits must never be mistaken for missing defaults.
             write_file(created.path, "research-sessions/limits.json", b"{invalid")
             try:

@@ -41,7 +41,9 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="T201 overflow fixture")).to_be_visible()
 
     page.get_by_role("button", name="Start a new research session").click()
-    expect(page.locator(".session-start-limits")).to_have_text("1 round · 2 total turns")
+    expect(page.locator(".session-start-limits")).to_have_text(
+        "1 round × 1 paired turn × 2 agents × 1 enabled strategy = 2 maximum agent calls"
+    )
     page.set_viewport_size({"width": 390, "height": 844})
     for button in (
         page.get_by_role("button", name="Start Session #2"),
