@@ -12623,8 +12623,11 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             and quote is not None
             and full_liability is not None
             and not _optional_reference_compilation_headroom(
-                record, quote, full_liability,
-                compiler_request_body=encoded, compiler_output_bound=output_bound,
+                record,
+                quote,
+                full_liability,
+                compiler_request_body=encoded,
+                compiler_output_bound=output_bound,
             )
         ):
             compilation["status"] = "skipped"

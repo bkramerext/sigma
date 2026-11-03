@@ -217,19 +217,28 @@ def verify_hard_budget_compiler_does_not_steal_first_turn() -> None:
         # One Investigator fits, but a 4K compiler call would exhaust the
         # cost needed for the Investigator's mandatory 128K ceiling.
         assert not research_sessions._optional_reference_compilation_headroom(
-            record, 0.06, 0.12,
-            compiler_request_body=b"x" * 512, compiler_output_bound=4000,
+            record,
+            0.06,
+            0.12,
+            compiler_request_body=b"x" * 512,
+            compiler_output_bound=4000,
         )
         assert ledger["calls"] == []
         ledger["cost_limit_usd"] = 2.0
         assert research_sessions._optional_reference_compilation_headroom(
-            record, 0.06, 0.12,
-            compiler_request_body=b"x" * 512, compiler_output_bound=4000,
+            record,
+            0.06,
+            0.12,
+            compiler_request_body=b"x" * 512,
+            compiler_output_bound=4000,
         )
         ledger["call_limit"] = 1
         assert not research_sessions._optional_reference_compilation_headroom(
-            record, 0.06, 0.12,
-            compiler_request_body=b"x" * 512, compiler_output_bound=4000,
+            record,
+            0.06,
+            0.12,
+            compiler_request_body=b"x" * 512,
+            compiler_output_bound=4000,
         )
         assert ledger["calls"] == []
 
