@@ -407,6 +407,17 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
           )),
         }));
         const rowKey = `${item.id}:${field}:${index}`;
+        // Enter, Escape and clicking outside are all ways to finish a valid
+        // reference edit. Rendering ReferenceLink then starts title lookup.
+        const commitReference = () => {
+          if (!reference.url.trim() || urlError) return;
+          setEditingReferences(previous => {
+            if (!previous.has(rowKey)) return previous;
+            const next = new Set(previous);
+            next.delete(rowKey);
+            return next;
+          });
+        };
         const editing = editingReferences.has(rowKey) || !reference.url.trim();
         return <tr key={index}><td>
           {readonly ? <div className="pt-reference-entry"><div className={referenceDisabled(item.id, field, reference.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={reference}/></div>{referenceToggle(item.id, field, reference)}</div> : <div className="pt-reference-entry">
@@ -420,15 +431,11 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
                   setEditingReferences(previous => new Set(previous).add(rowKey));
                   setAt(index, event.target.value);
                 }}
+                onBlur={commitReference}
                 onKeyDown={event => {
-                  if (event.key !== 'Enter') return;
+                  if (event.key !== 'Enter' && event.key !== 'Escape') return;
                   event.preventDefault();
-                  if (!reference.url.trim() || urlError) return;
-                  setEditingReferences(previous => {
-                    const next = new Set(previous);
-                    next.delete(rowKey);
-                    return next;
-                  });
+                  commitReference();
                 }}/> : <ReferenceLink reference={reference} onResolved={setResolved}
                   onChecked={status => setUrlValidation(previous => previous[reference.url] === status
                     ? previous : { ...previous, [reference.url]: status })}/>}
