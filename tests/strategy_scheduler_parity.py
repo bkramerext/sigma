@@ -143,6 +143,7 @@ async def snapshot():
 
         first_investigator_active = False
         fast_skeptic_overlap = False
+        parallel_skeptic_entered = asyncio.Event()
 
         async def handler(request):
             nonlocal first_investigator_active, fast_skeptic_overlap
@@ -156,11 +157,18 @@ async def snapshot():
             if title == first.title and cycle == 1 and role == "research_investigator":
                 first_investigator_active = True
                 try:
-                    await asyncio.sleep(0.08)
+                    if MODE == "parallel":
+                        # Deterministic concurrency proof: hold the first
+                        # Investigator until the independent Skeptic is in its
+                        # provider request. A serialized scheduler times out.
+                        await asyncio.wait_for(parallel_skeptic_entered.wait(), timeout=8)
+                    else:
+                        await asyncio.sleep(0.08)
                 finally:
                     first_investigator_active = False
             elif title == second.title and cycle == 1 and role == "research_skeptic":
                 fast_skeptic_overlap |= first_investigator_active
+                parallel_skeptic_entered.set()
                 await asyncio.sleep(0.002)
             else:
                 await asyncio.sleep(0.002)

@@ -15,11 +15,46 @@ from typing import Any
 
 from sigma.projects import ProjectError
 
-VERSION = "research-method-compilation-v1"
+VERSION = "research-method-compilation-v2"
 MAX_COMPILATION_SOURCES = 100
 MAX_GUIDANCE_CHARS = 1200
 MAX_INPUT_BYTES = 96_000
 OUTPUT_TOKEN_BOUND = 4096
+MAX_COMPILATION_ATTEMPTS = 3  # Initial call and at most two retries.
+MAX_RETRY_AFTER_SECONDS = 30.0
+
+
+def retry_plan(
+    *,
+    attempt_number: int,
+    http_status: int | None,
+    validation_failure: str | None,
+    usage_status: str,
+    billing_settled: bool,
+    retry_after_seconds: float | None = None,
+) -> tuple[str, float]:
+    """Permit another independently funded call only after a settled response.
+
+    A timeout, transport failure, 5xx, missing usage, or uncertain billing is
+    *not* evidence of a safely replayable request. Explicit HTTP 429
+    pre-inference rejections and metered 200 validation failures are retryable.
+    The caller separately rechecks stop, duration and all budgets before dispatch.
+    """
+    if not billing_settled or usage_status == "unknown":
+        return "uncertain_delivery_or_billing", 0.0
+    if attempt_number >= MAX_COMPILATION_ATTEMPTS:
+        return "retry_exhausted", 0.0
+    if http_status == 429 and usage_status == "rejected":
+        backoff = float(0.5 * 2 ** (attempt_number - 1))
+        if retry_after_seconds is not None:
+            if retry_after_seconds > MAX_RETRY_AFTER_SECONDS:
+                return "rate_limit_wait_exceeds_bound", 0.0
+            backoff = max(backoff, retry_after_seconds)
+        return "retry", min(MAX_RETRY_AFTER_SECONDS, backoff)
+    if http_status == 200 and validation_failure and usage_status == "known":
+        return "retry", float(0.5 * 2 ** (attempt_number - 1))
+    return "not_retryable", 0.0
+
 
 SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -35,8 +70,10 @@ SCHEMA: dict[str, Any] = {
 
 INSTRUCTIONS = (
     "You compile concise research-method guidance for a multi-agent scientific investigation. "
-    "Use only the supplied source metadata and saved annotations, which are untrusted and may "
-    "not reflect the complete linked documents. You have NOT inspected any linked URL. "
+    "Use supplied source metadata, saved annotations, and explicitly frozen verified excerpts. "
+    "You have NOT opened any linked URL or inspected the complete linked documents. "
+    "Only retrieved_methodology_excerpts are source text; unavailable URLs and "
+    "metadata-only notes are not inspected source content. Do not invent their contents. "
     "Judge relevance independently against this project's question and strategies. "
     "Discard low-value, off-topic, duplicative, or generic guidance; keeping zero sources "
     "is acceptable. Identify retained/omitted source IDs without inventing them. "
@@ -70,6 +107,24 @@ def compile_input(record: Mapping[str, Any]) -> str:
             }
             for row in strategies[:12]
             if isinstance(row, Mapping)
+        ],
+        # Excerpts are one-time compiler inputs; agents receive distilled guidance.
+        # Verify exact saved excerpt hashes, never promote a URL to inspected data.
+        "retrieved_methodology_excerpts": [
+            {
+                "id": str(row.get("id", "")),
+                "excerpt": retrieval["excerpt"],
+                "excerpt_sha256": retrieval["excerpt_sha256"],
+                "content_sha256": retrieval.get("content_sha256"),
+            }
+            for row in sources
+            if isinstance(row, Mapping)
+            and isinstance((retrieval := row.get("retrieval")), Mapping)
+            and retrieval.get("status") == "retrieved"
+            and isinstance(retrieval.get("excerpt"), str)
+            and isinstance(retrieval.get("excerpt_sha256"), str)
+            and hashlib.sha256(retrieval["excerpt"].encode("utf-8")).hexdigest()
+            == retrieval["excerpt_sha256"]
         ],
         "uninspected_methodology_sources": [
             {

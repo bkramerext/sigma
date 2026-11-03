@@ -15,7 +15,7 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -627,8 +627,10 @@ class ResearchExecutionRequest(OpenRequest):
 
 class ResearchLimitsRequest(OpenRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
-    research_rounds: int = Field(ge=1, le=5)
-    model_calls: int = Field(ge=2, le=120)
+    research_rounds: int = Field(ge=1, le=60)
+    turns_per_round: int | None = Field(default=None, ge=1, le=20)
+    scheduler_version: Literal[2] | None = None
+    model_calls: int = Field(ge=2, le=2400)
     session_duration_minutes: int | None = Field(
         ge=1, le=research_sessions.MAX_SESSION_DURATION_MINUTES
     )
@@ -636,6 +638,14 @@ class ResearchLimitsRequest(OpenRequest):
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
     maximum_input_tokens_per_session: int | None = Field(default=None, ge=4096, le=1_000_000)
     max_concurrent_sessions: int | str = "1"
+
+    @model_validator(mode="after")
+    def validate_legacy_call_ceiling(self) -> "ResearchLimitsRequest":
+        # Explicit legacy callers retain their historical 120-call API bound.
+        # Version-2 budgets are derived from rounds and paired turns instead.
+        if self.scheduler_version is None and self.model_calls > 120:
+            raise ValueError("Legacy model call maximum must be 120 or fewer")
+        return self
 
 
 class PaperGenerateRequest(OpenRequest):
@@ -1011,16 +1021,26 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
 
 @app.get("/api/projects/research-limits")
 def research_limits_view(path: str):
-    limits = research_sessions.get_limits(path)
+    limits = research_sessions._new_session_limits(research_sessions.get_limits(path))
     return {**limits, "max_concurrent_sessions": str(limits["max_concurrent_sessions"])}
 
 
 @app.put("/api/projects/research-limits")
 def research_limits_update(body: ResearchLimitsRequest):
+    if (body.scheduler_version is None) != (body.turns_per_round is None):
+        raise ProjectError("Scheduler version and turns per round must be saved together")
     limits = research_sessions.save_limits(
         body.path,
         {
             "research_rounds": body.research_rounds,
+            **(
+                {
+                    "scheduler_version": body.scheduler_version,
+                    "turns_per_round": body.turns_per_round,
+                }
+                if body.scheduler_version is not None
+                else {}
+            ),
             "model_calls": body.model_calls,
             "session_duration_minutes": body.session_duration_minutes,
             "output_tokens_per_call": body.output_tokens_per_call,

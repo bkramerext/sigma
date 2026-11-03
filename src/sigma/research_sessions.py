@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
@@ -66,7 +67,11 @@ from sigma.research_epistemics import (
     verification_label,
 )
 from sigma.research_feedback import ComputationFeedback, validate_feedback
-from sigma.research_method_sources import methodology_digest, select_method_sources
+from sigma.research_method_sources import (
+    methodology_digest,
+    retrieval_readiness_errors,
+    select_method_sources,
+)
 from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
@@ -851,6 +856,27 @@ def _new_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
         "turns_per_round": 3,
         "model_calls": 18,
     }
+
+
+def _session_start_limits(
+    stored: dict[str, Any], expected: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Bind a new v2 browser start to its saved, versioned research limits.
+
+    Historical v1 callers remain explicit legacy callers; saved session records
+    are never rewritten. The UI uses the same projection for its confirmation.
+    """
+    paired = stored.get("scheduler_version") == 2 or (
+        isinstance(expected, dict) and expected.get("scheduler_version") == 2
+    )
+    limits = _validate_limits(_new_session_limits(stored) if paired else stored)
+    if isinstance(expected, dict) and expected.get("scheduler_version") == 2:
+        for field in ("scheduler_version", "research_rounds", "turns_per_round", "model_calls"):
+            if expected.get(field) != limits.get(field):
+                raise ProjectError(
+                    "Research limits changed since confirmation; reopen session settings"
+                )
+    return limits
 
 
 def _paired_call_limit(limits: dict[str, Any], enabled_count: int) -> int:
@@ -3609,6 +3635,35 @@ def _transient_failure_kind(exc: Exception) -> str | None:
     return None
 
 
+def _supplied_peer_artifact_ids(context: dict[str, Any]) -> set[str]:
+    """Only selected, non-pointer peer extracts may be cited as peer evidence."""
+    return {
+        item["artifact_id"]
+        for item in context.get("other_strategy_evidence", [])
+        if isinstance(item, dict)
+        and isinstance(item.get("artifact_id"), str)
+        and item.get("evidence_availability") != "pointer_only_original_not_supplied"
+    }
+
+
+def _validate_obligation_review_basis(context: dict[str, Any], review: dict[str, Any]) -> None:
+    """Reject exact unsupported artifact/step IDs; peer provenance stays explicit."""
+    supplied_artifacts = set(context.get("context_artifact_ids", []))
+    supplied_artifacts.update(context.get("prior_session_artifact_ids", []))
+    if context.get("scheduler_version") == 2:
+        supplied_artifacts.update(_supplied_peer_artifact_ids(context))
+    current_step = context.get("investigator_step_id")
+    supplied_steps = {current_step} if isinstance(current_step, str) else set()
+    missing_artifacts = sorted(set(review["basis_artifact_ids"]) - supplied_artifacts)
+    missing_steps = sorted(set(review["basis_step_ids"]) - supplied_steps)
+    if missing_artifacts or missing_steps:
+        raise ProjectError(
+            "Skeptic obligation_reviews cited evidence not selected into its context: "
+            f"obligation_id={review['obligation_id']}; "
+            f"basis_artifact_ids={missing_artifacts[:5]}; basis_step_ids={missing_steps[:5]}"
+        )
+
+
 def _research_schema(model: type[BaseModel]) -> dict[str, Any]:
     """Normalize every object in the provider wire schema, including $defs.
 
@@ -3692,7 +3747,11 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + " Methodology reference URLs alone are uninspected pointers; only explicitly frozen retrieved excerpts in context are inspected source text. Never claim access beyond those exact excerpts. "
         + " Keep responses compact: do not duplicate open obligations or lengthy source text; "
         "retain the essential derivation and uncertainty, and fill every required JSON field. "
-        + " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, basis_artifact_ids must be drawn only from context_artifact_ids or prior_session_artifact_ids, and basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
+        + (
+            " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, basis_artifact_ids may cite context_artifact_ids, prior_session_artifact_ids, or non-pointer other_strategy_evidence actually included in this request; identify peer evidence as unverified peer work, never as verified local proof. basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
+            if context.get("scheduler_version") == 2
+            else " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, basis_artifact_ids must be drawn only from context_artifact_ids or prior_session_artifact_ids, and basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
+        )
         + " For prior_session_failure_attempt_ids, use only the exact IDs supplied in that field; if no IDs are supplied, return an empty array. Never infer or invent attempt IDs. "
         + " For continuation_reviews, review only artifact IDs present in approved_continuation.sources. If no approved continuation sources are supplied, return an empty array; prior_artifacts alone do not authorize continuation reviews. "
         + " For approved_continuation, inspect every selected source and return continuation_reviews exactly once per artifact_id. Use treatment negative_constraint for saved local refutations, unverified_input or method_to_test for other sources; no prior assertion is a certified premise. 'changed_plan' requires a concrete next_test and rationale; this is self-reported, not independently verified. A local counterexample blocks reuse of that candidate as established, not the project. Do not defer or reject a recorded counterexample; a revised candidate must state the changed scope. Distinguish stale/resolved duties, finite checks and conjectures. Never infer proof from prior agreement. "
@@ -3871,22 +3930,38 @@ def _refresh_token_accounting(record: dict[str, Any]) -> None:
     steps = [step for step in record.get("steps", []) if isinstance(step, dict)]
     compiler = record.get("reference_compilation")
     if isinstance(compiler, dict):
-        if isinstance(compiler.get("token_usage"), dict):
-            steps = [
-                *steps,
+        history = compiler.get("attempts")
+        if isinstance(history, list) and history:
+            # Count every metered compiler attempt, including invalid outputs
+            # that were billed before a successful retry. Unknown attempts
+            # never become zero-cost by virtue of a later successful call.
+            for attempt in history:
+                if not isinstance(attempt, dict):
+                    steps.append({"status": "interrupted"})
+                elif attempt.get("usage_status") == "known" and isinstance(
+                    attempt.get("token_usage"), dict
+                ):
+                    steps.append({"status": "incomplete", "token_usage": attempt["token_usage"]})
+                elif attempt.get("usage_status") == "unknown":
+                    steps.append({"status": "interrupted"})
+            if compiler.get("status") in {"running", "interrupted"} and not any(
+                isinstance(item, dict) and item.get("usage_status") == "unknown" for item in history
+            ):
+                steps.append({"status": "interrupted"})
+        elif isinstance(compiler.get("token_usage"), dict):
+            # Legacy single-attempt snapshots remain readable.
+            steps.append(
                 {
                     "status": "completed"
                     if compiler.get("status") == "completed"
                     else "incomplete",
                     "token_usage": compiler["token_usage"],
-                },
-            ]
+                }
+            )
         elif compiler.get("status") in {"running", "interrupted"} or (
             compiler.get("usage_status") == "unknown"
         ):
-            # An uncertain compiler attempt retains a spend liability even
-            # when all subsequent Investigator/Skeptic turns report usage.
-            steps = [*steps, {"status": "interrupted"}]
+            steps.append({"status": "interrupted"})
     # A provider can complete and report billable tokens even when the
     # returned answer fails a local content/acknowledgment check. Include
     # these securely metered failed attempts, but never infer token usage
@@ -5847,7 +5922,7 @@ async def start_session(
             raise ProjectError(str(exc)) from exc
     # Provider preflight may suspend on remote I/O. Never hold an exclusive
     # project flock across awaits: concurrent endpoints can block the event loop.
-    _validate_limits(get_limits(view.path))
+    _session_start_limits(get_limits(view.path), expected_limits)
     credential = await auth_context()
     if credential["identity"] != expected_binding:
         raise ProjectError(
@@ -5865,7 +5940,7 @@ async def start_session(
             locked_view, _locked_guard = _snapshot(view.path)
             if locked_view.project.id != expected_project_id:
                 raise ProjectError("Project identity changed during research preflight")
-            limits = _validate_limits(get_limits(view.path))
+            limits = _session_start_limits(get_limits(view.path), expected_limits)
             runtime_limits = _effective_limits(limits)
             records = _all(view.path)
             existing = next(
@@ -6114,6 +6189,20 @@ async def start_session(
                 records,
                 fetch_content=True,
             )
+            # Pilot admission: every selected methodological reference must be
+            # actually retrieved and hash-verified before billable provider work.
+            strict_reference_acceptance = os.environ.get(
+                "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS", ""
+            ).strip().lower() in {"1", "true", "yes", "on"}
+            if strict_reference_acceptance:
+                reference_issues = retrieval_readiness_errors(record["research_method_sources"])
+                if reference_issues:
+                    raise ProjectError(
+                        "Research-reference admission blocked before provider dispatch: "
+                        + "; ".join(reference_issues)[:1600]
+                        + " Replace inaccessible references or repair source retrieval "
+                        "before this acceptance run."
+                    )
             record["research_method_sources"]["sha256"] = methodology_digest(
                 record["research_method_sources"]
             )
@@ -6126,6 +6215,7 @@ async def start_session(
             ).strip().lower() in {"1", "true", "yes", "on"}
             record["reference_compilation"] = {
                 "version": research_reference_compiler.VERSION,
+                "required_for_acceptance": strict_reference_acceptance,
                 "status": (
                     "disabled"
                     if not compilation_enabled
@@ -6136,17 +6226,20 @@ async def start_session(
                 "source_sha256": record["research_method_sources"]["sha256"],
                 "source_count": source_count,
                 "created_at": _now(),
+                "attempts": [],
             }
             if (
                 compilation_enabled
                 and source_count
                 and isinstance(record.get("hard_budget_ledger"), dict)
             ):
-                # One separately identified compilation call, not an Investigator/
-                # Skeptic turn. Existing total input and spend ceilings stay fixed.
+                # Up to three independent compiler attempts, never Investigator/
+                # Skeptic turns. Token and cost ceilings remain unchanged;
+                # every attempted call still reserves and settles separately.
                 increase_call_limit(
                     record["hard_budget_ledger"],
-                    int(record["hard_budget_ledger"]["call_limit"]) + 1,
+                    int(record["hard_budget_ledger"]["call_limit"])
+                    + research_reference_compiler.MAX_COMPILATION_ATTEMPTS,
                 )
             if compilation_enabled and source_count:
                 _event(
@@ -6741,6 +6834,7 @@ async def control_session(
                         cloud_research.mark_call_unknown(record["id"], attempt_id)
                     except cloud_research.CloudResearchUnavailable as exc:
                         raise ProjectError(str(exc)) from exc
+                _record_unknown_compiler_attempt(compiler)
                 compiler["status"] = "fallback"
                 if not isinstance(compiler.get("token_usage"), dict):
                     compiler["usage_status"] = "unknown"
@@ -7226,8 +7320,18 @@ async def _call_provider(
         not set(item.get("basis_artifact_ids", [])) <= supplied_reasoning_sources
         for item in reasoning_items
     ):
+        missing = sorted(
+            {
+                artifact_id
+                for item in reasoning_items
+                for artifact_id in item.get("basis_artifact_ids", [])
+                if artifact_id not in supplied_reasoning_sources
+            }
+        )
+        field = "reasoning_steps" if role == "investigator" else "reasoning_assessments"
         raise ProjectError(
-            "Research reasoning cited an artifact not supplied in this call's context"
+            f"{role} {field}.basis_artifact_ids cited evidence not supplied in this call's "
+            f"context: {missing[:5]}"
         )
     if role == "skeptic":
         validate_feedback(
@@ -7301,20 +7405,7 @@ async def _call_provider(
                     "Skeptic returned an obligation review absent from the supplied ledger"
                 )
             reviewed_obligations.add(obligation_id)
-            supplied_sources = set(context.get("context_artifact_ids", []))
-            supplied_sources.update(context.get("prior_session_artifact_ids", []))
-            supplied_steps = (
-                {context["investigator_step_id"]}
-                if isinstance(context.get("investigator_step_id"), str)
-                else set()
-            )
-            if (
-                not set(review["basis_artifact_ids"]) <= supplied_sources
-                or not set(review["basis_step_ids"]) <= supplied_steps
-            ):
-                raise ProjectError(
-                    "Skeptic cited obligation evidence not selected into its context"
-                )
+            _validate_obligation_review_basis(context, review)
             if review["status"] in {"addressed", "superseded", "retracted"} and not (
                 review["basis_artifact_ids"] or review["basis_step_ids"]
             ):
@@ -7618,6 +7709,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             )
     context: dict[str, Any] = {
         "problem": record["problem"],
+        **({"scheduler_version": 2} if record.get("scheduler_version") == 2 else {}),
         "investigation_type": record.get("investigation_type"),
         "research_method_version": record.get("research_method_version") or "phase2-i2-v2",
         "methodology_source_catalog_version": (
@@ -13627,13 +13719,42 @@ def _optional_reference_compilation_headroom(
     return True
 
 
-async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
-    """One durable, non-replayed AI method-compilation stage before research.
+def _record_unknown_compiler_attempt(stage: dict[str, Any]) -> None:
+    """Audit an in-flight compiler checkpoint that cannot safely be replayed."""
+    attempts = stage.setdefault("attempts", [])
+    if not isinstance(attempts, list):
+        raise ProjectError("Saved compiler attempt history is invalid.")
+    number = stage.get("attempt_number")
+    if type(number) is not int or number < 1:
+        number = len(attempts) + 1
+    if any(isinstance(a, dict) and a.get("number") == number for a in attempts):
+        return
+    attempts.append(
+        {
+            "number": number,
+            "started_at": stage.get("attempt_started_at") or stage.get("started_at"),
+            "finished_at": _now(),
+            "status": "unknown",
+            "failure_type": "interrupted_before_settlement",
+            "provider_http_status": stage.get("provider_http_status"),
+            "provider_error_code": stage.get("provider_error_code"),
+            "validation_failure": stage.get("validation_failure"),
+            "token_usage": stage.get("token_usage"),
+            "usage_status": "unknown",
+            "retry_decision": "uncertain_delivery_or_billing",
+            "retry_delay_seconds": None,
+            "reason": "Provider delivery or billing was not independently settled.",
+            "request_sha256": stage.get("request_sha256"),
+        }
+    )
 
-    This is an additional metered call, not one of the Investigator/Skeptic
-    protocol slots. Its own persisted state and write-ahead spend reservation
-    survive worker restarts. Pre-compiler sessions remain readable but must
-    start over rather than silently continue with legacy method prompts.
+
+async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
+    """Durable, bounded compiler attempts before research.
+
+    Each of at most three calls has its own saved reservation and settlement.
+    Unknown delivery or usage is never replayed. Compiler attempts remain
+    outside Investigator/Skeptic turn quotas.
     """
     state_lock = _session_state_lock(session_id)
     async with state_lock:
@@ -13676,6 +13797,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             return True
         if state in {"running", "interrupted"}:
             # Unknown provider delivery must never be automatically replayed.
+            _record_unknown_compiler_attempt(compilation)
             compilation["status"] = "interrupted"
             compilation["reason"] = (
                 "Reference compilation may have reached the provider; it was not retried."
@@ -13767,7 +13889,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             else research_reference_compiler.OUTPUT_TOKEN_BOUND
         )
         if output_bound is None:
-            compilation["status"] = "skipped"
+            compilation["status"] = "fallback" if compilation.get("attempts") else "skipped"
             compilation["reason"] = "No safe output-token bound for the compiler model."
             _event(record, "references.compilation.skipped", compilation["reason"])
             _save(path, record)
@@ -13808,10 +13930,31 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 compiler_output_bound=output_bound,
             )
         ):
-            compilation["status"] = "skipped"
+            compilation["status"] = "fallback" if compilation.get("attempts") else "skipped"
             compilation["reason"] = (
-                "Research turns take priority over optional reference compilation."
+                "Compiler retry could not be funded without compromising research turns; "
+                "frozen original references are being used."
+                if compilation.get("attempts")
+                else "Research turns take priority over optional reference compilation."
             )
+            if isinstance(compilation.get("attempts"), list) and compilation["attempts"]:
+                compilation["attempts"].append(
+                    {
+                        "number": len(compilation["attempts"]) + 1,
+                        "started_at": _now(),
+                        "finished_at": _now(),
+                        "status": "not_dispatched",
+                        "failure_type": "preflight_budget_exhausted",
+                        "provider_http_status": None,
+                        "provider_error_code": None,
+                        "validation_failure": None,
+                        "token_usage": None,
+                        "usage_status": "not_dispatched",
+                        "retry_decision": "budget_exhausted",
+                        "retry_delay_seconds": None,
+                        "reason": compilation["reason"],
+                    }
+                )
             _event(record, "references.compilation.skipped", compilation["reason"])
             _save(path, record)
             return True
@@ -13827,13 +13970,47 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 > limit
             )
         ):
-            compilation["status"] = "skipped"
-            compilation["reason"] = "No safe cost reservation for compilation."
+            compilation["status"] = "fallback" if compilation.get("attempts") else "skipped"
+            compilation["reason"] = (
+                "No safe cost reservation for compilation; frozen notes retained."
+            )
+            if isinstance(compilation.get("attempts"), list) and compilation["attempts"]:
+                compilation["attempts"].append(
+                    {
+                        "number": len(compilation["attempts"]) + 1,
+                        "started_at": _now(),
+                        "finished_at": _now(),
+                        "status": "not_dispatched",
+                        "failure_type": "cost_budget_exhausted",
+                        "provider_http_status": None,
+                        "provider_error_code": None,
+                        "validation_failure": None,
+                        "token_usage": None,
+                        "usage_status": "not_dispatched",
+                        "retry_decision": "budget_exhausted",
+                        "retry_delay_seconds": None,
+                        "reason": compilation["reason"],
+                    }
+                )
             _event(
                 record,
                 "references.compilation.skipped",
                 "Reference compilation skipped within spending limits; original references retained.",
             )
+            _save(path, record)
+            return True
+        previous_attempts = compilation.get("attempts", [])
+        if not isinstance(previous_attempts, list):
+            compilation["status"] = "fallback"
+            compilation["reason"] = (
+                "Saved compiler attempt diagnostics are invalid; frozen notes retained."
+            )
+            _save(path, record)
+            return True
+        attempt_number = len(previous_attempts) + 1
+        if attempt_number > research_reference_compiler.MAX_COMPILATION_ATTEMPTS:
+            compilation["status"] = "fallback"
+            compilation["reason"] = "Reference compilation reached its three-attempt safety limit."
             _save(path, record)
             return True
         attempt_id = str(uuid4())
@@ -13847,10 +14024,30 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     request_body=encoded,
                     output_token_reservation=output_bound,
                 )
-            except BudgetExceeded:
-                compilation["status"] = "skipped"
+            except BudgetExceeded as exc:
+                compilation["status"] = "fallback" if compilation.get("attempts") else "skipped"
                 compilation["reason"] = (
-                    "Compiling references would exceed the frozen research budget."
+                    "Compiler retry could not be funded; using original frozen references."
+                    if compilation.get("attempts")
+                    else "Compiling references would exceed the frozen research budget."
+                )
+                compilation["failure_type"] = "budget_exhausted"
+                compilation.setdefault("attempts", []).append(
+                    {
+                        "number": attempt_number,
+                        "started_at": _now(),
+                        "finished_at": _now(),
+                        "status": "not_dispatched",
+                        "failure_type": "budget_exhausted",
+                        "validation_failure": None,
+                        "provider_http_status": None,
+                        "provider_error_code": None,
+                        "token_usage": None,
+                        "usage_status": "not_dispatched",
+                        "retry_decision": "budget_exhausted",
+                        "retry_delay_seconds": None,
+                        "reason": str(exc)[:320],
+                    }
                 )
                 _event(record, "references.compilation.skipped", compilation["reason"])
                 _save(path, record)
@@ -13859,10 +14056,21 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         # hosted SQLite reservation. A crash between the two durable stores
         # must never create an untraceable funded provider attempt.
         hosted = cloud_research.billing_enabled()
+        for key in (
+            "provider_http_status",
+            "provider_error_code",
+            "validation_failure",
+            "failure_type",
+            "token_usage",
+            "usage_status",
+        ):
+            compilation.pop(key, None)
         compilation.update(
             {
                 "status": "running",
-                "started_at": _now(),
+                "started_at": compilation.get("started_at") or _now(),
+                "attempt_started_at": _now(),
+                "attempt_number": attempt_number,
                 "attempt_id": attempt_id,
                 "request_sha256": hashlib.sha256(encoded).hexdigest(),
                 "token_reservation": token_reserve,
@@ -13878,7 +14086,10 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             )
         record["status"] = "running"
         record["current_action"] = "Compiling research references"
-        record["message"] = "Compiling selected references once before Investigator/Skeptic turns."
+        record["message"] = (
+            f"Compiling selected references (attempt {attempt_number} of "
+            f"{research_reference_compiler.MAX_COMPILATION_ATTEMPTS})."
+        )
         _event(record, "references.compilation.started", record["message"])
         _save(path, record)
         if hosted:
@@ -13907,8 +14118,30 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                         0.0,
                         float(record.get("estimated_cost_reserved_usd", 0.0)) - quote,
                     )
-                compilation["status"] = "skipped"
-                compilation["reason"] = str(exc)[:400]
+                compilation["status"] = "fallback" if compilation.get("attempts") else "skipped"
+                compilation["reason"] = (
+                    "Compiler retry funding was rejected; frozen original references retained. "
+                    + str(exc)[:240]
+                )
+                compilation["failure_type"] = "funding_rejected"
+                compilation.setdefault("attempts", []).append(
+                    {
+                        "number": attempt_number,
+                        "started_at": compilation.get("attempt_started_at"),
+                        "finished_at": _now(),
+                        "status": "not_dispatched",
+                        "failure_type": "funding_rejected",
+                        "provider_http_status": None,
+                        "provider_error_code": None,
+                        "validation_failure": None,
+                        "token_usage": None,
+                        "usage_status": "not_dispatched",
+                        "retry_decision": "funding_rejected",
+                        "retry_delay_seconds": None,
+                        "reason": str(exc)[:320],
+                        "request_sha256": compilation.get("request_sha256"),
+                    }
+                )
                 compilation["budget_reservation"] = None
                 compilation["token_reservation"] = 0
                 compilation["cost_reserve"] = 0.0
@@ -13928,6 +14161,10 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
     call_error: str | None = None
     provider_http_status: int | None = None
     provider_error_code: str | None = None
+    provider_response_status: str | None = None
+    validation_failure: str | None = None
+    retry_after_seconds: float | None = None
+    retry_delay_seconds: float | None = None
     rejected = False
     try:
         timeout_seconds = min(120.0, _call_timeout_seconds(record))
@@ -13958,6 +14195,27 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
                     raise ProjectError("Reference compiler response exceeded the 8 MB safety bound")
             provider_http_status = response.status_code
+            if response.status_code == 429:
+                # Respect numeric or HTTP-date Retry-After. An unparseable
+                # header is a hard no-retry rather than a rate-limit bypass.
+                retry_after = response.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        retry_after_seconds = max(0.0, float(retry_after))
+                        if not math.isfinite(retry_after_seconds):
+                            raise ValueError("nonfinite_retry_after")
+                    except ValueError:
+                        try:
+                            retry_after_seconds = max(
+                                0.0,
+                                (
+                                    parsedate_to_datetime(retry_after) - datetime.now(UTC)
+                                ).total_seconds(),
+                            )
+                        except (ValueError, TypeError, OverflowError):
+                            retry_after_seconds = (
+                                research_reference_compiler.MAX_RETRY_AFTER_SECONDS + 1
+                            )
             if response.status_code != 200:
                 # Persist safe error metadata, never raw provider bodies or
                 # user/source content. This makes known fallback diagnosable.
@@ -13985,7 +14243,11 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 )
             else:
                 raw = json.loads(wire)
+        provider_response_status = (
+            str(raw.get("status", ""))[:40] if isinstance(raw, dict) else None
+        )
         if not isinstance(raw, dict) or raw.get("status") != "completed":
+            validation_failure = "response_not_completed"
             raise ProjectError("Reference compiler did not complete.")
         texts = [
             part["text"]
@@ -13997,12 +14259,23 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             and isinstance(part.get("text"), str)
         ]
         if len(texts) != 1:
+            validation_failure = "expected_single_output_text"
             raise ProjectError("Reference compiler returned an invalid response.")
-        data = json.loads(texts[0])
+        try:
+            data = json.loads(texts[0])
+        except (ValueError, TypeError) as exc:
+            validation_failure = "output_text_not_json"
+            raise ProjectError("Reference compiler output text was not JSON.") from exc
         frozen_sources = record["research_method_sources"]["sources"]
-        compiled = research_reference_compiler.validate_result(data, frozen_sources)
+        try:
+            compiled = research_reference_compiler.validate_result(data, frozen_sources)
+        except (ProjectError, KeyError, TypeError, ValueError) as exc:
+            validation_failure = str(exc)[:240]
+            raise
+
     except (Exception, asyncio.CancelledError) as exc:
-        # No automatic retry: provider delivery/usage can be uncertain.
+        # A retry must be explicitly authorized after the attempt settles,
+        # not based on exception type alone (delivery could be uncertain).
         call_error = type(exc).__name__
         if isinstance(exc, asyncio.CancelledError):
             raise
@@ -14086,13 +14359,39 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     float(latest.get("estimated_cost_usd", 0.0)) + estimated, 9
                 )
             ledger_blocked = isinstance(ledger, dict) and bool(ledger.get("blocked_reason"))
-            metering_required = isinstance(ledger, dict) or hosted
-            if (
+            ledger_entry = (
+                next(
+                    (item for item in ledger["calls"] if item.get("call_id") == attempt_id),
+                    None,
+                )
+                if isinstance(ledger, dict)
+                else None
+            )
+            billing_settled = (
+                cloud_settled
+                and not ledger_blocked
+                and (ledger_entry is None or ledger_entry.get("status") in {"settled", "rejected"})
+            )
+            usage_status = (
+                "rejected"
+                if rejected and billing_settled
+                else "known"
+                if usage is not None and estimated is not None and billing_settled
+                else "unknown"
+            )
+            stage["usage_status"] = usage_status
+            if validation_failure is not None:
+                stage["validation_failure"] = validation_failure
+            if provider_response_status:
+                stage["provider_response_status"] = provider_response_status
+            metering_required = isinstance(ledger, dict) or hosted or paid
+            completed_ok = (
                 compiled is not None
                 and call_error is None
-                and not ledger_blocked
+                and billing_settled
                 and (estimated is not None or not metering_required)
-            ):
+            )
+            if completed_ok and compiled is not None:
                 stage.update(compiled)
                 stage["status"] = "completed"
                 stage["reason"] = (
@@ -14104,29 +14403,81 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     f"Compiled references: {len(compiled['selected_source_ids'])} retained, "
                     f"{len(compiled['omitted_source_ids'])} omitted.",
                 )
+                retry_decision = "completed"
             else:
                 stage["status"] = (
                     "fallback"
-                    if cloud_settled and (estimated is not None or rejected) and not ledger_blocked
+                    if billing_settled and (estimated is not None or rejected)
                     else "interrupted"
                 )
                 provider_detail = (
-                    f" (HTTP {provider_http_status}"
+                    f"HTTP {provider_http_status}"
                     + (f"; code {provider_error_code}" if provider_error_code else "")
-                    + ")"
-                    if provider_http_status is not None and provider_http_status != 200
-                    else ""
+                    if provider_http_status is not None
+                    else "provider status unavailable"
                 )
-                stage["reason"] = (
-                    "Compilation unavailable after a known provider response"
-                    + provider_detail
-                    + "; using original references."
-                    if stage["status"] == "fallback"
-                    else "Compilation outcome or usage is uncertain. The call was not retried."
+                failure_detail = (
+                    f"validation: {validation_failure}"
+                    if validation_failure is not None
+                    else provider_detail
+                    if provider_http_status != 200
+                    else call_error or "unknown response/usage"
                 )
                 stage["failure_type"] = call_error or "unknown_usage_or_budget"
-                _event(latest, "references.compilation.failed", stage["reason"])
-            stage["finished_at"] = _now()
+                stage["reason"] = (
+                    f"Reference compilation failed on attempt {attempt_number} "
+                    f"({failure_detail}); original frozen references retained."
+                    if stage["status"] == "fallback"
+                    else f"Reference compilation delivery, usage or settlement uncertain "
+                    f"on attempt {attempt_number} ({failure_detail}). Not retried; "
+                    "the original frozen references remain available."
+                )
+                retry_decision, retry_delay = research_reference_compiler.retry_plan(
+                    attempt_number=attempt_number,
+                    http_status=provider_http_status,
+                    validation_failure=validation_failure,
+                    usage_status=usage_status,
+                    billing_settled=billing_settled,
+                    retry_after_seconds=retry_after_seconds,
+                )
+                if latest["status"] in {"stopped", "paused", "failed", "ended", "completed"}:
+                    retry_decision = "stop_requested"
+                if retry_decision == "retry" and stage["status"] == "fallback":
+                    # Do not leave a completed-looking fallback between attempts.
+                    # The next call will independently check stop, account,
+                    # budgets, and funding before any dispatch.
+                    stage["status"] = "pending"
+                    stage["reason"] = (
+                        f"Compilation attempt {attempt_number} failed "
+                        f"({failure_detail}); retry {attempt_number + 1} is pending."
+                    )
+                    retry_delay_seconds = retry_delay
+                    _event(latest, "references.compilation.retry", stage["reason"])
+                else:
+                    _event(latest, "references.compilation.failed", stage["reason"])
+            attempts = stage.setdefault("attempts", [])
+            if not isinstance(attempts, list):
+                raise ProjectError("Reference compiler attempt history is invalid.")
+            attempts.append(
+                {
+                    "number": attempt_number,
+                    "started_at": stage.get("attempt_started_at"),
+                    "finished_at": _now(),
+                    "status": "completed" if completed_ok else "rejected" if rejected else "failed",
+                    "failure_type": None if completed_ok else stage.get("failure_type"),
+                    "provider_http_status": provider_http_status,
+                    "provider_error_code": provider_error_code,
+                    "provider_response_status": provider_response_status,
+                    "validation_failure": validation_failure,
+                    "token_usage": usage,
+                    "usage_status": usage_status,
+                    "retry_decision": retry_decision,
+                    "retry_delay_seconds": retry_delay_seconds,
+                    "reason": stage["reason"],
+                    "request_sha256": stage.get("request_sha256"),
+                }
+            )
+            stage["finished_at"] = _now() if stage["status"] != "pending" else None
             if latest["status"] not in {"stopped", "paused", "failed", "ended", "completed"}:
                 if stage["status"] == "interrupted":
                     latest["status"] = "paused"
@@ -14134,11 +14485,40 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     latest["message"] = stage["reason"]
                 else:
                     latest["status"] = "queued"
-                    latest["current_action"] = "References ready"
-                    latest["message"] = "Reference preparation finished. Research may proceed."
+                    latest["current_action"] = (
+                        "Compiling research references"
+                        if stage["status"] == "pending"
+                        else "References ready"
+                    )
+                    latest["message"] = (
+                        stage["reason"]
+                        if stage["status"] == "pending"
+                        else "Reference preparation finished. Research may proceed."
+                    )
             latest["updated_at"] = _now()
             _save(path, latest)
+    if retry_delay_seconds is not None:
+        # A stop during the wait is honored by the checkpoint re-read.
+        await asyncio.sleep(retry_delay_seconds)
+        return await _ensure_reference_compilation(session_id, path)
     return latest["status"] in {"queued", "running"}
+
+
+def _strict_compilation_block_reason(compilation: Any) -> str | None:
+    """A pilot that required references cannot quietly use uncompiled notes."""
+    if not isinstance(compilation, dict) or compilation.get("required_for_acceptance") is not True:
+        return None
+    if compilation.get("status") == "completed":
+        return None
+    status = str(compilation.get("status") or "unknown")[:50]
+    reason = str(compilation.get("reason") or "No successful reference compilation was saved.")[
+        :400
+    ]
+    return (
+        f"Research was not started: required reference compilation is {status}. "
+        f"{reason} Review Outcome → Research References, correct the cause, "
+        "and start a new session. No Investigator or Skeptic call was dispatched."
+    )
 
 
 async def _worker(session_id: str, path: str) -> None:
@@ -14163,6 +14543,33 @@ async def _worker(session_id: str, path: str) -> None:
         if initial.get("strategy_runs"):
             if not await _ensure_reference_compilation(session_id, path):
                 return
+            # Keep this gate after the final settled compilation attempt,
+            # before any Investigator wave, including after worker restarts.
+            async with _session_state_lock(session_id):
+                latest = _read(path, session_id)
+                blocked = _strict_compilation_block_reason(latest.get("reference_compilation"))
+                if blocked:
+                    if latest["status"] not in {
+                        "paused",
+                        "stopped",
+                        "ended",
+                        "completed",
+                        "failed",
+                    }:
+                        latest["status"] = "paused"
+                        latest["current_action"] = "Paused · reference compilation required"
+                        latest["message"] = blocked
+                        latest["stopped_at"] = latest.get("stopped_at") or _now()
+                        for branch in latest.get("strategy_runs", []):
+                            if branch.get("status") in {"queued", "running"}:
+                                branch["status"] = "paused"
+                                branch["current_action"] = "Paused · reference compilation"
+                                branch["reason"] = blocked
+                        latest["outcome"] = _outcome(latest)
+                        latest["updated_at"] = _now()
+                        _event(latest, "references.compilation.acceptance_blocked", blocked)
+                        _save(path, latest)
+                    return
             await _portfolio_worker(session_id, path)
             return
         while True:

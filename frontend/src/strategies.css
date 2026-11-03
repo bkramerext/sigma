@@ -753,6 +753,11 @@
 .workspace-page .outcome-subsection-content h4 { margin: 13px 0 6px; color: #ead0ae; font-size: 13px; }
 .workspace-page .outcome-subsection-content h5 { margin: 8px 0 5px; color: #d7b585; font-size: 12px; }
 .workspace-page .outcome-subsection-content p { margin: 5px 0; }
+.workspace-page .outcome-reference-compilation .reference-compilation-degraded { border-left: 3px solid #c18b59; background: #2b211c; color: #f0cda9; padding: 7px 9px; margin: 8px 0; }
+.workspace-page .reference-compilation-diagnostics { margin: 9px 0; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.workspace-page .reference-compilation-diagnostics ol { margin: 5px 0; padding-left: 20px; }
+.workspace-page .reference-compilation-diagnostics li { margin: 3px 0 7px; }
+.workspace-page .reference-compilation-diagnostics li small { display: block; color: #b8c8d3; }
 .workspace-page .outcome-subsection-intro,
 .workspace-page .outcome-unavailable { color: #9eacb7; }
 .workspace-page .outcome-integrity-note { color: #d6b88f; }
