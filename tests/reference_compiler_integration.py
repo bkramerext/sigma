@@ -27,13 +27,19 @@ from sigma import research_sessions
 
 
 async def verify_compilation(
-    path: Path, *, multiple_strategies: bool = False, compiler_rejection: bool = False,
-    skip_compiler: bool = False
+    path: Path,
+    *,
+    multiple_strategies: bool = False,
+    compiler_rejection: bool = False,
+    skip_compiler: bool = False,
 ) -> None:
     view, strategy, credential, config = await fixture.setup(path)
     limits = research_sessions.get_limits(str(path))
     rounds = 2 if multiple_strategies else 1
-    limits.update(research_rounds=rounds, model_calls=2 * rounds * (2 if multiple_strategies else 1))
+    limits.update(
+        research_rounds=rounds,
+        model_calls=2 * rounds * (2 if multiple_strategies else 1),
+    )
     research_sessions.save_limits(str(path), limits)
     strategy_ids = [strategy.id]
     if multiple_strategies:
@@ -120,8 +126,11 @@ async def verify_compilation(
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(research_sessions, "select_method_sources", return_value=source_catalog),
         (
-            patch.object(research_sessions, "_optional_reference_compilation_headroom", return_value=False)
-            if skip_compiler else nullcontext()
+            patch.object(
+                research_sessions, "_optional_reference_compilation_headroom", return_value=False
+            )
+            if skip_compiler
+            else nullcontext()
         ),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
@@ -164,7 +173,9 @@ async def verify_compilation(
     assert {step["role"] for step in finished["steps"]} == {"investigator", "skeptic"}
     saved = research_sessions._read(str(path), started["id"])
     stage = saved["reference_compilation"]
-    expected_status = "skipped" if skip_compiler else "fallback" if compiler_rejection else "completed"
+    expected_status = (
+        "skipped" if skip_compiler else "fallback" if compiler_rejection else "completed"
+    )
     assert stage["status"] == expected_status, stage
     assert stage["source_sha256"] == saved["research_method_sources"]["sha256"]
     assert stage["status"] != "pending"
@@ -197,7 +208,9 @@ async def verify_compilation(
         )
     ledger = saved.get("hard_budget_ledger")
     if isinstance(ledger, dict):
-        assert len(ledger["calls"]) == (0 if skip_compiler else 1) + 2 * expected_roles, ledger["calls"]
+        assert (
+            len(ledger["calls"]) == (0 if skip_compiler else 1) + 2 * expected_roles
+        ), ledger["calls"]
         assert all(item["status"] in {"settled", "rejected"} for item in ledger["calls"])
 
     if not compiler_rejection and not skip_compiler:
@@ -218,6 +231,24 @@ async def verify_compilation(
             research_sessions, "_read", return_value={**saved, "status": "queued"}
         ):
             assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
+        assert calls == before_calls
+
+        # An unknown in-flight compiler attempt cannot be retried on recovery.
+        interrupted = {
+            **saved,
+            "status": "queued",
+            "reference_compilation": {**stage, "status": "running"},
+        }
+        with (
+            patch.object(research_sessions, "_read", return_value=interrupted),
+            patch.object(research_sessions, "_save") as persisted,
+        ):
+            assert not await research_sessions._ensure_reference_compilation(
+                started["id"], str(path)
+            )
+        assert interrupted["status"] == "paused"
+        assert interrupted["reference_compilation"]["status"] == "interrupted"
+        persisted.assert_called_once()
         assert calls == before_calls
 
 
@@ -327,7 +358,10 @@ async def main() -> None:
         await verify_compilation(root / "multi.sigma", multiple_strategies=True)
         await verify_compilation(root / "fallback.sigma", compiler_rejection=True)
         await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
-    print("PASS: pre-fanout barrier, two-round strategy reuse, frozen reload, funded and failed fallback")
+    print(
+        "PASS: pre-fanout barrier, two-round strategy reuse, frozen reload, "
+        "funded and failed fallback"
+    )
 
 
 if __name__ == "__main__":
