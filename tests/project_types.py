@@ -223,6 +223,14 @@ def main() -> None:
             assert normalized_snapshot is not None
             assert normalized_snapshot["name"] == "Field Notes"
             assert "description" not in normalized_snapshot
+            # Preferences are isolated to the currently selected user workspace.
+            assert project_types.common_research_references() == ()
+            project_types.replace_custom_types(
+                [created.record()],
+                expected_revision=project_types.catalog_revision(),
+                reference_preferences_update={},
+            )
+            assert len(project_types.common_research_references()) == 2
             for invalid in (
                 {"name": "field notes", "scope": "duplicate", "icon": _placeholder()},
                 {
@@ -256,6 +264,8 @@ def main() -> None:
                     raise AssertionError("invalid custom project type was accepted")
         with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(second)}):
             assert project_types.custom_types() == []
+            assert project_types.common_research_references() == ()
+            assert project_types.reference_preferences() == project_types._default_reference_preferences()
 
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
