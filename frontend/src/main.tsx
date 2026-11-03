@@ -4877,6 +4877,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <p>Close this project to choose another directory.</p>
   </> : <p className="intro">Opening project…</p>}</div></WorkspaceFrame>;
   const project = view.project;
+  const headingStrategies = project.strategies.filter(strategy => !strategy.removed_at);
+  const headingDisabledCount = headingStrategies.filter(strategy => !strategy.enabled).length;
   void typeCatalogRevision;
   const savedTypeSnapshot = project.project_type_snapshot;
   const missingProjectType = !projectTypeCache.some(item => item.id === project.investigation_type);
@@ -4994,7 +4996,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
           <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={() => { if (guest) setGuestAiNotice('AI features require a signed-in account. Your guest project remains available.'); else startGeneration(); }}/>
-          <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
+          <p className="section-count">{headingStrategies.length} strateg{headingStrategies.length === 1 ? 'y' : 'ies'}{headingDisabledCount > 0 ? `, ${headingDisabledCount} disabled` : ''}</p>
         </div>
       </header>
       {guestAiNotice && <p className="hint guest-ai-notice" role="status">{guestAiNotice}</p>}
