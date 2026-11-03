@@ -4308,7 +4308,7 @@ async def test_session_deadline_bounds_generous_call_timeout(path: Path):
 
 async def test_limits_snapshot_and_usage_cost(path: Path):
     view, strategy, credential, config = await setup(path)
-    assert research_sessions.get_limits(str(path)) == research_sessions.DEFAULT_LIMITS
+    assert research_sessions.get_limits(str(path)) == research_sessions.NEW_DEFAULT_LIMITS
     limits = {
         **research_sessions.DEFAULT_LIMITS,
         "research_rounds": 1,
