@@ -14,10 +14,11 @@ export type ProjectTypeRecord = {
   behavior?: Record<string, boolean>;
 };
 
-type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode };
+type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode; initialOpenTypeId?: string | null };
 type Reference = { name: string; url: string };
 type ReferenceField = 'research_standards_references' | 'publication_standards_references';
 type ReferenceFields = Pick<ProjectTypeRecord, ReferenceField>;
+type ReferencePreferences = Record<string, Partial<Record<ReferenceField, string[]>>>;
 const titleCache = new Map<string, string | null>();
 const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
 const handledErrorHeaders = { 'X-Sigma-Error-Handled': 'true' };
@@ -119,7 +120,7 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   </div>;
 }
 
-export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
+export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLButtonElement>(null);
   const initialCustomIds = useRef<string[]>([]);
@@ -129,12 +130,14 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
   const [drafts, setDrafts] = useState<ProjectTypeRecord[]>([]);
   const [commonReferences, setCommonReferences] = useState<ReferenceFields | null>(null);
+  const [referencePreferences, setReferencePreferences] = useState<ReferencePreferences>({});
+  const [savedReferencePreferences, setSavedReferencePreferences] = useState<ReferencePreferences | null>(null);
   const [placeholderIcon, setPlaceholderIcon] = useState<ProjectTypeRecord['icon'] | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState('');
   const [error, setError] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(initialOpenTypeId);
   const [editingReferences, setEditingReferences] = useState<Set<string>>(() => new Set());
 
   function close() {
@@ -156,8 +159,11 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       icons: { placeholder: ProjectTypeRecord['icon'] };
       revision: string;
       common_references: ReferenceFields;
+      reference_preferences: ReferencePreferences;
     };
     setCommonReferences(data.common_references);
+    setReferencePreferences(data.reference_preferences ?? {});
+    setSavedReferencePreferences(structuredClone(data.reference_preferences ?? {}));
     setBuiltins(data.project_types.filter(item => !item.user_defined));
     const savedCustomTypes = data.project_types.filter(item => item.user_defined);
     setSavedDrafts(structuredClone(savedCustomTypes));
@@ -173,6 +179,46 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   function edit(id: string, patch: Partial<ProjectTypeRecord>) {
     setError('');
     setDrafts(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
+    // A changed or removed URL must not leave an invalid disabled-reference
+    // preference behind when the custom type is saved.
+    for (const field of ['research_standards_references', 'publication_standards_references'] as const) {
+      if (!patch[field]) continue;
+      const urls = new Set(patch[field].map(ref => ref.url));
+      setReferencePreferences(previous => {
+        const kept = (previous[id]?.[field] ?? []).filter(url => urls.has(url));
+        if (kept.length === (previous[id]?.[field] ?? []).length) return previous;
+        const owner = { ...previous[id], [field]: kept };
+        if (kept.length === 0) delete owner[field];
+        const next = { ...previous, [id]: owner };
+        if (!Object.keys(owner).length) delete next[id];
+        return next;
+      });
+    }
+  }
+  function referenceDisabled(owner: string, field: ReferenceField, url: string): boolean {
+    return referencePreferences[owner]?.[field]?.includes(url) ?? false;
+  }
+  function toggleReference(owner: string, field: ReferenceField, url: string) {
+    setError('');
+    setReferencePreferences(previous => {
+      const urls = previous[owner]?.[field] ?? [];
+      const updated = urls.includes(url) ? urls.filter(candidate => candidate !== url) : [...urls, url];
+      const fields: Partial<Record<ReferenceField, string[]>> = { ...previous[owner] };
+      if (updated.length) fields[field] = updated;
+      else delete fields[field];
+      const next = { ...previous, [owner]: fields };
+      if (!Object.keys(fields).length) delete next[owner];
+      return next;
+    });
+  }
+  function referenceToggle(owner: string, field: ReferenceField, reference: Reference) {
+    if (!reference.url.trim() || referenceUrlError(reference.url)) return null;
+    const disabled = referenceDisabled(owner, field, reference.url);
+    const action = disabled ? 'Enable' : 'Disable';
+    const label = field === 'research_standards_references' ? 'research' : 'publication';
+    return <button type="button" className="pt-reference-toggle" aria-pressed={disabled}
+      aria-label={`${action} ${label} reference ${reference.name || reference.url} for ${owner === 'common' ? 'all project types' : owner}`}
+      disabled={busy} onClick={() => toggleReference(owner, field, reference.url)}>{action}</button>;
   }
   const isDuplicateName = (item: ProjectTypeRecord) => {
     const normalized = item.name.normalize("NFKC").trim().toLocaleLowerCase();
@@ -248,7 +294,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
         confirmedRemovals[id] = usage.project_count;
         if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return;
       }
-      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
+      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved. Reload and review any changed types or project usage.');
       await load();
@@ -278,7 +324,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
         const rowKey = `${item.id}:${field}:${index}`;
         const editing = editingReferences.has(rowKey) || !reference.url.trim();
         return <tr key={index}><td>
-          {readonly ? <ReferenceLink reference={reference}/> : <div className="pt-reference-entry">
+          {readonly ? <div className="pt-reference-entry"><div className={referenceDisabled(item.id, field, reference.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={reference}/></div>{referenceToggle(item.id, field, reference)}</div> : <div className="pt-reference-entry">
             <div className="pt-reference-field">
               {editing ? <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={reference.url}
                 aria-invalid={!!urlError} aria-describedby={urlError ? errorId : undefined}
@@ -300,6 +346,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
                 }}/> : <ReferenceLink reference={reference} onResolved={setResolved}/>}
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
+            {referenceToggle(item.id, field, reference)}
             {!editing && <>
               <button type="button" disabled={busy} onClick={() => setEditingReferences(previous => new Set(previous).add(rowKey))}>Edit</button>
               <button type="button" disabled={busy} onClick={() => { setEditingReferences(new Set()); edit(item.id, { [field]: references.filter((_, i) => i !== index) }); }}>Remove</button>
@@ -327,7 +374,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
         <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>}
     </div>
   </details>;
-  const hasChanges = savedDrafts !== null && JSON.stringify(drafts) !== JSON.stringify(savedDrafts);
+  const hasChanges = savedDrafts !== null && (JSON.stringify(drafts) !== JSON.stringify(savedDrafts)
+    || JSON.stringify(referencePreferences) !== JSON.stringify(savedReferencePreferences));
   const invalidDraft = drafts.some(item =>
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
@@ -350,16 +398,17 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy} onClick={close}>Close</button></div></header>
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
+      <p className="pt-usage-notice">Reference manuals can increase AI input tokens and usage costs. Shared research and publication references are disabled by default; subject-specific guides remain enabled. Enable only the references you want SIGMA to use for future sessions and papers.</p>
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <h4>Research standards references for all project types</h4>
         <table className="pt-reference-table"><tbody>{commonReferences?.research_standards_references.map(ref =>
-          <tr key={ref.url}><td><ReferenceLink reference={ref}/></td></tr>
+          <tr key={ref.url}><td><div className="pt-reference-entry"><div className={referenceDisabled('common', 'research_standards_references', ref.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={ref}/></div>{referenceToggle('common', 'research_standards_references', ref)}</div></td></tr>
         )}</tbody></table>
         <h4>Publication standards references for all project types</h4>
         <table className="pt-reference-table"><tbody>{commonReferences?.publication_standards_references.map(ref =>
-          <tr key={ref.url}><td><ReferenceLink reference={ref}/></td></tr>
+          <tr key={ref.url}><td><div className="pt-reference-entry"><div className={referenceDisabled('common', 'publication_standards_references', ref.url) ? 'pt-reference-field pt-reference-disabled' : 'pt-reference-field'}><ReferenceLink reference={ref}/></div>{referenceToggle('common', 'publication_standards_references', ref)}</div></td></tr>
         )}</tbody></table>
       </section>
     </div>
