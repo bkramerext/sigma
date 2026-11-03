@@ -104,6 +104,58 @@ def _fetch_title(url: str) -> str | None:
     return _clean_title(parser.og_title) or _clean_title("".join(parser.title_parts))
 
 
+def domain_status(url: str) -> str:
+    """Verify an HTTPS/HTTP reference host without fetching arbitrary URLs.
+
+    "invalid" is reserved for malformed, unsafe or definitely nonexistent
+    domains. Transient resolver errors are "unverified" and must not erase
+    a user's reference. Never follow redirects or contact private addresses.
+    """
+    try:
+        if len(url) > 2048 or any(ord(char) < 32 for char in url):
+            return "invalid"
+        parts = urlsplit(url)
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.username is not None
+            or parts.password is not None
+        ):
+            return "invalid"
+        host = parts.hostname.encode("idna").decode("ascii").lower()
+        if (
+            "." not in host
+            or any(
+                not label
+                or len(label) > 63
+                or label.startswith("-")
+                or label.endswith("-")
+                or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in label)
+                for label in host.split(".")
+            )
+        ):
+            return "invalid"
+        try:
+            if not ipaddress.ip_address(host).is_global:
+                return "invalid"
+        except ValueError:
+            pass
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        candidates = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        if not candidates or any(
+            not ipaddress.ip_address(address[4][0]).is_global for address in candidates
+        ):
+            return "invalid"
+        return "valid"
+    except socket.gaierror as exc:
+        # NXDOMAIN is definitive. Timeout or resolver downtime is not.
+        if exc.errno == socket.EAI_NONAME or exc.errno == getattr(socket, "EAI_NODATA", None):
+            return "invalid"
+        return "unverified"
+    except (OSError, ValueError, UnicodeError):
+        return "unverified"
+
+
 @lru_cache(maxsize=512)
 def resolve_title(url: str) -> str | None:
     try:
