@@ -150,7 +150,17 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
     # methods packet prevent a real Investigator/Skeptic turn, or cause a
     # proof premise to be discarded sooner than necessary. The full frozen
     # pre-turn selection remains in the authoritative saved session.
-    if _bytes(context) > limit and context.get("methodology_source_material"):
+    methods = context.get("methodology_source_material")
+    compiled_methods = (
+        isinstance(methods, list)
+        and len(methods) == 1
+        and isinstance(methods[0], dict)
+        and methods[0].get("id") == "compiled-methodology-guide"
+    )
+    # Compiled guidance is a frozen session-wide invariant. Compact optional
+    # research history first rather than silently omitting the guide from
+    # late-round Investigator/Skeptic turns.
+    if _bytes(context) > limit and methods and not compiled_methods:
         selected = context.pop("methodology_source_material")
         context["methodology_source_status"] = "omitted_due_to_context_limit"
         manifest["methodology_sources_not_supplied"] = {

@@ -249,7 +249,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             page.route("**/api/projects/text/convert", queue_text_conversion)
             page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
             project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
-            expect(project_markdown).to_be_visible()
+            # Hosted CI can still be in the asynchronous "Opening project…"
+            # state after navigation. Keep the assertion, but allow backend
+            # fixture initialization to finish before declaring a UI failure.
+            expect(project_markdown).to_be_visible(timeout=20000)
             project_copy = page.locator("#project-markdown-slot-copy .text-copy-button")
             expect(project_copy).to_be_enabled()
             page.locator(".project-pane-title-line").screenshot(
@@ -399,7 +402,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(prelude).to_be_visible()
                 pause_notice = outcome.locator(".research-pause-guidance")
                 expect(pause_notice).to_be_visible()
-                expect(pause_notice).to_contain_text("Session paused")
+                expect(pause_notice).to_contain_text("Paused")
                 expect(pause_notice).to_contain_text(
                     "A dispatched provider request may still consume allowance."
                 )

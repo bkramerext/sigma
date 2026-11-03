@@ -2,7 +2,9 @@
 
 import asyncio
 import json
+import os
 import shutil
+import subprocess
 import sys
 import time
 from copy import deepcopy
@@ -38,6 +40,10 @@ from sigma.research_budget import (
     settle_rejected,
     totals,
 )
+
+# Legacy role-only fixtures deliberately leave the new compiler off.
+# tests/reference_compiler_integration.py explicitly enables and tests it.
+os.environ.setdefault("SIGMA_REFERENCE_COMPILATION_ENABLED", "false")
 
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
@@ -12208,7 +12214,93 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
     assert saved["strategy_runs"][0]["strategy_text"] == first.approach
 
 
+def test_reference_compilation_is_bounded_and_source_attributed() -> None:
+    import hashlib
+
+    from sigma import research_reference_compiler as compiler
+
+    sources = [
+        {
+            "id": "proof",
+            "title": "Proof methods",
+            "url": "https://example.org/proof",
+            "notes": "Test induction, boundary cases, and counterexamples.",
+        },
+        {
+            "id": "irrelevant",
+            "title": "Unrelated",
+            "url": "https://example.org/style",
+            "notes": "Decorative formatting unrelated to the proof.",
+        },
+    ]
+    initial = deepcopy(sources)
+    session = {
+        "model": MODEL,
+        "mode": "api_key",
+        "project_title": "A conjecture",
+        "problem": "Prove a combinatorial recurrence",
+        "investigation_type": "mathematical",
+        "strategy_runs": [{"strategy_title": "Induction", "strategy_text": "Check base cases"}],
+        "research_method_sources": {"sources": sources},
+    }
+    request = compiler.build_request(session)
+    assert request["store"] is False
+    assert request["text"]["format"]["strict"] is True
+    assert request["max_output_tokens"] == compiler.OUTPUT_TOKEN_BOUND
+    assert len(json.loads(request["input"])["uninspected_methodology_sources"]) == 2
+    chat_request = compiler.build_request({**session, "mode": "chatgpt"})
+    assert chat_request["stream"] is True and "max_output_tokens" not in chat_request
+
+    response = {
+        "guidance": " Verify base cases and counterexamples. ",
+        "selected_source_ids": ["proof"],
+        "omitted_source_ids": ["irrelevant"],
+        "rationale": "The other reference is off topic.",
+    }
+    selected = compiler.validate_result(response, sources)
+    assert selected["guidance"] == response["guidance"].strip()
+    assert (
+        selected["guidance_sha256"]
+        == hashlib.sha256(selected["guidance"].encode("utf-8")).hexdigest()
+    )
+    assert sources == initial
+    for invalid in (
+        {**response, "selected_source_ids": ["invented"]},
+        {**response, "omitted_source_ids": []},
+        {**response, "selected_source_ids": ["proof", "proof"]},
+        {**response, "guidance": "x" * (compiler.MAX_GUIDANCE_CHARS + 1)},
+    ):
+        try:
+            compiler.validate_result(invalid, sources)
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError("Invalid reference compilation was accepted")
+
+    context = {
+        "problem": session["problem"],
+        "investigation_type": "mathematical",
+        "research_method_version": research_sessions.RESEARCH_METHOD_VERSION,
+        "methodology_source_catalog_version": "methodology-catalog-v2",
+        "methodology_source_material": [
+            {"id": "compiled-methodology-guide", "notes": selected["guidance"]}
+        ],
+        "execution_tools": [],
+    }
+    role_settings = {
+        "mode": "api_key",
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "output_token_limit": 4000,
+    }
+    for role in ("investigator", "skeptic"):
+        prompt = json.dumps(research_sessions._role_request_payload(role_settings, role, context))
+        assert selected["guidance"] in prompt
+        assert "https://example.org/style" not in prompt
+
+
 def main():
+    test_reference_compilation_is_bounded_and_source_attributed()
     test_backend_build_is_pinned_at_backend_start()
     test_project_cost_denial_reports_affordable_first_call()
     test_outcome_includes_derived_execution_provenance()
@@ -12619,3 +12711,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # The new provider stage is tested separately with the feature explicitly
+    # enabled, so the long-standing role protocol fixtures remain unchanged.
+    subprocess.run(
+        [sys.executable, str(Path(__file__).parent / "reference_compiler_integration.py")],
+        check=True,
+    )

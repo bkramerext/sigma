@@ -18,6 +18,9 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
+# This historical accounting suite tests exactly the Investigator/Skeptic calls.
+os.environ.setdefault("SIGMA_REFERENCE_COMPILATION_ENABLED", "false")
+
 from sigma import cloud_research, cloud_workspaces, openai_connection, research_sessions
 from sigma.projects import (
     ProjectError,
@@ -2460,6 +2463,56 @@ def test_maximum_liability_enforced_across_calls() -> None:
                 cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_reservation_on_legacy_sqlite_schema_with_extra_columns() -> None:
+    """A migrated ledger with extra columns still admits a provider call."""
+    import sqlite3
+
+    with TemporaryDirectory(prefix="sigma-cloud-ledger-compat-") as directory:
+        root = Path(directory)
+        ledger_root = root / "ledger"
+        ledger_root.mkdir(mode=0o700)
+        member = workspace(root, "d" * 32)
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                    "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                },
+            ),
+            patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+            patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=False),
+        ):
+            binding = cloud_workspaces._CURRENT.set(member)
+            try:
+                # Materialize the existing ledger and emulate a historical
+                # forward-compatible column appended by a different migration.
+                cloud_research.snapshot()
+                with sqlite3.connect(ledger_root / "cloud-research.sqlite3") as db:
+                    db.execute(
+                        "ALTER TABLE calls ADD COLUMN historical_audit TEXT NOT NULL DEFAULT 'kept'"
+                    )
+                initial = job(member.workspace_id)
+                cloud_research.prepare_job(initial)
+                assert cloud_research.claim_job(initial["id"])
+                cloud_research.reserve_call(
+                    initial["id"],
+                    "first-investigator",
+                    0.02,
+                    256,
+                    maximum_liability_usd=0.15,
+                )
+                with sqlite3.connect(ledger_root / "cloud-research.sqlite3") as db:
+                    row = db.execute(
+                        "SELECT status,historical_audit FROM calls WHERE call_id=?",
+                        ("first-investigator",),
+                    ).fetchone()
+                assert row == ("reserved", "kept"), row
+            finally:
+                cloud_workspaces._CURRENT.reset(binding)
+
+
 def main() -> None:
     # This suite validates the explicitly configured API-key admission path;
     # never inherit the repository's local ChatGPT provider default.
@@ -2467,6 +2520,7 @@ def main() -> None:
     os.environ.setdefault("SIGMA_CLOUD_OPENAI_API_KEY", "cloud-research-fixture-key")
     test_hosted_deployment_forwards_global_spend_window()
     test_maximum_liability_enforced_across_calls()
+    test_reservation_on_legacy_sqlite_schema_with_extra_columns()
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
         base = Path(temp)
         persistent_root = (

@@ -82,6 +82,20 @@ with sync_playwright() as playwright:
                     == "6px"
                 )
                 page.mouse.move(0, 0)
+                references = outcome.locator(".outcome-source-material")
+                summary = references.locator(":scope > summary")
+                expect(summary).to_have_text("Research References")
+                expect(summary.locator(".disclosure-chevron")).to_be_visible()
+                assert (
+                    summary.locator(".disclosure-chevron").evaluate(
+                        "e => getComputedStyle(e).transform"
+                    )
+                    == "none"
+                )
+                summary.click()
+                expect(references).to_have_attribute("open", "")
+                summary.click()
+                expect(references).not_to_have_attribute("open", "")
             simple = outcome.locator(".outcome-simple")
             expect(simple).to_be_visible()
             expect(outcome.locator(".outcome-subsection")).to_have_count(0)
@@ -117,10 +131,31 @@ with sync_playwright() as playwright:
             labels = [label.strip() for label in sections]
             assert labels[:4] == [
                 "Conclusion",
+                "Research References",
                 "Reasoning / proof",
                 "Citations, evidence & obligations",
-                "Metrics",
             ], labels
+            other = row.locator(".outcome-other-details")
+            expect(other.locator(":scope > .outcome-subsection").first).to_contain_text("Metrics")
+            expect(other).to_contain_text("Status")
+            expect(other).to_have_css("row-gap", "7px")
+            other_gaps = other.locator(":scope > .outcome-subsection").evaluate_all(
+                """sections => sections.slice(1).map((item, index) =>
+                  Math.round(item.getBoundingClientRect().top -
+                    sections[index].getBoundingClientRect().bottom))"""
+            )
+            assert other_gaps and all(gap == 7 for gap in other_gaps), other_gaps
+            # The Conclusion and References cards now share the same grid
+            # spacing as the remaining outcome subsections.
+            advanced = row.locator(".outcome-subsections.outcome-advanced")
+            expect(advanced).to_have_css("row-gap", "7px")
+            expect(row.locator(".outcome-conclusion")).to_have_css("margin-bottom", "0px")
+            adjacent = advanced.locator(":scope > .outcome-subsection").evaluate_all(
+                """sections => sections.slice(1).map((item, index) =>
+                  Math.round(item.getBoundingClientRect().top -
+                    sections[index].getBoundingClientRect().bottom))"""
+            )
+            assert adjacent and all(gap == 7 for gap in adjacent), adjacent
             conclusion = row.locator(".outcome-conclusion")
             expect(conclusion).to_have_attribute("open", "")
             expect(conclusion).to_contain_text("Historical session summary")

@@ -448,6 +448,21 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, common_custom_references: commonCustomReferences, builtin_custom_references: builtinCustomReferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved. Reload and review any changed types or project usage.');
+      // Round-trip the saved catalog before closing. Both the Home entry point
+      // and the Project Settings shortcut must use the same persisted switches.
+      const verifiedResponse = await fetch('/api/project-types', { cache: 'no-store', headers: handledErrorHeaders });
+      if (!verifiedResponse.ok) throw new Error('Saved reference settings could not be verified. Reload and review your choices.');
+      const verified = await verifiedResponse.json() as { reference_preferences?: ReferencePreferences };
+      const signature = (choices: ReferencePreferences) => JSON.stringify(Object.entries(choices)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([owner, fields]) => [owner, Object.entries(fields)
+          .filter(([, urls]) => !!urls?.length)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([field, urls]) => [field, [...urls].sort()])])
+        .filter(([, fields]) => (fields as unknown[]).length > 0));
+      if (signature(verified.reference_preferences ?? {}) !== signature(referencePreferences)) {
+        throw new Error('Reference Enable/Disable changes were not retained. The dialog remains open so you can retry.');
+      }
       await load();
       window.dispatchEvent(new Event('sigma-project-types-updated'));
       setAddingId(null);

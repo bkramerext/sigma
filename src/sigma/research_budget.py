@@ -54,6 +54,47 @@ def authorize_independent_review_after_unknown(
     ledger["blocked_reason"] = None
 
 
+def authorize_reference_compiler_recovery_after_unknown(
+    ledger: dict[str, Any], *, call_id: str
+) -> None:
+    """Explicitly abandon an uncertain optional compiler call without replay.
+
+    Keep its full token and cost reservation. Other unknown role attempts and
+    budget integrity violations are not eligible for this narrow recovery.
+    """
+    if ledger.get("version") != LEDGER_VERSION or not isinstance(call_id, str) or not call_id:
+        raise BudgetExceeded("Saved compiler recovery identity or ledger version is invalid")
+    calls = ledger.get("calls")
+    if not isinstance(calls, list):
+        raise BudgetExceeded("Saved compiler budget calls are invalid")
+    matches = [item for item in calls if item.get("call_id") == call_id]
+    if len(matches) != 1:
+        raise BudgetExceeded("Saved compiler reservation cannot be identified uniquely")
+    target = matches[0]
+    if target.get("status") in {"settled", "rejected"}:
+        if ledger.get("blocked_reason") or any(
+            item.get("status") in {"reserved", "unknown"} for item in calls
+        ):
+            raise BudgetExceeded("Other unsettled provider requests block compiler recovery")
+        return
+    if target.get("status") == "unknown_compiler_abandoned":
+        if ledger.get("blocked_reason"):
+            raise BudgetExceeded("Another uncertain provider call blocks research")
+        return
+    if target.get("status") == "reserved":
+        mark_unknown(ledger, call_id=call_id)
+    elif target.get("status") != "unknown":
+        raise BudgetExceeded("Saved compiler attempt is not an uncertain provider call")
+    if ledger.get("blocked_reason") != "Provider call outcome or usage is unknown" or any(
+        item is not target and item.get("status") in {"reserved", "unknown"} for item in calls
+    ):
+        raise BudgetExceeded("Unknown compiler usage cannot bypass another budget failure")
+    # Keep the exact original liability; distinguish this explicitly abandoned
+    # compiler from uncertain role calls in independent Skeptic recovery.
+    target["status"] = "unknown_compiler_abandoned"
+    ledger["blocked_reason"] = None
+
+
 def new_ledger(
     *,
     call_limit: int,

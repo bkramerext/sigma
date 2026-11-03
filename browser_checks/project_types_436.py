@@ -76,7 +76,7 @@ with sync_playwright() as playwright:
     # Home account pills occupy About / Google over Admin / ChatGPT at right.
     grid = page.locator(".home-account-grid")
     expect(grid).to_be_visible()
-    expect(grid.locator(".home-about-button")).to_have_text("About")
+    expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
         '"about google" "admin chatgpt"'
     )
@@ -655,7 +655,7 @@ with sync_playwright() as playwright:
     open_project(page, legacy["path"])
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
-    expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About")
+    expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
     assert (
         header.locator(".header-controls").evaluate(
             "node => getComputedStyle(node).gridTemplateAreas"
@@ -730,6 +730,54 @@ with sync_playwright() as playwright:
     assert preferences["reference_preferences"]["mathematical"][
         "research_standards_references"
     ] == [math_ref]
+
+    # Common reference choices must be durable across BOTH Project Types entry
+    # paths. Home -> Save -> Adjust now -> Save -> Home must not reset them.
+    page.goto(BASE_URL)
+    page.get_by_role("button", name="Project Types", exact=True).click()
+    home_types = page.get_by_role("dialog", name="Project Types")
+    home_common = home_types.locator(".pt-common-references")
+    expect(home_common.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(4)
+    for _ in range(4):
+        home_common.locator(".pt-reference-toggle").filter(has_text="Enable").first.click()
+    expect(home_common.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(4)
+    home_types.locator("header").get_by_role("button", name="Save", exact=True).click()
+    expect(home_types).not_to_be_visible()
+    saved_common = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
+    assert "common" not in saved_common["reference_preferences"], saved_common
+
+    open_project(page, legacy["path"])
+    page.get_by_role("button", name="Project settings", exact=True).click()
+    settings = page.get_by_role("dialog", name="Project Settings")
+    settings.get_by_role("tab", name="Preferences").click()
+    adjust = settings.get_by_role("button", name="Adjust now")
+    expect(adjust).to_have_css("font-size", "12px")
+    adjust.click()
+    shortcut_types = page.get_by_role("dialog", name="Project Types")
+    shortcut_common = shortcut_types.locator(".pt-common-references")
+    expect(
+        shortcut_common.locator(".pt-reference-toggle").filter(has_text="Disable")
+    ).to_have_count(4)
+    expect(shortcut_types.locator("header").get_by_role("button", name="Save")).to_be_disabled()
+    shortcut_common.locator(".pt-reference-toggle").filter(has_text="Disable").first.click()
+    shortcut_types.locator("header").get_by_role("button", name="Save", exact=True).click()
+    expect(shortcut_types).not_to_be_visible()
+    saved_common = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
+    assert (
+        len(saved_common["reference_preferences"]["common"]["research_standards_references"]) == 1
+    )
+
+    page.goto(BASE_URL)
+    page.get_by_role("button", name="Project Types", exact=True).click()
+    restored_types = page.get_by_role("dialog", name="Project Types")
+    restored_common = restored_types.locator(".pt-common-references")
+    expect(restored_common.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(
+        1
+    )
+    expect(
+        restored_common.locator(".pt-reference-toggle").filter(has_text="Disable")
+    ).to_have_count(3)
+    restored_types.locator("header").get_by_role("button", name="Close", exact=True).click()
 
     assert not errors, errors
     browser.close()

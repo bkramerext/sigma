@@ -281,7 +281,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                 2: "stopped by user",
                 3: "required context exceeded the available context limit",
                 4: "configured elapsed-time limit",
-                5: "configured cost or call budget limit",
+                5: "Configured cost limit reached; research remains paused.",
                 6: "selected model or AI connection changed",
                 7: "project or one of its strategies changed",
                 8: "Review the stop details above",
@@ -334,11 +334,17 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             # Both duplicate banners disappear; the session and Resume stay intact.
             row.locator(".session-row-disclosure").click()
             expect(row.locator(".stopped-session-guidance")).to_be_visible()
+            expect(row.locator(".stopped-session-guidance .session-notice-title")).to_have_text(
+                "Stopped"
+            )
             expect(
                 row.get_by_role("complementary", name="Session status and next steps")
             ).to_be_visible()
-            # The top-right Dismiss action must never cover the first line
-            # of either notice, including on narrow/mobile viewports.
+            expect(row.locator(".research-pause-guidance .session-notice-title")).to_have_text(
+                "Stopped"
+            )
+            # Title and Dismiss share the same header line, rather than
+            # reserving an empty action row above the explanation.
             for width in (1440, 390, 320):
                 page.set_viewport_size({"width": width, "height": 844})
                 for notice in (
@@ -346,17 +352,23 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                     row.get_by_role("complementary", name="Session status and next steps"),
                 ):
                     layout = notice.evaluate("""element => {
-                        const button = element.querySelector('.session-notice-dismiss');
-                        const bounds = button.getBoundingClientRect();
-                        const textRows = Array.from(element.children).filter(child => child !== button);
+                        const header = element.querySelector('.session-notice-header');
+                        const title = header.querySelector('.session-notice-title').getBoundingClientRect();
+                        const button = header.querySelector('.session-notice-dismiss').getBoundingClientRect();
+                        const content = header.nextElementSibling.getBoundingClientRect();
                         return {
-                            buttonBottom: bounds.bottom,
-                            textTop: Math.min(...textRows.map(row => row.getBoundingClientRect().top)),
-                            buttonRight: bounds.right,
+                            titleLeft: title.left, titleRight: title.right,
+                            titleTop: title.top, titleBottom: title.bottom,
+                            buttonLeft: button.left, buttonTop: button.top, buttonRight: button.right,
+                            headerBottom: header.getBoundingClientRect().bottom,
+                            contentTop: content.top,
                             noticeRight: element.getBoundingClientRect().right
                         };
                     }""")
-                    assert layout["textTop"] >= layout["buttonBottom"] - 1, layout
+                    assert layout["buttonLeft"] >= layout["titleRight"] - 1, layout
+                    assert layout["buttonLeft"] - layout["titleRight"] <= 24, layout
+                    assert abs(layout["titleTop"] - layout["buttonTop"]) <= 5, layout
+                    assert layout["contentTop"] >= layout["headerBottom"] - 1, layout
                     assert layout["buttonRight"] <= layout["noticeRight"] + 1, layout
             row.locator(".stopped-session-guidance").get_by_role(
                 "button", name="Dismiss notices for Session #1"

@@ -25,6 +25,9 @@ from sigma import cloud_auth, sponsor_diagnostics
 from sigma.api import app
 from sigma.projects import initialize_project
 
+# The authorization fixture tests research roles without a compiler provider.
+os.environ.setdefault("SIGMA_REFERENCE_COMPILATION_ENABLED", "false")
+
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 CLIENT_ID = "sigma-test.apps.googleusercontent.com"
 ORIGIN = "https://sigma.test"

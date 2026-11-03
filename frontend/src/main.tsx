@@ -141,7 +141,8 @@ type ResearchOutcomeMetrics = { operational: OutcomeMetric[]; research_quality: 
 type OutcomeArgumentStep = { number: number; title: string; argument: string; epistemic_status: string; basis_artifact_ids: string[]; research_artifact_id?: string; review?: { disposition: string; rationale: string; objection?: string; basis_artifact_ids: string[] } };
 type StrategyFinding = { strategy_id: string; strategy_title: string; status: string; execution_status?: string; failure_reason?: string; claim: string; research_artifact_id: string; research_artifact_ids?: string[]; reasoning_steps: OutcomeArgumentStep[]; skeptic_response: string; objections: string[]; open_obligations: string[] };
 type ResearchMethodReference = { id: string; tier: 'general' | 'discipline' | 'branch'; title: string; url: string; notes: string; branch?: string };
-type ResearchSourceMaterial = { version: string; status: string; mode: string; branch?: string | null; sources: ResearchMethodReference[]; source_session_id?: string | null; selection_reason?: string; sha256?: string };
+type ResearchMethodCompilation = { version: string; status: string; source_count: number; guidance?: string; rationale?: string; selected_source_ids?: string[]; omitted_source_ids?: string[]; source_sha256?: string; guidance_sha256?: string; started_at?: string; finished_at?: string; reason?: string; token_usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number } };
+type ResearchSourceMaterial = { version: string; status: string; mode: string; branch?: string | null; sources: ResearchMethodReference[]; compilation?: ResearchMethodCompilation; source_session_id?: string | null; selection_reason?: string; sha256?: string };
 type ExecutionProvenance = { records: { id: string; runtime: string; statuses: string[]; artifact_ids: string[]; step_ids: string[]; source_recorded: boolean; output_recorded: boolean }[]; unidentified_count: number; completed_count: number; completed_without_recorded_io_count?: number; other_count: number; note: string };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; source_material?: ResearchSourceMaterial; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
@@ -230,6 +231,11 @@ function parallelSessionActivity(session: ResearchSession): string | null {
 }
 
 function strategyLiveStatusLines(session: ResearchSession): { id: string; label: string; detail: string }[] {
+  // Compilation is session-wide and precedes strategy fanout. Do not
+  // misleadingly display concurrent strategy statuses before this barrier.
+  if (['running', 'queued'].includes(session.status) && /compiling research references/i.test(session.current_action)) {
+    return [{ id: 'reference-compilation', label: 'Compiling references', detail: 'Preparing shared guidance for all strategies…' }];
+  }
   if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
   const active = new Map(
     session.steps.filter(step => step.status === 'running' && step.strategy_id)
@@ -280,8 +286,8 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
     return { cause: 'This session stopped because its required context exceeded the available context limit. Saved research is preserved.', next: 'Review the saved evidence and context limits before resuming. Resume will remain subject to the backend context guard.' };
   if (/duration|wall.clock/.test(evidence))
     return { cause: 'This session stopped after reaching its configured elapsed-time limit. Saved research is preserved.', next: 'Adjust the project time limit if appropriate, then resume the session.' };
-  if (/cost|budget/.test(evidence))
-    return { cause: 'This session stopped after reaching a configured cost or call budget limit. Saved research is preserved.', next: 'Review the project limits and usage before resuming.' };
+  if (/cost|budget|allowance|funding|spend ceiling/i.test(evidence))
+    return { cause: recordedReason || 'A provider-call funding reservation was denied. Saved research is preserved.', next: 'Check the specific funding denial above before resuming. Retrying cannot bypass a depleted allowance.' };
   if (/model|connection|billing identity/.test(evidence))
     return { cause: 'The selected model or AI connection changed while this session was stopped. Saved research is preserved.', next: 'Check the AI connection and selected model before resuming.' };
   if (/project|strategy/.test(evidence))
@@ -302,7 +308,8 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
   const guidance = stoppedSessionGuidance(session);
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
-  return <SessionNotice number={session.session_number} onDismiss={onDismiss} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
+  const title = 'Stopped';
+  return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
     <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
     {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
   </SessionNotice>;
@@ -709,8 +716,8 @@ function SessionNoticeDismiss({ number, onDismiss }: { number: number; onDismiss
 // An in-flow exit slot: the notice slides through its own bottom edge
 // as that slot collapses, instead of flying toward the viewport footer.
 // Dismissal is a presentation-only operation; saved research is unchanged.
-function SessionNotice({ number, onDismiss, kind, ariaLabel, children }: {
-  number: number; onDismiss: () => void; kind: string; ariaLabel: string; children: ReactNode;
+function SessionNotice({ number, onDismiss, title, kind, ariaLabel, children }: {
+  number: number; onDismiss: () => void; title: string; kind: string; ariaLabel: string; children: ReactNode;
 }) {
   const [exiting, setExiting] = useState(false);
   const timer = useRef<number | null>(null);
@@ -725,7 +732,10 @@ function SessionNotice({ number, onDismiss, kind, ariaLabel, children }: {
   return <div className={`session-notice-exit-slot${exiting ? ' is-exiting' : ''}`}>
     <div className="session-notice-exit-inner">
       <div className={kind} role={kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
-        <SessionNoticeDismiss number={number} onDismiss={dismiss}/>
+        <div className="session-notice-header">
+          <strong className="session-notice-title">{title}</strong>
+          <SessionNoticeDismiss number={number} onDismiss={dismiss}/>
+        </div>
         {children}
       </div>
     </div>
@@ -808,17 +818,23 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const provenance = session.outcome.execution_provenance;
   const runMetrics = session.outcome.metrics?.operational ?? [];
   const budgetDenied = session.steps.some(step => step.failure_kind === 'budget_denied');
-  const budgetReason = session.strategy_runs?.find(branch => /allowance|inference[- ]spend|cost reserve|cost limit/i.test(branch.reason ?? ''))?.reason;
+  const budgetReason = session.strategy_runs?.find(branch =>
+    /allowance|inference[- ]spend|cost reserve|cost limit|global spend|token budget|capacity|funding/i.test(branch.reason ?? '')
+  )?.reason;
+  const compilation = session.outcome.source_material?.compilation;
+  const compilerAttempted = !!compilation?.started_at;
   const budgetNotice = budgetDenied
     ? session.calls_used === 0
-      ? 'The available research funds could not cover a provider call. No provider calls were made.'
-      : 'Research stopped because the remaining research funds could not cover another provider call. Saved findings are preserved.'
+      ? compilerAttempted
+        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research References for its status.'
+        : 'No Investigator or Skeptic call was dispatched. Check the saved funding denial below.'
+      : 'Research stopped because another provider call could not be funded. Saved findings are preserved.'
     : '';
   const statusHeading = budgetDenied
     ? session.calls_used === 0 ? 'Insufficient research funds' : 'Research funding limit reached'
-    : session.status === 'paused' ? 'Session paused'
-      : session.status === 'stopped' ? 'Session stopped'
-        : session.status === 'failed' ? 'Session failed' : 'Session ended';
+    : session.status === 'paused' ? 'Paused'
+      : session.status === 'stopped' ? 'Stopped'
+        : session.status === 'failed' ? 'Error' : 'Ended';
   const statusNextStep = session.next_step_guidance
     || (session.termination_reason_code === 'research_completed_early' ? 'Review the saved findings and rationale; the configured turn count was an upper limit, not a target.'
       : budgetDenied ? 'Review the available research allowance before starting another session.'
@@ -967,16 +983,17 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     <h5>{title}</h5>
     {items?.length ? <dl>{items.map((item, index) => <div className="outcome-label-value" key={`${item.label}:${index}`}><dt>{item.label}</dt><dd><span>{item.value}</span>{item.detail && <small>{item.detail}</small>}</dd></div>)}</dl> : <p className="outcome-unavailable">No {title.toLowerCase()} metrics are available for this session.</p>}
   </div>;
-  return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
-    <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
-      <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{outcomeDisplayLabel(session)}</span></div></div>
-      {conversionProgress && <p className="outcome-markdown-progress" role="status">{conversionProgress}</p>}
-      {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
-      {provenancePrelude}
+  const researchReferences = (
       <details className="outcome-subsection outcome-source-material">
-        <summary>Source Material</summary>
+        <summary><DisclosureChevron expanded={false}/>Research References</summary>
         <div className="outcome-subsection-content">
           <p>Research-method references selected before the Investigator/Skeptic turns. These describe how to investigate; they are not independent evidence for the research findings.</p>
+          {session.outcome.source_material?.compilation && <div className="outcome-reference-compilation">
+            <p><strong>Initial step · Compile references:</strong> {session.outcome.source_material.compilation.status === 'completed' ? 'Completed' : session.outcome.source_material.compilation.status === 'not_needed' ? 'No references selected' : session.outcome.source_material.compilation.status === 'pending' ? 'Queued' : session.outcome.source_material.compilation.status === 'running' ? 'Running' : 'Unavailable; frozen reference notes retained'}</p>
+            {session.outcome.source_material.compilation.guidance && <p>{session.outcome.source_material.compilation.guidance}</p>}
+            {session.outcome.source_material.compilation.status === 'completed' && <small>{session.outcome.source_material.compilation.selected_source_ids?.length ?? 0} references retained · {session.outcome.source_material.compilation.omitted_source_ids?.length ?? 0} omitted as low value or irrelevant. Original reference records preserved in this session.</small>}
+            {session.outcome.source_material.compilation.reason && session.outcome.source_material.compilation.status !== 'completed' && <small>{session.outcome.source_material.compilation.reason}</small>}
+          </div>}
           {session.outcome.source_material?.sources?.length ? <>
             <p><strong>Selection:</strong> {session.outcome.source_material.status === 'reused' ? 'Reused from a previous session' : 'Selected for this session'} · {session.outcome.source_material.mode}{session.outcome.source_material.branch ? ` · ${session.outcome.source_material.branch}` : ''}</p>
             <ul>{session.outcome.source_material.sources.map(source => <li key={source.id}>
@@ -987,9 +1004,15 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           </> : <p>No methodology source material was recorded for this session.</p>}
         </div>
       </details>
-      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <SessionNotice number={session.session_number} onDismiss={onDismissStatusNotice} kind="research-pause-guidance" ariaLabel="Session status and next steps">
-        <strong>{statusHeading}</strong>
-        {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
+  );
+  return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
+    <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
+      <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{outcomeDisplayLabel(session)}</span></div></div>
+      {conversionProgress && <p className="outcome-markdown-progress" role="status">{conversionProgress}</p>}
+      {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
+      {provenancePrelude}
+      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <SessionNotice number={session.session_number} onDismiss={onDismissStatusNotice} title={statusHeading} kind="research-pause-guidance" ariaLabel="Session status and next steps">
+        {budgetDenied ? <><p>{budgetNotice}</p>{(session.message || budgetReason) && <p>{session.message || budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
         <p>{statusNextStep}</p>
       </SessionNotice>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
@@ -1007,6 +1030,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
         </div>
         {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{simpleQualifications.map((item, index) => <li key={index}>{item}</li>)}</ul>{qualificationItems.length > simpleQualifications.length && <small>{qualificationItems.length - simpleQualifications.length} more saved qualification{qualificationItems.length - simpleQualifications.length === 1 ? '' : 's'} in Advanced Outcome.</small>}</div>}
       </div>}
+      {!advancedOutcomeDetails && researchReferences}
       {advancedOutcomeDetails && <div className="outcome-subsections outcome-advanced">
         <details className="outcome-subsection outcome-conclusion" open>
           <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
@@ -1021,6 +1045,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {(session.outcome.caveats?.length || review?.open_obligations?.length || review?.unresolved_objections?.length) ? <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong>{!!session.outcome.caveats?.length && <ul>{session.outcome.caveats.map((item, index) => <li key={`caveat-${index}`}>{item}</li>)}</ul>}{!!review?.open_obligations?.length && <ul>{review.open_obligations.map((item, index) => <li key={`obligation-${index}`}>{item}</li>)}</ul>}{!!review?.unresolved_objections?.length && <ul>{review.unresolved_objections.map((item, index) => <li key={`objection-${index}`}>{item}</li>)}</ul>}</div> : null}
           </div>
         </details>
+        {researchReferences}
         {approvedPackets.length > 0 && <details className="outcome-subsection continuation-evidence">
           <summary><DisclosureChevron expanded={false}/>Researcher-approved inherited evidence · {approvedSourceIds.size} source{approvedSourceIds.size === 1 ? '' : 's'}</summary>
           <div className="outcome-subsection-content">
@@ -1057,13 +1082,13 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             })}</ol></section>}
           </div>
         </details>}
+        <section className="outcome-other-details" aria-label="Other Outcome details"><h4>Other Outcome details</h4>
         <details className="outcome-subsection">
           <summary><DisclosureChevron expanded={false}/>Metrics</summary>
           <div className="outcome-subsection-content">
             {session.outcome.metrics ? <div className="outcome-metrics-groups">{renderMetricGroup('Operational', session.outcome.metrics.operational)}{renderMetricGroup('Research quality', session.outcome.metrics.research_quality)}</div> : <p className="outcome-unavailable">Metrics are not available for this historical session.</p>}
           </div>
         </details>
-        <section className="outcome-other-details" aria-label="Other Outcome details"><h4>Other Outcome details</h4>
           <details className="outcome-subsection">
           <summary><DisclosureChevron expanded={false}/>Status</summary>
           <div className="outcome-subsection-content">
@@ -3185,7 +3210,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
-    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
+    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
     </div>
   </header>;
 }
@@ -4211,7 +4236,7 @@ function Home({ initialPath, onOpen }: {
         <div className="home-left-actions">{(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="home-about-button" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}>Project Types</button>}</div>
         <div className="home-right-actions"><div className="home-auth-pills"><MockAuthSelector/>
           <div className="home-account-grid">
-            <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>
+            <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
             <GoogleIdentityPill inviteInHeader/>
             {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
             {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}

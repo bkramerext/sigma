@@ -15,6 +15,7 @@ os.environ["SIGMA_PROJECTS_ROOT"] = mkdtemp(prefix="sigma-browser-managed-")
 os.environ["SIGMA_AUTH_HOME"] = mkdtemp(prefix="sigma-browser-api-auth-")
 os.environ["OPENAI_API_KEY"] = "explicit-browser-test-fixture"
 os.environ["SIGMA_AI_MODEL"] = "gpt-4.1"
+os.environ["SIGMA_REFERENCE_COMPILATION_ENABLED"] = "false"
 
 from sigma import papers, proposals, samples
 from sigma.api import app
