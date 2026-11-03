@@ -7729,14 +7729,16 @@ async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_p
     assert finished["termination_reason_code"] == "protocol_complete"
     branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
     assert branches[first.id]["status"] == "ended"
-    assert branches[first.id]["last_decision"] == "stop_no_progress"
+    # The Skeptic's unproductive assessment remains saved, but the protocol
+    # continues through the configured final round before reporting its limit.
+    assert branches[first.id]["last_decision"] == "stop_budget_exhausted"
     assert len(branches[first.id]["artifacts"]) == 2
     assert any(event["kind"] == "coordinator.early_stop_deferred" for event in finished["events"])
     actions = {
         item["strategy_id"]: item for item in finished["portfolio_decision"]["strategy_actions"]
     }
-    assert actions[first.id]["action"] == "abandon_for_session"
-    assert "no concrete next step" in actions[first.id]["rationale"]
+    assert actions[first.id]["action"] == "hold_for_limits"
+    assert "configured budget" in actions[first.id]["rationale"]
     assert actions[first.id]["basis_artifact_ids"]
     assert branches[second.id]["artifacts"]
     assert (path / "project.json").read_bytes() == project_before
