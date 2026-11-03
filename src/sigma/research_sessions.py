@@ -12655,10 +12655,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         # of a stale or corrupted checksum.
         try:
             frozen = record["research_method_sources"]
-            if (
-                compilation.get("source_sha256") != frozen.get("sha256")
-                or methodology_digest(frozen) != frozen.get("sha256")
-            ):
+            if compilation.get("source_sha256") != frozen.get("sha256") or methodology_digest(
+                frozen
+            ) != frozen.get("sha256"):
                 raise ProjectError("Frozen source digest does not match compilation provenance")
         except (ProjectError, KeyError, TypeError, ValueError, AttributeError):
             compilation["status"] = "fallback"
