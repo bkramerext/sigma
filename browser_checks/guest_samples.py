@@ -289,6 +289,16 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(star).to_have_attribute("rel", "noopener noreferrer")
         expect(scored_group).to_contain_text("Best score 75/100")
         expect(scored_group.locator(".recent-title-star")).to_have_count(1)
+        star_color = star.evaluate("element => getComputedStyle(element).color")
+        star.hover()
+        assert star.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
+        assert star.evaluate("element => getComputedStyle(element).color") != star_color
+        assert (
+            star.evaluate("element => getComputedStyle(element).backgroundColor")
+            == "rgba(0, 0, 0, 0)"
+        )
+        star.focus()
+        assert star.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
         assert scored_group.locator(".recent-pin, .recent-forget").count() == 0
         pdf_response = httpx.get(ui_url + star.get_attribute("href"), timeout=10)
         assert pdf_response.status_code == 200, pdf_response.text[:500]

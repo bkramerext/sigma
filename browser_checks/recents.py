@@ -304,8 +304,26 @@ with sync_playwright() as playwright:
     row = second_copy.locator("xpath=../../..")
     row_before = row.bounding_box()
     remove = row.get_by_role("button", name=re.compile("Remove .* from Saved Projects"))
+    pin = row.locator(".recent-pin")
+    expect(pin).to_be_visible()
+    # Star, pin and remove use the same highlighted glyph color on hover.
+    normal_color = pin.evaluate("element => getComputedStyle(element).color")
+    assert normal_color == remove.evaluate("element => getComputedStyle(element).color")
+    pin.hover()
+    hovered_color = pin.evaluate("element => getComputedStyle(element).color")
+    assert hovered_color == "rgb(245, 213, 147)" and hovered_color != normal_color
+    assert (
+        pin.evaluate("element => getComputedStyle(element).backgroundColor") == "rgba(0, 0, 0, 0)"
+    )
+    pin.focus()
+    assert pin.evaluate("element => getComputedStyle(element).color") == hovered_color
     remove.evaluate("element => element.scrollIntoView({block: 'end'})")
     remove.hover()
+    assert remove.evaluate("element => getComputedStyle(element).color") == hovered_color
+    assert (
+        remove.evaluate("element => getComputedStyle(element).backgroundColor")
+        == "rgba(0, 0, 0, 0)"
+    )
     tooltip = page.get_by_role("tooltip")
     expect(tooltip).to_have_text("Remove from Saved Projects; keep all research")
     tooltip_box = tooltip.bounding_box()
