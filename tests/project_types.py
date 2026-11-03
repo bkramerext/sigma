@@ -28,7 +28,8 @@ def main() -> None:
     assert literature.icon["key"] == "literature"
     assert [item.id for item in builtins if (item.behavior or {}).get("lean")] == ["mathematical"]
 
-    # Curated defaults are immutable, limited, and separate from custom types.
+    # Curated catalog entries stay immutable; shared guides are disabled by
+    # default per user while subject-specific references remain enabled.
     common = project_types.common_references()
     assert len(common["research_standards_references"]) == 2
     assert len(common["publication_standards_references"]) == 2
@@ -80,34 +81,95 @@ def main() -> None:
             own = getattr(item, field)
             assert all(ref["name"].strip() and ref["url"].startswith("https://") for ref in own)
             inherited = getattr(effective, field)
-            assert len(inherited) == 3, (identifier, field)
-            assert {ref["url"] for ref in common[field] + list(own)} == {
-                ref["url"] for ref in inherited
-            }
+            assert len(inherited) == 1, (identifier, field)
+            assert {ref["url"] for ref in own} == {ref["url"] for ref in inherited}
 
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
         with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root)}), TestClient(app) as client:
             before = client.get("/api/project-types").json()
             assert before["common_references"] == common
-            assert "reference_preferences" not in before
             assert "builtin_references" not in before
-            # Even direct API requests cannot hide or replace standard references.
+            default_disabled = before["reference_preferences"]
+            assert default_disabled == {
+                "common": {
+                    field: [ref["url"] for ref in refs]
+                    for field, refs in common.items()
+                }
+            }
+            assert project_types.common_research_references() == ()
+            # Invalid preferences may not change curated catalog definitions.
             rejected = client.put(
                 "/api/project-types",
                 json={
                     "project_types": [],
                     "expected_revision": before["revision"],
                     "reference_preferences": {
-                        "common": {
-                            "hidden_research": [common["research_standards_references"][0]["url"]]
-                        }
+                        "common": {"hidden_research": [common["research_standards_references"][0]["url"]]}
                     },
                 },
             )
-            assert rejected.status_code == 422, rejected.text
+            assert rejected.status_code == 400, rejected.text
             assert client.get("/api/project-types").json()["revision"] == before["revision"]
             assert client.get("/api/project-types").json()["common_references"] == common
+
+            # One shared research reference enabled; the other shared references
+            # remain off. Turn off mathematical research reference independently.
+            math_ref = builtins_by_id["mathematical"].research_standards_references[0]["url"]
+            custom_preferences = {
+                "common": {
+                    "research_standards_references": [common["research_standards_references"][1]["url"]],
+                    "publication_standards_references": [ref["url"] for ref in common["publication_standards_references"]],
+                },
+                "mathematical": {"research_standards_references": [math_ref]},
+            }
+            updated = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": before["revision"],
+                    "reference_preferences": custom_preferences,
+                },
+            )
+            assert updated.status_code == 200, updated.text
+            assert client.get("/api/project-types").json()["reference_preferences"] == custom_preferences
+            enabled_math = project_types.get_type("mathematical")
+            assert enabled_math is not None
+            assert {ref["url"] for ref in enabled_math.research_standards_references} == {
+                common["research_standards_references"][0]["url"]
+            }
+            # Other disciplines keep their own guides and no publication common references.
+            enabled_physics = project_types.get_type("physics")
+            assert enabled_physics is not None
+            assert len(enabled_physics.research_standards_references) == 2
+            assert len(enabled_physics.publication_standards_references) == 1
+            from sigma import research_method_sources
+            methods, _ = research_method_sources._effective_sources("mathematical")
+            assert {ref["url"] for ref in methods} == {
+                common["research_standards_references"][0]["url"]
+            }
+            # Saving unrelated custom types through an older API client must
+            # preserve saved reference choices rather than silently resetting them.
+            revision = updated.json()["revision"]
+            older = client.put(
+                "/api/project-types",
+                json={"project_types": [], "expected_revision": revision},
+            )
+            assert older.status_code == 200, older.text
+            assert project_types.reference_preferences() == custom_preferences
+
+            # Restore defaults so remaining catalog tests run in their
+            # original subject-only configuration.
+            restored = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": older.json()["revision"],
+                    "reference_preferences": default_disabled,
+                },
+            )
+            assert restored.status_code == 200, restored.text
+            assert len(project_types.get_type("mathematical").research_standards_references) == 1
 
     from sigma.reference_titles import _TitleParser, resolve_title
 
