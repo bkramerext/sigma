@@ -1364,8 +1364,13 @@ def reserve_call(
                     "The per-user research token budget has been reached."
                 )
             now = _now()
+            # Explicit column names keep reservations compatible with
+            # previously migrated ledgers that may have extra columns.
             db.execute(
-                "INSERT INTO calls VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO calls "
+                "(call_id,session_id,workspace_id,amount_usd,status,"
+                "token_reservation,input_tokens,output_tokens,created_at,"
+                "updated_at,maximum_liability_usd) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     call_id,
                     session_id,
@@ -1381,7 +1386,13 @@ def reserve_call(
                 ),
             )
     except sqlite3.Error as exc:
-        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+        # A storage/schema failure is not an exhausted allowance. Preserve
+        # fail-closed admission and surface a bounded diagnostic category.
+        sqlite_code = getattr(exc, "sqlite_errorname", "SQLITE_ERROR")
+        raise CloudResearchUnavailable(
+            f"Cloud research ledger reservation failed ({sqlite_code}). "
+            "No provider call was dispatched; inspect backend SQLite diagnostics."
+        ) from exc
 
 
 def settle_call(
