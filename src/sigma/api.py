@@ -191,7 +191,7 @@ def list_project_types_view(request: Request):
         }
     return {
         "project_types": [item.record() for item in project_types.all_types()],
-        "common_references": project_types.common_references(),
+        "common_references": project_types.curated_common_references(),
         "common_custom_references": project_types.common_custom_references(),
         "reference_preferences": project_types.reference_preferences(),
         "icons": {"placeholder": project_types.placeholder_icon()},
