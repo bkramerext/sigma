@@ -4127,8 +4127,10 @@ async def test_malformed_output_and_restart(path: Path):
         investigation(1),
         skeptic(1),
         investigation(2),
-        httpx.ReadTimeout(""),
-        httpx.ReadTimeout(""),
+        *[
+            httpx.ReadTimeout("")
+            for _ in range(research_sessions.MAX_TRANSIENT_AUTO_RETRIES + 1)
+        ],
     ]
 
     async def fail_second_review(request):
