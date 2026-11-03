@@ -1635,12 +1635,10 @@ def _scientific_candidate_evaluation(
                 and not str(step["review"].get("objection") or "").strip()
             }
             prior_basis_valid = bool(basis) and all(
-                isinstance(identifier, str) and identifier in linked
-                for identifier in basis
+                isinstance(identifier, str) and identifier in linked for identifier in basis
             )
             current_basis_valid = bool(step_basis) and all(
-                type(number) is int and number in accepted_step_numbers
-                for number in step_basis
+                type(number) is int and number in accepted_step_numbers for number in step_basis
             )
             if not (
                 evidence.get("sufficiency") == "sufficient_for_scoped_claim"
