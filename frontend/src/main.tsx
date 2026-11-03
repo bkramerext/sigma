@@ -813,10 +813,16 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const provenance = session.outcome.execution_provenance;
   const runMetrics = session.outcome.metrics?.operational ?? [];
   const budgetDenied = session.steps.some(step => step.failure_kind === 'budget_denied');
-  const budgetReason = session.strategy_runs?.find(branch => /allowance|inference[- ]spend|cost reserve|cost limit/i.test(branch.reason ?? ''))?.reason;
+  const budgetReason = session.strategy_runs?.find(branch =>
+    /allowance|inference[- ]spend|cost reserve|cost limit|global spend|token budget|capacity|funding/i.test(branch.reason ?? '')
+  )?.reason;
+  const compilation = session.outcome.source_material?.compilation;
+  const compilerAttempted = !!compilation?.started_at;
   const budgetNotice = budgetDenied
     ? session.calls_used === 0
-      ? 'The available research funds could not cover a provider call. No provider calls were made.'
+      ? compilerAttempted
+        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research References for its status.'
+        : 'The available research funds could not cover a provider call. No provider calls were made.'
       : 'Research stopped because the remaining research funds could not cover another provider call. Saved findings are preserved.'
     : '';
   const statusHeading = budgetDenied
