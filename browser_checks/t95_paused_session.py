@@ -281,7 +281,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                 2: "stopped by user",
                 3: "required context exceeded the available context limit",
                 4: "configured elapsed-time limit",
-                5: "configured cost or call budget limit",
+                5: "Configured cost limit reached; research remains paused.",
                 6: "selected model or AI connection changed",
                 7: "project or one of its strategies changed",
                 8: "Review the stop details above",
