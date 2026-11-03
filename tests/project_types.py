@@ -92,10 +92,7 @@ def main() -> None:
             assert "builtin_references" not in before
             default_disabled = before["reference_preferences"]
             assert default_disabled == {
-                "common": {
-                    field: [ref["url"] for ref in refs]
-                    for field, refs in common.items()
-                }
+                "common": {field: [ref["url"] for ref in refs] for field, refs in common.items()}
             }
             assert project_types.common_research_references() == ()
             # Invalid preferences may not change curated catalog definitions.
@@ -105,7 +102,9 @@ def main() -> None:
                     "project_types": [],
                     "expected_revision": before["revision"],
                     "reference_preferences": {
-                        "common": {"hidden_research": [common["research_standards_references"][0]["url"]]}
+                        "common": {
+                            "hidden_research": [common["research_standards_references"][0]["url"]]
+                        }
                     },
                 },
             )
@@ -118,8 +117,12 @@ def main() -> None:
             math_ref = builtins_by_id["mathematical"].research_standards_references[0]["url"]
             custom_preferences = {
                 "common": {
-                    "research_standards_references": [common["research_standards_references"][1]["url"]],
-                    "publication_standards_references": [ref["url"] for ref in common["publication_standards_references"]],
+                    "research_standards_references": [
+                        common["research_standards_references"][1]["url"]
+                    ],
+                    "publication_standards_references": [
+                        ref["url"] for ref in common["publication_standards_references"]
+                    ],
                 },
                 "mathematical": {"research_standards_references": [math_ref]},
             }
@@ -132,7 +135,10 @@ def main() -> None:
                 },
             )
             assert updated.status_code == 200, updated.text
-            assert client.get("/api/project-types").json()["reference_preferences"] == custom_preferences
+            assert (
+                client.get("/api/project-types").json()["reference_preferences"]
+                == custom_preferences
+            )
             enabled_math = project_types.get_type("mathematical")
             assert enabled_math is not None
             assert {ref["url"] for ref in enabled_math.research_standards_references} == {
@@ -144,6 +150,7 @@ def main() -> None:
             assert len(enabled_physics.research_standards_references) == 2
             assert len(enabled_physics.publication_standards_references) == 1
             from sigma import research_method_sources
+
             methods, _ = research_method_sources._effective_sources("mathematical")
             assert {ref["url"] for ref in methods} == {
                 common["research_standards_references"][0]["url"]
