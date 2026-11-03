@@ -9,6 +9,7 @@ import tempfile
 import time
 from pathlib import Path
 from urllib.parse import quote
+from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -753,6 +754,123 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             )
             expect(diagnostic.get_by_role("heading", name="Strategies")).to_be_visible()
             diagnostic.close()
+
+            # Compilation is session-wide: do not render fanout status or
+            # concurrency counts until the compiler has completed/fallen back.
+            compilation_context = browser.new_context(viewport={"width": 1440, "height": 844})
+            compilation_page = compilation_context.new_page()
+            compilation_page_errors: list[str] = []
+            compilation_page.on(
+                "pageerror", lambda error: compilation_page_errors.append(str(error))
+            )
+            stage_ids: dict[str, str] = {}
+
+            def compilation_session_response(route):
+                response = route.fetch()
+                payload = response.json()
+                for index, state in enumerate(
+                    ("pending", "running", "completed", "skipped", "fallback", "not_needed"),
+                    start=12,
+                ):
+                    variant = json.loads(json.dumps(session))
+                    variant_id = stage_ids.setdefault(state, str(uuid4()))
+                    variant["id"] = variant_id
+                    variant["session_number"] = index
+                    variant["status"] = "queued" if state == "pending" else "running"
+                    variant["current_action"] = (
+                        "Queued"
+                        if state == "pending"
+                        else "Compiling research references"
+                        if state == "running"
+                        else "Compiling research references"
+                        if state == "completed"
+                        else "2 strategies active · shared budget"
+                    )
+                    variant["calls_used"] = 0 if state in {"pending", "running"} else 1
+                    variant["steps"] = (
+                        []
+                        if state in {"pending", "running"}
+                        else [
+                            {
+                                "id": "mock-investigator",
+                                "strategy_id": "strategy-a",
+                                "role": "investigator",
+                                "status": "running",
+                                "cycle": 1,
+                            }
+                        ]
+                    )
+                    variant["artifacts"] = []
+                    variant["strategy_runs"] = [
+                        {
+                            "strategy_id": "strategy-a",
+                            "strategy_title": "First strategy",
+                            "status": "queued",
+                            "current_action": "Queued",
+                            "current_question": "Check the first case",
+                            "cycle": 0,
+                            "calls_used": 0,
+                            "artifacts": [],
+                        },
+                        {
+                            "strategy_id": "strategy-b",
+                            "strategy_title": "Second strategy",
+                            "status": "queued",
+                            "current_action": "Queued",
+                            "current_question": "Check the second case",
+                            "cycle": 0,
+                            "calls_used": 0,
+                            "artifacts": [],
+                        },
+                    ]
+                    variant["outcome"]["source_material"] = {
+                        "status": "selected",
+                        "mode": "mathematical",
+                        "sources": [],
+                        "compilation": {
+                            "version": "research-method-compilation-v1",
+                            "status": state,
+                            "source_count": 2,
+                        },
+                    }
+                    payload["sessions"].append(variant)
+                route.fulfill(
+                    status=response.status,
+                    content_type="application/json",
+                    body=json.dumps(payload),
+                )
+
+            compilation_page.route(
+                "**/api/projects/research-sessions?*",
+                compilation_session_response,
+            )
+            compilation_page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
+            expect(compilation_page.get_by_role("heading", name="Strategies")).to_be_visible()
+            for state, label in (
+                ("pending", "Preparing references"),
+                ("running", "Compiling references"),
+            ):
+                stage_row = compilation_page.locator(f'li[data-session-id="{stage_ids[state]}"]')
+                expect(stage_row.locator(".session-strategy-live-status li")).to_have_count(1)
+                expect(stage_row.locator(".session-strategy-live-status li")).to_contain_text(label)
+                expect(stage_row.locator(".session-strategy-live-status")).not_to_contain_text(
+                    "S1/"
+                )
+                expect(stage_row.locator(".session-progress-inline")).not_to_contain_text(
+                    "in flight"
+                )
+            # A stale action label cannot revive a completed compiler barrier.
+            for state in ("completed", "skipped", "fallback", "not_needed"):
+                stage_row = compilation_page.locator(f'li[data-session-id="{stage_ids[state]}"]')
+                expect(stage_row.locator(".session-strategy-live-status li")).to_have_count(2)
+                expect(stage_row.locator(".session-strategy-live-status")).to_contain_text(
+                    "S1/Investigator"
+                )
+                expect(stage_row.locator(".session-progress-inline")).to_contain_text(
+                    "1 in flight · 1 waiting"
+                )
+            assert not compilation_page_errors, compilation_page_errors
+            compilation_context.close()
 
             assert not starts, "Fixtures must not start provider sessions"
             assert not errors, errors
