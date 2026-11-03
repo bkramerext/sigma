@@ -191,6 +191,48 @@ def main() -> None:
     assert resolve_title("http://127.0.0.1/secret") is None
     assert resolve_title("file:///etc/passwd") is None
 
+    # Google redirects from its bare domain to www; the visible reference
+    # should still resolve to "Google" rather than displaying the bare URL.
+    from sigma import reference_titles
+
+    reference_titles.resolve_title.cache_clear()
+    with patch(
+        "sigma.reference_titles._request_page",
+        side_effect=[
+            (301, "https://www.google.com/", None),
+            (200, None, b"<html><head><title>Google</title></head></html>"),
+        ],
+    ) as request_page:
+        assert resolve_title("https://google.com/") == "Google"
+        assert [args.args[0] for args in request_page.call_args_list] == [
+            "https://google.com/",
+            "https://www.google.com/",
+        ]
+    reference_titles.resolve_title.cache_clear()
+
+    # Redirects must not downgrade HTTPS or run forever on loops.
+    with patch(
+        "sigma.reference_titles._request_page",
+        return_value=(302, "http://www.google.com/", None),
+    ) as request_page:
+        assert resolve_title("https://google.com/") is None
+        assert request_page.call_count == 1
+    reference_titles.resolve_title.cache_clear()
+    with patch(
+        "sigma.reference_titles._request_page",
+        return_value=(301, "/same", None),
+    ) as request_page:
+        assert resolve_title("https://www.google.com/same") is None
+        assert request_page.call_count == 1
+    reference_titles.resolve_title.cache_clear()
+    with patch(
+        "sigma.reference_titles._request_page",
+        return_value=(302, "https://www.google.com/next", None),
+    ) as request_page:
+        assert resolve_title("https://google.com/") is None
+        assert request_page.call_count <= reference_titles._MAX_REDIRECTS + 1
+    reference_titles.resolve_title.cache_clear()
+
     import socket
 
     from sigma.reference_titles import domain_status
