@@ -1843,9 +1843,7 @@ class CloudAuthTests(TestCase):
                 401,
             )
             # A fresh chooser flow continues to complete normally.
-            allowed = self.finish(
-                email="sponsor@example.test", subject="configured-google-subject"
-            )
+            allowed = self.finish(email="sponsor@example.test", subject="configured-google-subject")
             self.assertEqual(allowed.status_code, 303)
             self.assertEqual(allowed.headers["location"], "/")
             self.assertIn("sigma_session", allowed.cookies)
@@ -1853,9 +1851,7 @@ class CloudAuthTests(TestCase):
             self.client.cookies.set("sigma_session", allowed.cookies["sigma_session"])
             account = self.client.get("/api/cloud-auth/status").json()
             self.assertTrue(account["authenticated"])
-            self.assertEqual(
-                account["user"], {"email": "sponsor@example.test", "role": "admin"}
-            )
+            self.assertEqual(account["user"], {"email": "sponsor@example.test", "role": "admin"})
             self.assertFalse(account["account"]["invitation_welcome_pending"])
             self.assertEqual(account["admin_contact_email"], "sponsor@example.test")
             self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
@@ -2318,9 +2314,7 @@ class CloudAuthTests(TestCase):
             },
         ):
             os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
-            login = self.finish(
-                email="sponsor@example.test", subject="configured-google-admin"
-            )
+            login = self.finish(email="sponsor@example.test", subject="configured-google-admin")
             self.assertEqual(login.status_code, 303)
             self.client.cookies.update(login.cookies)
             status = self.client.get("/api/cloud-auth/status").json()
@@ -2559,9 +2553,7 @@ class CloudAuthTests(TestCase):
             },
         ):
             os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
-            login = self.finish(
-                email="sponsor@example.test", subject="connection-identity-admin"
-            )
+            login = self.finish(email="sponsor@example.test", subject="connection-identity-admin")
             self.client.cookies.update(login.cookies)
             self.assertEqual(
                 self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
@@ -2762,9 +2754,7 @@ class CloudAuthTests(TestCase):
             },
         ):
             os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
-            login = self.finish(
-                email="sponsor@example.test", subject="same-email-personal-owner"
-            )
+            login = self.finish(email="sponsor@example.test", subject="same-email-personal-owner")
             self.assertEqual(login.status_code, 303)
             self.client.cookies.update(login.cookies)
             self.assertEqual(
@@ -2814,9 +2804,7 @@ class CloudAuthTests(TestCase):
                 initial_connection = restarted.get("/api/ai/connection")
             self.assertEqual(initial_connection.status_code, 200, initial_connection.text)
             self.assertEqual(initial_connection.json()["status"], "connected")
-            self.assertEqual(
-                initial_connection.json().get("account_label"), "sponsor@example.test"
-            )
+            self.assertEqual(initial_connection.json().get("account_label"), "sponsor@example.test")
             self.assertIn(sponsor_token, observed_tokens)
 
             token_record = {
@@ -2941,9 +2929,7 @@ class CloudAuthTests(TestCase):
                 sponsor_connection = restarted.get("/api/ai/connection?refresh=true")
             self.assertEqual(sponsor_connection.status_code, 200, sponsor_connection.text)
             self.assertEqual(sponsor_connection.json()["status"], "connected")
-            self.assertEqual(
-                sponsor_connection.json()["account_label"], "sponsor@example.test"
-            )
+            self.assertEqual(sponsor_connection.json()["account_label"], "sponsor@example.test")
             self.assertIn(sponsor_token, observed_tokens)
 
             with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
@@ -3079,9 +3065,7 @@ class CloudAuthTests(TestCase):
                         self.assertEqual(personal.status_code, 200, personal.text)
                         connection = client.get("/api/ai/connection")
                     self.assertEqual(connection.json()["status"], "connected")
-                    self.assertEqual(
-                        connection.json().get("account_label"), "sponsor@example.test"
-                    )
+                    self.assertEqual(connection.json().get("account_label"), "sponsor@example.test")
 
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
@@ -3322,7 +3306,7 @@ class CloudAuthTests(TestCase):
             "/api/cloud-auth/admin/grants",
             json={
                 "kind": "domain",
-                "value": "gmail.com",
+                "value": "example.test",
                 "role": "member",
                 "allowance_usd": 10,
             },
@@ -3388,7 +3372,7 @@ class CloudAuthTests(TestCase):
             with cloud_auth._db(cloud_auth.config()) as db:
                 db.execute(
                     "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
-                    "VALUES('domain','gmail.com','member',1,?,10)",
+                    "VALUES('domain','example.test','member',1,?,10)",
                     (cloud_auth._now(),),
                 )
             status = self.client.get("/api/cloud-auth/status").json()
@@ -3455,7 +3439,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "domain",
-                    "value": "gmail.com",
+                    "value": "example.test",
                     "role": "member",
                     "allowance_usd": 10,
                 },
@@ -3465,7 +3449,7 @@ class CloudAuthTests(TestCase):
             with cloud_auth._db(cloud_auth.config()) as db:
                 policy = db.execute(
                     "SELECT role,active,allowance_usd FROM grants "
-                    "WHERE kind='domain' AND value='gmail.com'"
+                    "WHERE kind='domain' AND value='example.test'"
                 ).fetchone()
             self.assertEqual(tuple(policy), ("member", 1, 10))
 
@@ -3718,7 +3702,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "domain",
-                    "value": "gmail.com",
+                    "value": "example.test",
                     "role": "member",
                     "allowance_usd": 10,
                 },
@@ -3742,7 +3726,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(tuple(restored), ("member", 1, 10))
             self.assertEqual(approvals, 1)
 
-            # Removing the individual grant is not a ban. Active gmail.com
+            # Removing the individual grant is not a ban. Active example.test
             # grants authorize the SAME Google account again on the next pass.
             removed = admin.delete(
                 "/api/cloud-auth/admin/grants/email/" + email,
@@ -3802,7 +3786,7 @@ class CloudAuthTests(TestCase):
                     "/api/cloud-auth/admin/grants",
                     json={
                         "kind": "domain",
-                        "value": "gmail.com",
+                        "value": "example.test",
                         "role": "member",
                         "allowance_usd": 10,
                     },
@@ -3814,7 +3798,7 @@ class CloudAuthTests(TestCase):
                 domain = next(
                     grant
                     for grant in visible.json()["grants"]
-                    if grant["kind"] == "domain" and grant["value"] == "gmail.com"
+                    if grant["kind"] == "domain" and grant["value"] == "example.test"
                 )
                 self.assertEqual((domain["role"], domain["active"]), ("member", 1))
                 with patch.object(cloud_auth, "_deliver_invitation"):
@@ -3831,7 +3815,7 @@ class CloudAuthTests(TestCase):
                 self.assertEqual(tuple(grant), ("member", 1, 10))
                 # Remove both derived email authorization and its domain.
                 # No permanent deny or stale session may survive this reset.
-                for kind, value in (("email", email), ("domain", "gmail.com")):
+                for kind, value in (("email", email), ("domain", "example.test")):
                     removed = admin.delete(
                         f"/api/cloud-auth/admin/grants/{kind}/{value}",
                         headers={"Origin": local_origin},
@@ -3853,7 +3837,7 @@ class CloudAuthTests(TestCase):
     def test_fresh_local_google_login_after_old_revoke_and_new_domain_grant(self):
         """A new domain admission supersedes old revocation and pending request."""
         local_origin = "http://127.0.0.1:5173"
-        email = "previous-invite@gmail.com"
+        email = "previous-invite@example.test"
         subject = "fresh-previous-invite-sub"
         with patch.dict(
             os.environ,
@@ -3894,7 +3878,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "domain",
-                    "value": "gmail.com",
+                    "value": "example.test",
                     "role": "member",
                     "allowance_usd": 10,
                 },
