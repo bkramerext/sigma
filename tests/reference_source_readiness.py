@@ -18,7 +18,7 @@ import research_sessions as fixture
 from sigma import research_reference_compiler, research_sessions
 from sigma.openai_connection import AuthContext
 from sigma.projects import ProjectError
-
+from sigma.project_types import builtin_types, curated_common_references
 from sigma.research_method_sources import retrieval_readiness_errors
 
 
@@ -41,7 +41,6 @@ def source(title: str, *, status: str = "retrieved", reason: str | None = None) 
     return {"id": title.lower(), "title": title, "url": retrieval["url"], "retrieval": retrieval}
 
 
-
 def verify_compiler_receives_verified_excerpts() -> None:
     configured = [source("UConn"), source("Close-reading"), source("Source-synthesis")]
     snapshot = {
@@ -56,8 +55,7 @@ def verify_compiler_receives_verified_excerpts() -> None:
     assert len(supplied) == 3, supplied
     assert {row["id"] for row in supplied} == {"uconn", "close-reading", "source-synthesis"}
     assert all(
-        row["excerpt_sha256"]
-        == hashlib.sha256(row["excerpt"].encode("utf-8")).hexdigest()
+        row["excerpt_sha256"] == hashlib.sha256(row["excerpt"].encode("utf-8")).hexdigest()
         for row in supplied
     )
     configured[1]["retrieval"]["excerpt"] = "Tampered source text"
@@ -94,20 +92,26 @@ async def verify_provider_free_admission() -> None:
             "retrieval_summary": {"retrieved": 1, "unavailable": 2},
         }
         with (
-            patch.dict(os.environ, {"SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS": "true"}),
-            patch.object(
-                research_sessions, "auth_context", new=AsyncMock(return_value=credential)
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS": "true",
+                    "SIGMA_REFERENCE_COMPILATION_ENABLED": "true",
+                },
             ),
-            patch.object(
-                research_sessions, "configuration", new=AsyncMock(return_value=config)
-            ),
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(research_sessions, "select_method_sources", return_value=methods),
             patch.object(research_sessions, "_worker", new=AsyncMock()) as mock_worker,
         ):
             try:
                 await research_sessions.start_session(
-                    str(path), strategy.id, str(uuid4()), view.project.id,
-                    credential["identity"], expected_limits=limits,
+                    str(path),
+                    strategy.id,
+                    str(uuid4()),
+                    view.project.id,
+                    credential["identity"],
+                    expected_limits=limits,
                     strategy_ids=[strategy.id],
                 )
             except ProjectError as exc:
@@ -124,8 +128,11 @@ async def verify_provider_free_admission() -> None:
             # admission without requiring a model request.
             ready = {
                 **methods,
-                "sources": [source("UConn"), source("Brandeis-close-reading"),
-                            source("Brandeis-source-synthesis")],
+                "sources": [
+                    source("UConn"),
+                    source("Brandeis-close-reading"),
+                    source("Brandeis-source-synthesis"),
+                ],
                 "retrieval_summary": {"retrieved": 3, "unavailable": 0},
             }
             with patch.object(research_sessions, "select_method_sources", return_value=ready):
@@ -140,6 +147,18 @@ async def verify_provider_free_admission() -> None:
             assert saved["reference_compilation"]["status"] == "pending"
             assert saved["calls_used"] == 0
             assert saved["steps"] == []
+
+
+def verify_curated_method_reference_defaults() -> None:
+    common = curated_common_references()["research_standards_references"]
+    literature = next(item for item in builtin_types() if item.id == "literature")
+    urls = {item["url"] for item in common}
+    urls.update(item["url"] for item in literature.research_standards_references)
+    assert urls == {
+        "https://guides.lib.uconn.edu/c.php?g=1067492&p=7986329",
+        "https://writingcenter.tamu.edu/guides/resources/lit-reviews.html",
+        "https://writing.wisc.edu/handbook/academicwriting/closereading/",
+    }, urls
 
 
 def main() -> None:
@@ -168,13 +187,15 @@ def main() -> None:
     assert "SHA-256" in retrieval_readiness_errors({"sources": [modified]})[0]
     missing_content_hash = source("No-content-hash")
     missing_content_hash["retrieval"]["content_sha256"] = None
-    assert "source-content SHA-256" in retrieval_readiness_errors(
-        {"sources": [missing_content_hash]}
-    )[0]
+    assert (
+        "source-content SHA-256"
+        in retrieval_readiness_errors({"sources": [missing_content_hash]})[0]
+    )
 
     # An empty selection is not evidence that all configured methods were read.
     assert retrieval_readiness_errors({"sources": []})
     assert retrieval_readiness_errors({"sources": "invalid"})
+    verify_curated_method_reference_defaults()
     verify_compiler_receives_verified_excerpts()
     asyncio.run(verify_provider_free_admission())
     print("PASS: research-reference admission / all-3 retrievable / 403 / no provider dispatch")

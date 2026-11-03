@@ -6191,12 +6191,13 @@ async def start_session(
             )
             # Pilot admission: every selected methodological reference must be
             # actually retrieved and hash-verified before billable provider work.
-            if os.environ.get(
-                "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS", ""
-            ).strip().lower() in {"1", "true", "yes", "on"}:
-                reference_issues = retrieval_readiness_errors(
-                    record["research_method_sources"]
-                )
+            if os.environ.get("SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }:
+                reference_issues = retrieval_readiness_errors(record["research_method_sources"])
                 if reference_issues:
                     raise ProjectError(
                         "Research-reference admission blocked before provider dispatch: "

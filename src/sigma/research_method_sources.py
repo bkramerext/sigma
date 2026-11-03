@@ -152,6 +152,16 @@ BY_URL[
     "title": "ACM SIGSOFT — Engineering Research",
     "notes": "For software engineering distinguish conceptual designs, analytical results, tested implementations, and independently measured outcomes. Check the task, correctness oracle, and limitations.",
 }
+BY_URL["https://writing.wisc.edu/handbook/academicwriting/closereading/"] = {
+    "id": "uw-madison-literary-close-reading",
+    "title": "UW–Madison — A Short Guide to Close Reading for Literary Analysis",
+    "notes": "Analyze diction, imagery, form, narrative voice and competing interpretations in identifiable passages; distinguish textual observations from assumptions about authorial intention.",
+}
+BY_URL["https://writingcenter.tamu.edu/guides/resources/lit-reviews.html"] = {
+    "id": "tamu-critical-literature-synthesis",
+    "title": "Texas A&M University Writing Center — Literature Reviews",
+    "notes": "Compare and critically appraise relevant studies and arguments by shared themes or contested claims, rather than listing summaries. Trace source positions and evidentiary limits.",
+}
 CATALOG_VERSION = "project-type-methods-v1"
 
 
