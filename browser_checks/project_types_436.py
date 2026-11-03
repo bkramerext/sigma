@@ -97,12 +97,16 @@ with sync_playwright() as playwright:
     common_section = dialog.locator(".pt-common-references")
     expect(common_section.locator(".pt-reference-link")).to_have_count(4)
     expect(common_section.locator("input")).to_have_count(0)
-    expect(common_section.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(4)
+    expect(common_section.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(
+        4
+    )
     expect(common_section.locator(".pt-reference-url")).to_have_count(0)
     expect(common_section.locator(".pt-reference-link a")).to_have_count(4)
     common_section.locator(".pt-reference-toggle").filter(has_text="Enable").first.click()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
-    expect(common_section.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(1)
+    expect(common_section.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(
+        1
+    )
     common_section.locator(".pt-reference-toggle").filter(has_text="Disable").first.click()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     math_card = dialog.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
@@ -584,9 +588,9 @@ with sync_playwright() as playwright:
     types_dialog.locator("header").get_by_role("button", name="Save", exact=True).click()
     expect(types_dialog).not_to_be_visible()
     preferences = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
-    math_ref = next(
-        item for item in preferences["project_types"] if item["id"] == "mathematical"
-    )["research_standards_references"][0]["url"]
+    math_ref = next(item for item in preferences["project_types"] if item["id"] == "mathematical")[
+        "research_standards_references"
+    ][0]["url"]
     assert preferences["reference_preferences"]["mathematical"][
         "research_standards_references"
     ] == [math_ref]
