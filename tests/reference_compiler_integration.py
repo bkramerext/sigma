@@ -604,7 +604,9 @@ async def verify_compiler_billing_settlement_failure(path: Path) -> None:
 
         with (
             patch.object(research_sessions.cloud_research, "billing_enabled", return_value=True),
-            patch.object(research_sessions.cloud_research, "reserve_call", side_effect=verify_write_ahead),
+            patch.object(
+                research_sessions.cloud_research, "reserve_call", side_effect=verify_write_ahead
+            ),
             patch.object(
                 research_sessions.cloud_research,
                 "settle_call",

@@ -3108,7 +3108,9 @@ def _refresh_token_accounting(record: dict[str, Any]) -> None:
             steps = [
                 *steps,
                 {
-                    "status": "completed" if compiler.get("status") == "completed" else "incomplete",
+                    "status": "completed"
+                    if compiler.get("status") == "completed"
+                    else "incomplete",
                     "token_usage": compiler["token_usage"],
                 },
             ]
@@ -13000,11 +13002,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                         0.0,
                         float(latest.get("estimated_cost_reserved_usd", 0.0)) - quote,
                     )
-            if (
-                estimated is not None
-                and cloud_settled
-                and latest.get("cost_status") == "available"
-            ):
+            if estimated is not None and cloud_settled and latest.get("cost_status") == "available":
                 latest["estimated_cost_usd"] = round(
                     float(latest.get("estimated_cost_usd", 0.0)) + estimated, 9
                 )
