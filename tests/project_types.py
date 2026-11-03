@@ -359,10 +359,9 @@ def main() -> None:
                 },
             )
             assert hidden_builtin.status_code == 200, hidden_builtin.text
-            assert (
-                builtin_research
-                not in project_types.get_type("mathematical").research_standards_references
-            )
+            disabled_math = project_types.get_type("mathematical")
+            assert disabled_math is not None
+            assert builtin_research not in disabled_math.research_standards_references
             removed_builtin = client.put(
                 "/api/project-types",
                 json={
@@ -374,8 +373,11 @@ def main() -> None:
             )
             assert removed_builtin.status_code == 200, removed_builtin.text
             assert project_types.builtin_custom_references() == {}
-            assert project_types.get_type("mathematical").research_standards_references == (
-                builtins_by_id["mathematical"].research_standards_references
+            restored_math = project_types.get_type("mathematical")
+            assert restored_math is not None
+            assert (
+                restored_math.research_standards_references
+                == builtins_by_id["mathematical"].research_standards_references
             )
 
     from sigma.reference_titles import _TitleParser, resolve_title
