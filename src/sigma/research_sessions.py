@@ -12508,12 +12508,8 @@ def _optional_reference_compilation_headroom(
         role_requests: list[bytes] = []
         for branch in queued:
             context = _portfolio_context(record, branch, "investigator", 1)
-            role_estimate = _reserve_cost(
-                record, context, "investigator", estimate=sponsored
-            )
-            role_liability = _reserve_cost(
-                record, context, "investigator", estimate=False
-            )
+            role_estimate = _reserve_cost(record, context, "investigator", estimate=sponsored)
+            role_liability = _reserve_cost(record, context, "investigator", estimate=False)
             if role_estimate is None or role_liability is None:
                 return False
             research_cost += role_estimate
@@ -12544,24 +12540,25 @@ def _optional_reference_compilation_headroom(
             # Hosted allowance tracks tokens as well as dollars. Check the
             # full output ceilings of the first parallel Investigator wave,
             # leaving enough headroom for research after compilation.
-            existing_tokens = funding.get("user_reserved_or_observed_tokens")
-            token_ceiling = int(os.environ.get("SIGMA_CLOUD_USER_TOKEN_BUDGET", "2000000"))
-            if (
-                type(existing_tokens) is not int
-                or existing_tokens < 0
-                or token_ceiling < 1
-                or not compiler_request_body
-                or compiler_output_bound < 1
-            ):
-                return False
-            expected_tokens = (
-                existing_tokens + len(compiler_request_body) + 8192 + compiler_output_bound
-            )
-            expected_tokens += sum(
-                len(request) + 8192 + provider_output_bound for request in role_requests
-            )
-            if expected_tokens > token_ceiling:
-                return False
+            if not cloud_research._admin_has_unlimited_spend():
+                existing_tokens = funding.get("user_reserved_or_observed_tokens")
+                token_ceiling = int(os.environ.get("SIGMA_CLOUD_USER_TOKEN_BUDGET", "2000000"))
+                if (
+                    type(existing_tokens) is not int
+                    or existing_tokens < 0
+                    or token_ceiling < 1
+                    or not compiler_request_body
+                    or compiler_output_bound < 1
+                ):
+                    return False
+                expected_tokens = (
+                    existing_tokens + len(compiler_request_body) + 8192 + compiler_output_bound
+                )
+                expected_tokens += sum(
+                    len(request) + 8192 + provider_output_bound for request in role_requests
+                )
+                if expected_tokens > token_ceiling:
+                    return False
         if isinstance(hard, dict):
             if not compiler_request_body or compiler_output_bound < 1:
                 return False
@@ -12584,6 +12581,7 @@ def _optional_reference_compilation_headroom(
     except Exception:  # noqa: BLE001 — optional step must never block research
         return False
     return True
+
 
 async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
     """One durable, non-replayed AI method-compilation stage before research.

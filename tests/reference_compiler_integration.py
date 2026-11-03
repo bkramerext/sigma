@@ -235,7 +235,7 @@ async def verify_compilation(
             "calls"
         ]
         if compiler_server_error or pause_during_compilation:
-            assert ledger["calls"][0]["status"] == "unknown"
+            assert ledger["calls"][0]["status"] == "unknown_compiler_abandoned"
             assert ledger["blocked_reason"] is None
         else:
             assert all(item["status"] in {"settled", "rejected"} for item in ledger["calls"])
@@ -420,6 +420,38 @@ def verify_hard_budget_compiler_does_not_steal_first_turn() -> None:
         assert ledger["calls"] == []
 
 
+def verify_abandoned_compiler_preserves_future_review_recovery() -> None:
+    """A retained unknown compiler liability cannot poison later Skeptic recovery."""
+    from sigma.research_budget import (
+        authorize_independent_review_after_unknown,
+        authorize_reference_compiler_recovery_after_unknown,
+        mark_unknown,
+        new_ledger,
+        reserve_before_dispatch,
+        totals,
+    )
+
+    ledger = new_ledger(
+        call_limit=4,
+        input_token_limit=100_000,
+        output_tokens_per_call=1000,
+        cost_limit_usd=10.0,
+        input_price_per_million=2.5,
+        output_price_per_million=10.0,
+    )
+    reserve_before_dispatch(ledger, call_id="compiler", request_body=b"compiler")
+    mark_unknown(ledger, call_id="compiler")
+    before = totals(ledger)
+    authorize_reference_compiler_recovery_after_unknown(ledger, call_id="compiler")
+    assert ledger["calls"][0]["status"] == "unknown_compiler_abandoned"
+    assert totals(ledger)["cost_usd_used_or_reserved"] == before["cost_usd_used_or_reserved"]
+    reserve_before_dispatch(ledger, call_id="skeptic", request_body=b"skeptic")
+    mark_unknown(ledger, call_id="skeptic")
+    authorize_independent_review_after_unknown(ledger, uncertain_call_ids={"skeptic"})
+    assert ledger["blocked_reason"] is None
+    assert totals(ledger)["calls_including_unknown"] == 2
+
+
 def verify_compiled_methods_survive_context_compaction() -> None:
     """Late-round context compaction cannot drop the frozen shared guide."""
     from sigma.research_context_budget import compact_dispatch_context
@@ -450,6 +482,7 @@ def verify_compiled_methods_survive_context_compaction() -> None:
 
 
 async def main() -> None:
+    verify_abandoned_compiler_preserves_future_review_recovery()
     verify_compiled_methods_survive_context_compaction()
     verify_compilation_preserves_first_turn_funding()
     verify_hard_budget_compiler_does_not_steal_first_turn()

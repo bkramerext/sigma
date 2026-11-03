@@ -77,6 +77,10 @@ def authorize_reference_compiler_recovery_after_unknown(
         ):
             raise BudgetExceeded("Other unsettled provider requests block compiler recovery")
         return
+    if target.get("status") == "unknown_compiler_abandoned":
+        if ledger.get("blocked_reason"):
+            raise BudgetExceeded("Another uncertain provider call blocks research")
+        return
     if target.get("status") == "reserved":
         mark_unknown(ledger, call_id=call_id)
     elif target.get("status") != "unknown":
@@ -85,7 +89,9 @@ def authorize_reference_compiler_recovery_after_unknown(
         item is not target and item.get("status") in {"reserved", "unknown"} for item in calls
     ):
         raise BudgetExceeded("Unknown compiler usage cannot bypass another budget failure")
-    # The call remains unknown and counts at its full reserved liability.
+    # Keep the exact original liability; distinguish this explicitly abandoned
+    # compiler from uncertain role calls in independent Skeptic recovery.
+    target["status"] = "unknown_compiler_abandoned"
     ledger["blocked_reason"] = None
 
 
