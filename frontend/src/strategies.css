@@ -455,9 +455,6 @@
   border: 1px solid transparent; border-radius: 6px; color: #c7a16d;
 }
 .workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle[aria-pressed="true"] { color: #f1c58d; }
-.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:hover:not(:disabled) {
-  border-color: #ac7054; background: var(--copper-gradient); color: #fff2e9;
-}
 .workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:focus-visible {
   outline: 2px solid #edbc77; outline-offset: 2px;
 }
@@ -1072,9 +1069,14 @@
 .workspace-page .session-strategy-live-status strong { color: var(--text, #e3e8ec); font-weight: 600; }
 
 /* Shared hover/focus state for all workspace icon buttons, including pane actions. */
-.workspace-page .workspace-icon-button { transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
+.workspace-page .workspace-icon-button,
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle {
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
 .workspace-page .workspace-icon-button:hover:not(:disabled),
 .workspace-page .workspace-icon-button:focus-visible,
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:hover:not(:disabled),
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:focus-visible,
 .workspace-page .project-pane-actions .text-view-icon:hover:not(:disabled),
 .workspace-page .project-pane-actions .text-view-icon:focus-visible {
   color: #fff2e9 !important; background: var(--copper-gradient) !important; border-color: #ac7054 !important;
@@ -1082,6 +1084,8 @@
 }
 .workspace-page .workspace-icon-button:hover:not(:disabled) svg,
 .workspace-page .workspace-icon-button:focus-visible svg,
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:hover:not(:disabled) svg,
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:focus-visible svg,
 .workspace-page .project-pane-actions .text-view-icon:hover:not(:disabled) svg,
 .workspace-page .project-pane-actions .text-view-icon:focus-visible svg { color: #fff2e9; }
 .workspace-page .workspace-icon-button:disabled { transition: none; }
