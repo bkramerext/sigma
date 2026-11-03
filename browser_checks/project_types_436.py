@@ -91,9 +91,12 @@ with sync_playwright() as playwright:
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
-    assert dialog.get_by_role("heading", name="Project Types", exact=True).evaluate(
-        "e => getComputedStyle(e).color"
-    ) == "rgb(244, 204, 105)"
+    assert (
+        dialog.get_by_role("heading", name="Project Types", exact=True).evaluate(
+            "e => getComputedStyle(e).color"
+        )
+        == "rgb(244, 204, 105)"
+    )
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     # Shared references start disabled per user; subject-specific references
     # start enabled. Catalog names/URLs remain immutable, but usage is editable.
