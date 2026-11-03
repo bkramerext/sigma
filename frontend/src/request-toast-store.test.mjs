@@ -147,6 +147,72 @@ test('long error messages are shortened before they can fill the screen', () => 
   assert.ok(toast.message.endsWith('… [message shortened]'));
 });
 
+test('identical provider failures become one toast without resetting its lifetime', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  const message = 'SIGMA-sponsored ChatGPT is temporarily unavailable. Please try again later. Saved research is unchanged.';
+  const first = store.add(message);
+  clock.advance(30_000);
+  const duplicate = store.add(message);
+  assert.equal(duplicate.id, first.id);
+  assert.deepEqual(store.getSnapshot().map(item => item.id), [first.id]);
+  assert.equal(clock.timers.size, 1);
+
+  // Frequent identical polling errors do not keep the notification alive forever.
+  clock.advance(29_999);
+  store.add(message);
+  clock.advance(1);
+  assert.equal(store.getSnapshot()[0].phase, 'exiting');
+  assert.equal(store.add(message).id, first.id);
+  clock.advance(REQUEST_TOAST_EXIT_MS);
+  assert.equal(store.getSnapshot().length, 0);
+  const retry = store.add(message);
+  assert.notEqual(retry.id, first.id);
+  assert.equal(store.getSnapshot().length, 1);
+});
+
+test('HTTP envelopes and whitespace are coalesced with the same local error detail', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  const detail = 'Billing is temporarily unavailable. Saved research is unchanged.';
+  const fromGlobalFetch = store.add(`HTTP 503 Service Unavailable: ${detail}`);
+  const fromLocalCatch = store.add(` Billing is temporarily unavailable.  Saved research is unchanged. `);
+  assert.equal(fromLocalCatch.id, fromGlobalFetch.id);
+  assert.equal(store.getSnapshot().length, 1);
+  assert.equal(clock.timers.size, 1);
+
+  const secondStore = makeStore(new FakeClock());
+  secondStore.add(detail);
+  secondStore.add(`HTTP 503: ${detail}`);
+  assert.equal(secondStore.getSnapshot().length, 1);
+});
+
+test('different errors remain distinct and a new retry can report after dismissal', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  const first = store.add('Provider is unavailable');
+  const other = store.add('Payment method was rejected');
+  assert.notEqual(first.id, other.id);
+  assert.equal(store.getSnapshot().length, 2);
+
+  store.dismiss(first.id);
+  assert.equal(store.add('Provider is unavailable').id, first.id);
+  clock.advance(REQUEST_TOAST_EXIT_MS);
+  const retry = store.add('Provider is unavailable');
+  assert.notEqual(retry.id, first.id);
+  assert.deepEqual(store.getSnapshot().map(item => item.message), ['Payment method was rejected', 'Provider is unavailable']);
+});
+
+test('duplicate bursts do not evict unrelated errors or allocate extra timers', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  for (let index = 0; index < 5; index += 1) store.add(`distinct error ${index}`);
+  const firstIds = store.getSnapshot().map(item => item.id);
+  for (let index = 0; index < 20; index += 1) store.add('distinct error 2');
+  assert.deepEqual(store.getSnapshot().map(item => item.id), firstIds);
+  assert.equal(clock.timers.size, 5);
+});
+
 test('exit phase slides down, stack gap collapses, and reduced-motion CSS disables motion', async () => {
   const css = await readFile(new URL('./request-toast.css', import.meta.url), 'utf8');
   assert.match(css, /\.request-toast\[data-phase="exiting"\][^{]*\{[^}]*translateY\(calc\(100% \+ 10px\)\)/s);
