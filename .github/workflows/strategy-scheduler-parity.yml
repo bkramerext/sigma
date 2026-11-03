@@ -1,9 +1,6 @@
 name: Strategy scheduler semantic parity (#421)
 
 on:
-  # Temporary parity-only branch trigger while stabilizing without Actions dispatch API access.
-  push:
-    branches: ['chat-a/421-parity-stabilization']
   pull_request:
     branches: [main]
     paths:
@@ -14,6 +11,7 @@ on:
       - 'tests/cloud_research.py'
       - 'tests/strategy_global_slots.py'
       - 'tests/strategy_scheduler_parity.py'
+      - 'tests/strategy_scheduler_parity_compare.py'
       - '.github/workflows/strategy-scheduler-parity.yml'
   workflow_dispatch:
 
@@ -22,7 +20,7 @@ permissions:
 
 jobs:
   original-main-parity:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.pull_request.number == 423 || github.event.pull_request.number == 426
+    # All relevant scheduler PRs must execute semantic parity, not only historical PR numbers.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
