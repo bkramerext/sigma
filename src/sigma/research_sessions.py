@@ -3554,11 +3554,29 @@ def _transient_failure_kind(exc: Exception) -> str | None:
 
 
 def _research_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """Normalize every object in the provider wire schema, including $defs.
+
+    Pydantic defaults are application-side parsing behavior, not valid strict
+    Responses API schema defaults. Every nested property is required on the
+    wire (nullable fields can still be null); Pydantic continues to enforce
+    all scientific-evidence constraints after decoding.
+    """
     schema = model.model_json_schema()
-    # Provider strict JSON requires every property, including nullable fields.
-    schema["required"] = list(schema["properties"])
-    for prop in schema["properties"].values():
-        prop.pop("default", None)
+
+    def normalize(node: Any) -> None:
+        if isinstance(node, dict):
+            node.pop("default", None)
+            properties = node.get("properties")
+            if node.get("type") == "object" and isinstance(properties, dict):
+                node["required"] = list(properties)
+                node["additionalProperties"] = False
+            for value in node.values():
+                normalize(value)
+        elif isinstance(node, list):
+            for value in node:
+                normalize(value)
+
+    normalize(schema)
     return schema
 
 
@@ -13774,6 +13792,8 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
     raw: dict[str, Any] | None = None
     compiled: dict[str, Any] | None = None
     call_error: str | None = None
+    provider_http_status: int | None = None
+    provider_error_code: str | None = None
     rejected = False
     try:
         timeout_seconds = min(120.0, _call_timeout_seconds(record))
@@ -13803,7 +13823,18 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 wire.extend(chunk)
                 if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
                     raise ProjectError("Reference compiler response exceeded the 8 MB safety bound")
+            provider_http_status = response.status_code
             if response.status_code != 200:
+                # Persist safe error metadata, never raw provider bodies or
+                # user/source content. This makes known fallback diagnosable.
+                try:
+                    error_body = json.loads(wire)
+                    error = error_body.get("error") if isinstance(error_body, dict) else None
+                    code = error.get("code") if isinstance(error, dict) else None
+                    if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code):
+                        provider_error_code = code
+                except (ValueError, TypeError):
+                    pass
                 # 5xx/timeout-like responses do not prove zero billable usage.
                 # Only known pre-inference 4xx rejections release the reservation.
                 rejected = response.status_code in {400, 401, 403, 404, 422, 429}
@@ -13847,6 +13878,10 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             stage = latest.get("reference_compilation")
             if not isinstance(stage, dict) or stage.get("attempt_id") != attempt_id:
                 raise ProjectError("Reference compilation checkpoint was replaced unexpectedly.")
+            if provider_http_status is not None:
+                stage["provider_http_status"] = provider_http_status
+            if provider_error_code is not None:
+                stage["provider_error_code"] = provider_error_code
             usage = _usage(raw) if isinstance(raw, dict) else None
             estimated = _estimate_cost(latest["model"], usage) if usage is not None else None
             if usage is not None:
@@ -13941,8 +13976,17 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     if cloud_settled and (estimated is not None or rejected) and not ledger_blocked
                     else "interrupted"
                 )
+                provider_detail = (
+                    f" (HTTP {provider_http_status}"
+                    + (f"; code {provider_error_code}" if provider_error_code else "")
+                    + ")"
+                    if provider_http_status is not None and provider_http_status != 200
+                    else ""
+                )
                 stage["reason"] = (
-                    "Compilation unavailable after a known provider response; using original references."
+                    "Compilation unavailable after a known provider response"
+                    + provider_detail
+                    + "; using original references."
                     if stage["status"] == "fallback"
                     else "Compilation outcome or usage is uncertain. The call was not retried."
                 )

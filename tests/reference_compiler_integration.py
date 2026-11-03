@@ -104,7 +104,12 @@ async def verify_compilation(
             compilation_started.set()
             await compilation_release.wait()
             if compiler_rejection:
-                return httpx.Response(400, json={"error": {"message": "Compiler unavailable"}})
+                return httpx.Response(
+                    400,
+                    json={
+                        "error": {"code": "invalid_json_schema", "message": "Compiler unavailable"}
+                    },
+                )
             if compiler_server_error:
                 return httpx.Response(503, json={"error": {"message": "Provider overloaded"}})
             assert payload["store"] is False
@@ -211,6 +216,14 @@ async def verify_compilation(
     )
     expected_status = "skipped" if skip_compiler else "completed" if compiled_ok else "fallback"
     assert stage["status"] == expected_status, stage
+    if compiler_rejection:
+        assert stage["provider_http_status"] == 400
+        assert stage["provider_error_code"] == "invalid_json_schema"
+        assert "HTTP 400; code invalid_json_schema" in stage["reason"]
+        assert stage["failure_type"] == "ProjectError"
+    if compiler_server_error:
+        assert stage["provider_http_status"] == 503
+        assert stage.get("provider_error_code") is None
     assert stage["source_sha256"] == saved["research_method_sources"]["sha256"]
     assert stage["status"] != "pending"
     if compiled_ok:
