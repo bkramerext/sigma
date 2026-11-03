@@ -133,17 +133,32 @@ with sync_playwright() as playwright:
         "e=>({overflow:getComputedStyle(e).overflowY,scrollHeight:e.scrollHeight,clientHeight:e.clientHeight})"
     )
     assert scroll_metrics["overflow"] == "auto"
-    # Leave enough room after the last category to reveal the last row even
-    # when the desktop viewport is short and many categories are expanded.
+    # The absolutely positioned Projects column must be bounded by the viewport,
+    # otherwise the list grows indefinitely and its parent silently clips it.
+    bounds = scroller.evaluate(
+        """e => {
+          const list = e.getBoundingClientRect();
+          const projects = e.closest('.home-projects').getBoundingClientRect();
+          return { listBottom: list.bottom, projectsBottom: projects.bottom, viewport: innerHeight };
+        }"""
+    )
+    assert bounds["projectsBottom"] <= bounds["viewport"] - 10, bounds
+    assert bounds["listBottom"] <= bounds["viewport"] - 10, bounds
     assert scroller.evaluate("e => parseFloat(getComputedStyle(e).paddingBottom)") >= 40
-    if scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"]:
-        scroller.evaluate("e => e.scrollTop = e.scrollHeight")
-        assert scroller.evaluate("e => e.scrollTop") > 0
-        last_bottom_gap = scroller.evaluate(
-            "e => e.getBoundingClientRect().bottom - e.lastElementChild.getBoundingClientRect().bottom"
-        )
-        assert last_bottom_gap >= 39, last_bottom_gap
-        scroller.evaluate("e => e.scrollTop = 0")
+    # All categories are expanded. At a 720px viewport this list MUST overflow.
+    assert scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"], scroll_metrics
+    scroller.evaluate("e => e.scrollTop = e.scrollHeight")
+    assert scroller.evaluate("e => e.scrollTop") > 0
+    last_gap = scroller.evaluate(
+        """e => {
+          const last = e.lastElementChild.getBoundingClientRect();
+          const viewport = e.getBoundingClientRect();
+          return { bottomGap: viewport.bottom - last.bottom, top: last.top, viewportTop: viewport.top };
+        }"""
+    )
+    assert last_gap["bottomGap"] >= 39, last_gap
+    assert last_gap["top"] >= last_gap["viewportTop"], last_gap
+    scroller.evaluate("e => e.scrollTop = 0")
     assert (
         samples_panel.locator(".sample-open strong").all_text_contents()[-1]
         == "Did Jesus Use Cannabis?"
