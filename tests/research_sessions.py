@@ -9558,6 +9558,10 @@ async def test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
             in {
                 "coordinator.provisional_stop_reopened",
                 "coordinator.early_stop_deferred",
+                # Preserved Investigator obligations can cause an immediate
+                # revision before the legacy deferred-stop branches run.
+                # The coordinator still schedules independent verification.
+                "coordinator.convergence_verification_scheduled",
             }
             for event in finished["events"]
         )
