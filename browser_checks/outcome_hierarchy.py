@@ -82,6 +82,17 @@ with sync_playwright() as playwright:
                     == "6px"
                 )
                 page.mouse.move(0, 0)
+                references = outcome.locator(".outcome-source-material")
+                summary = references.locator(":scope > summary")
+                expect(summary).to_have_text("Research References")
+                expect(summary.locator(".disclosure-chevron")).to_be_visible()
+                assert summary.locator(".disclosure-chevron").evaluate(
+                    "e => getComputedStyle(e).transform"
+                ) == "none"
+                summary.click()
+                expect(references).to_have_attribute("open", "")
+                summary.click()
+                expect(references).not_to_have_attribute("open", "")
             simple = outcome.locator(".outcome-simple")
             expect(simple).to_be_visible()
             expect(outcome.locator(".outcome-subsection")).to_have_count(0)
