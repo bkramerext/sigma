@@ -19,7 +19,9 @@ type Reference = { name: string; url: string };
 type ReferenceField = 'research_standards_references' | 'publication_standards_references';
 type ReferenceFields = Pick<ProjectTypeRecord, ReferenceField>;
 type ReferencePreferences = Record<string, Partial<Record<ReferenceField, string[]>>>;
-const titleCache = new Map<string, string | null>();
+type DomainStatus = 'valid' | 'invalid' | 'unverified';
+type TitleResult = { title: string | null; status: DomainStatus };
+const titleCache = new Map<string, TitleResult>();
 const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
 const handledErrorHeaders = { 'X-Sigma-Error-Handled': 'true' };
 // Mirror the server's URL canonicalization so switches on newly edited custom
@@ -31,38 +33,55 @@ function preferenceUrl(raw: string): string {
     return `${parsed.protocol}//${parsed.host}${parsed.pathname || '/'}${parsed.search}`;
   } catch { return raw.trim(); }
 }
-// Keep validation aligned with server-side _validate_references. Empty edit rows
-// are deliberately ignored on Save. Nonempty malformed URLs are not.
+// Store the complete URL, but let people type a normal website address.
+// When editing, preserve the original protocol invisibly; new links use HTTPS.
+function editableReferenceUrl(value: string): string {
+  return value.replace(/^https?:\/\//i, '');
+}
+function completeReferenceUrl(value: string, previous = ''): string {
+  if (!value.trim()) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.includes('://') || /^[a-z][a-z\d+.-]*:(?!\d)/i.test(value)) return value;
+  const protocol = previous.toLowerCase().startsWith('http://') ? 'http://' : 'https://';
+  return protocol + value;
+}
+// Bad domain syntax is rejected immediately; DNS checks also catch domains
+// that look plausible (such as badbadbad.bad) but do not actually resolve.
 function referenceUrlError(value: string): string | null {
   const candidate = value.trim();
   if (!candidate) return null;
   if (value.length > 2048) return 'URL must be at most 2,048 characters.';
-  if (!/^https?:\/\//i.test(candidate)) return 'Use an HTTP or HTTPS URL with a host.';
+  if (!/^https?:\/\//i.test(candidate)) return 'Enter a website address, such as example.org.';
   try {
     const parsed = new URL(candidate);
-    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) {
-      return 'Use an HTTP or HTTPS URL with a host, without sign-in credentials.';
+    const host = parsed.hostname;
+    const domain = /^(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i;
+    if (!['http:', 'https:'].includes(parsed.protocol) || !domain.test(host) || parsed.username || parsed.password) {
+      return 'Enter a valid public website address, such as example.org.';
+    }
+    if (parsed.port && (Number(parsed.port) < 1 || Number(parsed.port) > 65535)) {
+      return 'Enter a valid port number.';
     }
   } catch {
-    return 'Enter a valid HTTP or HTTPS URL with a host.';
+    return 'Enter a valid public website address, such as example.org.';
   }
   return null;
 }
 
-
-function ReferenceLink({ reference, onResolved, editing = false }: { reference: Reference; onResolved?: (name: string) => void; editing?: boolean }) {
+function ReferenceLink({ reference, onResolved, onChecked }: { reference: Reference; onResolved?: (name: string) => void; onChecked?: (status: DomainStatus) => void }) {
   const candidate = reference.url.trim();
   const knownName = reference.name.trim() || candidate;
-  const [resolvedTitle, setResolvedTitle] = useState<string | null>(() => titleCache.get(candidate) ?? null);
+  const [resolvedTitle, setResolvedTitle] = useState<string | null>(() => titleCache.get(candidate)?.title ?? null);
   useEffect(() => {
     if (!candidate || referenceUrlError(candidate) || knownName !== candidate) {
       setResolvedTitle(null);
       return;
     }
     if (titleCache.has(candidate)) {
-      const cached = titleCache.get(candidate) ?? null;
-      setResolvedTitle(cached);
-      if (cached) onResolved?.(cached);
+      const cached = titleCache.get(candidate)!;
+      setResolvedTitle(cached.title);
+      onChecked?.(cached.status);
+      if (cached.title) onResolved?.(cached.title);
       return;
     }
     setResolvedTitle(null);
@@ -70,15 +89,22 @@ function ReferenceLink({ reference, onResolved, editing = false }: { reference: 
     const timer = window.setTimeout(() => {
       void fetch(`/api/reference-title?url=${encodeURIComponent(candidate)}`, { signal: controller.signal, headers: handledErrorHeaders })
         .then(response => response.ok ? response.json() : Promise.reject())
-        .then((data: { title: string | null }) => {
+        .then((data: { title: string | null; domain_status?: string }) => {
           const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : null;
-          titleCache.set(candidate, title);
+          const status: DomainStatus = data.domain_status === 'invalid' ? 'invalid'
+            : data.domain_status === 'valid' ? 'valid' : 'unverified';
+          titleCache.set(candidate, { title, status });
           if (!controller.signal.aborted) {
             setResolvedTitle(title);
+            onChecked?.(status);
             if (title) onResolved?.(title);
           }
         }).catch(() => {
-          if (!controller.signal.aborted) { titleCache.set(candidate, null); setResolvedTitle(null); }
+          if (!controller.signal.aborted) {
+            titleCache.set(candidate, { title: null, status: 'unverified' });
+            setResolvedTitle(null);
+            onChecked?.('unverified');
+          }
         });
     }, 350);
     return () => { window.clearTimeout(timer); controller.abort(); };
