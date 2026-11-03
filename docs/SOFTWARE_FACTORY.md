@@ -108,6 +108,22 @@ No invented test results. Report skipped, unavailable, or inconclusive verificat
 
 ## 5. Git and PR integration protocol
 
+### Copyable coordination handoffs
+
+Whenever the coordinator asks the human to forward instructions, changes of ownership, status requests, integration decisions, or corrections to **any separate ChatGPT conversation or Codex worker**, present the complete message as **one self-contained, copyable text block**, with its intended recipient named outside the block. Do not scatter the handoff across surrounding commentary or require the human to assemble instructions. Existing mandatory worker-isolation wording remains applicable to Codex dispatches. A prepared block is not evidence that it was delivered.
+
+### Local-first verification and economical CI
+
+**CI is a final integration and merge gate, not the primary iterative debugging tool.** Before pushing, run available focused tests, the repository's pinned Ruff lint and formatter checks, relevant type checks, and applicable local integration/browser verification. Prefer narrow checks during development, then the full required local checks before final push. If a check genuinely cannot run locally, document why and use CI for that check; never claim unexecuted local checks passed.
+
+**Avoid routine Ruff failures:** Check changed files while editing, then run the same pinned-version, repository-wide `ruff check` and `ruff format --check` coverage used by CI before pushing. Treat simple formatting and lint errors as preventable local issues.
+
+**Fix early, push once:** Monitor early CI jobs (especially Ruff) while all jobs continue. On any failure, inspect diagnostics and remedy the problem promptly in the working tree, but **do not immediately push**. Continue observing the remaining jobs, investigate each additional failure, correct all known problems, and only after the current CI jobs have finished rerun the affected local checks and push one consolidated correction. Do not abandon remaining failure evidence merely because an early check already failed. When an underlying cause explains multiple failures, fix that cause rather than applying independent workarounds.
+
+**Reuse the current PR:** Keep corrections and related changes on the existing branch/PR, using additional local commits as useful. Avoid one PR per defect, unnecessary pushes, repeated rebases, force pushes, and full-suite reruns when focused local tests suffice during development. Coordinate overlapping changes to reduce duplicate integration and CI work. Rebase or merge updated `main` only when needed to resolve real integration conflicts or meet the final merge gate; verify the combined result locally before pushing.
+
+**No weakening of gates:** A final pushed head must pass all required CI and security/release checks. A successful earlier commit does not validate a newer head; GitHub's rerun-failed-jobs action tests the *same* commit and cannot validate a subsequently committed fix. Any CI-only failure not reproducible locally still requires diagnosis and an evidence-backed resolution, not a skipped check.
+
 - Each worker uses an isolated checkout/worktree and a ticket-specific branch targeting `main`.
 - Keep changes narrow and avoid unrelated formatting, UI redesign, or other workers' ownership areas.
 - Worker runs focused tests and `./sigma test`, plus CLI, real-Chrome, Python/Sage, or export checks as appropriate. If a check cannot run, explain why.
