@@ -189,7 +189,7 @@ def _optional_text(value: Any, label: str, limit: int) -> str:
 
 
 def common_research_references() -> tuple[dict[str, str], ...]:
-    """Enabled shared research-method references; catalog defaults stay immutable."""
+    """Enabled shared research-method references; curated defaults stay immutable."""
     references = common_references()["research_standards_references"]
     disabled = set(
         reference_preferences().get("common", {}).get("research_standards_references", [])
@@ -245,17 +245,48 @@ def custom_types() -> list[ProjectType]:
     return sorted(result, key=lambda item: item.name.casefold())
 
 
-def common_references() -> dict[str, list[dict[str, str]]]:
+def curated_common_references() -> dict[str, list[dict[str, str]]]:
     """Immutable curated defaults shared by every research discipline."""
     raw = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))["common_references"]
     return {field: list(_validate_references(raw[field], field)) for field in REFERENCE_FIELDS}
+
+
+def _validate_common_custom_references(value: Any) -> dict[str, list[dict[str, str]]]:
+    if not isinstance(value, dict) or set(value) - set(REFERENCE_FIELDS):
+        raise ProjectError("Common custom references must have research or publication categories")
+    curated = curated_common_references()
+    result: dict[str, list[dict[str, str]]] = {}
+    for field in REFERENCE_FIELDS:
+        refs = list(_validate_references(value.get(field, []), field))
+        forbidden = {ref["url"] for ref in curated[field]}
+        if any(ref["url"] in forbidden for ref in refs):
+            raise ProjectError("Built-in common references cannot be replaced")
+        result[field] = refs
+    return result
+
+
+def common_custom_references() -> dict[str, list[dict[str, str]]]:
+    """Private user-created common guides, separate from built-in definitions."""
+    return _validate_common_custom_references(
+        _read_catalog().get("common_custom_references", {})
+    )
+
+
+def common_references() -> dict[str, list[dict[str, str]]]:
+    """Curated and user-created shared guides used by future work."""
+    curated = curated_common_references()
+    additions = common_custom_references()
+    return {
+        field: list({ref["url"]: ref for ref in [*curated[field], *additions[field]]}.values())
+        for field in REFERENCE_FIELDS
+    }
 
 
 def _default_reference_preferences() -> dict[str, dict[str, list[str]]]:
     """Per-user default: omit shared guides, retain discipline-specific guides."""
     return {
         "common": {
-            field: [ref["url"] for ref in refs] for field, refs in common_references().items()
+            field: [ref["url"] for ref in refs] for field, refs in curated_common_references().items()
         }
     }
 
@@ -265,6 +296,7 @@ def _validate_reference_preferences(
     custom: list[ProjectType],
     *,
     drop_removed: bool = False,
+    common_override: dict[str, list[dict[str, str]]] | None = None,
 ) -> dict[str, dict[str, list[str]]]:
     """Validate disabled reference URLs against immutable and custom type definitions.
 
@@ -281,7 +313,7 @@ def _validate_reference_preferences(
         if not isinstance(owner, str) or not isinstance(fields, dict):
             raise ProjectError("Reference preferences contain an invalid project type")
         if owner == "common":
-            allowed = common_references()
+            allowed = common_override if common_override is not None else common_references()
         else:
             item = resolve_type_metadata(owner, definitions)
             if item is None:
@@ -497,6 +529,7 @@ def _write_custom(
     *,
     expected_revision: str | None = None,
     reference_preferences_update: dict[str, dict[str, list[str]]] | None = None,
+    common_custom_references_update: dict[str, list[dict[str, str]]] | None = None,
 ) -> None:
     path = _store_path()
     lock_fd = os.open(
@@ -515,18 +548,33 @@ def _write_custom(
             raise ProjectError(
                 "Project types changed in another window; reload and review before saving"
             )
+        existing_catalog = _read_catalog()
+        saved_custom_common = _validate_common_custom_references(
+            existing_catalog.get("common_custom_references", {})
+            if common_custom_references_update is None
+            else common_custom_references_update
+        )
+        curated_common = curated_common_references()
+        effective_common = {
+            field: [*curated_common[field], *saved_custom_common[field]]
+            for field in REFERENCE_FIELDS
+        }
         current_preferences = (
-            _read_catalog().get("reference_preferences", _default_reference_preferences())
+            existing_catalog.get("reference_preferences", _default_reference_preferences())
             if reference_preferences_update is None
             else reference_preferences_update
         )
         preferences = _validate_reference_preferences(
-            current_preferences, items, drop_removed=reference_preferences_update is None
+            current_preferences,
+            items,
+            drop_removed=(reference_preferences_update is None),
+            common_override=effective_common,
         )
         document = {
             "schema_version": 1,
             "project_types": [item.record() for item in items],
             "reference_preferences": preferences,
+            "common_custom_references": saved_custom_common,
         }
         payload = json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
         if len(payload.encode("utf-8")) > 16_000_000:
@@ -602,6 +650,7 @@ def replace_custom_types(
     expected_revision: str | None = None,
     confirmed_removals: dict[str, int] | None = None,
     reference_preferences_update: dict[str, dict[str, list[str]]] | None = None,
+    common_custom_references_update: dict[str, list[dict[str, str]]] | None = None,
 ) -> list[ProjectType]:
     if len(records) > 500:
         raise ProjectError("Too many custom project types")
@@ -647,5 +696,6 @@ def replace_custom_types(
         result,
         expected_revision=expected_revision,
         reference_preferences_update=reference_preferences_update,
+        common_custom_references_update=common_custom_references_update,
     )
     return sorted(result, key=lambda item: item.name.casefold())
