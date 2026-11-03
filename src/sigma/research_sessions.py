@@ -271,9 +271,7 @@ class Skeptic(BaseModel):
     response: str = Field(min_length=1, max_length=6000)
     objections: list[str] = Field(max_length=12)
     remaining_obligations: list[str] = Field(max_length=12)
-    verification_followups: list[VerificationFollowup] = Field(
-        default_factory=list, max_length=12
-    )
+    verification_followups: list[VerificationFollowup] = Field(default_factory=list, max_length=12)
     next_question: str = Field(max_length=1000)
     objective_status: str = Field(pattern="^(achieved|partial|not_achieved)$")
     solution_claim: str = Field(max_length=2000)
@@ -1310,12 +1308,10 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
             "",
             "### Independent verification still needed",
             "",
-            "The following peer-source inspections remain open. They do not by themselves "
-            "refute the reviewed argument, but they cannot certify it.",
+            "The following peer-source inspections remain open; they do not certify "
+            "the reviewed argument or independently verify it.",
         ]
-        lines.extend(
-            f"- {item}" for item in review["independent_verification_followups"][:8]
-        )
+        lines.extend(f"- {item}" for item in review["independent_verification_followups"][:8])
     unresolved_values = review.get("unresolved_objections", [])
     unresolved = list(unresolved_values) if isinstance(unresolved_values, list) else []
     open_obligations = review.get("open_obligations", [])
@@ -1500,8 +1496,7 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         artifact
         for artifact in reviewed
         if artifact["objective_review"].get("status") == "achieved"
-        and artifact["objective_review"].get("verification_status")
-        == "convincing_unverified"
+        and artifact["objective_review"].get("verification_status") == "convincing_unverified"
     ]
     material_contradiction = any(
         isinstance(artifact.get("skeptic_output"), dict)
@@ -9285,10 +9280,7 @@ def _commit_portfolio_review(
         else:
             decision = "stop_budget_exhausted"
             next_question = ""
-    if (
-        objective_candidate
-        and output["assessment"] in {"stop", "continue"}
-    ):
+    if objective_candidate and output["assessment"] in {"stop", "continue"}:
         decision, next_question = coordinate_decision(
             "stop",
             "productive_conclusion",

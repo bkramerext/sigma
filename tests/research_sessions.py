@@ -5652,14 +5652,13 @@ def test_e1_peer_inspection_does_not_hide_complete_unverified_candidate():
         "response": "The proof is a convincing but unverified candidate.",
     }
     classify = lambda value, steps=argument, inv=investigation, rec=record: (
-        research_sessions._reviewed_objective_candidate(
-            rec, branch, inv, value, steps, []
-        )
+        research_sessions._reviewed_objective_candidate(rec, branch, inv, value, steps, [])
     )
     assert classify(output) == (True, [peer_note])
-    assert "verification_followups" in research_sessions._research_schema(
-        research_sessions.Skeptic
-    )["required"]
+    assert (
+        "verification_followups"
+        in research_sessions._research_schema(research_sessions.Skeptic)["required"]
+    )
 
     # None of these substantive/ungrounded cases may be waived.
     bad = deepcopy(output)
@@ -5757,14 +5756,19 @@ def test_e1_peer_inspection_does_not_hide_complete_unverified_candidate():
     assert reversed_result["solution_review"] == positive["solution_review"]
     assert reversed_result["conclusion"] == positive["conclusion"]
 
-    historical = {**saved, "artifacts": [{
-        **accepted,
-        "objective_review": {
-            "status": "partial",
-            "claim": output["solution_claim"],
-            "verification_status": "incomplete",
-        },
-    }]}
+    historical = {
+        **saved,
+        "artifacts": [
+            {
+                **accepted,
+                "objective_review": {
+                    "status": "partial",
+                    "claim": output["solution_claim"],
+                    "verification_status": "incomplete",
+                },
+            }
+        ],
+    }
     old = research_sessions._outcome_without_metrics(historical)
     assert old["assessment"] == "mixed"
     assert "candidate reported" in old["label"]
