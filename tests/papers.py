@@ -434,9 +434,11 @@ def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
                     {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
                 )
             )
-        except ProjectError as exc:
-            assert "before a valid response.completed" in str(exc)
-            assert "Completed sections remain saved" in str(exc)
+        except papers.PaperTransientFailure as exc:
+            assert "Temporary paper-provider failure" in str(exc)
+            assert isinstance(exc.__cause__, ProjectError)
+            assert "before a valid response.completed" in str(exc.__cause__)
+            assert "Completed work is saved" in str(exc.__cause__)
         else:
             raise AssertionError("Partial provider streams must not produce a paper draft")
 
@@ -3518,6 +3520,24 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
     assert "Writing Mathematics" in tex
     assert r"\url{https://example.org/writing-math}" in tex
     assert "not the scientific evidence or findings" in tex
+    comparison = papers.reference_efficiency.compare(
+        {"paper_writing_methodology": [{"writing_guidance_excerpt": "a" * 1600}]},
+        {"paper_writing_methodology": [{"writing_guidance": "short guidance"}]},
+    )
+    assert comparison["original_estimated_tokens"] > comparison["compiled_estimated_tokens"]
+    with_metrics = papers._tex(
+        draft(),
+        [],
+        "f" * 64,
+        include_validation_notes=True,
+        writing_sources=[source],
+        reference_comparison=comparison,
+    )
+    assert r"\subsection{Reference compilation efficiency (estimated)}" in with_metrics
+    assert "not provider-measured billable tokens" in with_metrics
+    assert str(comparison["original_estimated_tokens"]) in with_metrics
+    no_diagnostics = papers._tex(draft(), [], "f" * 64, reference_comparison=comparison)
+    assert "Reference compilation efficiency" not in no_diagnostics
     empty_tex = papers._tex(draft(), [], "f" * 64, include_validation_notes=True)
     assert "No external writing-guidance sources were recorded." in empty_tex
 
@@ -3777,6 +3797,114 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
     assert uncertain_state["provider_calls_total"] == 1 + section_attempts
     assert uncertain_state["evidence_indexed"] is True
     assert uncertain_state["plan"]
+
+
+def test_transient_paper_failures_retry_sections_without_rewriting_saved_work() -> None:
+    """Three attempts per failed section; resume only the missing section."""
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+    attempts: dict[int, int] = {}
+    retry_details: list[str] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        attempts[number] = attempts.get(number, 0) + 1
+        if number == 1:
+            raise papers.PaperTransientFailure("fixture stream ended without completion")
+        return papers.LongSectionDraft(paragraphs=[f"Saved section {number}."]), "fixture-model"
+
+    async def progress(
+        stage: papers.PaperProgressStage,
+        current: int | None,
+        total: int | None,
+        state: papers.PaperProgressState = "active",
+        *,
+        detail: str | None = None,
+    ) -> None:
+        if stage == "retry" and detail:
+            retry_details.append(detail)
+
+    async def fail_after_three() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda _value: None,
+                    progress,
+                    structured_fast_path=True,
+                )
+            except papers.PaperTransientFailure:
+                pass
+            else:
+                raise AssertionError("Paper section must fail after three transient attempts")
+
+    asyncio.run(fail_after_three())
+    assert attempts == {1: 3, 2: 1, 3: 1, 4: 1, 5: 1}
+    assert set(state["section_drafts"]) == {"2", "3", "4", "5"}
+    assert state["provider_calls_total"] == 8  # plan + 3 attempts + four siblings
+    assert any("Retrying section 1 (attempt 3 of 3)." in item for item in retry_details)
+
+    async def resumed_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        assert schema_name == "sigma_long_paper_section"
+        assert input_value["section_number"] == 1
+        attempts[1] += 1
+        return papers.LongSectionDraft(
+            paragraphs=["Recovered only the missing section."]
+        ), "fixture-model"
+
+    async def resume() -> None:
+        with patch.object(papers, "_provider_structured", new=resumed_provider):
+            result, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert calls == 9
+        assert len(result.sections) == 5
+
+    asyncio.run(resume())
+    assert attempts == {1: 4, 2: 1, 3: 1, 4: 1, 5: 1}
+    assert set(state["section_drafts"]) == {"1", "2", "3", "4", "5"}
+
+
+def test_paper_transient_error_classification_excludes_permanent_rejections() -> None:
+    from sigma.plan_stream import ChatGPTProviderRejection
+
+    assert papers._retryable_paper_response_failure(
+        ProjectError("Paper stream ended before a valid response.completed. (SSE events: 3)")
+    )
+    assert papers._retryable_paper_response_failure(
+        ProjectError("OpenAI API request failed (HTTP 503): temporary provider outage")
+    )
+    assert not papers._retryable_paper_response_failure(
+        ProjectError("OpenAI API request failed (HTTP 400): invalid schema")
+    )
+    assert not papers._retryable_paper_response_failure(
+        ChatGPTProviderRejection(
+            "Plan allowance exhausted",
+            state="limited",
+            code="subscription_sharing_usage_limit_exceeded",
+            http_status=429,
+            streamed=True,
+        )
+    )
+    assert papers._retryable_paper_response_failure(
+        ChatGPTProviderRejection(
+            "Provider rate limit",
+            state="limited",
+            code=None,
+            http_status=429,
+            streamed=False,
+        )
+    )
 
 
 def test_paper_failure_reason_survives_reopen() -> None:
@@ -6789,6 +6917,8 @@ def main() -> None:
     test_paper_pdf_source_reader_accepts_only_substantial_extractable_text()
     test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
+    test_transient_paper_failures_retry_sections_without_rewriting_saved_work()
+    test_paper_transient_error_classification_excludes_permanent_rejections()
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
     test_paper_failure_reason_survives_reopen()
     test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()

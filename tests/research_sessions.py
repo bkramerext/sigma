@@ -319,7 +319,7 @@ async def test_unlimited_duration_completes_without_session_deadline(path: Path)
 
 
 async def test_portfolio_retry_wrapper_has_a_hard_attempt_bound():
-    results = iter(["retry", "retry", "retry"])
+    results = iter(["retry"] * 4)
     with (
         patch.object(
             research_sessions,
@@ -345,7 +345,7 @@ async def test_portfolio_retry_wrapper_has_a_hard_attempt_bound():
             asyncio.Lock(),
         )
     assert result is False
-    assert role_call.await_count == 3
+    assert role_call.await_count == 4
 
 
 async def test_transient_timeout_retries_as_a_new_accounted_turn(path: Path):
@@ -425,13 +425,13 @@ async def test_repeated_transient_failures_are_isolated_and_explained(path: Path
 
     branch = finished["strategy_runs"][0]
     assert finished["status"] == "failed"
-    assert finished["calls_used"] == attempts == 2
-    assert [step["status"] for step in finished["steps"]] == ["failed", "failed"]
+    assert finished["calls_used"] == attempts == 3
+    assert [step["status"] for step in finished["steps"]] == ["failed"] * 3
     assert all(step["failure_kind"] == "provider_temporary" for step in finished["steps"])
     assert branch["status"] == "failed"
     assert branch["recovery_attempts_exhausted"] is True
     assert finished["termination_reason_code"] == "provider_or_strategy_failure"
-    assert "temporary error after one automatic retry" in finished["message"]
+    assert "temporary error after two automatic retries" in finished["message"]
     assert "incomplete" in finished["message"]
     assert finished["artifacts"] == []
 
@@ -4127,8 +4127,7 @@ async def test_malformed_output_and_restart(path: Path):
         investigation(1),
         skeptic(1),
         investigation(2),
-        httpx.ReadTimeout(""),
-        httpx.ReadTimeout(""),
+        *[httpx.ReadTimeout("") for _ in range(research_sessions.MAX_TRANSIENT_AUTO_RETRIES + 1)],
     ]
 
     async def fail_second_review(request):
@@ -12642,6 +12641,34 @@ def test_reference_compilation_is_bounded_and_source_attributed() -> None:
         == hashlib.sha256(selected["guidance"].encode("utf-8")).hexdigest()
     )
     assert sources == initial
+    compilation_record = {
+        **session,
+        "reference_compilation": {
+            **selected,
+            "status": "completed",
+            "source_sha256": "a" * 64,
+        },
+    }
+    comparison = research_sessions._research_reference_compilation_efficiency(compilation_record)
+    assert comparison is not None
+    # A tiny source set can expand when compiled guidance gains provenance
+    # fields. Report a signed difference rather than asserting all inputs shrink.
+    assert comparison["estimated_tokens_avoided_per_use"] == (
+        comparison["original_estimated_tokens"] - comparison["compiled_estimated_tokens"]
+    )
+    # Estimate is displayed separately from provider-metered usage.
+    metric_rows = research_sessions._outcome_metrics(compilation_record, {})["operational"]
+    reference_row = next(
+        row for row in metric_rows if row["label"] == "Reference compilation · estimated tokens"
+    )
+    assert "before" in reference_row["value"] and "after" in reference_row["value"]
+    assert "not measured provider usage" in reference_row["detail"]
+    assert (
+        research_sessions._research_reference_compilation_efficiency(
+            {**compilation_record, "reference_compilation": {"status": "fallback"}}
+        )
+        is None
+    )
     for invalid in (
         {**response, "selected_source_ids": ["invented"]},
         {**response, "omitted_source_ids": []},
