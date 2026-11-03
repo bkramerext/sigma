@@ -2848,7 +2848,7 @@ function AboutArchitecture() {
     strategyB: 'The same problem may become clearer through a different model, formalism, or computational method. Its results can complement, challenge, or refine the evidence from other strategies, without being assumed equivalent.',
     strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
     session: 'When you press Play, SIGMA runs an investigation of your selected approaches. Each approach can be tried, challenged and revised over several rounds, within the limits you set.',
-    orchestration: "SIGMA's session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible branches, manages budgets and decides whether another cycle can run.",
+    orchestration: "SIGMA's session engine selects bounded evidence, dispatches Investigator and Skeptic calls, coordinates strategies and manages limits.",
     investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
     investigatorFollowup: 'A later Investigator turn can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
     tools: 'The Investigator can draw on tools such as SciPy and SageMath to explore ideas, test patterns, and carry out calculations.',
@@ -2980,12 +2980,11 @@ function AboutArchitecture() {
     { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another method' },
     { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Look for a counterexample' },
   ];
-  // A single strategy's illustrative six turns. These are successive calls
-  // using two agent roles, not six persistent agents or a scheduling promise.
-  const exampleRounds = [
-    { round: 1, title: 'Try an idea', investigator: 'Propose an approach', skeptic: 'Look for flaws', investigatorKey: 'investigator', skepticKey: 'skeptic' },
-    { round: 2, title: 'Improve it', investigator: 'Revise after critique', skeptic: 'Challenge the revision', investigatorKey: 'investigatorRound2', skepticKey: 'skepticRound2' },
-    { round: 3, title: 'Dig deeper', investigator: 'Test a stronger idea', skeptic: 'Check what remains uncertain', investigatorKey: 'investigatorRound3', skepticKey: 'skepticRound3' },
+  // Three illustrative paired turns (six individual calls) in one research round.
+  const exampleTurns = [
+    { turn: 1, title: 'Try an idea', investigator: 'Propose an approach', skeptic: 'Look for flaws', investigatorKey: 'investigator', skepticKey: 'skeptic' },
+    { turn: 2, title: 'Improve it', investigator: 'Revise after critique', skeptic: 'Challenge the revision', investigatorKey: 'investigatorRound2', skepticKey: 'skepticRound2' },
+    { turn: 3, title: 'Dig deeper', investigator: 'Test a stronger idea', skeptic: 'Check what remains uncertain', investigatorKey: 'investigatorRound3', skepticKey: 'skepticRound3' },
   ] as const;
   function toggleSession() {
     const next = !sessionExpanded;
@@ -3009,7 +3008,7 @@ function AboutArchitecture() {
                 <span className="about-diagram-node-title">{strategy.title}</span>
                 <span className="about-diagram-node-subtitle">{strategy.subtitle}</span>
               </div>
-              <div className="about-strategy-round" aria-label="Research round: Investigator turn followed by Skeptic turn">
+              <div className="about-strategy-round" aria-label="Paired turn: Investigator call followed by Skeptic call">
                 <span><strong>Investigator</strong></span><b aria-hidden="true">→</b><span><strong>Skeptic</strong></span>
               </div>
               {help(strategy.id, strategy.title)}
@@ -3029,26 +3028,26 @@ function AboutArchitecture() {
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
-            <h4 id="about-session-detail-heading">How an idea grows over six agent turns</h4>
-            <p className="about-multi-agent-intro">Here is one possible path for <strong>one strategy</strong>. The Investigator makes an attempt; the Skeptic tests it; then the Investigator can build on what was learned. The process can repeat instead of ending after the first answer.</p>
-            <p className="about-round-definition"><strong>One research round</strong> is an Investigator → Skeptic exchange within a strategy. <strong>One agent turn</strong> is a single contribution from either role.</p>
-            <section className="about-agent-instantiation" aria-label="Example of three research rounds and six agent turns within one strategy">
-              <h5>One strategy · Three rounds · Six turns</h5>
+            <h4 id="about-session-detail-heading">How one research round works</h4>
+            <p className="about-multi-agent-intro">For <strong>one strategy</strong>, each turn pairs an Investigator call with a subsequent Skeptic review. Later turns can respond to criticism.</p>
+            <p className="about-round-definition"><strong>One research round</strong> has up to three paired <strong>turns</strong> per strategy by default. Each turn contains two <strong>agent calls</strong>: Investigator → Skeptic.</p>
+            <section className="about-agent-instantiation" aria-label="Example of one round with three paired turns and six agent calls within one strategy">
+              <h5>One strategy · One round · Three turns</h5>
               <div className="about-agent-turns">
-                {exampleRounds.map((round, index) => <div className="about-agent-round" key={round.round}>
-                  <div className="about-agent-round-heading"><strong>Round {round.round}</strong><span>{round.title}</span></div>
+                {exampleTurns.map((turn, index) => <div className="about-agent-round" key={turn.turn}>
+                  <div className="about-agent-round-heading"><strong>Turn {turn.turn} of 3</strong><span>{turn.title}</span></div>
                   <div className="about-agent-round-pair">
                     <div className="about-agent-turn">
-                      <span className="about-turn-number">TURN {round.round * 2 - 1}</span>
-                      {card(round.investigatorKey, 'Investigator', round.investigator, 'blue')}
+                      <span className="about-turn-number">CALL {turn.turn * 2 - 1}</span>
+                      {card(turn.investigatorKey, 'Investigator', turn.investigator, 'blue')}
                     </div>
                     <span className="about-turn-arrow" aria-hidden="true">→</span>
                     <div className="about-agent-turn">
-                      <span className="about-turn-number">TURN {round.round * 2}</span>
-                      {card(round.skepticKey, 'Skeptic', round.skeptic, 'blue')}
+                      <span className="about-turn-number">CALL {turn.turn * 2}</span>
+                      {card(turn.skepticKey, 'Skeptic', turn.skeptic, 'blue')}
                     </div>
                   </div>
-                  {index < exampleRounds.length - 1 && <div className="about-agent-return">
+                  {index < exampleTurns.length - 1 && <div className="about-agent-return">
                     <svg viewBox="0 0 600 42" preserveAspectRatio="none" aria-hidden="true" focusable="false">
                       <path d="M505 3 V15 H155 V38 M147 30 L155 38 L163 30" fill="none" stroke="#75b7ef" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
@@ -3057,22 +3056,22 @@ function AboutArchitecture() {
                   </div>}
                 </div>)}
               </div>
-              <p className="about-agent-instantiation-note">These six turns show how <strong>one strategy</strong> can develop. Another strategy may take a different path—or stop early. Python and SageMath experiments may help when available. SIGMA saves the arguments, challenges, and results for review.</p>
+              <p className="about-agent-instantiation-note">These six calls illustrate one round. Other strategies may run concurrently or stop early; saved evidence can inform later turns and rounds.</p>
             </section>
-            <p className="about-shared-budget"><strong>Why repeat?</strong> A Skeptic may find a flaw the Investigator can fix or a question worth testing. Each new attempt can build on the last one.</p>
+            <p className="about-shared-budget"><strong>Why more rounds?</strong> Later turns can test objections or revise claims. Progress is the goal, not a scheduler guarantee.</p>
             <div className="about-exploration-space" role="group" aria-label="Example of how much research fits into one session">
               <p className="about-exploration-title">How much can one session explore?</p>
-              <p>Suppose you select all three strategies and allow <strong>three rounds per strategy</strong>:</p>
+              <p>With three enabled strategies and the default three rounds:</p>
               <div className="about-exploration-grid">
                 {strategyExamples.map(strategy => <div className="about-exploration-row" key={strategy.id}>
                   <span className="about-exploration-strategy">{strategy.title}</span>
-                  {[1, 2, 3].map(round => <span className="about-exploration-round" key={round}>Round {round}<small>2 turns</small></span>)}
+                  {[1, 2, 3].map(round => <span className="about-exploration-round" key={round}>Round {round}<small>3 turns</small></span>)}
                 </div>)}
               </div>
-              <p className="about-session-exploration-example">That's <strong>3 rounds with up to 3 Investigator/Skeptic pairs each</strong>, or 18 maximum agent calls per strategy. With a 12-turn limit, SIGMA could run at most 6 complete rounds across the three strategies. Some strategies might stop early or never start.</p>
+              <p className="about-session-exploration-example"><strong>3 rounds × 3 turns × 3 strategies × 2 agent calls = 54 maximum calls.</strong> Strategies progress independently, but each Investigator call precedes its Skeptic. Limits or early stopping may reduce the total.</p>
             </div>
             <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
-            <p className="about-multiple-strategies-note">Each enabled selected strategy has its own rounds and paired turns. The session maximum is calculated automatically.</p>
+            <p className="about-multiple-strategies-note">Saved evidence is selected into bounded later contexts; there is no automatic round-end merge.</p>
             <p className="about-multiple-sessions-note">You can run another session later to revisit a strategy with new evidence or compare what changed.</p>
           </div>
         </div>
