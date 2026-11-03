@@ -133,7 +133,7 @@ with sync_playwright() as playwright:
     assert common_link_box and common_new_box
     assert abs(common_link_box["x"] - common_new_box["x"]) < 1
     common_new.hover()
-    expect(common_new).to_have_css("color", "rgb(255, 229, 166)")
+    expect(common_new).to_have_css("color", "rgb(255, 231, 161)")
     # Leaving New blank cancels the insertion rather than trapping a row in edit mode.
     common_new.click()
     common_input = common_section.get_by_label("Research reference URL 3")
