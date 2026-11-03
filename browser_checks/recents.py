@@ -140,15 +140,31 @@ with sync_playwright() as playwright:
         "e=>({overflow:getComputedStyle(e).overflowY,scrollHeight:e.scrollHeight,clientHeight:e.clientHeight})"
     )
     assert scroll_metrics["overflow"] == "auto"
-    # The complete catalog may fit exactly at this viewport with Linux fonts.
-    # Exercise scrolling only when there is actual overflow.
-    if scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"]:
-        scroller.evaluate("e=>e.scrollTop=e.scrollHeight")
-        assert scroller.evaluate("e=>e.scrollTop") > 0
-        bottom_inset = scroller.evaluate("e => e.scrollHeight - e.scrollTop - e.clientHeight")
-        assert abs(bottom_inset) < 2, bottom_inset
-        assert scroller.evaluate("e => parseFloat(getComputedStyle(e).paddingBottom)") >= 32
-        scroller.evaluate("e=>e.scrollTop=0")
+    # Projects is constrained within the viewport. When expanded, the last
+    # category and bottom padding must both be reachable in this scroll area.
+    bounds = scroller.evaluate(
+        """e => {
+          const list = e.getBoundingClientRect();
+          const projects = e.closest('.home-projects').getBoundingClientRect();
+          return { listBottom: list.bottom, projectsBottom: projects.bottom, viewport: innerHeight };
+        }"""
+    )
+    assert bounds["projectsBottom"] <= bounds["viewport"] - 10, bounds
+    assert bounds["listBottom"] <= bounds["viewport"] - 10, bounds
+    assert scroller.evaluate("e => parseFloat(getComputedStyle(e).paddingBottom)") >= 40
+    assert scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"], scroll_metrics
+    scroller.evaluate("e => e.scrollTop = e.scrollHeight")
+    assert scroller.evaluate("e => e.scrollTop") > 0
+    last_gap = scroller.evaluate(
+        """e => {
+          const last = e.lastElementChild.getBoundingClientRect();
+          const viewport = e.getBoundingClientRect();
+          return { bottomGap: viewport.bottom - last.bottom, top: last.top, viewportTop: viewport.top };
+        }"""
+    )
+    assert last_gap["bottomGap"] >= 39, last_gap
+    assert last_gap["top"] >= last_gap["viewportTop"], last_gap
+    scroller.evaluate("e => e.scrollTop = 0")
     assert (
         samples_panel.locator(".sample-open strong").all_text_contents()[-1]
         == "Did Jesus Use Cannabis?"

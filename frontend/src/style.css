@@ -358,6 +358,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   width: min(520px, calc(100% - 2 * var(--home-project-edge)));
   position: absolute;
   top: var(--home-projects-top);
+  bottom: 16px;
   left: var(--home-project-edge);
   z-index: 1;
 }
