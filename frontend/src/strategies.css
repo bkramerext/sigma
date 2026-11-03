@@ -446,12 +446,21 @@
 .workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle,
 .workspace-page .strategy-title-line .strategy-markdown-slot .sigma-render-toggle,
 .workspace-page .strategy-rename-form .strategy-markdown-slot .sigma-render-toggle { display: inline-flex; align-items: center; justify-content: center; width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 0; background: transparent; color: #aab4ba; box-shadow: none; cursor: pointer; }
-.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:hover:not(:disabled),
 .workspace-page .strategy-title-line .strategy-markdown-slot .sigma-render-toggle:hover:not(:disabled),
 .workspace-page .strategy-rename-form .strategy-markdown-slot .sigma-render-toggle:hover:not(:disabled),
-.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle[aria-pressed="true"],
 .workspace-page .strategy-title-line .strategy-markdown-slot .sigma-render-toggle[aria-pressed="true"],
 .workspace-page .strategy-rename-form .strategy-markdown-slot .sigma-render-toggle[aria-pressed="true"] { border: 0; background: transparent; color: #f1c58d; box-shadow: none; }
+/* The project Markdown control matches the pencil and copy buttons. */
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle {
+  border: 1px solid transparent; border-radius: 6px; color: #c7a16d;
+}
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle[aria-pressed="true"] { color: #f1c58d; }
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:hover:not(:disabled) {
+  border-color: #ac7054; background: var(--copper-gradient); color: #fff2e9;
+}
+.workspace-page .project-pane-title-line .project-markdown-slot .sigma-render-toggle:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 2px;
+}
 .workspace-page .project-pane-title-line .project-markdown-slot .markdown-logo,
 .workspace-page .strategy-title-line .strategy-markdown-slot .markdown-logo,
 .workspace-page .strategy-rename-form .strategy-markdown-slot .markdown-logo { display: block; width: 24px; height: 20px; }
