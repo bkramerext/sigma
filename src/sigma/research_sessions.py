@@ -37,9 +37,9 @@ from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
 from sigma.research_budget import (
-    authorize_reference_compiler_recovery_after_unknown,
     BudgetExceeded,
     authorize_independent_review_after_unknown,
+    authorize_reference_compiler_recovery_after_unknown,
     cancel_before_dispatch,
     increase_call_limit,
     mark_unknown,
@@ -12481,51 +12481,88 @@ def _optional_reference_compilation_headroom(
     compiler_request_body: bytes = b"",
     compiler_output_bound: int = 0,
 ) -> bool:
-    """Do not spend optional compilation funding needed by the first research turn.
+    """Protect the first Investigator wave across all queued strategies.
 
-    For sponsored accounts, actual per-user admission uses practical estimates;
-    the shared provider exposure uses full model-output liability. A failed
-    funding inspection disables only compilation, never the research session.
+    Compiling is optional. A reservation is permitted only when the next
+    dispatchable research wave still fits the account, session, and hard-ledger
+    ceilings. The check is conservative, not an atomic guarantee against
+    simultaneous funding spent by other sessions.
     """
-    if (
-        record.get("cloud_sponsored") is not True
-        and record.get("mode") != "api_key"
-        and not isinstance(record.get("hard_budget_ledger"), dict)
-    ):
+    hard = record.get("hard_budget_ledger")
+    sponsored = record.get("cloud_sponsored") is True
+    if not sponsored and record.get("mode") != "api_key" and not isinstance(hard, dict):
         return True
     try:
-        branch = next(
-            item for item in record.get("strategy_runs", []) if item.get("status") == "queued"
-        )
-        context = _portfolio_context(record, branch, "investigator", 1)
-        role_estimate = _reserve_cost(
-            record, context, "investigator", estimate=record.get("cloud_sponsored") is True
-        )
-        role_liability = _reserve_cost(record, context, "investigator", estimate=False)
-        if role_estimate is None or role_liability is None:
+        queued = [
+            item
+            for item in record.get("strategy_runs", [])
+            if isinstance(item, dict) and item.get("status") == "queued"
+        ]
+        if not queued:
             return False
+        provider_output_bound = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
+        if provider_output_bound is None:
+            return False
+        research_cost = 0.0
+        research_liability = 0.0
+        role_requests: list[bytes] = []
+        for branch in queued:
+            context = _portfolio_context(record, branch, "investigator", 1)
+            role_estimate = _reserve_cost(
+                record, context, "investigator", estimate=sponsored
+            )
+            role_liability = _reserve_cost(
+                record, context, "investigator", estimate=False
+            )
+            if role_estimate is None or role_liability is None:
+                return False
+            research_cost += role_estimate
+            research_liability += role_liability
+            if sponsored or isinstance(hard, dict):
+                role_requests.append(
+                    _serialized_role_request(
+                        _role_request_payload(record, "investigator", context)
+                    )
+                )
         limit = record.get("maximum_estimated_cost_usd")
         if limit is not None and (
             float(record.get("estimated_cost_usd") or 0.0)
             + float(record.get("estimated_cost_reserved_usd") or 0.0)
             + compiler_cost
-            + role_estimate
+            + research_cost
             > float(limit)
         ):
             return False
-        if record.get("cloud_sponsored") is True:
+        if sponsored:
             funding = cloud_research.snapshot()
-            if float(funding["remaining_usd"]) + 1e-9 < compiler_cost + role_estimate:
+            if float(funding["remaining_usd"]) + 1e-9 < compiler_cost + research_cost:
                 return False
-            if float(funding["global_remaining_usd"]) + 1e-9 < compiler_liability + role_liability:
+            if float(funding["global_remaining_usd"]) + 1e-9 < (
+                compiler_liability + research_liability
+            ):
                 return False
-        hard = record.get("hard_budget_ledger")
+            # Hosted allowance tracks tokens as well as dollars. Check the
+            # full output ceilings of the first parallel Investigator wave,
+            # leaving enough headroom for research after compilation.
+            existing_tokens = funding.get("user_reserved_or_observed_tokens")
+            token_ceiling = int(os.environ.get("SIGMA_CLOUD_USER_TOKEN_BUDGET", "2000000"))
+            if (
+                type(existing_tokens) is not int
+                or existing_tokens < 0
+                or token_ceiling < 1
+                or not compiler_request_body
+                or compiler_output_bound < 1
+            ):
+                return False
+            expected_tokens = (
+                existing_tokens + len(compiler_request_body) + 8192 + compiler_output_bound
+            )
+            expected_tokens += sum(
+                len(request) + 8192 + provider_output_bound for request in role_requests
+            )
+            if expected_tokens > token_ceiling:
+                return False
         if isinstance(hard, dict):
-            # A compiler request is additional to the configured agent turns.
-            # Simulate BOTH admissions on a copy of the frozen ledger, using
-            # full provider output ceilings. Input-only checks missed output
-            # liability, cumulative cost, and the call-count limit. Those
-            # omissions could strand an otherwise admissible first turn.
             if not compiler_request_body or compiler_output_bound < 1:
                 return False
             preview = deepcopy(hard)
@@ -12536,23 +12573,17 @@ def _optional_reference_compilation_headroom(
                 output_token_reservation=compiler_output_bound,
                 allow_concurrent=True,
             )
-            provider_output_bound = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
-            if provider_output_bound is None:
-                return False
-            role_request = _serialized_role_request(
-                _role_request_payload(record, "investigator", context)
-            )
-            reserve_before_dispatch(
-                preview,
-                call_id="preflight-first-investigator",
-                request_body=role_request,
-                output_token_reservation=provider_output_bound,
-                allow_concurrent=True,
-            )
+            for index, role_request in enumerate(role_requests):
+                reserve_before_dispatch(
+                    preview,
+                    call_id=f"preflight-first-investigator-{index}",
+                    request_body=role_request,
+                    output_token_reservation=provider_output_bound,
+                    allow_concurrent=True,
+                )
     except Exception:  # noqa: BLE001 — optional step must never block research
         return False
     return True
-
 
 async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
     """One durable, non-replayed AI method-compilation stage before research.
@@ -12605,7 +12636,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             return False
         if state != "pending":
             compilation["status"] = "fallback"
-            compilation["reason"] = "Unrecognized reference compilation state; frozen notes retained."
+            compilation["reason"] = (
+                "Unrecognized reference compilation state; frozen notes retained."
+            )
             _event(record, "references.compilation.skipped", compilation["reason"])
             _save(path, record)
             return True
@@ -12676,18 +12709,15 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         )
         quote = full_liability if record.get("mode") == "api_key" else practical_cost
         paid = record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
-        if (
-            (paid or isinstance(record.get("hard_budget_ledger"), dict))
-            and (
-                quote is None
-                or full_liability is None
-                or not _optional_reference_compilation_headroom(
-                    record,
-                    quote,
-                    full_liability,
-                    compiler_request_body=encoded,
-                    compiler_output_bound=output_bound,
-                )
+        if (paid or isinstance(record.get("hard_budget_ledger"), dict)) and (
+            quote is None
+            or full_liability is None
+            or not _optional_reference_compilation_headroom(
+                record,
+                quote,
+                full_liability,
+                compiler_request_body=encoded,
+                compiler_output_bound=output_bound,
             )
         ):
             compilation["status"] = "skipped"
@@ -12737,7 +12767,33 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 _event(record, "references.compilation.skipped", compilation["reason"])
                 _save(path, record)
                 return True
-        if cloud_research.billing_enabled():
+        # Persist the attempt ID and its conservative liability before the
+        # hosted SQLite reservation. A crash between the two durable stores
+        # must never create an untraceable funded provider attempt.
+        hosted = cloud_research.billing_enabled()
+        compilation.update(
+            {
+                "status": "running",
+                "started_at": _now(),
+                "attempt_id": attempt_id,
+                "request_sha256": hashlib.sha256(encoded).hexdigest(),
+                "token_reservation": token_reserve,
+                "cost_reserve": quote,
+                "budget_reservation": reservation,
+            }
+        )
+        if reservation is not None or hosted:
+            record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
+        if paid and quote is not None:
+            record["estimated_cost_reserved_usd"] = (
+                float(record.get("estimated_cost_reserved_usd", 0.0)) + quote
+            )
+        record["status"] = "running"
+        record["current_action"] = "Compiling research references"
+        record["message"] = "Compiling selected references once before Investigator/Skeptic turns."
+        _event(record, "references.compilation.started", record["message"])
+        _save(path, record)
+        if hosted:
             try:
                 if quote is None:
                     raise cloud_research.CloudResearchUnavailable(
@@ -12751,10 +12807,26 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     maximum_liability_usd=full_liability,
                 )
             except cloud_research.CloudResearchUnavailable as exc:
+                # This reservation was rejected before transport invocation.
+                # Release only its own holds; keep the failed attempt in audit.
                 if isinstance(hard, dict) and reservation is not None:
                     cancel_before_dispatch(hard, call_id=attempt_id)
+                record["tokens_reserved"] = max(
+                    0, int(record.get("tokens_reserved", 0)) - token_reserve
+                )
+                if paid and quote is not None:
+                    record["estimated_cost_reserved_usd"] = max(
+                        0.0,
+                        float(record.get("estimated_cost_reserved_usd", 0.0)) - quote,
+                    )
                 compilation["status"] = "skipped"
                 compilation["reason"] = str(exc)[:400]
+                compilation["budget_reservation"] = None
+                compilation["token_reservation"] = 0
+                compilation["cost_reserve"] = 0.0
+                record["status"] = "queued"
+                record["current_action"] = "References ready"
+                record["message"] = "Compilation not funded; using frozen original references."
                 _event(
                     record,
                     "references.compilation.skipped",
@@ -12762,28 +12834,6 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 )
                 _save(path, record)
                 return True
-        compilation.update(
-            {
-                "status": "running",
-                "started_at": _now(),
-                "attempt_id": attempt_id,
-                "request_sha256": hashlib.sha256(encoded).hexdigest(),
-                "token_reservation": token_reserve,
-                "cost_reserve": quote,
-                "budget_reservation": reservation,
-            }
-        )
-        if reservation is not None or cloud_research.billing_enabled():
-            record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
-        if paid and quote is not None:
-            record["estimated_cost_reserved_usd"] = (
-                float(record.get("estimated_cost_reserved_usd", 0.0)) + quote
-            )
-        record["status"] = "running"
-        record["current_action"] = "Compiling research references"
-        record["message"] = "Compiling selected references once before Investigator/Skeptic turns."
-        _event(record, "references.compilation.started", record["message"])
-        _save(path, record)
 
     raw: dict[str, Any] | None = None
     compiled: dict[str, Any] | None = None

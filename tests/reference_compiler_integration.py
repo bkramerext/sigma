@@ -281,6 +281,7 @@ def verify_compilation_preserves_first_turn_funding() -> None:
     """Optional reference work may not consume the first research turn's budget."""
     session = {
         "mode": "api_key",
+        "model": "gpt-6.1-sol",
         "cloud_sponsored": True,
         "strategy_runs": [{"strategy_id": "test", "status": "queued"}],
         "estimated_cost_usd": 0.0,
@@ -294,21 +295,53 @@ def verify_compilation_preserves_first_turn_funding() -> None:
     with (
         patch.object(research_sessions, "_portfolio_context", return_value={}),
         patch.object(research_sessions, "_reserve_cost", side_effect=quote),
+        patch.object(research_sessions, "_role_request_payload", return_value={"input": "test"}),
         patch.object(
             research_sessions.cloud_research,
             "snapshot",
-            return_value={"remaining_usd": 0.12, "global_remaining_usd": 2.0},
+            return_value={
+                "remaining_usd": 0.12,
+                "global_remaining_usd": 2.0,
+                "user_reserved_or_observed_tokens": 0,
+            },
         ) as funding,
     ):
         # The compiler itself could be funded for $0.06, but an Investigator
         # would then be denied because only $0.06 would remain.
         assert not research_sessions._optional_reference_compilation_headroom(session, 0.06, 0.12)
-        funding.return_value = {"remaining_usd": 0.30, "global_remaining_usd": 0.55}
+        funding.return_value = {
+            "remaining_usd": 0.30,
+            "global_remaining_usd": 0.55,
+            "user_reserved_or_observed_tokens": 0,
+        }
         # User allowance is sufficient, but maximum global model liability
         # would crowd out the next Investigator reservation.
         assert not research_sessions._optional_reference_compilation_headroom(session, 0.06, 0.12)
-        funding.return_value = {"remaining_usd": 0.30, "global_remaining_usd": 1.0}
-        assert research_sessions._optional_reference_compilation_headroom(session, 0.06, 0.12)
+        funding.return_value = {
+            "remaining_usd": 0.30,
+            "global_remaining_usd": 1.0,
+            "user_reserved_or_observed_tokens": 0,
+        }
+        assert research_sessions._optional_reference_compilation_headroom(
+            session, 0.06, 0.12, compiler_request_body=b"compiler", compiler_output_bound=4000
+        )
+        # A compiler that fits dollars must also preserve the first role's
+        # full hosted token reservation.
+        funding.return_value["user_reserved_or_observed_tokens"] = 1_990_000
+        assert not research_sessions._optional_reference_compilation_headroom(
+            session, 0.06, 0.12, compiler_request_body=b"compiler", compiler_output_bound=4000
+        )
+        funding.return_value["user_reserved_or_observed_tokens"] = 0
+        session["strategy_runs"].append({"strategy_id": "second", "status": "queued"})
+        funding.return_value["global_remaining_usd"] = 1.0
+        assert not research_sessions._optional_reference_compilation_headroom(
+            session, 0.06, 0.12, compiler_request_body=b"compiler", compiler_output_bound=4000
+        )
+        funding.return_value["global_remaining_usd"] = 1.20
+        assert research_sessions._optional_reference_compilation_headroom(
+            session, 0.06, 0.12, compiler_request_body=b"compiler", compiler_output_bound=4000
+        )
+        session["strategy_runs"].pop()
     api = {**session, "cloud_sponsored": False, "maximum_estimated_cost_usd": 0.55}
     with (
         patch.object(research_sessions, "_portfolio_context", return_value={}),
@@ -387,7 +420,37 @@ def verify_hard_budget_compiler_does_not_steal_first_turn() -> None:
         assert ledger["calls"] == []
 
 
+def verify_compiled_methods_survive_context_compaction() -> None:
+    """Late-round context compaction cannot drop the frozen shared guide."""
+    from sigma.research_context_budget import compact_dispatch_context
+
+    compiled = {
+        "id": "compiled-methodology-guide",
+        "notes": "Verify boundary cases and attempted counterexamples.",
+    }
+    packet = {
+        "methodology_source_material": [compiled.copy()],
+        "context_manifest": {"sources": []},
+        "prior_artifacts": [{"id": "earlier", "details": "x" * 4000}],
+        "context_artifact_ids": ["earlier"],
+    }
+    assert compact_dispatch_context(packet, limit=1500)
+    assert packet["methodology_source_material"] == [compiled]
+    assert packet["prior_artifacts"][0]["evidence_availability"] == (
+        "pointer_only_original_not_supplied"
+    )
+    # Raw optional reference annotations retain the established policy:
+    # they can be dropped before material research evidence.
+    raw = {
+        "methodology_source_material": [{"id": "raw", "notes": "x" * 4000}],
+        "context_manifest": {"sources": []},
+    }
+    assert compact_dispatch_context(raw, limit=1500)
+    assert "methodology_source_material" not in raw
+
+
 async def main() -> None:
+    verify_compiled_methods_survive_context_compaction()
     verify_compilation_preserves_first_turn_funding()
     verify_hard_budget_compiler_does_not_steal_first_turn()
     with TemporaryDirectory() as temporary:
