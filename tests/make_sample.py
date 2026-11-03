@@ -116,7 +116,7 @@ async def create_source_project(root: Path) -> tuple[Path, str, str, str]:
                 raise AssertionError("Unexpected additional research call")
             return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
-        limits = research_sessions.get_limits(str(source))
+        limits = dict(research_sessions.DEFAULT_LIMITS)
         limits.update(research_rounds=1, model_calls=2)
         research_sessions.save_limits(str(source), limits)
         with (
@@ -494,18 +494,18 @@ async def main() -> None:
                     strategy_ids=reliability_ids,
                 )
                 finished_reliability = await wait_for(reliability.path, started_reliability["id"])
-            assert finished_reliability["calls_used"] == len(reliable_calls) == 18
-            assert finished_reliability["cycle_limit"] == 3
+            assert finished_reliability["calls_used"] == len(reliable_calls) == 54
+            assert finished_reliability["cycle_limit"] == 9
             assert finished_reliability["status"] == "ended"
             assert {(strategy_id, cycle, role) for strategy_id, cycle, role in reliable_calls} == {
                 (strategy_id, cycle, role)
                 for strategy_id in reliability_ids
-                for cycle in (1, 2, 3)
+                for cycle in range(1, 10)
                 for role in ("research_investigator", "research_skeptic")
             }
             limits_12 = research_sessions.save_limits(
                 reliability.path,
-                {**reliability_limits, "model_calls": 12},
+                {**research_sessions.DEFAULT_LIMITS, "research_rounds": 3, "model_calls": 12},
             )
             reliable_calls.clear()
             with (

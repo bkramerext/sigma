@@ -858,6 +858,14 @@ def _paired_call_limit(limits: dict[str, Any], enabled_count: int) -> int:
     return 2 * limits["research_rounds"] * limits["turns_per_round"] * enabled_count
 
 
+def _research_round_label(record: dict[str, Any], cycle: int) -> str:
+    """Show human research rounds without altering durable pair-slot identities."""
+    if record.get("scheduler_version") == 2:
+        round_number, paired_turn = _paired_round_position(record, cycle)
+        return f"Research round {round_number}, turn {paired_turn}"
+    return f"Research round {cycle}"
+
+
 def _paired_round_position(record: dict[str, Any], pair_slot: int) -> tuple[int, int]:
     """Translate durable pair slots to (research round, paired turn in round)."""
     if record.get("scheduler_version") != 2:
@@ -905,7 +913,7 @@ def get_limits(path: str) -> dict[str, Any]:
                             raise current_error
             except ValueError as exc:
                 raise ProjectError("Research limits are invalid") from exc
-        return _new_session_limits(limits)
+        return limits
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
@@ -931,7 +939,7 @@ def get_limits(path: str) -> dict[str, Any]:
                 limits = _validate_legacy_limits(raw)
             except ProjectError:
                 raise current_error
-    return _new_session_limits(limits)
+    return limits
 
 
 def _legacy_project_concurrency(raw: dict[str, Any]) -> int:
@@ -4353,9 +4361,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         }
     }
     if record.get("scheduler_version") == 2:
-        round_number, pair_number = _paired_round_position(
-            record, int(record.get("cycle", 0))
-        )
+        round_number, pair_number = _paired_round_position(record, int(record.get("cycle", 0)))
         result["research_round"] = round_number if record.get("cycle", 0) else 0
         result["paired_turn_in_round"] = pair_number if record.get("cycle", 0) else 0
         result["research_round_limit"] = record["research_round_limit"]
@@ -10560,7 +10566,7 @@ async def _portfolio_role_call(
             record["current_action"] = f"{role.title()} · {branch['strategy_title']}"
             record["current_question"] = branch["current_question"]
             record["message"] = (
-                f"Research round {cycle}: {role.title()} agent turn "
+                f"{_research_round_label(record, cycle)}: {role.title()} agent call "
                 f"{record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} in progress."
                 if len(record["strategy_runs"]) == 1
                 else f"{role.title()} agent turn {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} is running for {branch['strategy_title']}."

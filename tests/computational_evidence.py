@@ -225,7 +225,7 @@ async def test_cross_session_computation_reuse(path: Path, runtime_name: str = "
     research_sessions._save(str(path), old_session)
     prior_bytes = (research_sessions._directory(str(path)) / f"{old_session_id}.json").read_bytes()
 
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["research_rounds"] = 1
     research_sessions.save_limits(str(path), limits)
     tools = execution_tool_fixture(True)

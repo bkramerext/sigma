@@ -398,7 +398,7 @@ async def test_transient_timeout_retries_as_a_new_accounted_turn(path: Path):
 
 async def test_repeated_transient_failures_are_isolated_and_explained(path: Path):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 2, "model_calls": 6})
     research_sessions.save_limits(str(path), limits)
     attempts = 0
@@ -438,7 +438,7 @@ async def test_repeated_transient_failures_are_isolated_and_explained(path: Path
 
 async def test_last_affordable_provider_failure_names_failure_and_exhaustion(path: Path):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 2, "model_calls": 2})
     research_sessions.save_limits(str(path), limits)
 
@@ -482,7 +482,7 @@ async def test_last_shared_turn_failure_survives_terminal_sibling_finalization(p
     second = create_strategy(path, "Second route", "Check another derivation.").project.strategies[
         -1
     ]
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 3, "model_calls": 6})
     limits = research_sessions.save_limits(str(path), limits)
     calls = []
@@ -564,7 +564,7 @@ async def test_expired_deadline_preserves_sibling_partial_artifacts(path: Path):
     second = create_strategy(
         path, "Second route", "Check a distinct derivation."
     ).project.strategies[-1]
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 2, "model_calls": 3})
     limits = research_sessions.save_limits(str(path), limits)
     started_event = asyncio.Event()
@@ -1858,7 +1858,7 @@ async def test_foreign_worker_lock_blocks_resume_and_removal(path: Path):
 
 async def test_three_cycles_and_idempotency(path: Path):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 3, "model_calls": 6})
     research_sessions.save_limits(str(path), limits)
     before = (path / "project.json").read_bytes()
@@ -2069,7 +2069,7 @@ async def test_legacy_worker_aggregates_usage_and_audits_inputs(path: Path):
 
 async def test_investigator_python_is_run_and_reviewed(path: Path):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["research_rounds"] = 1
     research_sessions.save_limits(str(path), limits)
     code = "print(6 * 7)"
@@ -2295,7 +2295,7 @@ async def test_recovery_reuses_saved_python_execution(path: Path):
 
 async def test_stop_during_python_execution_preserves_provenance(path: Path):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["research_rounds"] = 1
     research_sessions.save_limits(str(path), limits)
     code = "while True: pass"
@@ -2367,7 +2367,7 @@ async def test_stop_during_python_execution_preserves_provenance(path: Path):
 
 async def test_failed_experiment_is_reused_then_revised(path: Path):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 3, "model_calls": 6})
     research_sessions.save_limits(str(path), limits)
     bad_code, repaired_code = (
@@ -2489,7 +2489,7 @@ async def test_portfolio_python_queue_and_stop(path: Path):
             ).project.strategies[-1]
             for i in (2, 3)
         ]
-        limits = research_sessions.get_limits(str(case))
+        limits = dict(research_sessions.DEFAULT_LIMITS)
         limits.update(research_rounds=1, model_calls=6)
         limits = research_sessions.save_limits(str(case), limits)
         entered, release = asyncio.Event(), asyncio.Event()
@@ -2602,7 +2602,7 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
     view, strategy, credential, config = await setup(path)
     # This test exercises cross-session finding transfer, not early research
     # termination. Give the source session a complete one-round protocol.
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=1, model_calls=2)
     research_sessions.save_limits(str(path), limits)
     outputs = [investigation(1), skeptic(1, "stop", "decisive_counterexample")]
@@ -4741,7 +4741,7 @@ async def test_pending_skeptic_uses_final_turn_and_deferred_outcome_is_specific(
     view, first, credential, config = await setup(path)
     second_view = create_strategy(path, "Deferred route", "Check an independent argument.")
     second = next(item for item in second_view.project.strategies if item.id != first.id)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=2, model_calls=2)
     limits = research_sessions.save_limits(str(path), limits)
     dispatched = []
@@ -4799,7 +4799,7 @@ async def test_adversarial_achieved_reviews_never_publish_unsupported_solution(p
     async def run_case(case: str, skeptic_output: dict, turns: int, rounds: int):
         case_path = path.with_name(f"{case}.sigma")
         view, strategy, credential, config = await setup(case_path)
-        limits = research_sessions.get_limits(str(case_path))
+        limits = dict(research_sessions.DEFAULT_LIMITS)
         limits.update(research_rounds=rounds, model_calls=turns)
         limits = research_sessions.save_limits(str(case_path), limits)
         calls = []
@@ -6502,7 +6502,7 @@ async def test_strategy_skeptic_does_not_wait_for_sibling_investigator(path: Pat
     second = create_strategy(
         path, "Independent fast route", "Complete an unrelated argument."
     ).project.strategies[-1]
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=1, model_calls=4)
     research_sessions.save_limits(str(path), limits)
     fast_skeptic_seen = asyncio.Event()
@@ -6909,7 +6909,7 @@ async def test_concurrent_strategy_portfolio(path: Path):
     third = create_strategy(
         path, "Counterexample search", "Search for assumptions that make the claim fail."
     ).project.strategies[-1]
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["model_calls"] = 8
     limits = research_sessions.save_limits(str(path), limits)
     state = {"active": 0, "maximum": 0}
@@ -7213,7 +7213,7 @@ async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidenc
         path, "Complementary route", "Derive a separate invariant and compare its consequences."
     ).project.strategies[-1]
     project_before = (path / "project.json").read_bytes()
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 2, "model_calls": 8})
     limits = research_sessions.save_limits(str(path), limits)
     seen_contexts = []
@@ -7686,7 +7686,7 @@ async def test_peer_finding_changes_target_investigator_after_stop_and_resume(pa
     target = create_strategy(
         path, "Real-analysis route", "Derive an invariant for all real line arrangements."
     ).project.strategies[-1]
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 3, "model_calls": 10})
     limits = research_sessions.save_limits(str(path), limits)
     preflight_waiting = asyncio.Event()
@@ -7878,7 +7878,7 @@ async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_p
         path, "Alternate route", "Try an independent structural decomposition."
     ).project.strategies[-1]
     project_before = (path / "project.json").read_bytes()
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=2, model_calls=12)
     limits = research_sessions.save_limits(str(path), limits)
 
@@ -7961,7 +7961,7 @@ async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path
                 f"Use a distinct route and explicitly test boundary {index}.",
             ).project.strategies[-1]
         )
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["model_calls"] = 20
     limits = research_sessions.save_limits(str(path), limits)
     state = {"active": 0, "maximum": 0}
@@ -8043,7 +8043,7 @@ async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path
 
 async def test_forked_strategy_followup_preserves_parent_comparison(path: Path):
     view, parent, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=1, model_calls=2)
     research_sessions.save_limits(str(path), limits)
     first_outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
@@ -8096,7 +8096,7 @@ async def test_forked_strategy_followup_preserves_parent_comparison(path: Path):
             result = skeptic(context["cycle"], "stop", "productive_conclusion")
         return httpx.Response(200, json=provider_response(result))
 
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=1, model_calls=4)
     research_sessions.save_limits(str(path), limits)
     with (
@@ -8138,7 +8138,7 @@ async def test_forked_strategy_followup_preserves_parent_comparison(path: Path):
 
 async def test_stop_concurrent_portfolio_preserves_completed_boundary(path: Path):
     view, first, credential, config = await setup(path)
-    test_limits = research_sessions.get_limits(str(path))
+    test_limits = dict(research_sessions.DEFAULT_LIMITS)
     test_limits["model_calls"] = 6
     research_sessions.save_limits(str(path), test_limits)
     second = create_strategy(path, "Second line", "Try a distinct derivation.").project.strategies[
@@ -8246,7 +8246,7 @@ async def test_stop_reconciles_queued_portfolio_branches(path: Path):
     ]
     entered = asyncio.Event()
     state = {"count": 0, "active": 0}
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["model_calls"] = 8
     limits = research_sessions.save_limits(str(path), limits)
 
@@ -8420,7 +8420,7 @@ async def test_portfolio_preflight_timeout_pauses_without_spending_calls_and_rec
     path: Path,
 ):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=1, model_calls=2)
     research_sessions.save_limits(str(path), limits)
     config_calls = 0
@@ -9383,7 +9383,7 @@ async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path)
     second = create_strategy(path, "Second strategy", "Try another mechanism.").project.strategies[
         -1
     ]
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["research_rounds"] = 2
     limits["model_calls"] = 5
     limits = research_sessions.save_limits(str(path), limits)
@@ -9439,7 +9439,7 @@ async def test_three_strategies_launch_under_three_turn_shared_ceiling(path: Pat
     third = next(
         item for item in third_view.project.strategies if item.id not in {first.id, second.id}
     )
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 3, "model_calls": 3})
     limits = research_sessions.save_limits(str(path), limits)
     dispatched = []
@@ -9494,7 +9494,7 @@ async def test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
 ):
     """An early claimed solution or unproductive report cannot truncate the protocol."""
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=3, model_calls=6)
     limits = research_sessions.save_limits(str(path), limits)
     dispatched = []
@@ -9580,7 +9580,7 @@ async def test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
 
 async def test_incomplete_productive_stop_uses_remaining_round(path: Path):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 2, "model_calls": 4})
     limits = research_sessions.save_limits(str(path), limits)
     roles = []
@@ -9974,7 +9974,7 @@ async def test_remove_terminal_and_monotonic_number(path: Path):
     view, strategy, credential, config = await setup(path)
     # The test concerns terminal-session removal and numbering, not an
     # early model-decided research stop. Configure a complete single round.
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=1, model_calls=2)
     limits = research_sessions.save_limits(str(path), limits)
     terminal_review = skeptic(1, "stop", "no_progress")
@@ -11366,7 +11366,7 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
     other = create_strategy(
         path, "Independent history inquiry", "Evaluate source reliability in a bounded archive."
     ).project.strategies[-1]
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=1, model_calls=2)
     research_sessions.save_limits(str(path), limits)
     phase = "seed"
@@ -11517,7 +11517,7 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
         root = path / f"domain-{index}.sigma"
         view = initialize_project(root, f"Cross-domain case {index}", question, research_mode=mode)
         strategy = create_strategy(root, "Bounded local test", approach).project.strategies[0]
-        limits = research_sessions.get_limits(str(root))
+        limits = dict(research_sessions.DEFAULT_LIMITS)
         limits.update(research_rounds=1, model_calls=2)
         research_sessions.save_limits(str(root), limits)
         credential = {
@@ -12796,7 +12796,7 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
     third = next(
         row for row in third_view.project.strategies if row.id not in {first.id, second.id}
     )
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update({"research_rounds": 3, "model_calls": 18})
     limits = research_sessions.save_limits(str(path), limits)
     entered = asyncio.Event()
@@ -13000,6 +13000,130 @@ def test_reference_compilation_is_bounded_and_source_attributed() -> None:
         assert "https://example.org/style" not in prompt
 
 
+# Issue #506: provider-free paired-turn scheduling and historical isolation.
+def test_paired_round_defaults_and_enabled_call_ceiling() -> None:
+    limits = research_sessions._validate_limits(dict(research_sessions.NEW_DEFAULT_LIMITS))
+    assert (limits["scheduler_version"], limits["research_rounds"], limits["turns_per_round"]) == (
+        2,
+        3,
+        3,
+    )
+    assert limits["model_calls"] == 18
+    assert [research_sessions._paired_call_limit(limits, count) for count in (0, 1, 2, 3)] == [
+        0,
+        18,
+        36,
+        54,
+    ]
+    assert research_sessions._paired_call_limit({**limits, "research_rounds": 2}, 2) == 24
+    assert research_sessions._paired_call_limit({**limits, "turns_per_round": 4}, 2) == 48
+
+
+def test_paired_round_positions_are_explicit_and_legacy_is_unchanged() -> None:
+    paired = {"scheduler_version": 2, "turns_per_round": 3}
+    assert [research_sessions._paired_round_position(paired, slot) for slot in range(1, 10)] == [
+        (1, 1),
+        (1, 2),
+        (1, 3),
+        (2, 1),
+        (2, 2),
+        (2, 3),
+        (3, 1),
+        (3, 2),
+        (3, 3),
+    ]
+    assert research_sessions._paired_round_position({"cycle_limit": 3}, 2) == (2, 1)
+    legacy = {"research_rounds": 2, "model_calls": 12}
+    upgraded = research_sessions._new_session_limits(legacy)
+    assert legacy == {"research_rounds": 2, "model_calls": 12}
+    assert (upgraded["research_rounds"], upgraded["turns_per_round"], upgraded["model_calls"]) == (
+        3,
+        3,
+        18,
+    )
+
+
+def test_paired_round_protocol_requires_every_accepted_role() -> None:
+    steps = [
+        {"strategy_id": sid, "role": role, "cycle": slot, "status": "completed"}
+        for sid in ("a", "b", "c")
+        for slot in range(1, 10)
+        for role in ("investigator", "skeptic")
+    ]
+    record = {
+        "status": "ended",
+        "strategy_ids": ["a", "b", "c"],
+        "cycle_limit": 9,
+        "research_round_limit": 3,
+        "turns_per_round": 3,
+        "scheduler_version": 2,
+        "steps": steps,
+        "artifacts": [],
+        "events": [],
+    }
+    assert research_sessions._mark_protocol_complete(record)
+    assert record["termination_reason_code"] == "protocol_complete"
+    assert "54 configured" in record["message"]
+    missing = deepcopy(record)
+    missing.pop("termination_reason_code")
+    missing["steps"] = steps[:-1]
+    assert not research_sessions._mark_protocol_complete(missing)
+    assert missing.get("termination_reason_code") is None
+    missing["steps"].append({"strategy_id": "c", "role": "skeptic", "cycle": 9, "status": "failed"})
+    assert not research_sessions._mark_protocol_complete(missing)
+
+
+def test_paired_round_pipeline_orders_roles_without_paid_calls() -> None:
+    observed: list[tuple[str, int]] = []
+
+    async def fake_call(
+        session_id: str,
+        path: str,
+        strategy_id: str,
+        role: str,
+        cycle: int,
+        semaphore: asyncio.Semaphore,
+        state_lock: asyncio.Lock,
+    ) -> bool:
+        observed.append((role, cycle))
+        return True
+
+    async def run() -> None:
+        branch: dict[str, Any] = {
+            "strategy_id": "s",
+            "cycle": 0,
+            "pending_investigation": None,
+        }
+        semaphore = asyncio.Semaphore(2)
+        lock = asyncio.Lock()
+        with patch.object(research_sessions, "_portfolio_role_call_with_recovery", fake_call):
+            for slot in range(1, 10):
+                branch["cycle"] = slot - 1
+                assert await research_sessions._portfolio_strategy_pipeline(
+                    "session", "/unused", branch, semaphore, lock
+                )
+        assert observed == [
+            (role, slot) for slot in range(1, 10) for role in ("investigator", "skeptic")
+        ]
+
+    asyncio.run(run())
+
+
+def test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs() -> None:
+    queued = [{"strategy_id": item, "pending_investigation": None} for item in ("a", "b", "c")]
+    selected, cursor = research_sessions._affordable_portfolio_branches(queued, 6, 0)
+    assert [item["strategy_id"] for item in selected] == ["a", "b", "c"]
+    assert cursor == 0
+    selected, cursor = research_sessions._affordable_portfolio_branches(queued, 2, 1)
+    assert [item["strategy_id"] for item in selected] == ["b"]
+    assert cursor == 2
+    # An accepted Investigator that needs its Skeptic consumes only one new slot.
+    queued[0]["pending_investigation"] = {"claim": "saved"}
+    selected, _ = research_sessions._affordable_portfolio_branches(queued, 1, 0)
+    assert [item["strategy_id"] for item in selected] == ["a"]
+    assert research_sessions._affordable_portfolio_branches(queued[1:], 1, 0)[0] == []
+
+
 def main():
     # The project test driver invokes provider-free scientific Outcome
     # regressions directly; this repository does not use pytest discovery.
@@ -13008,6 +13132,11 @@ def main():
     for name, check in vars(test_outcome_policy).items():
         if name.startswith("test_") and callable(check):
             check()
+    test_paired_round_defaults_and_enabled_call_ceiling()
+    test_paired_round_positions_are_explicit_and_legacy_is_unchanged()
+    test_paired_round_protocol_requires_every_accepted_role()
+    test_paired_round_pipeline_orders_roles_without_paid_calls()
+    test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs()
     print("PASS provider-free scientific Outcome policy regressions")
     test_reference_compilation_is_bounded_and_source_attributed()
     test_backend_build_is_pinned_at_backend_start()
@@ -13555,119 +13684,3 @@ def test_e001_reference_fetch_rejects_private_hosts_and_downgrade(monkeypatch):
     )
 
 
-# Issue #506: provider-free paired-turn scheduling and historical isolation.
-def test_paired_round_defaults_and_enabled_call_ceiling() -> None:
-    limits = research_sessions._validate_limits(dict(research_sessions.NEW_DEFAULT_LIMITS))
-    assert (limits["scheduler_version"], limits["research_rounds"], limits["turns_per_round"]) == (
-        2, 3, 3
-    )
-    assert limits["model_calls"] == 18
-    assert [
-        research_sessions._paired_call_limit(limits, count) for count in (0, 1, 2, 3)
-    ] == [0, 18, 36, 54]
-    assert research_sessions._paired_call_limit({**limits, "research_rounds": 2}, 2) == 24
-    assert research_sessions._paired_call_limit({**limits, "turns_per_round": 4}, 2) == 48
-
-
-def test_paired_round_positions_are_explicit_and_legacy_is_unchanged() -> None:
-    paired = {"scheduler_version": 2, "turns_per_round": 3}
-    assert [
-        research_sessions._paired_round_position(paired, slot) for slot in range(1, 10)
-    ] == [
-        (1, 1), (1, 2), (1, 3),
-        (2, 1), (2, 2), (2, 3),
-        (3, 1), (3, 2), (3, 3),
-    ]
-    assert research_sessions._paired_round_position({"cycle_limit": 3}, 2) == (2, 1)
-    legacy = {"research_rounds": 2, "model_calls": 12}
-    upgraded = research_sessions._new_session_limits(legacy)
-    assert legacy == {"research_rounds": 2, "model_calls": 12}
-    assert (upgraded["research_rounds"], upgraded["turns_per_round"], upgraded["model_calls"]) == (
-        3, 3, 18
-    )
-
-
-def test_paired_round_protocol_requires_every_accepted_role() -> None:
-    steps = [
-        {"strategy_id": sid, "role": role, "cycle": slot, "status": "completed"}
-        for sid in ("a", "b", "c")
-        for slot in range(1, 10)
-        for role in ("investigator", "skeptic")
-    ]
-    record = {
-        "status": "ended",
-        "strategy_ids": ["a", "b", "c"],
-        "cycle_limit": 9,
-        "research_round_limit": 3,
-        "turns_per_round": 3,
-        "scheduler_version": 2,
-        "steps": steps,
-        "artifacts": [],
-        "events": [],
-    }
-    assert research_sessions._mark_protocol_complete(record)
-    assert record["termination_reason_code"] == "protocol_complete"
-    assert "54 configured" in record["message"]
-    missing = deepcopy(record)
-    missing.pop("termination_reason_code")
-    missing["steps"] = steps[:-1]
-    assert not research_sessions._mark_protocol_complete(missing)
-    assert missing.get("termination_reason_code") is None
-    missing["steps"].append(
-        {"strategy_id": "c", "role": "skeptic", "cycle": 9, "status": "failed"}
-    )
-    assert not research_sessions._mark_protocol_complete(missing)
-
-
-def test_paired_round_pipeline_orders_roles_without_paid_calls() -> None:
-    observed: list[tuple[str, int]] = []
-
-    async def fake_call(
-        session_id: str,
-        path: str,
-        strategy_id: str,
-        role: str,
-        cycle: int,
-        semaphore: asyncio.Semaphore,
-        state_lock: asyncio.Lock,
-    ) -> bool:
-        observed.append((role, cycle))
-        return True
-
-    async def run() -> None:
-        branch: dict[str, Any] = {
-            "strategy_id": "s",
-            "cycle": 0,
-            "pending_investigation": None,
-        }
-        semaphore = asyncio.Semaphore(2)
-        lock = asyncio.Lock()
-        with patch.object(research_sessions, "_portfolio_role_call_with_recovery", fake_call):
-            for slot in range(1, 10):
-                branch["cycle"] = slot - 1
-                assert await research_sessions._portfolio_strategy_pipeline(
-                    "session", "/unused", branch, semaphore, lock
-                )
-        assert observed == [
-            (role, slot) for slot in range(1, 10)
-            for role in ("investigator", "skeptic")
-        ]
-
-    asyncio.run(run())
-
-
-def test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs() -> None:
-    queued = [
-        {"strategy_id": item, "pending_investigation": None} for item in ("a", "b", "c")
-    ]
-    selected, cursor = research_sessions._affordable_portfolio_branches(queued, 6, 0)
-    assert [item["strategy_id"] for item in selected] == ["a", "b", "c"]
-    assert cursor == 0
-    selected, cursor = research_sessions._affordable_portfolio_branches(queued, 2, 1)
-    assert [item["strategy_id"] for item in selected] == ["b"]
-    assert cursor == 2
-    # An accepted Investigator that needs its Skeptic consumes only one new slot.
-    queued[0]["pending_investigation"] = {"claim": "saved"}
-    selected, _ = research_sessions._affordable_portfolio_branches(queued, 1, 0)
-    assert [item["strategy_id"] for item in selected] == ["a"]
-    assert research_sessions._affordable_portfolio_branches(queued[1:], 1, 0)[0] == []

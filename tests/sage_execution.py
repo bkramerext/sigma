@@ -115,7 +115,7 @@ def test_contract():
 
 async def test_integrated(path, status, available=True):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["research_rounds"] = 1
     research_sessions.save_limits(str(path), limits)
     tools = capabilities(available)
@@ -328,7 +328,7 @@ async def test_recovery_and_runtime_identity(path):
 
 async def test_failure_reuse_then_revision(path):
     view, strategy, credential, config = await setup(path)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits.update(research_rounds=3, model_calls=6)
     research_sessions.save_limits(str(path), limits)
     tools = capabilities()
@@ -383,7 +383,7 @@ async def test_mixed_queue_stop_and_resume(root):
     view_b, strategy_b, _, _ = await setup(root / "second-session.sigma")
     added = create_strategy(path, "Python peer", "Inspect a finite Python experiment.")
     peer = next(item for item in added.project.strategies if item.id != strategy_a.id)
-    limits = research_sessions.get_limits(str(path))
+    limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["research_rounds"] = 1
     research_sessions.save_limits(str(path), limits)
     entered, release = asyncio.Event(), asyncio.Event()

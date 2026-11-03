@@ -634,7 +634,14 @@ def prepare_job(record: dict[str, Any]) -> None:
     call_limit = record.get("call_limit")
     duration_limit = record.get("duration_limit_minutes")
     maximum_cost = record.get("maximum_estimated_cost_usd")
-    call_ceiling = session_call_ceiling()
+    # Historical shared-call sessions retain the original admission ceiling.
+    # New sessions have an explicit, versioned per-strategy pair-slot ceiling.
+    # 12 is the maximum permitted selected-strategy count in start_session.
+    call_ceiling = (
+        12 * 60 * 20 * 2
+        if record.get("scheduler_version") == 2
+        else session_call_ceiling()
+    )
     if (
         type(call_limit) is not int
         or not 2 <= call_limit <= call_ceiling
