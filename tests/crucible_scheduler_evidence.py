@@ -37,9 +37,11 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
     assert research_sessions.get_limits(str(path)) == legacy
     assert research_sessions._session_start_limits(legacy, None) == legacy
     projected = api.research_limits_view(str(path))
-    assert (projected["scheduler_version"], projected["research_rounds"], projected["turns_per_round"]) == (
-        2, 3, 3
-    )
+    assert (
+        projected["scheduler_version"],
+        projected["research_rounds"],
+        projected["turns_per_round"],
+    ) == (2, 3, 3)
     assert projected["model_calls"] == 18
     assert (path / "research-sessions" / "limits.json").read_bytes() == before
     started_limits = research_sessions._session_start_limits(legacy, projected)
@@ -68,7 +70,9 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
     assert response["scheduler_version"] == 2
     stored = json.loads((path / "research-sessions" / "limits.json").read_text())
     assert (stored["scheduler_version"], stored["turns_per_round"], stored["model_calls"]) == (
-        2, 3, 18
+        2,
+        3,
+        18,
     )
     assert research_sessions.get_limits(str(path))["scheduler_version"] == 2
 
@@ -77,8 +81,11 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
         "prior_session_artifact_ids": ["saved-prior"],
         "other_strategy_evidence": [
             {"strategy_id": "peer-strategy", "artifact_id": "visible-peer"},
-            {"strategy_id": "peer-strategy", "artifact_id": "pointer-peer",
-             "evidence_availability": "pointer_only_original_not_supplied"},
+            {
+                "strategy_id": "peer-strategy",
+                "artifact_id": "pointer-peer",
+                "evidence_availability": "pointer_only_original_not_supplied",
+            },
         ],
         "investigator_step_id": "current-step",
         "obligation_ledger": [
@@ -124,8 +131,12 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
 
 async def verify_complete_54_call_session(path: Path) -> None:
     view, strategy, credential, config = await fixture.setup(path)
-    second = create_strategy(path, "Second independent route", "Review a separate case.").project.strategies[-1]
-    third = create_strategy(path, "Third independent route", "Check a competing explanation.").project.strategies[-1]
+    second = create_strategy(
+        path, "Second independent route", "Review a separate case."
+    ).project.strategies[-1]
+    third = create_strategy(
+        path, "Third independent route", "Check a competing explanation."
+    ).project.strategies[-1]
     strategy_ids = [strategy.id, second.id, third.id]
     limits = research_sessions._validate_limits(dict(research_sessions.NEW_DEFAULT_LIMITS))
     research_sessions.save_limits(str(path), limits)
@@ -141,7 +152,11 @@ async def verify_complete_54_call_session(path: Path) -> None:
         assert 1 <= cycle <= 9
         assert context["scheduler_note"]
         roles.append(role)
-        data = fixture.investigation(cycle) if role == "research_investigator" else fixture.skeptic(cycle)
+        data = (
+            fixture.investigation(cycle)
+            if role == "research_investigator"
+            else fixture.skeptic(cycle)
+        )
         return httpx.Response(200, json=fixture.provider_response(data))
 
     with (
@@ -156,8 +171,13 @@ async def verify_complete_54_call_session(path: Path) -> None:
         ),
     ):
         started = await research_sessions.start_session(
-            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"],
-            expected_limits=expected, strategy_ids=strategy_ids,
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=expected,
+            strategy_ids=strategy_ids,
         )
         assert started["scheduler_version"] == 2
         assert started["call_limit"] == 54
@@ -169,7 +189,9 @@ async def verify_complete_54_call_session(path: Path) -> None:
         completed = await fixture.wait_for(path, started["id"])
 
     assert completed["calls_used"] == 54, (
-        completed["status"], completed.get("message"), completed.get("termination_reason_code"),
+        completed["status"],
+        completed.get("message"),
+        completed.get("termination_reason_code"),
         Counter(roles),
     )
     assert completed["call_limit"] == 54
@@ -178,7 +200,12 @@ async def verify_complete_54_call_session(path: Path) -> None:
     assert len(completed["artifacts"]) == 27
     assert Counter(roles) == {"research_investigator": 27, "research_skeptic": 27}
     assert all(
-        sum(1 for step in completed["steps"] if step["strategy_id"] == sid and step["status"] == "completed") == 18
+        sum(
+            1
+            for step in completed["steps"]
+            if step["strategy_id"] == sid and step["status"] == "completed"
+        )
+        == 18
         for sid in strategy_ids
     )
     assert all(
@@ -193,7 +220,9 @@ async def main() -> None:
         root = Path(directory)
         await verify_versioned_settings_and_peer_evidence(root / "legacy.sigma")
         await verify_complete_54_call_session(root / "v2.sigma")
-    print("PASS Crucible versioned settings, 54 provider-free calls, strict peer evidence provenance")
+    print(
+        "PASS Crucible versioned settings, 54 provider-free calls, strict peer evidence provenance"
+    )
 
 
 if __name__ == "__main__":

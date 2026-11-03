@@ -1026,7 +1026,10 @@ def research_limits_update(body: ResearchLimitsRequest):
         {
             "research_rounds": body.research_rounds,
             **(
-                {"scheduler_version": body.scheduler_version, "turns_per_round": body.turns_per_round}
+                {
+                    "scheduler_version": body.scheduler_version,
+                    "turns_per_round": body.turns_per_round,
+                }
                 if body.scheduler_version is not None
                 else {}
             ),

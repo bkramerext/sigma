@@ -868,7 +868,9 @@ def _session_start_limits(
     if isinstance(expected, dict) and expected.get("scheduler_version") == 2:
         for field in ("scheduler_version", "research_rounds", "turns_per_round", "model_calls"):
             if expected.get(field) != limits.get(field):
-                raise ProjectError("Research limits changed since confirmation; reopen session settings")
+                raise ProjectError(
+                    "Research limits changed since confirmation; reopen session settings"
+                )
     return limits
 
 
@@ -3639,9 +3641,7 @@ def _supplied_peer_artifact_ids(context: dict[str, Any]) -> set[str]:
     }
 
 
-def _validate_obligation_review_basis(
-    context: dict[str, Any], review: dict[str, Any]
-) -> None:
+def _validate_obligation_review_basis(context: dict[str, Any], review: dict[str, Any]) -> None:
     """Reject exact unsupported artifact/step IDs; peer provenance stays explicit."""
     supplied_artifacts = set(context.get("context_artifact_ids", []))
     supplied_artifacts.update(context.get("prior_session_artifact_ids", []))
