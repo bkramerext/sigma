@@ -3274,7 +3274,13 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
     from sigma import paper_writing_sources, project_types
 
     common = project_types.common_references()["publication_standards_references"]
-    resolved = project_types.get_type("mathematical")
+    default_type = project_types.get_type("mathematical")
+    assert default_type is not None
+    # Shared publication manuals are now off by default, but this fixture
+    # explicitly opts in to cover multi-source selection and ranking.
+    assert len(default_type.publication_standards_references) == 1
+    with patch.object(project_types, "reference_preferences", return_value={}):
+        resolved = project_types.get_type("mathematical")
     assert resolved is not None
     official = list(resolved.publication_standards_references)
     assert len(official) >= len(common) + 1

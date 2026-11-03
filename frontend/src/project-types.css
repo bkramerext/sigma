@@ -95,3 +95,9 @@
 .project-types-dialog .pt-reference-link .pt-reference-url { color: #aab7c4; font-size: 11px; }
 .project-types-dialog .pt-reference-link .pt-reference-url:hover { color: #e7d1b8; }
 .project-types-dialog .pt-restore-references { justify-self: start; }
+
+/* Usage controls apply to shared, built-in and custom references alike. */
+.pt-usage-notice { margin: 0 0 16px; color: #c8d1d9; font-size: 12px; line-height: 1.6; }
+.pt-reference-entry > .pt-reference-field { min-width: 0; }
+.pt-reference-disabled .pt-reference-link { opacity: .52; }
+.project-types-dialog .pt-reference-toggle { flex: 0 0 auto; min-width: 53px; align-self: flex-start; text-align: right; }

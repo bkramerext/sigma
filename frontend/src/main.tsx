@@ -3705,7 +3705,7 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
   </div>;
 }
 
-function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
+function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void; onAdjustReferences?: () => void }) {
   useDocumentScrollLock();
   const ai = useAI();
   const cloud = useCloudIdentity();
@@ -3858,6 +3858,10 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         <label className="project-preference-checkbox" htmlFor="show-advanced-outcome-details"><input id="show-advanced-outcome-details" type="checkbox" checked={values.show_advanced_outcome_details} onChange={event => change('show_advanced_outcome_details', event.target.checked)}/>Show advanced Outcome details</label>
         <p className="settings-hint">When enabled, each saved outcome opens with its conclusion and provides expandable reasoning, evidence, metrics and session details. When disabled, SIGMA shows a concise result with its qualifications.</p>
       </fieldset>
+      <div className="project-references-usage">
+        <p>Reference manuals used for research and publication can increase AI input tokens and usage costs. Shared references are disabled by default for each user; subject-specific references remain enabled. Choose which references to use for future work in Project Types.</p>
+        <button type="button" className="text-view-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Adjust now</button>
+      </div>
       {error && <p role="alert" className="error">{error}</p>}
     </section>}
     </form>
@@ -4604,6 +4608,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [qaOpen, setQaOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
+  const [projectTypesFocusTypeId, setProjectTypesFocusTypeId] = useState<string | null>(null);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
   useEffect(() => {
     const openTypes = () => setProjectTypesOpen(true);
@@ -5010,10 +5015,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setView(next);
       setAnnouncement('Advanced Outcome enabled.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} onRunningChange={setResearchRunning} onRevealNewSession={collapseProjectAndStrategies}/>
-    {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
+    {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onAdjustReferences={() => { setProjectTypesFocusTypeId(view.project.investigation_type); setProjectEditing(false); exitMode('project-settings'); setProjectTypesOpen(true); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
+      {projectTypesOpen && <ProjectTypesDialog initialOpenTypeId={projectTypesFocusTypeId} onClose={() => { setProjectTypesOpen(false); setProjectTypesFocusTypeId(null); if (projectTypesFocusTypeId) requestAnimationFrame(() => editProjectButton.current?.focus()); }} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     {paperOpen && (
       <AIPaperDialog path={view.path} projectId={project.id} guest={guest} onCancel={() => {
         window.localStorage.removeItem(paperRecoveryKey(project.id));

@@ -92,16 +92,32 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
-    # Standard Common and discipline guidance is visible but cannot be edited.
+    # Shared references start disabled per user; subject-specific references
+    # start enabled. Catalog names/URLs remain immutable, but usage is editable.
     common_section = dialog.locator(".pt-common-references")
     expect(common_section.locator(".pt-reference-link")).to_have_count(4)
-    expect(common_section.locator("input, button")).to_have_count(0)
+    expect(common_section.locator("input")).to_have_count(0)
+    expect(common_section.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(
+        4
+    )
     expect(common_section.locator(".pt-reference-url")).to_have_count(0)
     expect(common_section.locator(".pt-reference-link a")).to_have_count(4)
+    common_section.locator(".pt-reference-toggle").filter(has_text="Enable").first.click()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
+    expect(common_section.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(
+        1
+    )
+    common_section.locator(".pt-reference-toggle").filter(has_text="Disable").first.click()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     math_card = dialog.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
     math_card.locator("summary").click()
     expect(math_card.locator(".pt-reference-link")).to_have_count(2)
-    expect(math_card.locator("input:not([disabled]), button")).to_have_count(0)
+    expect(math_card.locator("input:not([disabled])")).to_have_count(0)
+    expect(math_card.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(2)
+    math_card.locator(".pt-reference-toggle").filter(has_text="Disable").first.click()
+    expect(math_card.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(1)
+    math_card.locator(".pt-reference-toggle").filter(has_text="Enable").first.click()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     math_card.locator("summary").click()
     expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_have_count(0)
     expect(dialog.get_by_text("(cannot be modified)", exact=True)).to_be_visible()
@@ -116,10 +132,11 @@ with sync_playwright() as playwright:
     literature.locator("summary").click()
     expect(literature).to_have_attribute("open", "")
     expect(literature.locator(".project-type-card-icon svg")).to_be_visible()
-    # Literature now has a curated research and publication reference pair.
+    # Literature retains its subject-specific curated pair as enabled defaults.
     expect(literature.get_by_text("Research standards references")).to_have_count(1)
     expect(literature.get_by_text("Publication standards references")).to_have_count(1)
     expect(literature.locator(".pt-reference-link a")).to_have_count(2)
+    expect(literature.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(2)
     expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(0)
     expect(literature.get_by_role("columnheader", name="URL")).to_have_count(0)
     builtin_names = (
@@ -211,7 +228,7 @@ with sync_playwright() as playwright:
     expect(url_input).to_have_value("https://example.org/research-standard")
     # URL edits commit on Enter; no Done or Remove button while typing.
     first_entry = parent.locator(".pt-reference-entry").first
-    expect(first_entry.locator("button")).to_have_count(0)
+    expect(first_entry.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(1)
     url_input.press("Enter")
     expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
     expect(first_entry.locator(".pt-reference-link a")).to_have_count(1)
@@ -241,7 +258,7 @@ with sync_playwright() as playwright:
     assert all(
         row["paddingTop"] == "4px" and row["borderBottom"] == "0px" for row in reference_layout
     ), reference_layout
-    expect(first_entry.locator("button")).to_have_count(0)
+    expect(first_entry.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(1)
     # A new draft uses local Cancel, not Remove or a second Save.
     expect(
         dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")
@@ -543,6 +560,41 @@ with sync_playwright() as playwright:
     ).json()
     assert replaced["project"]["investigation_type"] == "mathematical"
     assert replaced["project"]["project_type_snapshot"]["id"] == "mathematical"
+
+    # Preferences warns about extra token usage, then Adjust now navigates
+    # to Project Types with this project's discipline already expanded.
+    page.get_by_role("button", name="Project settings", exact=True).click()
+    settings = page.get_by_role("dialog", name="Project Settings")
+    settings.get_by_role("tab", name="Preferences").click()
+    expect(
+        settings.get_by_text("Reference manuals used for research and publication", exact=False)
+    ).to_be_visible()
+    settings.get_by_role("button", name="Adjust now").click()
+    expect(settings).not_to_be_visible()
+    types_dialog = page.get_by_role("dialog", name="Project Types")
+    expect(types_dialog).to_be_visible()
+    selected_type = types_dialog.locator(
+        '.project-type-card:has(> summary strong:text-is("Mathematics"))'
+    )
+    expect(selected_type).to_have_attribute("open", "")
+    research_toggle = selected_type.get_by_role(
+        "button", name="Disable research reference", exact=False
+    )
+    expect(research_toggle).to_have_count(1)
+    research_toggle.click()
+    expect(
+        selected_type.get_by_role("button", name="Enable research reference", exact=False)
+    ).to_have_count(1)
+    types_dialog.locator("header").get_by_role("button", name="Save", exact=True).click()
+    expect(types_dialog).not_to_be_visible()
+    preferences = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
+    math_ref = next(item for item in preferences["project_types"] if item["id"] == "mathematical")[
+        "research_standards_references"
+    ][0]["url"]
+    assert preferences["reference_preferences"]["mathematical"][
+        "research_standards_references"
+    ] == [math_ref]
+
     assert not errors, errors
     browser.close()
 
