@@ -25,8 +25,8 @@ from sigma.projects import ProjectError, create_strategy
 from sigma.research_context_budget import restrict_obligation_citations_to_supplied_context
 
 
-def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
-    view, _, _, _ = asyncio.run(fixture.setup(path))
+async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
+    view, _, _, _ = await fixture.setup(path)
     legacy = {
         **research_sessions.DEFAULT_LIMITS,
         "research_rounds": 3,
@@ -191,7 +191,7 @@ async def verify_complete_54_call_session(path: Path) -> None:
 async def main() -> None:
     with TemporaryDirectory() as directory:
         root = Path(directory)
-        verify_versioned_settings_and_peer_evidence(root / "legacy.sigma")
+        await verify_versioned_settings_and_peer_evidence(root / "legacy.sigma")
         await verify_complete_54_call_session(root / "v2.sigma")
     print("PASS Crucible versioned settings, 54 provider-free calls, strict peer evidence provenance")
 
