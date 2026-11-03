@@ -293,7 +293,10 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         star.hover()
         assert star.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
         assert star.evaluate("element => getComputedStyle(element).color") != star_color
-        assert star.evaluate("element => getComputedStyle(element).backgroundColor") == "rgba(0, 0, 0, 0)"
+        assert (
+            star.evaluate("element => getComputedStyle(element).backgroundColor")
+            == "rgba(0, 0, 0, 0)"
+        )
         star.focus()
         assert star.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
         assert scored_group.locator(".recent-pin, .recent-forget").count() == 0
