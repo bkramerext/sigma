@@ -106,7 +106,9 @@ async def verify_compilation(
             if compiler_rejection:
                 return httpx.Response(
                     400,
-                    json={"error": {"code": "invalid_json_schema", "message": "Compiler unavailable"}},
+                    json={
+                        "error": {"code": "invalid_json_schema", "message": "Compiler unavailable"}
+                    },
                 )
             if compiler_server_error:
                 return httpx.Response(503, json={"error": {"message": "Provider overloaded"}})

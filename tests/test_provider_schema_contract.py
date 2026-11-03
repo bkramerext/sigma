@@ -6,14 +6,16 @@ properties. No live provider calls occur in these tests.
 """
 
 import json
-from collections.abc import Mapping
 from unittest.mock import patch
 
-import pytest
-
-from sigma import agentic, proposals, research_reference_compiler, research_reference_content
-from sigma import research_sessions
-from sigma.research_sessions import Investigator, Skeptic, ScientificEvidenceReview
+from sigma import (
+    agentic,
+    proposals,
+    research_reference_compiler,
+    research_reference_content,
+    research_sessions,
+)
+from sigma.research_sessions import Investigator, ScientificEvidenceReview, Skeptic
 
 
 def _assert_strict_schema(node, path="$"):
@@ -33,13 +35,13 @@ def _assert_strict_schema(node, path="$"):
             _assert_strict_schema(value, f"{path}[{number}]")
 
 
-@pytest.mark.parametrize("model", [Investigator, Skeptic])
-def test_crucible_provider_role_wire_schemas_are_strict_all_the_way_down(model):
-    schema = research_sessions._research_schema(model)
-    _assert_strict_schema(schema)
-    assert set(schema["required"]) == set(schema["properties"])
-    assert schema["additionalProperties"] is False
-    assert len(json.dumps(schema)) < 120_000
+def test_crucible_provider_role_wire_schemas_are_strict_all_the_way_down():
+    for model in (Investigator, Skeptic):
+        schema = research_sessions._research_schema(model)
+        _assert_strict_schema(schema)
+        assert set(schema["required"]) == set(schema["properties"])
+        assert schema["additionalProperties"] is False
+        assert len(json.dumps(schema)) < 120_000
 
 
 def test_skeptic_nested_scientific_evidence_is_required_and_default_free():
@@ -47,9 +49,7 @@ def test_skeptic_nested_scientific_evidence_is_required_and_default_free():
     scientific = schema["$defs"]["ScientificEvidenceReview"]
     assert scientific["type"] == "object"
     assert scientific["required"] == list(scientific["properties"])
-    assert {"claim_kind", "basis_artifact_ids", "basis_step_numbers"} <= set(
-        scientific["required"]
-    )
+    assert {"claim_kind", "basis_artifact_ids", "basis_step_numbers"} <= set(scientific["required"])
     assert "default" not in scientific["properties"]["claim_kind"]
     assert "default" not in schema["properties"]["scientific_evidence_review"]
     assert {"scientific_evidence_review", "negative_target", "objective_retracted"} <= set(
@@ -57,9 +57,7 @@ def test_skeptic_nested_scientific_evidence_is_required_and_default_free():
     )
     # Scientific evidence is not omitted just to make a provider schema pass.
     assert "ScientificEvidenceReview" in schema["$defs"]
-    assert {"objective_requirements", "rationale", "sufficiency"} <= set(
-        scientific["properties"]
-    )
+    assert {"objective_requirements", "rationale", "sufficiency"} <= set(scientific["properties"])
 
 
 def test_role_payloads_marshal_and_pydantic_validate_after_wire_normalization():
@@ -126,13 +124,17 @@ def test_role_payloads_marshal_and_pydantic_validate_after_wire_normalization():
         assert packet["text"]["format"]["schema"] == schema
     assert skeptic.scientific_evidence_review is not None
     assert skeptic.scientific_evidence_review.claim_kind == "unassessed"
-    with pytest.raises(ValueError):
+    try:
         ScientificEvidenceReview.model_validate(
             {
                 **skeptic.scientific_evidence_review.model_dump(),
                 "rationale": "too short",
             }
         )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Scientific evidence validation was weakened")
 
 
 def test_other_generated_role_schema_contracts_and_compiler():
@@ -159,17 +161,27 @@ def test_other_generated_role_schema_contracts_and_compiler():
     assert request["text"]["format"]["name"] == "research_reference_compilation"
 
 
-@pytest.mark.parametrize("url", [
-    "https://www.brandeis.edu/writing-program/resources/faculty/handouts/writing-a-literature-review.html",
-    "https://www.brandeis.edu/writing-program/resources/faculty/writing-handbook/01-critical-thinking/close-reading-step-by-step.html",
-])
-def test_brandeis_access_denial_remains_explicit_unavailable(url):
-    with patch.object(
-        research_reference_content, "_read_remote", return_value=(403, "text/html", b"", None)
-    ):
-        frozen = research_reference_content.freeze_reference_content(url)
-    assert frozen["status"] == "unavailable"
-    assert frozen["reason"] == "http_403"
-    assert frozen["excerpt"] is None
-    assert frozen["content_sha256"] is None
-    assert frozen["retrieved_at"] is None
+def test_brandeis_access_denial_remains_explicit_unavailable():
+    urls = (
+        "https://www.brandeis.edu/writing-program/resources/faculty/handouts/writing-a-literature-review.html",
+        "https://www.brandeis.edu/writing-program/resources/faculty/writing-handbook/01-critical-thinking/close-reading-step-by-step.html",
+    )
+    for url in urls:
+        with patch.object(
+            research_reference_content, "_read_remote", return_value=(403, "text/html", b"", None)
+        ):
+            frozen = research_reference_content.freeze_reference_content(url)
+        assert frozen["status"] == "unavailable"
+        assert frozen["reason"] == "http_403"
+        assert frozen["excerpt"] is None
+        assert frozen["content_sha256"] is None
+        assert frozen["retrieved_at"] is None
+
+
+if __name__ == "__main__":
+    test_crucible_provider_role_wire_schemas_are_strict_all_the_way_down()
+    test_skeptic_nested_scientific_evidence_is_required_and_default_free()
+    test_role_payloads_marshal_and_pydantic_validate_after_wire_normalization()
+    test_other_generated_role_schema_contracts_and_compiler()
+    test_brandeis_access_denial_remains_explicit_unavailable()
+    print("Research provider schema contracts: PASS")
