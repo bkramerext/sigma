@@ -133,12 +133,17 @@ with sync_playwright() as playwright:
         "e=>({overflow:getComputedStyle(e).overflowY,scrollHeight:e.scrollHeight,clientHeight:e.clientHeight})"
     )
     assert scroll_metrics["overflow"] == "auto"
-    # The complete catalog may fit exactly at this viewport with Linux fonts.
-    # Exercise scrolling only when there is actual overflow.
+    # Leave enough room after the last category to reveal the last row even
+    # when the desktop viewport is short and many categories are expanded.
+    assert scroller.evaluate("e => parseFloat(getComputedStyle(e).paddingBottom)") >= 40
     if scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"]:
-        scroller.evaluate("e=>e.scrollTop=e.scrollHeight")
-        assert scroller.evaluate("e=>e.scrollTop") > 0
-        scroller.evaluate("e=>e.scrollTop=0")
+        scroller.evaluate("e => e.scrollTop = e.scrollHeight")
+        assert scroller.evaluate("e => e.scrollTop") > 0
+        last_bottom_gap = scroller.evaluate(
+            "e => e.getBoundingClientRect().bottom - e.lastElementChild.getBoundingClientRect().bottom"
+        )
+        assert last_bottom_gap >= 39, last_bottom_gap
+        scroller.evaluate("e => e.scrollTop = 0")
     assert (
         samples_panel.locator(".sample-open strong").all_text_contents()[-1]
         == "Did Jesus Use Cannabis?"
