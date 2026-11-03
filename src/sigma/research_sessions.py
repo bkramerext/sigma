@@ -12442,7 +12442,11 @@ def _mark_protocol_complete(record: dict[str, Any]) -> bool:
 
 
 def _optional_reference_compilation_headroom(
-    record: dict[str, Any], compiler_cost: float, compiler_liability: float
+    record: dict[str, Any],
+    compiler_cost: float,
+    compiler_liability: float,
+    *,
+    compiler_input_bound: int = 0,
 ) -> bool:
     """Do not spend optional compilation funding needed by the first research turn.
 
@@ -12476,17 +12480,16 @@ def _optional_reference_compilation_headroom(
             funding = cloud_research.snapshot()
             if float(funding["remaining_usd"]) + 1e-9 < compiler_cost + role_estimate:
                 return False
-            if (
-                float(funding["global_remaining_usd"]) + 1e-9
-                < compiler_liability + role_liability
-            ):
+            if float(funding["global_remaining_usd"]) + 1e-9 < compiler_liability + role_liability:
                 return False
         hard = record.get("hard_budget_ledger")
         if isinstance(hard, dict):
-            role_input_bound = len(
-                _serialized_role_request(_role_request_payload(record, "investigator", context))
-            ) + 8192
-            compiler_input_bound = int(record.get("_compiler_input_bound", 0))
+            role_input_bound = (
+                len(
+                    _serialized_role_request(_role_request_payload(record, "investigator", context))
+                )
+                + 8192
+            )
             used_input = sum(
                 int(
                     item.get("input_tokens", 0)
@@ -12602,22 +12605,20 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             if prices is not None
             else None
         )
-        quote = (
-            full_liability
-            if record.get("mode") == "api_key"
-            else practical_cost
-        )
+        quote = full_liability if record.get("mode") == "api_key" else practical_cost
         paid = record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
         if (
             paid
             and quote is not None
             and full_liability is not None
             and not _optional_reference_compilation_headroom(
-                {**record, "_compiler_input_bound": input_bound}, quote, full_liability
+                record, quote, full_liability, compiler_input_bound=input_bound
             )
         ):
             compilation["status"] = "skipped"
-            compilation["reason"] = "Research turns take priority over optional reference compilation."
+            compilation["reason"] = (
+                "Research turns take priority over optional reference compilation."
+            )
             _event(record, "references.compilation.skipped", compilation["reason"])
             _save(path, record)
             return True

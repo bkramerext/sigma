@@ -171,32 +171,22 @@ def verify_compilation_preserves_first_turn_funding() -> None:
     ):
         # The compiler itself could be funded for $0.06, but an Investigator
         # would then be denied because only $0.06 would remain.
-        assert not research_sessions._optional_reference_compilation_headroom(
-            session, 0.06, 0.12
-        )
+        assert not research_sessions._optional_reference_compilation_headroom(session, 0.06, 0.12)
         funding.return_value = {"remaining_usd": 0.30, "global_remaining_usd": 0.55}
         # User allowance is sufficient, but maximum global model liability
         # would crowd out the next Investigator reservation.
-        assert not research_sessions._optional_reference_compilation_headroom(
-            session, 0.06, 0.12
-        )
+        assert not research_sessions._optional_reference_compilation_headroom(session, 0.06, 0.12)
         funding.return_value = {"remaining_usd": 0.30, "global_remaining_usd": 1.0}
-        assert research_sessions._optional_reference_compilation_headroom(
-            session, 0.06, 0.12
-        )
+        assert research_sessions._optional_reference_compilation_headroom(session, 0.06, 0.12)
     api = {**session, "cloud_sponsored": False, "maximum_estimated_cost_usd": 0.55}
     with (
         patch.object(research_sessions, "_portfolio_context", return_value={}),
         patch.object(research_sessions, "_reserve_cost", side_effect=quote),
     ):
         # API-key sessions must retain the full provider liability estimate.
-        assert not research_sessions._optional_reference_compilation_headroom(
-            api, 0.06, 0.12
-        )
+        assert not research_sessions._optional_reference_compilation_headroom(api, 0.06, 0.12)
         api["maximum_estimated_cost_usd"] = 1.00
-        assert research_sessions._optional_reference_compilation_headroom(
-            api, 0.06, 0.12
-        )
+        assert research_sessions._optional_reference_compilation_headroom(api, 0.06, 0.12)
 
 
 async def main() -> None:
