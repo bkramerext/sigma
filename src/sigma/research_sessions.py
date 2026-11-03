@@ -12653,9 +12653,19 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             )
             _save(path, record)
             return True
-        credential = await auth_context()
-        if (
-            credential["mode"] != record["mode"]
+        try:
+            credential = await auth_context()
+        except Exception:  # noqa: BLE001 — optional compilation must not block research
+            compilation["status"] = "fallback"
+            compilation["reason"] = (
+                "Reference compiler credential lookup unavailable; frozen notes retained."
+            )
+            _event(record, "references.compilation.skipped", compilation["reason"])
+            _save(path, record)
+            return True
+        if not isinstance(credential, dict) or (
+            credential.get("mode") != record["mode"]
+            or not isinstance(credential.get("identity"), str)
             or _digest(credential["identity"]) != record["identity_hash"]
         ):
             record["status"] = "paused"
@@ -12665,8 +12675,17 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             )
             _save(path, record)
             return False
-        _assert_safe_role_request(payload, credential.get("token"))
-        encoded = _serialized_role_request(payload)
+        try:
+            _assert_safe_role_request(payload, credential.get("token"))
+            encoded = _serialized_role_request(payload)
+        except (ProjectError, KeyError, TypeError, ValueError):
+            compilation["status"] = "fallback"
+            compilation["reason"] = (
+                "Reference compiler request could not be prepared; frozen notes retained."
+            )
+            _event(record, "references.compilation.skipped", compilation["reason"])
+            _save(path, record)
+            return True
         input_bound = len(encoded) + 8192
         # Personal ChatGPT streams cannot set max_output_tokens. Reserve
         # the full provider/model output ceiling rather than the compiler's
@@ -12913,20 +12932,35 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             estimated = _estimate_cost(latest["model"], usage) if usage is not None else None
             if usage is not None:
                 stage["token_usage"] = usage
-            if cloud_research.billing_enabled():
-                if rejected:
-                    cloud_research.mark_call_provider_rejected(session_id, attempt_id)
-                else:
-                    cloud_research.settle_call(
-                        session_id,
-                        attempt_id,
-                        input_tokens=usage.get("input_tokens") if usage else None,
-                        output_tokens=usage.get("output_tokens") if usage else None,
-                        estimated_cost_usd=estimated,
+            cloud_settled = True
+            if hosted:
+                try:
+                    if rejected:
+                        cloud_research.mark_call_provider_rejected(session_id, attempt_id)
+                    else:
+                        cloud_research.settle_call(
+                            session_id,
+                            attempt_id,
+                            input_tokens=usage.get("input_tokens") if usage else None,
+                            output_tokens=usage.get("output_tokens") if usage else None,
+                            estimated_cost_usd=estimated,
+                        )
+                except cloud_research.CloudResearchUnavailable:
+                    # A provider response may be known while its billing write is not.
+                    # Keep the full reservation and require explicit recovery,
+                    # rather than leaving a running checkpoint after this failure.
+                    cloud_settled = False
+                    call_error = "cloud_billing_settlement_unavailable"
+                    _event(
+                        latest,
+                        "references.compilation.billing_unknown",
+                        "Cloud billing settlement was unavailable; the full reservation remains held.",
                     )
             ledger = latest.get("hard_budget_ledger")
             if isinstance(ledger, dict) and reservation is not None:
-                if rejected:
+                if not cloud_settled:
+                    mark_unknown(ledger, call_id=attempt_id)
+                elif rejected:
                     settle_rejected(ledger, call_id=attempt_id)
                 elif (
                     usage is not None
@@ -12944,7 +12978,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                         call_error = str(exc)
                 else:
                     mark_unknown(ledger, call_id=attempt_id)
-            if estimated is not None or rejected:
+            if (estimated is not None or rejected) and cloud_settled:
                 latest["tokens_reserved"] = max(
                     0,
                     int(latest.get("tokens_reserved", 0))
@@ -12959,12 +12993,16 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                         0.0,
                         float(latest.get("estimated_cost_reserved_usd", 0.0)) - quote,
                     )
-            if estimated is not None and latest.get("cost_status") == "available":
+            if (
+                estimated is not None
+                and cloud_settled
+                and latest.get("cost_status") == "available"
+            ):
                 latest["estimated_cost_usd"] = round(
                     float(latest.get("estimated_cost_usd", 0.0)) + estimated, 9
                 )
             ledger_blocked = isinstance(ledger, dict) and bool(ledger.get("blocked_reason"))
-            metering_required = isinstance(ledger, dict) or cloud_research.billing_enabled()
+            metering_required = isinstance(ledger, dict) or hosted
             if (
                 compiled is not None
                 and call_error is None
@@ -12985,7 +13023,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             else:
                 stage["status"] = (
                     "fallback"
-                    if (estimated is not None or rejected) and not ledger_blocked
+                    if cloud_settled and (estimated is not None or rejected) and not ledger_blocked
                     else "interrupted"
                 )
                 stage["reason"] = (
