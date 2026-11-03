@@ -1651,7 +1651,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      confirmationSummary: limits ? `${limits.research_rounds} rounds × ${limits.turns_per_round ?? 3} paired turns × 2 agents × ${eligible.length} enabled strategies = ${limits.research_rounds * (limits.turns_per_round ?? 3) * 2 * eligible.length} maximum agent calls` : undefined,
+      confirmationSummary: limits ? `${limits.research_rounds} ${limits.research_rounds === 1 ? "round" : "rounds"} × ${limits.turns_per_round ?? 3} paired ${limits.turns_per_round === 1 ? "turn" : "turns"} × 2 agents × ${eligible.length} enabled ${eligible.length === 1 ? "strategy" : "strategies"} = ${limits.research_rounds * (limits.turns_per_round ?? 3) * 2 * eligible.length} maximum agent calls` : undefined,
       // Match the backend's queued/running slot count. The server remains
       // authoritative when another browser starts a session concurrently.
       playDisabled: busy || !!readError || confirmStart || !eligible.length || projectAtCapacity,
