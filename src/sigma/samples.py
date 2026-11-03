@@ -174,9 +174,9 @@ def _sample_limits(identifier: str) -> dict[str, Any] | None:
         raise ProjectError("Sample limits are unsafe or exceed their size limit.")
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-        from sigma.research_sessions import DEFAULT_LIMITS, _validate_limits
+        from sigma.research_sessions import NEW_DEFAULT_LIMITS, _validate_limits
 
-        if not isinstance(value, dict) or not set(value) <= set(DEFAULT_LIMITS):
+        if not isinstance(value, dict) or not set(value) <= set(NEW_DEFAULT_LIMITS):
             raise ValueError("Invalid sample limits")
         return _validate_limits(value)
     except (OSError, ValueError, TypeError) as exc:

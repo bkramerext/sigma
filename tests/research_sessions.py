@@ -13553,3 +13553,121 @@ def test_e001_reference_fetch_rejects_private_hosts_and_downgrade(monkeypatch):
         [sys.executable, str(Path(__file__).parent / "reference_compiler_integration.py")],
         check=True,
     )
+
+
+# Issue #506: provider-free paired-turn scheduling and historical isolation.
+def test_paired_round_defaults_and_enabled_call_ceiling() -> None:
+    limits = research_sessions._validate_limits(dict(research_sessions.NEW_DEFAULT_LIMITS))
+    assert (limits["scheduler_version"], limits["research_rounds"], limits["turns_per_round"]) == (
+        2, 3, 3
+    )
+    assert limits["model_calls"] == 18
+    assert [
+        research_sessions._paired_call_limit(limits, count) for count in (0, 1, 2, 3)
+    ] == [0, 18, 36, 54]
+    assert research_sessions._paired_call_limit({**limits, "research_rounds": 2}, 2) == 24
+    assert research_sessions._paired_call_limit({**limits, "turns_per_round": 4}, 2) == 48
+
+
+def test_paired_round_positions_are_explicit_and_legacy_is_unchanged() -> None:
+    paired = {"scheduler_version": 2, "turns_per_round": 3}
+    assert [
+        research_sessions._paired_round_position(paired, slot) for slot in range(1, 10)
+    ] == [
+        (1, 1), (1, 2), (1, 3),
+        (2, 1), (2, 2), (2, 3),
+        (3, 1), (3, 2), (3, 3),
+    ]
+    assert research_sessions._paired_round_position({"cycle_limit": 3}, 2) == (2, 1)
+    legacy = {"research_rounds": 2, "model_calls": 12}
+    upgraded = research_sessions._new_session_limits(legacy)
+    assert legacy == {"research_rounds": 2, "model_calls": 12}
+    assert (upgraded["research_rounds"], upgraded["turns_per_round"], upgraded["model_calls"]) == (
+        3, 3, 18
+    )
+
+
+def test_paired_round_protocol_requires_every_accepted_role() -> None:
+    steps = [
+        {"strategy_id": sid, "role": role, "cycle": slot, "status": "completed"}
+        for sid in ("a", "b", "c")
+        for slot in range(1, 10)
+        for role in ("investigator", "skeptic")
+    ]
+    record = {
+        "status": "ended",
+        "strategy_ids": ["a", "b", "c"],
+        "cycle_limit": 9,
+        "research_round_limit": 3,
+        "turns_per_round": 3,
+        "scheduler_version": 2,
+        "steps": steps,
+        "artifacts": [],
+        "events": [],
+    }
+    assert research_sessions._mark_protocol_complete(record)
+    assert record["termination_reason_code"] == "protocol_complete"
+    assert "54 configured" in record["message"]
+    missing = deepcopy(record)
+    missing.pop("termination_reason_code")
+    missing["steps"] = steps[:-1]
+    assert not research_sessions._mark_protocol_complete(missing)
+    assert missing.get("termination_reason_code") is None
+    missing["steps"].append(
+        {"strategy_id": "c", "role": "skeptic", "cycle": 9, "status": "failed"}
+    )
+    assert not research_sessions._mark_protocol_complete(missing)
+
+
+def test_paired_round_pipeline_orders_roles_without_paid_calls() -> None:
+    observed: list[tuple[str, int]] = []
+
+    async def fake_call(
+        session_id: str,
+        path: str,
+        strategy_id: str,
+        role: str,
+        cycle: int,
+        semaphore: asyncio.Semaphore,
+        state_lock: asyncio.Lock,
+    ) -> bool:
+        observed.append((role, cycle))
+        return True
+
+    async def run() -> None:
+        branch: dict[str, Any] = {
+            "strategy_id": "s",
+            "cycle": 0,
+            "pending_investigation": None,
+        }
+        semaphore = asyncio.Semaphore(2)
+        lock = asyncio.Lock()
+        with patch.object(research_sessions, "_portfolio_role_call_with_recovery", fake_call):
+            for slot in range(1, 10):
+                branch["cycle"] = slot - 1
+                assert await research_sessions._portfolio_strategy_pipeline(
+                    "session", "/unused", branch, semaphore, lock
+                )
+        assert observed == [
+            (role, slot) for slot in range(1, 10)
+            for role in ("investigator", "skeptic")
+        ]
+
+    asyncio.run(run())
+
+
+def test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs() -> None:
+    queued = [
+        {"strategy_id": item, "pending_investigation": None} for item in ("a", "b", "c")
+    ]
+    selected, cursor = research_sessions._affordable_portfolio_branches(queued, 6, 0)
+    assert [item["strategy_id"] for item in selected] == ["a", "b", "c"]
+    assert cursor == 0
+    selected, cursor = research_sessions._affordable_portfolio_branches(queued, 2, 1)
+    assert [item["strategy_id"] for item in selected] == ["b"]
+    assert cursor == 2
+    # An accepted Investigator that needs its Skeptic consumes only one new slot.
+    queued[0]["pending_investigation"] = {"claim": "saved"}
+    selected, _ = research_sessions._affordable_portfolio_branches(queued, 1, 0)
+    assert [item["strategy_id"] for item in selected] == ["a"]
+    assert research_sessions._affordable_portfolio_branches(queued[1:], 1, 0)[0] == []
