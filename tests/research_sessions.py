@@ -4512,7 +4512,8 @@ async def test_prior_obligation_overflow_allows_repeatable_bounded_research(path
         },
     )
     prior_bytes = (path / "research-sessions" / f"{prior_id}.json").read_bytes()
-    limits = {**research_sessions.get_limits(str(path)), "research_rounds": 1, "model_calls": 2}
+    # This historical two-call test is deliberately exercised with v1 limits.
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2}
     research_sessions.save_limits(str(path), limits)
     provider_calls = []
 
@@ -4591,6 +4592,8 @@ async def test_prior_obligation_overflow_allows_repeatable_bounded_research(path
 
 def test_limits_validation(path: Path):
     initialize_project(path, "Limits project", "A question", research_mode="mathematical")
+    # Retain the historical explicit-call-ceiling validation contract.
+    research_sessions.save_limits(str(path), dict(research_sessions.DEFAULT_LIMITS))
     before = research_sessions.get_limits(str(path))
     invalid = [
         {**before, "model_calls": 1},
@@ -7006,7 +7009,7 @@ async def test_session7_context_pause_recovers_original_18_turn_research(path: P
     limits = research_sessions.save_limits(
         str(path),
         {
-            **research_sessions.get_limits(str(path)),
+            **research_sessions.DEFAULT_LIMITS,
             "research_rounds": 3,
             "model_calls": 18,
             "session_duration_minutes": None,
@@ -7098,7 +7101,7 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     limits = research_sessions.save_limits(
         str(path),
         {
-            **research_sessions.get_limits(str(path)),
+            **research_sessions.DEFAULT_LIMITS,
             "research_rounds": 9,
             # One failed, separately accounted attempt must not consume the
             # final successful Investigator/Skeptic turn.
