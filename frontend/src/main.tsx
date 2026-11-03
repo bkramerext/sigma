@@ -978,12 +978,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     <h5>{title}</h5>
     {items?.length ? <dl>{items.map((item, index) => <div className="outcome-label-value" key={`${item.label}:${index}`}><dt>{item.label}</dt><dd><span>{item.value}</span>{item.detail && <small>{item.detail}</small>}</dd></div>)}</dl> : <p className="outcome-unavailable">No {title.toLowerCase()} metrics are available for this session.</p>}
   </div>;
-  return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
-    <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
-      <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{outcomeDisplayLabel(session)}</span></div></div>
-      {conversionProgress && <p className="outcome-markdown-progress" role="status">{conversionProgress}</p>}
-      {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
-      {provenancePrelude}
+  const researchReferences = (
       <details className="outcome-subsection outcome-source-material">
         <summary><DisclosureChevron expanded={false}/>Research References</summary>
         <div className="outcome-subsection-content">
@@ -1004,6 +999,13 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           </> : <p>No methodology source material was recorded for this session.</p>}
         </div>
       </details>
+  );
+  return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
+    <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
+      <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{outcomeDisplayLabel(session)}</span></div></div>
+      {conversionProgress && <p className="outcome-markdown-progress" role="status">{conversionProgress}</p>}
+      {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
+      {provenancePrelude}
       {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <SessionNotice number={session.session_number} onDismiss={onDismissStatusNotice} title={statusHeading} kind="research-pause-guidance" ariaLabel="Session status and next steps">
         {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
         <p>{statusNextStep}</p>
@@ -1023,6 +1025,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
         </div>
         {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{simpleQualifications.map((item, index) => <li key={index}>{item}</li>)}</ul>{qualificationItems.length > simpleQualifications.length && <small>{qualificationItems.length - simpleQualifications.length} more saved qualification{qualificationItems.length - simpleQualifications.length === 1 ? '' : 's'} in Advanced Outcome.</small>}</div>}
       </div>}
+      {!advancedOutcomeDetails && researchReferences}
       {advancedOutcomeDetails && <div className="outcome-subsections outcome-advanced">
         <details className="outcome-subsection outcome-conclusion" open>
           <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
@@ -1037,6 +1040,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {(session.outcome.caveats?.length || review?.open_obligations?.length || review?.unresolved_objections?.length) ? <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong>{!!session.outcome.caveats?.length && <ul>{session.outcome.caveats.map((item, index) => <li key={`caveat-${index}`}>{item}</li>)}</ul>}{!!review?.open_obligations?.length && <ul>{review.open_obligations.map((item, index) => <li key={`obligation-${index}`}>{item}</li>)}</ul>}{!!review?.unresolved_objections?.length && <ul>{review.unresolved_objections.map((item, index) => <li key={`objection-${index}`}>{item}</li>)}</ul>}</div> : null}
           </div>
         </details>
+        {researchReferences}
         {approvedPackets.length > 0 && <details className="outcome-subsection continuation-evidence">
           <summary><DisclosureChevron expanded={false}/>Researcher-approved inherited evidence · {approvedSourceIds.size} source{approvedSourceIds.size === 1 ? '' : 's'}</summary>
           <div className="outcome-subsection-content">

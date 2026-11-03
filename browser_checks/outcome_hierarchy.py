@@ -129,12 +129,24 @@ with sync_playwright() as playwright:
             expect(row.locator(".outcome-subsections")).to_be_visible()
             sections = row.locator(".outcome-subsection > summary").all_text_contents()
             labels = [label.strip() for label in sections]
-            assert labels[:4] == [
+            assert labels[:5] == [
                 "Conclusion",
+                "Research References",
                 "Reasoning / proof",
                 "Citations, evidence & obligations",
                 "Metrics",
             ], labels
+            # The Conclusion and References cards now share the same grid
+            # spacing as the remaining outcome subsections.
+            advanced = row.locator(".outcome-subsections.outcome-advanced")
+            expect(advanced).to_have_css("row-gap", "7px")
+            expect(row.locator(".outcome-conclusion")).to_have_css("margin-bottom", "0px")
+            adjacent = advanced.locator(":scope > .outcome-subsection").evaluate_all(
+                """sections => sections.slice(1).map((item, index) =>
+                  Math.round(item.getBoundingClientRect().top -
+                    sections[index].getBoundingClientRect().bottom))"""
+            )
+            assert adjacent and all(gap == 7 for gap in adjacent), adjacent
             conclusion = row.locator(".outcome-conclusion")
             expect(conclusion).to_have_attribute("open", "")
             expect(conclusion).to_contain_text("Historical session summary")

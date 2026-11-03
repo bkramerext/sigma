@@ -730,7 +730,7 @@
 .workspace-page .outcome-qualifications > div { margin: 5px 0; }
 .workspace-page .outcome-qualifications ul { margin: 2px 0 0; padding-left: 18px; }
 .workspace-page .outcome-qualifications li { margin: 2px 0; }
-.workspace-page .outcome-conclusion { margin: 0 0 8px; }
+.workspace-page .outcome-conclusion { margin: 0; }
 
 .workspace-page .outcome-subsections { display: grid; gap: 7px; min-width: 0; }
 .workspace-page .outcome-subsection { min-width: 0; border: 1px solid #344754; border-radius: 5px; background: #09141e; }
