@@ -303,7 +303,11 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
   const guidance = stoppedSessionGuidance(session);
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
-  return <SessionNotice number={session.session_number} onDismiss={onDismiss} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
+  const title = /cost or call budget limit/i.test(guidance.cause) ? 'Insufficient research funds'
+    : /context limit/i.test(guidance.cause) ? 'Research context limit'
+      : /elapsed-time limit/i.test(guidance.cause) ? 'Research time limit reached'
+        : /interrupted/i.test(guidance.cause) ? 'Research interrupted' : 'Session stopped';
+  return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
     <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
     {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
   </SessionNotice>;
@@ -710,8 +714,8 @@ function SessionNoticeDismiss({ number, onDismiss }: { number: number; onDismiss
 // An in-flow exit slot: the notice slides through its own bottom edge
 // as that slot collapses, instead of flying toward the viewport footer.
 // Dismissal is a presentation-only operation; saved research is unchanged.
-function SessionNotice({ number, onDismiss, kind, ariaLabel, children }: {
-  number: number; onDismiss: () => void; kind: string; ariaLabel: string; children: ReactNode;
+function SessionNotice({ number, onDismiss, title, kind, ariaLabel, children }: {
+  number: number; onDismiss: () => void; title: string; kind: string; ariaLabel: string; children: ReactNode;
 }) {
   const [exiting, setExiting] = useState(false);
   const timer = useRef<number | null>(null);
@@ -726,7 +730,10 @@ function SessionNotice({ number, onDismiss, kind, ariaLabel, children }: {
   return <div className={`session-notice-exit-slot${exiting ? ' is-exiting' : ''}`}>
     <div className="session-notice-exit-inner">
       <div className={kind} role={kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
-        <SessionNoticeDismiss number={number} onDismiss={dismiss}/>
+        <div className="session-notice-header">
+          <strong className="session-notice-title">{title}</strong>
+          <SessionNoticeDismiss number={number} onDismiss={dismiss}/>
+        </div>
         {children}
       </div>
     </div>
@@ -994,8 +1001,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           </> : <p>No methodology source material was recorded for this session.</p>}
         </div>
       </details>
-      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <SessionNotice number={session.session_number} onDismiss={onDismissStatusNotice} kind="research-pause-guidance" ariaLabel="Session status and next steps">
-        <strong>{statusHeading}</strong>
+      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <SessionNotice number={session.session_number} onDismiss={onDismissStatusNotice} title={statusHeading} kind="research-pause-guidance" ariaLabel="Session status and next steps">
         {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
         <p>{statusNextStep}</p>
       </SessionNotice>}
