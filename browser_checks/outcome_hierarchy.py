@@ -129,13 +129,15 @@ with sync_playwright() as playwright:
             expect(row.locator(".outcome-subsections")).to_be_visible()
             sections = row.locator(".outcome-subsection > summary").all_text_contents()
             labels = [label.strip() for label in sections]
-            assert labels[:5] == [
+            assert labels[:4] == [
                 "Conclusion",
                 "Research References",
                 "Reasoning / proof",
                 "Citations, evidence & obligations",
-                "Metrics",
             ], labels
+            other = row.locator(".outcome-other-details")
+            expect(other.locator(":scope > .outcome-subsection").first).to_contain_text("Metrics")
+            expect(other).to_contain_text("Status")
             # The Conclusion and References cards now share the same grid
             # spacing as the remaining outcome subsections.
             advanced = row.locator(".outcome-subsections.outcome-advanced")

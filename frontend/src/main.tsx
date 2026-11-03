@@ -1077,13 +1077,13 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             })}</ol></section>}
           </div>
         </details>}
+        <section className="outcome-other-details" aria-label="Other Outcome details"><h4>Other Outcome details</h4>
         <details className="outcome-subsection">
           <summary><DisclosureChevron expanded={false}/>Metrics</summary>
           <div className="outcome-subsection-content">
             {session.outcome.metrics ? <div className="outcome-metrics-groups">{renderMetricGroup('Operational', session.outcome.metrics.operational)}{renderMetricGroup('Research quality', session.outcome.metrics.research_quality)}</div> : <p className="outcome-unavailable">Metrics are not available for this historical session.</p>}
           </div>
         </details>
-        <section className="outcome-other-details" aria-label="Other Outcome details"><h4>Other Outcome details</h4>
           <details className="outcome-subsection">
           <summary><DisclosureChevron expanded={false}/>Status</summary>
           <div className="outcome-subsection-content">
