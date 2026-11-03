@@ -54,6 +54,13 @@
 }
 .home-page .home-recents .recent-pin:disabled,
 .home-page .home-recents .recent-forget:disabled { opacity: .5; cursor: default; }
+
+/* All project glyphs share the scored-star hover treatment, including
+   keyboard focus. Keep the background clear rather than showing a button box. */
+.home-page .home-recents :is(.recent-title-star, .recent-pin, .recent-forget):is(:hover:not(:disabled), :focus-visible),
+.home-page .home-samples .recent-title-star:is(:hover, :focus-visible) {
+  color: #f5d593; background: transparent; box-shadow: none; text-decoration: none;
+}
 .home-page .home-recents .recent-remove-actions { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; width: min(300px, calc(100vw - 32px)); margin: 0; }
 .home-page .home-recents .recent-remove-actions.recent-remove-above { top: auto; bottom: calc(100% + 4px); }
 .home-page .home-recents .recent-remove-confirm { padding: 14px 16px; border: 1px solid #66533d; border-radius: 6px; background: #101820f5; color: #d5dfe7; line-height: 1.6; box-shadow: 0 14px 35px #0009; }
