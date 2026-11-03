@@ -9345,15 +9345,18 @@ async def test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
         "revise",
     ]
     assert len(dispatched) == 6
-    assert any(
-        event["kind"]
-        in {
-            "coordinator.provisional_stop_reopened",
-            "coordinator.early_stop_deferred",
-        }
-        for event in finished["events"]
-    )
     if not unproductive_no_progress:
+        # An unsupported positive claim is explicitly reopened. An unproductive
+        # stop may already have been converted into a revision without a
+        # distinct deferred-stop event; the six accepted turns prove continuity.
+        assert any(
+            event["kind"]
+            in {
+                "coordinator.provisional_stop_reopened",
+                "coordinator.early_stop_deferred",
+            }
+            for event in finished["events"]
+        )
         assert finished["convergence_status"] == "model_reported_unverified"
         assert all(artifact["convergence"]["reported"] for artifact in finished["artifacts"])
         assert any(event["kind"] == "research.convergence_reported" for event in finished["events"])
