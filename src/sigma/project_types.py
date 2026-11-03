@@ -191,7 +191,9 @@ def _optional_text(value: Any, label: str, limit: int) -> str:
 def common_research_references() -> tuple[dict[str, str], ...]:
     """Enabled shared research-method references; catalog defaults stay immutable."""
     references = common_references()["research_standards_references"]
-    disabled = set(reference_preferences().get("common", {}).get("research_standards_references", []))
+    disabled = set(
+        reference_preferences().get("common", {}).get("research_standards_references", [])
+    )
     return tuple(ref for ref in references if ref["url"] not in disabled)
 
 
@@ -253,8 +255,7 @@ def _default_reference_preferences() -> dict[str, dict[str, list[str]]]:
     """Per-user default: omit shared guides, retain discipline-specific guides."""
     return {
         "common": {
-            field: [ref["url"] for ref in refs]
-            for field, refs in common_references().items()
+            field: [ref["url"] for ref in refs] for field, refs in common_references().items()
         }
     }
 
@@ -292,8 +293,10 @@ def _validate_reference_preferences(
             raise ProjectError("Reference preferences contain an unknown category")
         chosen: dict[str, list[str]] = {}
         for field, urls in fields.items():
-            if not isinstance(urls, list) or len(urls) > MAX_REFERENCES or any(
-                not isinstance(url, str) for url in urls
+            if (
+                not isinstance(urls, list)
+                or len(urls) > MAX_REFERENCES
+                or any(not isinstance(url, str) for url in urls)
             ):
                 raise ProjectError("Disabled references must be a list of URLs")
             if len(set(urls)) != len(urls):
