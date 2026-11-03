@@ -146,7 +146,61 @@ async def verify_compilation(path: Path) -> None:
         assert all(item["status"] == "settled" for item in ledger["calls"])
 
 
+def verify_compilation_preserves_first_turn_funding() -> None:
+    """Optional reference work may not consume the first research turn's budget."""
+    session = {
+        "mode": "api_key",
+        "cloud_sponsored": True,
+        "strategy_runs": [{"strategy_id": "test", "status": "queued"}],
+        "estimated_cost_usd": 0.0,
+        "estimated_cost_reserved_usd": 0.0,
+        "maximum_estimated_cost_usd": None,
+    }
+
+    def quote(_record, _context, _role, *, estimate=False):
+        return 0.08 if estimate else 0.50
+
+    with (
+        patch.object(research_sessions, "_portfolio_context", return_value={}),
+        patch.object(research_sessions, "_reserve_cost", side_effect=quote),
+        patch.object(
+            research_sessions.cloud_research,
+            "snapshot",
+            return_value={"remaining_usd": 0.12, "global_remaining_usd": 2.0},
+        ) as funding,
+    ):
+        # The compiler itself could be funded for $0.06, but an Investigator
+        # would then be denied because only $0.06 would remain.
+        assert not research_sessions._optional_reference_compilation_headroom(
+            session, 0.06, 0.12
+        )
+        funding.return_value = {"remaining_usd": 0.30, "global_remaining_usd": 0.55}
+        # User allowance is sufficient, but maximum global model liability
+        # would crowd out the next Investigator reservation.
+        assert not research_sessions._optional_reference_compilation_headroom(
+            session, 0.06, 0.12
+        )
+        funding.return_value = {"remaining_usd": 0.30, "global_remaining_usd": 1.0}
+        assert research_sessions._optional_reference_compilation_headroom(
+            session, 0.06, 0.12
+        )
+    api = {**session, "cloud_sponsored": False, "maximum_estimated_cost_usd": 0.55}
+    with (
+        patch.object(research_sessions, "_portfolio_context", return_value={}),
+        patch.object(research_sessions, "_reserve_cost", side_effect=quote),
+    ):
+        # API-key sessions must retain the full provider liability estimate.
+        assert not research_sessions._optional_reference_compilation_headroom(
+            api, 0.06, 0.12
+        )
+        api["maximum_estimated_cost_usd"] = 1.00
+        assert research_sessions._optional_reference_compilation_headroom(
+            api, 0.06, 0.12
+        )
+
+
 async def main() -> None:
+    verify_compilation_preserves_first_turn_funding()
     with TemporaryDirectory() as temporary:
         await verify_compilation(Path(temporary) / "compiled.sigma")
     print("PASS: compiled reference guide persisted, metered and reused by both agents")
