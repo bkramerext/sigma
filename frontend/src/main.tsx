@@ -975,7 +975,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
       {provenancePrelude}
       <details className="outcome-subsection outcome-source-material">
-        <summary>Source Material</summary>
+        <summary><DisclosureChevron expanded={false}/>Research References</summary>
         <div className="outcome-subsection-content">
           <p>Research-method references selected before the Investigator/Skeptic turns. These describe how to investigate; they are not independent evidence for the research findings.</p>
           {session.outcome.source_material?.compilation && <div className="outcome-reference-compilation">
