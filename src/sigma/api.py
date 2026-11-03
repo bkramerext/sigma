@@ -15,7 +15,7 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -638,6 +638,14 @@ class ResearchLimitsRequest(OpenRequest):
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
     maximum_input_tokens_per_session: int | None = Field(default=None, ge=4096, le=1_000_000)
     max_concurrent_sessions: int | str = "1"
+
+    @model_validator(mode="after")
+    def validate_legacy_call_ceiling(self) -> "ResearchLimitsRequest":
+        # Explicit legacy callers retain their historical 120-call API bound.
+        # Version-2 budgets are derived from rounds and paired turns instead.
+        if self.scheduler_version is None and self.model_calls > 120:
+            raise ValueError("Legacy model call maximum must be 120 or fewer")
+        return self
 
 
 class PaperGenerateRequest(OpenRequest):

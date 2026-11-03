@@ -327,7 +327,15 @@ def main():
             }
             saved_limits = client.put(limits_url, json={"path": str(path), **changed_limits})
             assert saved_limits.status_code == 200 and saved_limits.json() == changed_limits
-            assert client.get(limits_url, params={"path": str(path)}).json() == changed_limits
+            assert client.get(limits_url, params={"path": str(path)}).json() == {
+                **research_sessions.NEW_DEFAULT_LIMITS,
+                "max_concurrent_sessions": "1",
+            }
+            # Browser previews a new v2 session without rewriting explicit v1 limits.
+            assert research_sessions.get_limits(str(path)) == {
+                **changed_limits,
+                "max_concurrent_sessions": 1,
+            }
             assert (
                 client.put(
                     limits_url, json={"path": str(path), **changed_limits, "model_calls": 1}
