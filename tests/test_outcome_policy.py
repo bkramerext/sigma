@@ -312,3 +312,40 @@ def test_two_incomplete_strategies_do_not_combine_into_a_solution():
     result = research_sessions._outcome(_record(a, b))
     assert result["assessment"] == "mixed"
     assert result["solution_review"]["status"] != "achieved"
+
+
+def test_first_cycle_formal_proof_uses_reviewed_step_ids_not_future_artifact_id():
+    candidate = _artifact()
+    candidate["skeptic_output"]["scientific_evidence_review"] = {
+        "sufficiency": "sufficient_for_scoped_claim",
+        "claim_kind": "formal_proof",
+        "objective_requirements": [
+            "Prove the insertion upper bound and construct an attaining arrangement."
+        ],
+        "basis_artifact_ids": [],
+        "basis_step_numbers": [1, 2],
+        "rationale": (
+            "Both essential deductions are accepted and jointly establish "
+            "the scoped formal claim without a measured-data premise."
+        ),
+    }
+    # Coordinator checks scientific sufficiency before the current artifact has
+    # an ID. Do not require a fabricated self-reference or existing prior cycle.
+    candidate.pop("id")
+    candidate.pop("objective_review")
+    record = {"status": "running", "investigation_type": "computer_science", "artifacts": []}
+    reviewed = research_sessions._scientific_candidate_evaluation(record, candidate)
+    assert reviewed["candidate_complete"], reviewed["blocking_reasons"]
+
+    candidate["skeptic_output"]["scientific_evidence_review"]["basis_step_numbers"] = [99]
+    invalid = research_sessions._scientific_candidate_evaluation(record, candidate)
+    assert not invalid["candidate_complete"]
+    assert "discipline_evidence_unassessed" in invalid["blocking_reasons"]
+
+    # A checked proof step cannot substitute for empirical observations.
+    evidence = candidate["skeptic_output"]["scientific_evidence_review"]
+    evidence["claim_kind"] = "empirical"
+    evidence["basis_step_numbers"] = [1, 2]
+    empirical = research_sessions._scientific_candidate_evaluation(record, candidate)
+    assert not empirical["candidate_complete"]
+    assert "empirical_observations_not_recorded" in empirical["blocking_reasons"]

@@ -9800,7 +9800,47 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
             "classes are disjoint and exhaustive, so a_n=a_(n-1)+a_(n-2). There is one empty "
             "string and two valid strings of length one. This proves the Fibonacci formula by induction."
         ),
-        "assumptions": ["The two classes are defined by the final symbol."],
+        "reasoning_steps": [
+            {
+                "title": "Disjoint and exhaustive final-bit cases",
+                "argument": (
+                    "For every n >= 2 each admissible string ends in exactly one of "
+                    "0 and 1, so the two final-symbol classes are disjoint and exhaustive."
+                ),
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Ending-zero class",
+                "argument": (
+                    "Deleting a terminal 0 is a bijection between admissible n-bit "
+                    "strings ending in 0 and all admissible (n-1)-bit strings."
+                ),
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Ending-one class",
+                "argument": (
+                    "For n >= 2, an admissible string ending in 1 must end in 01. "
+                    "Deleting that suffix gives a bijection to admissible (n-2)-bit strings."
+                ),
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Initial counts, recurrence, and closed form",
+                "argument": (
+                    "The empty string gives a_0=1; 0 and 1 give a_1=2. The two "
+                    "bijections prove a_n=a_(n-1)+a_(n-2) for every n >= 2, "
+                    "so induction gives a_n=F_(n+2). It yields a_2=3 and a_3=5."
+                ),
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+        ],
+        # The final-symbol split is a definition, not an unproved premise.
+        "assumptions": [],
         "evidence_status": "Complete inductive argument; no formal checker was run.",
         "open_obligations": [],
         "python_code": None,
@@ -9821,6 +9861,53 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
             "The final-bit classes are disjoint and exhaustive [cycle 1].",
             "The recurrence and initial values imply the general Fibonacci formula [cycle 1].",
         ],
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "accepted",
+                "rationale": "Every admissible string has exactly one last bit, so these cases cover all valid strings.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 2,
+                "disposition": "accepted",
+                "rationale": "Appending or removing a terminal zero preserves admissibility in both directions.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 3,
+                "disposition": "accepted",
+                "rationale": "The forbidden adjacent ones force terminal 01, whose removal preserves admissibility.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 4,
+                "disposition": "accepted",
+                "rationale": "The bijections establish the recurrence for all n >= 2 and the base counts complete induction.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+        ],
+        "assumptions_reviewed": [],
+        "scientific_evidence_review": {
+            "sufficiency": "sufficient_for_scoped_claim",
+            "claim_kind": "formal_proof",
+            "objective_requirements": [
+                "Prove a counting recurrence for every n >= 2.",
+                "Establish initial counts and the Fibonacci closed form.",
+                "Check small n explicitly.",
+            ],
+            # A first-cycle review cannot cite its own not-yet-saved artifact.
+            "basis_artifact_ids": [],
+            "basis_step_numbers": [1, 2, 3, 4],
+            "rationale": (
+                "Accepted disjoint cases and two bijections establish the universal "
+                "recurrence, initial values, and induction without empirical premises."
+            ),
+        },
         "verification_status": "convincing_unverified",
         "unresolved_objections": [],
         "supporting_cycles": [1],

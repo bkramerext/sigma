@@ -275,10 +275,19 @@ class ScientificEvidenceReview(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     sufficiency: Literal["sufficient_for_scoped_claim", "insufficient", "unassessed"]
     claim_kind: Literal[
-        "theoretical", "empirical", "computational", "interpretive", "planning", "unassessed"
+        "formal_proof",
+        "theoretical",
+        "empirical",
+        "computational",
+        "interpretive",
+        "planning",
+        "unassessed",
     ] = "unassessed"
     objective_requirements: list[str] = Field(max_length=24)
-    basis_artifact_ids: list[str] = Field(max_length=24)
+    # Prior saved artifacts and current-cycle reviewed steps are distinct
+    # evidence namespaces. A first-round review cannot cite its own future ID.
+    basis_artifact_ids: list[str] = Field(default_factory=list, max_length=24)
+    basis_step_numbers: list[int] = Field(default_factory=list, max_length=24)
     rationale: str = Field(min_length=24, max_length=1600)
 
 
@@ -1498,7 +1507,13 @@ def _scientific_candidate_evaluation(
     issues: list[str] = []
     impacts: list[dict[str, Any]] = []
     if isinstance(skeptic, dict) and isinstance(investigation, dict):
-        mathematical = _mathematical_session(record)
+        evidence = skeptic.get("scientific_evidence_review") or {}
+        # A formal combinatorial or software-correctness proof is mathematical
+        # even when its project category is computer science. The scoped claim,
+        # not the category label, determines the proof obligation standard.
+        mathematical = _mathematical_session(record) or (
+            isinstance(evidence, dict) and evidence.get("claim_kind") == "formal_proof"
+        )
         notes = [
             *(skeptic.get("remaining_obligations") or []),
             *(skeptic.get("unresolved_objections") or []),
@@ -1599,31 +1614,49 @@ def _scientific_candidate_evaluation(
         # For nonmathematical work a completed agent narrative is not a
         # substitute for a documented fit between the claim and its evidence.
         # The review links concrete supporting artifacts to stated requirements.
-        if not mathematical:
-            evidence = skeptic.get("scientific_evidence_review") or {}
+        if not _mathematical_session(record):
+            evidence = evidence if isinstance(evidence, dict) else {}
             linked = {
                 str(item.get("id"))
                 for item in record.get("artifacts", [])
                 if isinstance(item, dict) and item.get("id")
             }
-            linked.add(str(artifact.get("id") or ""))
+            if artifact.get("id"):
+                linked.add(str(artifact["id"]))
             basis = evidence.get("basis_artifact_ids") or []
+            step_basis = evidence.get("basis_step_numbers") or []
+            accepted_step_numbers = {
+                step.get("number")
+                for step in steps
+                if isinstance(step, dict)
+                and isinstance(step.get("review"), dict)
+                and step["review"].get("disposition") == "accepted"
+                and len(str(step["review"].get("rationale") or "").strip()) >= 24
+                and not str(step["review"].get("objection") or "").strip()
+            }
+            prior_basis_valid = bool(basis) and all(
+                isinstance(identifier, str) and identifier in linked
+                for identifier in basis
+            )
+            current_basis_valid = bool(step_basis) and all(
+                type(number) is int and number in accepted_step_numbers
+                for number in step_basis
+            )
             if not (
                 evidence.get("sufficiency") == "sufficient_for_scoped_claim"
                 and evidence.get("objective_requirements")
-                and basis
-                and all(identifier in linked for identifier in basis)
+                and (prior_basis_valid or current_basis_valid)
                 and len(str(evidence.get("rationale") or "").strip()) >= 24
             ):
                 issues.append("discipline_evidence_unassessed")
             kind = evidence.get("claim_kind") or "unassessed"
             if kind == "unassessed":
                 issues.append("scientific_claim_kind_unknown")
-            if kind == "theoretical" and any(
+            if kind in {"theoretical", "formal_proof"} and any(
                 item.get("epistemic_status") not in {"deduction", "assumption"} for item in steps
             ):
                 issues.append("theoretical_inference_not_established")
-            if kind in {"theoretical", "planning"} and (
+            if kind in {"formal_proof", "theoretical", "planning"} and (
                 set(investigation.get("assumptions") or [])
                 - set(skeptic.get("assumptions_reviewed") or [])
             ):
@@ -3233,6 +3266,10 @@ SKEPTIC_GUIDANCE = (
     "For nonmathematical completed claims, scientific_evidence_review must enumerate project-objective "
     "requirements and linked saved evidence, distinguishing theoretical reasoning from physical "
     "realizability, observations, empirical controls, simulations, text inspection, or planned actions. "
+    "For a formal proof in computer science or another discipline, use claim_kind=formal_proof and "
+    "cite the accepted current-cycle reasoning steps with basis_step_numbers; list only already-saved "
+    "artifact IDs in basis_artifact_ids. The current Investigator/Skeptic artifact has not yet been "
+    "saved when objective sufficiency is assessed, so do not invent its future artifact ID. "
     "Do not report sufficient evidence if the required observations or sources were not inspected. "
     "For a negative result, set negative_target to project_objective only for an objective-settling "
     "counterexample or impossibility finding; a failed strategy is strategy_claim, not a negative "

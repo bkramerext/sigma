@@ -156,9 +156,14 @@ Conditional premises must be explicitly declared and independently reviewed
 as premises, not converted to theorems.
 
 Nonmathematical evidence review must connect stated objective requirements
-to concrete saved sources, models or observations. Mathematics needs sound
-inference, physical claims must separate consistency/simulation from
-realizability, biology needs relevant observational units and controls,
+to concrete saved sources, models or observations. Formal proofs in computer
+science (such as combinatorial recurrence proofs) use mathematical inference
+standards according to the actual claim, not the project category alone. An
+initial cycle must cite accepted current reasoning step numbers, because the
+artifact being reviewed has not received its saved ID yet. Later cycles may
+also cite already-saved artifacts. Mathematics needs sound inference,
+physical claims must separate consistency/simulation from realizability,
+biology needs relevant observational units and controls,
 AI engineering needs actual execution and meaningful test oracles, literature
 needs inspected primary text for text-dependent claims, and military planning
 needs scoped scenarios, alternatives and explicit uncertainty. These
