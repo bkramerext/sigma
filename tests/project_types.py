@@ -191,6 +191,24 @@ def main() -> None:
     assert resolve_title("http://127.0.0.1/secret") is None
     assert resolve_title("file:///etc/passwd") is None
 
+    import socket
+
+    from sigma.reference_titles import domain_status
+
+    assert domain_status("http://127.0.0.1/private") == "invalid"
+    assert domain_status("file:///etc/passwd") == "invalid"
+    assert domain_status("https://not-a-site") == "invalid"
+    with patch("sigma.reference_titles.socket.getaddrinfo") as lookup:
+        lookup.side_effect = socket.gaierror(socket.EAI_NONAME, "Name not found")
+        assert domain_status("https://badbadbad.bad/guide") == "invalid"
+        lookup.side_effect = socket.gaierror(socket.EAI_AGAIN, "Temporary resolver failure")
+        assert domain_status("https://example.org/guide") == "unverified"
+        lookup.side_effect = None
+        lookup.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 443))]
+        assert domain_status("https://example.org/guide") == "valid"
+        lookup.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))]
+        assert domain_status("https://example.org/guide") == "invalid"
+
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
         first = root / "first"
