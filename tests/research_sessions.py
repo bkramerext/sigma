@@ -9366,7 +9366,8 @@ async def test_e004_unsupported_achieved_no_progress_reaches_configured_rounds(
         assert not any(artifact["convergence"]["reported"] for artifact in finished["artifacts"])
     # Reaching the configured protocol is not a certification of the model's claim.
     assert finished["outcome"]["assessment"] != "positive"
-    assert finished["outcome"]["solution_review"]["status"] == "partial"
+    assert finished["outcome"]["solution_review"]["status"] != "achieved"
+    assert finished["outcome"]["solution_review"]["verification_status"] == "incomplete"
 
 
 async def test_incomplete_productive_stop_uses_remaining_round(path: Path):
