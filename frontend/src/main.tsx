@@ -3859,8 +3859,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         <p className="settings-hint">When enabled, each saved outcome opens with its conclusion and provides expandable reasoning, evidence, metrics and session details. When disabled, SIGMA shows a concise result with its qualifications.</p>
       </fieldset>
       <div className="project-references-usage">
-        <p>Reference manuals used for research and publication can increase AI input tokens and usage costs. Shared references are disabled by default for each user; subject-specific references remain enabled. Choose which references to use for future work in Project Types.</p>
-        <button type="button" className="text-view-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Adjust now</button>
+        <p>Research and publication references may increase usage costs. <button type="button" className="project-reference-adjust-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Adjust now</button></p>
       </div>
       {error && <p role="alert" className="error">{error}</p>}
     </section>}
