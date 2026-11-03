@@ -3103,14 +3103,21 @@ def _refresh_token_accounting(record: dict[str, Any]) -> None:
     """Aggregate call usage without presenting missing usage as a zero total."""
     steps = [step for step in record.get("steps", []) if isinstance(step, dict)]
     compiler = record.get("reference_compilation")
-    if isinstance(compiler, dict) and isinstance(compiler.get("token_usage"), dict):
-        steps = [
-            *steps,
-            {
-                "status": "completed" if compiler.get("status") == "completed" else "incomplete",
-                "token_usage": compiler["token_usage"],
-            },
-        ]
+    if isinstance(compiler, dict):
+        if isinstance(compiler.get("token_usage"), dict):
+            steps = [
+                *steps,
+                {
+                    "status": "completed" if compiler.get("status") == "completed" else "incomplete",
+                    "token_usage": compiler["token_usage"],
+                },
+            ]
+        elif compiler.get("status") in {"running", "interrupted"} or (
+            compiler.get("usage_status") == "unknown"
+        ):
+            # An uncertain compiler attempt retains a spend liability even
+            # when all subsequent Investigator/Skeptic turns report usage.
+            steps = [*steps, {"status": "interrupted"}]
     # A provider can complete and report billable tokens even when the
     # returned answer fails a local content/acknowledgment check. Include
     # these securely metered failed attempts, but never infer token usage
@@ -5872,6 +5879,8 @@ async def control_session(
                     except cloud_research.CloudResearchUnavailable as exc:
                         raise ProjectError(str(exc)) from exc
                 compiler["status"] = "fallback"
+                if not isinstance(compiler.get("token_usage"), dict):
+                    compiler["usage_status"] = "unknown"
                 compiler["finished_at"] = compiler.get("finished_at") or _now()
                 compiler["reason"] = (
                     "Previous compilation delivery or usage was uncertain. "
@@ -12516,9 +12525,7 @@ def _optional_reference_compilation_headroom(
             research_liability += role_liability
             if sponsored or isinstance(hard, dict):
                 role_requests.append(
-                    _serialized_role_request(
-                        _role_request_payload(record, "investigator", context)
-                    )
+                    _serialized_role_request(_role_request_payload(record, "investigator", context))
                 )
         limit = record.get("maximum_estimated_cost_usd")
         if limit is not None and (

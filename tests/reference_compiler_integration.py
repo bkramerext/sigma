@@ -208,6 +208,10 @@ async def verify_compilation(
         assert stage["guidance_sha256"]
         assert stage["token_usage"]["input_tokens"] == 120
         assert stage["token_usage"]["output_tokens"] == 80
+    if compiler_server_error or pause_during_compilation:
+        # Unknown compiler usage remains visible after role calls settle.
+        assert finished["token_usage_status"] == "partial"
+        assert stage["usage_status"] == "unknown"
     assert saved["research_method_sources"]["sha256"] == stage["source_sha256"]
     assert len(saved["research_method_sources"]["sources"]) >= 2
     assert len(role_requests) == 2 * expected_roles
