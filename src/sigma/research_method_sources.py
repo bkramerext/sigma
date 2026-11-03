@@ -165,7 +165,7 @@ def _canonical_url(url: str) -> str:
     return urlunsplit((parts.scheme.lower(), host, parts.path or "/", parts.query, ""))
 
 
-def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str | None]:
+def _effective_sources(project_type_id: str) -> tuple[list[dict[str, Any]], str | None]:
     """Collect common + root-to-leaf Project Types references without truncation.
 
     Missing parents/cycles are bounded. Custom types are allowed; no keyword
@@ -202,7 +202,7 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
     )
 
     seen: set[str] = set()
-    sources: list[dict[str, str]] = []
+    sources: list[dict[str, Any]] = []
 
     def add(
         reference: Mapping[str, str] | str,
@@ -234,7 +234,7 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
                 "before attributing a prescribed method to it, and state uncertainty."
             )
         )
-        row = {
+        row: dict[str, Any] = {
             "id": known["id"]
             if known
             else "project-type-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16],
@@ -269,6 +269,8 @@ def select_method_sources(
     problem: str,
     strategies: Iterable[str],
     prior_sessions: Iterable[Mapping[str, Any]] = (),
+    *,
+    fetch_content: bool = False,
 ) -> dict[str, Any]:
     """Freeze the complete inherited reference set at session creation.
 
@@ -317,6 +319,25 @@ def select_method_sources(
         status = "reused"
         source_session_id = str(previous.get("id") or "")
         break
+    # The live research path explicitly opts in. Unit tests, previews and
+    # metadata-only callers never perform surprise outbound network requests.
+    # A successfully frozen prior snapshot is reused byte-for-byte; failures are
+    # retried on a future session, without ever inventing missing source text.
+    if fetch_content:
+        from sigma.research_reference_content import freeze_reference_content
+
+        for row in sources:
+            previous_retrieval = row.get("retrieval")
+            if (
+                isinstance(previous_retrieval, dict)
+                and previous_retrieval.get("status") == "retrieved"
+                and isinstance(previous_retrieval.get("excerpt"), str)
+                and isinstance(previous_retrieval.get("excerpt_sha256"), str)
+                and hashlib.sha256(previous_retrieval["excerpt"].encode("utf-8")).hexdigest()
+                == previous_retrieval["excerpt_sha256"]
+            ):
+                continue
+            row["retrieval"] = freeze_reference_content(row["url"])
     advisory = (
         f"{len(sources)} research-method references are configured. Three or fewer "
         "is recommended for focus; all selected references will still be supplied."
@@ -329,6 +350,24 @@ def select_method_sources(
         "mode": mode,
         "branch": branch,
         "sources": sources,
+        "retrieval_summary": (
+            {
+                "retrieved": sum(
+                    1
+                    for row in sources
+                    if isinstance(row.get("retrieval"), dict)
+                    and row["retrieval"].get("status") == "retrieved"
+                ),
+                "unavailable": sum(
+                    1
+                    for row in sources
+                    if isinstance(row.get("retrieval"), dict)
+                    and row["retrieval"].get("status") != "retrieved"
+                ),
+            }
+            if fetch_content
+            else None
+        ),
         "source_session_id": source_session_id,
         "selection_key": selection_key,
         "advisory": advisory,

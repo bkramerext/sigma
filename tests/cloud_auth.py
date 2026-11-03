@@ -130,6 +130,59 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_e003_local_readonly_build_preflight_without_workspace(self):
+        """Local operator can check a stale process without granting workspace access."""
+        environment = {
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            "SIGMA_UI_INSTANCE_ID": "test-managed-instance",
+        }
+        with patch.dict(os.environ, environment):
+            with (
+                patch("sigma.build_info.build_commit", return_value="a" * 40),
+                patch("sigma.build_info.checkout_commit", return_value="a" * 40),
+            ):
+                response = self.client.get("/api/local-runtime/build")
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(
+                    response.json(),
+                    {
+                        "backend_build_commit": "a" * 40,
+                        "backend_checkout_commit": "a" * 40,
+                        "backend_update_required": False,
+                        "build_verified": True,
+                    },
+                )
+                self.assertEqual(response.headers["cache-control"], "no-store")
+                # A build-only preflight is not an admin authorization grant.
+                self.assertNotEqual(
+                    self.client.get("/api/cloud-research/readiness").status_code, 200
+                )
+                with TestClient(
+                    app,
+                    base_url="http://127.0.0.1",
+                    client=("192.0.2.10", 23456),
+                ) as remote:
+                    self.assertEqual(remote.get("/api/local-runtime/build").status_code, 404)
+            with (
+                patch("sigma.build_info.build_commit", return_value="a" * 40),
+                patch("sigma.build_info.checkout_commit", return_value="b" * 40),
+            ):
+                result = self.client.get("/api/local-runtime/build")
+                self.assertEqual(result.status_code, 200)
+                self.assertTrue(result.json()["backend_update_required"])
+                self.assertFalse(result.json()["build_verified"])
+            with (
+                patch("sigma.build_info.build_commit", return_value="unknown"),
+                patch("sigma.build_info.checkout_commit", return_value=None),
+            ):
+                result = self.client.get("/api/local-runtime/build")
+                self.assertEqual(result.status_code, 200)
+                self.assertFalse(result.json()["build_verified"])
+        # The diagnostic is unavailable in hosted mode even with a managed marker.
+        with patch.dict(os.environ, {"SIGMA_UI_INSTANCE_ID": "test-managed-instance"}):
+            self.assertNotEqual(self.client.get("/api/local-runtime/build").status_code, 200)
+
     def test_public_sample_paper_without_signin(self):
         """Only immutable catalog PDFs bypass hosted auth, never working papers."""
         pdf = (

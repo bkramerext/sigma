@@ -84,6 +84,11 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
     if (
         not cloud_workspaces.enabled()
         or request.url.path == "/api/ui-instance"
+        or (
+            request.url.path == "/api/local-runtime/build"
+            and request.method == "GET"
+            and cloud_auth.config().local
+        )
         or request.url.path == "/api/projects/samples"
         or cloud_auth.public_sample_paper_path(request.method, request.url.path)
         or request.url.path.startswith("/api/cloud-auth/")
@@ -322,6 +327,40 @@ def ui_instance() -> dict[str, str | None]:
     return {"instance": os.environ.get("SIGMA_UI_INSTANCE_ID")}
 
 
+@app.get("/api/local-runtime/build")
+def local_runtime_build(request: Request):
+    """Loopback-only, build-identity diagnostic; grants no account or workspace access."""
+    from sigma.build_info import build_commit, checkout_commit
+
+    cfg = cloud_auth.config()
+    client = request.client.host if request.client is not None else None
+    if (
+        not cfg.local
+        or not os.environ.get("SIGMA_UI_INSTANCE_ID")
+        or client not in {"127.0.0.1", "::1", "localhost"}
+        or request.url.hostname not in {"127.0.0.1", "localhost"}
+    ):
+        raise HTTPException(404, "Not found")
+    running = build_commit()
+    checkout = checkout_commit()
+    matched = (
+        len(running) == 40 and checkout is not None and len(checkout) == 40 and running == checkout
+    )
+    return JSONResponse(
+        {
+            "backend_build_commit": running,
+            "backend_checkout_commit": checkout,
+            "backend_update_required": not matched,
+            "build_verified": matched,
+        },
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
+
+
 @app.get("/api/cloud-research/budget")
 def cloud_research_budget():
     """Return only the authenticated workspace's persisted inference budget."""
@@ -351,7 +390,7 @@ async def cloud_research_readiness(request: Request):
         or principal.role != "admin"
     ):
         raise HTTPException(403, "Administrator access required.")
-    from sigma.build_info import build_commit
+    from sigma.build_info import build_commit, checkout_commit, local_build_mismatch
     from sigma.cloud_sponsor import inference_provider
 
     provider = inference_provider()
@@ -375,6 +414,9 @@ async def cloud_research_readiness(request: Request):
     except (ProjectError, OSError, RuntimeError, ValueError):
         provider_status = "unavailable"
     blockers: list[str] = []
+    stale_backend = local_build_mismatch()
+    if stale_backend is not None:
+        blockers.append("stale_backend_checkout_mismatch")
     if not enabled:
         blockers.append("sponsorship_disabled")
     if provider not in {"chatgpt", "api_key"}:
@@ -400,6 +442,8 @@ async def cloud_research_readiness(request: Request):
             "global_reset_at": budget.get("global_reset_at"),
             "blockers": blockers,
             "backend_build_commit": build_commit(),
+            "backend_checkout_commit": checkout_commit(),
+            "backend_update_required": stale_backend is not None,
         },
         headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
     )
