@@ -22,6 +22,15 @@ type ReferencePreferences = Record<string, Partial<Record<ReferenceField, string
 const titleCache = new Map<string, string | null>();
 const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
 const handledErrorHeaders = { 'X-Sigma-Error-Handled': 'true' };
+// Mirror the server's URL canonicalization so switches on newly edited custom
+// references persist under the normalized URL saved with the project type.
+function preferenceUrl(raw: string): string {
+  try {
+    const parsed = new URL(raw.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) return raw.trim();
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname || '/'}${parsed.search}`;
+  } catch { return raw.trim(); }
+}
 // Keep validation aligned with server-side _validate_references. Empty edit rows
 // are deliberately ignored on Save. Nonempty malformed URLs are not.
 function referenceUrlError(value: string): string | null {
@@ -183,7 +192,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     // preference behind when the custom type is saved.
     for (const field of ['research_standards_references', 'publication_standards_references'] as const) {
       if (!patch[field]) continue;
-      const urls = new Set(patch[field].map(ref => ref.url));
+      const urls = new Set(patch[field].map(ref => preferenceUrl(ref.url)));
       setReferencePreferences(previous => {
         const kept = (previous[id]?.[field] ?? []).filter(url => urls.has(url));
         if (kept.length === (previous[id]?.[field] ?? []).length) return previous;
@@ -196,13 +205,16 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     }
   }
   function referenceDisabled(owner: string, field: ReferenceField, url: string): boolean {
-    return referencePreferences[owner]?.[field]?.includes(url) ?? false;
+    return referencePreferences[owner]?.[field]?.includes(preferenceUrl(url)) ?? false;
   }
   function toggleReference(owner: string, field: ReferenceField, url: string) {
     setError('');
     setReferencePreferences(previous => {
       const urls = previous[owner]?.[field] ?? [];
-      const updated = urls.includes(url) ? urls.filter(candidate => candidate !== url) : [...urls, url];
+      const canonicalUrl = preferenceUrl(url);
+      const updated = urls.includes(canonicalUrl)
+        ? urls.filter(candidate => candidate !== canonicalUrl)
+        : [...urls, canonicalUrl].sort((left, right) => left.localeCompare(right));
       const fields: Partial<Record<ReferenceField, string[]>> = { ...previous[owner] };
       if (updated.length) fields[field] = updated;
       else delete fields[field];
