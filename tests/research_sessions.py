@@ -431,12 +431,7 @@ async def test_repeated_transient_failures_are_isolated_and_explained(path: Path
     assert branch["status"] == "failed"
     assert branch["recovery_attempts_exhausted"] is True
     assert finished["termination_reason_code"] == "provider_or_strategy_failure"
-    assert "temporary error after two automatic retries" in finished["message"], {
-        "message": finished["message"],
-        "branch_failure_code": branch.get("termination_reason_code"),
-        "branch_reason": branch.get("reason"),
-        "failed_step_kinds": [step.get("failure_kind") for step in finished["steps"]],
-    }
+    assert "temporary error after two automatic retries" in finished["message"]
     assert "incomplete" in finished["message"]
     assert finished["artifacts"] == []
 

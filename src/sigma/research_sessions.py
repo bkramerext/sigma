@@ -11070,9 +11070,10 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
                     retry_count = {1: "one", 2: "two"}.get(
                         automatic_retries, str(automatic_retries)
                     )
-                    failure_text += f" after {retry_count} automatic retry"
-                    if automatic_retries != 1:
-                        failure_text += "s"
+                    if automatic_retries == 1:
+                        failure_text += " after one automatic retry"
+                    else:
+                        failure_text += f" after {retry_count} automatic retries"
             reasons.append(f"{branch.get('strategy_title') or 'Strategy'}: {failure_text}")
 
         saved = sum(len(item.get("artifacts", [])) for item in runs)
