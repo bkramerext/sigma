@@ -321,9 +321,15 @@ async def completed(
     response: httpx.Response,
     guard: str | None = None,
     *,
-    max_stream_bytes: int = MAX_STREAM_BYTES,
+    max_stream_bytes: int | None = MAX_STREAM_BYTES,
     overflow_message: str = "Provider stream exceeded the byte limit; no strategy was saved.",
     retry_after: str | None = None,
+    max_event_chars: int | None = None,
+    max_text_bytes: int | None = None,
+    max_events: int | None = None,
+    incomplete_message: str = (
+        "ChatGPT stream ended without a valid response.completed. No strategy was saved."
+    ),
 ) -> dict:
     content_type = response.headers.get("content-type", "")
     ct_main = content_type.split(";")[0].strip().lower()
@@ -335,17 +341,24 @@ async def completed(
     sequence = -1
     response_id = None
     terminal = None
-    deltas = ""
+    delta_chunks: list[str] = []
+    delta_bytes = 0
+    event_count = 0
     refused = False
     done_seen = False
     async for chunk in response.aiter_bytes():
         byte_count += len(chunk)
-        if byte_count > max_stream_bytes:
+        if max_stream_bytes is not None and byte_count > max_stream_bytes:
             raise ProjectError(overflow_message)
         buffer += decoder.decode(chunk)
         buffer = buffer.replace("\r\n", "\n")
         while "\n\n" in buffer:
             block, buffer = buffer.split("\n\n", 1)
+            event_count += 1
+            if max_events is not None and event_count > max_events:
+                raise ProjectError("Provider emitted too many streaming events.")
+            if max_event_chars is not None and len(block) > max_event_chars:
+                raise ProjectError("Provider emitted an oversized streaming event.")
             data = "\n".join(
                 line[5:].lstrip(" ") for line in block.split("\n") if line.startswith("data:")
             )
@@ -444,17 +457,41 @@ async def completed(
                     )
                 terminal = raw
             elif kind == "response.output_text.delta":
-                if not isinstance(event.get("delta"), str):
+                delta = event.get("delta")
+                if not isinstance(delta, str):
                     raise ValueError("plan_stream:delta_not_str")
-                deltas += event["delta"]
+                delta_bytes += len(delta.encode("utf-8"))
+                if max_text_bytes is not None and delta_bytes > max_text_bytes:
+                    raise ProjectError(
+                        "Provider generated text exceeds the bounded response capacity."
+                    )
+                delta_chunks.append(delta)
             elif kind.startswith("response.refusal."):
                 refused = True
+        # Drop fully processed events: the retained partial frame stays bounded
+        # independently of cumulative SSE transport traffic.
+        if max_event_chars is not None and len(buffer) > max_event_chars:
+            raise ProjectError("Provider emitted an oversized streaming event.")
     buffer += decoder.decode(b"", final=True)
     if terminal is None:
-        raise ProjectError(
-            "ChatGPT stream ended without a valid response.completed. No strategy was saved."
+        raise ProjectError(incomplete_message)
+    if max_text_bytes is not None:
+        output_items = terminal.get("output", [])
+        if not isinstance(output_items, list):
+            raise ValueError("plan_stream:invalid_terminal_output")
+        final_text_bytes = sum(
+            len(part["text"].encode("utf-8"))
+            for item in output_items
+            if isinstance(item, dict) and isinstance(item.get("content", []), list)
+            for part in item.get("content", [])
+            if isinstance(part, dict)
+            and part.get("type") == "output_text"
+            and isinstance(part.get("text"), str)
         )
-    if deltas:
+        if final_text_bytes > max_text_bytes:
+            raise ProjectError("Provider generated text exceeds the bounded response capacity.")
+    if delta_chunks:
+        deltas = "".join(delta_chunks)
         # Some streaming adapters provide the complete text only through
         # response.output_text.delta events and omit it from the terminal
         # response's output array. Reconstruct that missing field rather than

@@ -338,7 +338,8 @@ def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
                 )
             )
         except ProjectError as exc:
-            assert "without a valid response.completed" in str(exc)
+            assert "before a valid response.completed" in str(exc)
+            assert "Completed sections remain saved" in str(exc)
         else:
             raise AssertionError("Partial provider streams must not produce a paper draft")
 
@@ -982,6 +983,13 @@ def test_one_shot_and_long_form_both_proofread_before_compiling() -> None:
                 patch.object(papers, "_provider", new=author),
                 patch.object(papers, "_generate_long_draft", new=long_author),
                 patch.object(papers, "_provider_structured", new=proofreader),
+                # This test exercises TeX stage ordering, not external
+                # publication compilation. Keep the optional source set empty.
+                patch.object(
+                    papers.paper_writing_sources,
+                    "select",
+                    new=lambda *_args, **_kwargs: asyncio.sleep(0, result=([], "unavailable")),
+                ),
                 patch.object(papers, "_compile_pdf", new=measured_compile),
                 mock_pdf_inspection(),
             ):
@@ -1621,7 +1629,9 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         assert all(r"\begin{longtable}" in source for source in compile_tex)
         assert r"\begin{longtable}" in successful_tex[0]
         assert saved["snapshot_sha256"] == snapshot_hash
-        assert saved["generation"]["provider_calls_attempted"] == 3
+        assert saved["generation"]["provider_calls_attempted"] == (
+            3 + saved["generation"]["publication_compiler_calls"]
+        )
         assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 2
         assert saved["generation"]["proofreading"]["correction_categories"] == ["math_notation"]
         assert saved["draft"]["diagrams"] == []
@@ -1777,7 +1787,7 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
         r"\section{Claim and source notes}",
         r"\section{Issues found (diagnostic data)}",
         r"\section{Structured reasoning and review records}",
-        r"\section{Editorial writing sources}",
+        r"\section{Publication references used}",
         "Validation:",
         "Snapshot SHA-256",
         r"\section*{Evidence and authorship note}",
@@ -3397,9 +3407,9 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
         "excerpt": "A source excerpt used only for writing.",
         "sha256": "a" * 64,
     }
-    # Editorial sources are recorded but kept out of normal reader-facing PDFs.
+    # Editorial sources are recorded but omitted from PDFs without details.
     default_tex = papers._tex(draft(), [], "f" * 64, writing_sources=[source])
-    assert r"\section{Editorial writing sources}" not in default_tex
+    assert r"\section{Publication references used}" not in default_tex
     assert "Writing Mathematics" not in default_tex
 
     # When validation notes are explicitly requested, sources are disclosed as
@@ -3407,7 +3417,7 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
     tex = papers._tex(
         draft(), [], "f" * 64, writing_sources=[source], include_validation_notes=True
     )
-    assert r"\section{Editorial writing sources}" in tex
+    assert r"\section{Publication references used}" in tex
     assert "Writing Mathematics" in tex
     assert r"\url{https://example.org/writing-math}" in tex
     assert "not the scientific evidence or findings" in tex
@@ -3423,9 +3433,11 @@ def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
         package["sources"][0]["data"]["investigation_type"] = project_type
         package["sources"][0]["data"]["problem"] = "Study the stated research question."
         seen: dict[str, list[str]] = {}
+        frozen_checklist = "State the unverified proof obligations explicitly."
 
         async def fake_stage(_input, _binding, _config, *, instructions, schema_name, **_kwargs):
             seen.setdefault(schema_name, []).append(instructions)
+            assert _input["paper_writing_methodology"] == [{"writing_guidance": frozen_checklist}]
             if schema_name == "sigma_long_paper_plan":
                 return plan, "fixture-model"
             assert schema_name == "sigma_long_paper_section"
@@ -3434,6 +3446,10 @@ def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
             ), "fixture-model"
 
         state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+        state["publication_compilation"] = {
+            "status": "completed",
+            "checklist": [frozen_checklist],
+        }
 
         async def write_long() -> None:
             with patch.object(papers, "_provider_structured", new=fake_stage):
@@ -6434,6 +6450,107 @@ def test_review_proofreader_accepts_safe_patch_but_rejects_mutation() -> None:
         assert "changed protected scientific" in result["fallback_reason"]
 
 
+def test_paper_sse_bounds_generated_text_not_redundant_transport() -> None:
+    """Large streams of progress frames must not require large in-memory output."""
+
+    class ProgressStream:
+        def __init__(self) -> None:
+            self.headers = {"content-type": "text/event-stream"}
+
+        async def aiter_bytes(self):
+            yield (
+                b'data: {"type":"response.created","sequence_number":0,'
+                b'"response":{"id":"paper"}}\n\n'
+            )
+            for index in range(1, 810):
+                event = {
+                    "type": "response.in_progress",
+                    "sequence_number": index,
+                    "response": {"id": "paper", "padding": "p" * 21_000},
+                }
+                yield ("data: " + json.dumps(event) + "\n\n").encode()
+            yield (
+                b'data: {"type":"response.output_text.delta","sequence_number":810,'
+                b'"delta":"small section"}\n\n'
+            )
+            yield (
+                b'data: {"type":"response.completed","sequence_number":811,'
+                b'"response":{"id":"paper","status":"completed","output":[]}}\n\n'
+            )
+
+    result = asyncio.run(
+        completed(
+            cast(httpx.Response, ProgressStream()),
+            max_stream_bytes=None,
+            max_event_chars=4_000_000,
+            max_events=100_000,
+            max_text_bytes=papers.MAX_RESPONSE_BYTES,
+        )
+    )
+    assert result["status"] == "completed"
+    assert result["output"][0]["content"][0]["text"] == "small section"
+
+    class TruncatedStream:
+        def __init__(self) -> None:
+            self.headers = {"content-type": "text/event-stream"}
+
+        async def aiter_bytes(self):
+            yield (
+                b'data: {"type":"response.created","sequence_number":0,'
+                b'"response":{"id":"paper"}}\n\n'
+            )
+            yield (
+                b'data: {"type":"response.output_text.delta","sequence_number":1,'
+                b'"delta":"partial"}\n\n'
+            )
+
+    try:
+        asyncio.run(
+            completed(
+                cast(httpx.Response, TruncatedStream()),
+                max_stream_bytes=None,
+                max_event_chars=4_000_000,
+                max_events=100_000,
+                max_text_bytes=papers.MAX_RESPONSE_BYTES,
+                incomplete_message="Paper stream ended without completion; saved sections remain.",
+            )
+        )
+    except ProjectError as exc:
+        assert "saved sections remain" in str(exc)
+        assert "strategy" not in str(exc)
+    else:
+        raise AssertionError("Truncated SSE completion was accepted")
+
+    class ExcessiveTextStream:
+        def __init__(self) -> None:
+            self.headers = {"content-type": "text/event-stream"}
+
+        async def aiter_bytes(self):
+            yield (
+                b'data: {"type":"response.created","sequence_number":0,'
+                b'"response":{"id":"paper"}}\n\n'
+            )
+            yield (
+                b'data: {"type":"response.output_text.delta","sequence_number":1,'
+                b'"delta":"this text exceeds the small test bound"}\n\n'
+            )
+
+    try:
+        asyncio.run(
+            completed(
+                cast(httpx.Response, ExcessiveTextStream()),
+                max_stream_bytes=None,
+                max_event_chars=4_000_000,
+                max_events=100_000,
+                max_text_bytes=10,
+            )
+        )
+    except ProjectError as exc:
+        assert "bounded response capacity" in str(exc)
+    else:
+        raise AssertionError("Oversized generated text was accepted")
+
+
 def main() -> None:
     test_review_proofreader_accepts_safe_patch_but_rejects_mutation()
     test_review_fallback_question_and_tex_safety()
@@ -6479,6 +6596,7 @@ def main() -> None:
     test_visual_preference_controls_one_shot_and_long_paper_wire_schemas()
     test_strict_paper_schemas_require_all_properties()
     test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage()
+    test_paper_sse_bounds_generated_text_not_redundant_transport()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
     test_proofreading_option_changes_keep_per_render_and_cumulative_call_counts()
@@ -6837,17 +6955,8 @@ def main() -> None:
     with patch("sigma.api.export_project_view", return_value=large_export):
         large_snapshot, _ = papers._snapshot("unused")
     assert len(papers._json(large_snapshot)) > 65_000
-    assert len(papers._json(large_snapshot)) <= papers.MAX_CONTEXT_BYTES
-    with (
-        patch("sigma.api.export_project_view", return_value=evidence_export),
-        patch.object(papers, "MAX_CONTEXT_BYTES", 10),
-    ):
-        try:
-            papers._snapshot("unused")
-        except ProjectError as exc:
-            assert "bytes" in str(exc) and "No evidence was omitted" in str(exc)
-        else:
-            raise AssertionError("Oversized complete evidence snapshots must be rejected")
+    # Frozen evidence is not artificially capped by provider input limits.
+    assert large_snapshot["sources"][0]["data"]["problem"] == large_export["project"]["problem"]
 
     package = {"sources": [{"id": "project:pid", "data": {"problem": "A question"}}]}
     parsed = draft()
@@ -7148,6 +7257,10 @@ if __name__ == "__main__":
 
     httpx.AsyncClient = offline_async_client  # type: ignore[assignment]
     try:
-        main()
+        # Historical paper tests exercise authoring/proofreading call counts.
+        # Keep optional reference-compilation spending out of those fixtures;
+        # the dedicated compiler tests assert its real dispatch and recovery.
+        with patch.object(papers, "_publication_compiler_has_writing_headroom", return_value=False):
+            main()
     finally:
         httpx.AsyncClient = real_async_client
