@@ -394,6 +394,12 @@
 }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
+/* Match the star's hover/focus color on Copy and Explain, without changing
+   icon spacing or adding a background against the title. */
+.project-settings-dialog.ai-paper-dialog .settings-body :is(button.text-copy-button, button.ai-paper-eli5-balloon):is(:hover:not(:disabled), :focus-visible),
+.project-settings-dialog.ai-paper-dialog .saved-paper-score-star:is(:hover, :focus-visible) {
+  color: #f5d593; border-color: transparent; background: transparent; box-shadow: none; text-decoration: none;
+}
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining {
   position: absolute; left: 0; top: 50%; transform: translateY(-50%);
   font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
