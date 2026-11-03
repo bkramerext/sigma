@@ -172,6 +172,7 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
     classifier can override an explicitly persisted project type.
     """
     from sigma.project_types import (
+        builtin_custom_references,
         builtin_types,
         common_research_references,
         custom_types,
@@ -179,6 +180,7 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
     )
 
     definitions = {t.id: t for t in [*builtin_types(), *custom_types()]}
+    builtins_additions = builtin_custom_references()
     chain = []
     visited: set[str] = set()
     cursor: str | None = project_type_id
@@ -250,7 +252,11 @@ def _effective_sources(project_type_id: str) -> tuple[list[dict[str, str]], str 
         add(reference, "general", "common", "Common scientific methods")
     for index, item in enumerate(chain):
         tier = "discipline" if index == 0 else "branch"
-        for reference in item.research_standards_references:
+        project_type_refs = [
+            *item.research_standards_references,
+            *builtins_additions.get(item.id, {}).get("research_standards_references", []),
+        ]
+        for reference in project_type_refs:
             if enabled_urls is not None and reference["url"] not in enabled_urls:
                 continue
             add(reference, tier, item.id, item.name)

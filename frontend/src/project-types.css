@@ -30,14 +30,22 @@
 .project-type-card-body section { min-width: 0; }
 .project-type-card-body section h3 { margin-bottom: 6px; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 .pt-reference-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.pt-reference-table td { padding: 4px 0; border: 0; text-align: left; }
-.pt-reference-entry { display: flex; align-items: flex-start; gap: 12px; }
+.pt-reference-table td { padding: 2px 0; border: 0; text-align: left; }
+.pt-reference-entry { display: flex; align-items: center; gap: 9px; }
 .pt-reference-field { display: grid; flex: 1 1 auto; min-width: 0; gap: 3px; }
-.pt-reference-entry input { min-width: 0; width: 100%; min-height: 32px; text-overflow: ellipsis; }
+.project-types-dialog .pt-reference-entry input { box-sizing: border-box; min-width: 0; width: 100%; height: 27px; min-height: 27px; padding: 3px 7px; text-overflow: ellipsis; }
 .pt-reference-entry button { flex: 0 0 auto; }
-.pt-reference-table td button { min-height: 28px; padding: 2px 5px; border: 0; color: #e0aa8b; background: transparent; text-decoration: underline; }
+/* Common, built-in, and custom reference actions share the link yellow.
+   Removing horizontal button padding aligns New directly beneath the URL text. */
+.project-types-dialog .pt-reference-table td button:not([role="combobox"]):not([role="option"]) {
+  min-height: 24px; padding: 1px 0; border: 0; color: #edc38d;
+  background: transparent; text-decoration: underline;
+}
+.project-types-dialog .pt-reference-table td button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) {
+  color: #ffe5a6;
+}
 .project-type-card > summary .project-type-remove { flex: 0 0 auto; margin-left: 0; white-space: nowrap; }
-.pt-reference-new-row td { padding-top: 4px; }
+.pt-reference-new-row td { padding-top: 2px; }
 .project-types-add { margin-top: 8px; }
 .project-types-body [role=alert] { color: #f1aaa0; }
 .project-type-missing-warning { margin: 12px 0; padding: 12px 14px; border: 1px solid #b87e4f; border-radius: 6px; color: #e6d4bd; background: #32251c; }
@@ -89,7 +97,7 @@
 /* Shared and type-specific reference lists use identical controls and previews. */
 .pt-common-references > p { margin: 0 0 12px; color: #b6c3cf; font-size: 12px; line-height: 1.55; }
 .pt-common-references > h4 { margin: 13px 0 6px; color: #cdd7e0; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
-.pt-reference-link { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.pt-reference-link { display: grid; gap: 0; min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
 .project-types-dialog .pt-reference-link a { width: fit-content; max-width: 100%; color: #edc38d; text-underline-offset: 3px; }
 .project-types-dialog .pt-reference-link a:hover { color: #ffe5a6; }
 .project-types-dialog .pt-reference-link .pt-reference-url { color: #aab7c4; font-size: 11px; }
@@ -97,10 +105,10 @@
 .project-types-dialog .pt-restore-references { justify-self: start; }
 
 /* Usage controls apply to shared, built-in and custom references alike. */
-.pt-usage-notice { margin: 0 0 16px; color: #c8d1d9; font-size: 12px; line-height: 1.6; }
+.pt-usage-notice { margin: 0 0 12px; color: #c8d1d9; font-size: 11px; line-height: 1.45; }
 .pt-reference-entry > .pt-reference-field { min-width: 0; }
 .pt-reference-disabled .pt-reference-link { opacity: .52; }
-.project-types-dialog .pt-reference-toggle { flex: 0 0 auto; min-width: 53px; align-self: flex-start; text-align: right; }
+.project-types-dialog .pt-reference-toggle { flex: 0 0 auto; min-width: 53px; align-self: center; text-align: right; }
 
 /* Both New actions are intentionally yellow, distinct from ordinary text links. */
 .project-types-dialog button.pt-new-action:not([role="combobox"]):not([role="option"]) {
