@@ -4985,9 +4985,20 @@ class CloudAuthTests(TestCase):
                         "/api/projects/research-limits", params={"path": path}
                     )
                     self.assertEqual(reloaded_limits.status_code, 200, reloaded_limits.text)
+                    # The explicit v1 PUT persists its historical 12-call ceiling,
+                    # while a fresh browser start previews the new v2 3x3 protocol.
                     self.assertEqual(
-                        reloaded_limits.json()["model_calls"], 12, reloaded_limits.text
+                        (
+                            reloaded_limits.json()["scheduler_version"],
+                            reloaded_limits.json()["research_rounds"],
+                            reloaded_limits.json()["turns_per_round"],
+                            reloaded_limits.json()["model_calls"],
+                        ),
+                        (2, 3, 3, 18),
+                        reloaded_limits.text,
                     )
+                    self.assertEqual(research_sessions.get_limits(path)["model_calls"], 12)
+                    self.assertNotIn("scheduler_version", research_sessions.get_limits(path))
                     config = member.get("/api/projects/proposals/config", params={"path": path})
                     self.assertEqual(config.status_code, 200, config.text)
                     self.assertTrue(config.json()["available"], config.text)

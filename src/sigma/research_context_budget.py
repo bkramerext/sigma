@@ -378,6 +378,16 @@ def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -
         values = context.get(field)
         if isinstance(values, list):
             allowed_artifacts.update(value for value in values if isinstance(value, str))
+    # Peer summaries are admissible only when the full bounded extract was
+    # actually selected. Pointer-only peer IDs remain strictly unavailable.
+    if context.get("scheduler_version") == 2:
+        allowed_artifacts.update(
+            item["artifact_id"]
+            for item in context.get("other_strategy_evidence", [])
+            if isinstance(item, dict)
+            and isinstance(item.get("artifact_id"), str)
+            and item.get("evidence_availability") != "pointer_only_original_not_supplied"
+        )
     current_step = context.get("investigator_step_id")
     allowed_steps = {current_step} if isinstance(current_step, str) else set()
     ledger = context.get("obligation_ledger")
