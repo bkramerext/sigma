@@ -655,7 +655,7 @@ with sync_playwright() as playwright:
     open_project(page, legacy["path"])
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
-    expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About")
+    expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
     assert (
         header.locator(".header-controls").evaluate(
             "node => getComputedStyle(node).gridTemplateAreas"

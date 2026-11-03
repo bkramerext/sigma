@@ -399,7 +399,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(prelude).to_be_visible()
                 pause_notice = outcome.locator(".research-pause-guidance")
                 expect(pause_notice).to_be_visible()
-                expect(pause_notice).to_contain_text("Session paused")
+                expect(pause_notice).to_contain_text("Paused")
                 expect(pause_notice).to_contain_text(
                     "A dispatched provider request may still consume allowance."
                 )

@@ -138,6 +138,13 @@ with sync_playwright() as playwright:
             other = row.locator(".outcome-other-details")
             expect(other.locator(":scope > .outcome-subsection").first).to_contain_text("Metrics")
             expect(other).to_contain_text("Status")
+            expect(other).to_have_css("row-gap", "7px")
+            other_gaps = other.locator(":scope > .outcome-subsection").evaluate_all(
+                """sections => sections.slice(1).map((item, index) =>
+                  Math.round(item.getBoundingClientRect().top -
+                    sections[index].getBoundingClientRect().bottom))"""
+            )
+            assert other_gaps and all(gap == 7 for gap in other_gaps), other_gaps
             # The Conclusion and References cards now share the same grid
             # spacing as the remaining outcome subsections.
             advanced = row.locator(".outcome-subsections.outcome-advanced")

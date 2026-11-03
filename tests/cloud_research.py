@@ -2497,7 +2497,10 @@ def test_reservation_on_legacy_sqlite_schema_with_extra_columns() -> None:
                 cloud_research.prepare_job(initial)
                 assert cloud_research.claim_job(initial["id"])
                 cloud_research.reserve_call(
-                    initial["id"], "first-investigator", 0.02, 256,
+                    initial["id"],
+                    "first-investigator",
+                    0.02,
+                    256,
                     maximum_liability_usd=0.15,
                 )
                 with sqlite3.connect(ledger_root / "cloud-research.sqlite3") as db:
