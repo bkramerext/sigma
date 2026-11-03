@@ -425,6 +425,30 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
                 "buttons => buttons.map(button => button.getAttribute('title'))"
             )
         )
+        strategy_markdown = page.locator(
+            ".strategy-title-line .strategy-markdown-slot .sigma-render-toggle"
+        ).first
+        strategy_pencil = strategy_pencils.first
+        expect(strategy_markdown).to_be_visible()
+        assert strategy_markdown.get_attribute("title") is None
+        assert strategy_markdown.evaluate(icon_style) == strategy_pencil.evaluate(icon_style)
+        strategy_pencil.hover()
+        expect(strategy_pencil).to_have_css("color", "rgb(255, 242, 233)")
+        strategy_hover_style = strategy_pencil.evaluate(icon_style)
+        strategy_markdown.hover()
+        expect(strategy_markdown).to_have_css("color", "rgb(255, 242, 233)")
+        assert strategy_markdown.evaluate(icon_style) == strategy_hover_style
+        strategy_offset = strategy_markdown.locator("svg.markdown-logo").evaluate(
+            """svg => {
+              const bounds = svg.getBBox();
+              const midpoint = new DOMPoint(bounds.x + bounds.width / 2,
+                bounds.y + bounds.height / 2).matrixTransform(svg.getScreenCTM());
+              const button = svg.closest('button').getBoundingClientRect();
+              return [midpoint.x - (button.left + button.right) / 2,
+                      midpoint.y - (button.top + button.bottom) / 2];
+            }"""
+        )
+        assert all(abs(offset) < 1 for offset in strategy_offset), strategy_offset
         page.mouse.move(0, 0)
         project_google = page.get_by_role("link", name="Sign in with Google")
         expect(project_google).to_be_visible()
