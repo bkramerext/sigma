@@ -189,8 +189,54 @@ def verify_compilation_preserves_first_turn_funding() -> None:
         assert research_sessions._optional_reference_compilation_headroom(api, 0.06, 0.12)
 
 
+def verify_hard_budget_compiler_does_not_steal_first_turn() -> None:
+    """Compiler preflight must account for full output cost and call slots."""
+    from sigma.research_budget import new_ledger
+
+    record = {
+        "mode": "api_key",
+        "cloud_sponsored": False,
+        "model": "gpt-6.1-sol",
+        "strategy_runs": [{"strategy_id": "test", "status": "queued"}],
+        "maximum_estimated_cost_usd": None,
+    }
+    ledger = new_ledger(
+        call_limit=2,
+        input_token_limit=100_000,
+        output_tokens_per_call=4000,
+        cost_limit_usd=1.33,
+        input_price_per_million=2.5,
+        output_price_per_million=10.0,
+    )
+    record["hard_budget_ledger"] = ledger
+    with (
+        patch.object(research_sessions, "_portfolio_context", return_value={}),
+        patch.object(research_sessions, "_role_request_payload", return_value={"input": "test"}),
+        patch.object(research_sessions, "_reserve_cost", return_value=0.1),
+    ):
+        # One Investigator fits, but a 4K compiler call would exhaust the
+        # cost needed for the Investigator's mandatory 128K ceiling.
+        assert not research_sessions._optional_reference_compilation_headroom(
+            record, 0.06, 0.12,
+            compiler_request_body=b"x" * 512, compiler_output_bound=4000,
+        )
+        assert ledger["calls"] == []
+        ledger["cost_limit_usd"] = 2.0
+        assert research_sessions._optional_reference_compilation_headroom(
+            record, 0.06, 0.12,
+            compiler_request_body=b"x" * 512, compiler_output_bound=4000,
+        )
+        ledger["call_limit"] = 1
+        assert not research_sessions._optional_reference_compilation_headroom(
+            record, 0.06, 0.12,
+            compiler_request_body=b"x" * 512, compiler_output_bound=4000,
+        )
+        assert ledger["calls"] == []
+
+
 async def main() -> None:
     verify_compilation_preserves_first_turn_funding()
+    verify_hard_budget_compiler_does_not_steal_first_turn()
     with TemporaryDirectory() as temporary:
         await verify_compilation(Path(temporary) / "compiled.sigma")
     print("PASS: compiled reference guide persisted, metered and reused by both agents")
