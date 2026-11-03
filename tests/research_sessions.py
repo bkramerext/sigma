@@ -13137,6 +13137,7 @@ def main():
     test_paired_round_protocol_requires_every_accepted_role()
     test_paired_round_pipeline_orders_roles_without_paid_calls()
     test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs()
+    print("PASS five paired-round scheduler regressions (no provider calls)")
     print("PASS provider-free scientific Outcome policy regressions")
     test_reference_compilation_is_bounded_and_source_attributed()
     test_backend_build_is_pinned_at_backend_start()
@@ -13564,9 +13565,6 @@ def main():
     print("Persistent research session scenarios passed.")  # CI retrigger
 
 
-if __name__ == "__main__":
-    main()
-
 
 def test_e001_research_reference_content_frozen_and_in_both_role_requests(monkeypatch):
     """No provider usage: retrieved excerpts are frozen, hashed and auditable."""
@@ -13683,4 +13681,7 @@ def test_e001_reference_fetch_rejects_private_hosts_and_downgrade(monkeypatch):
         check=True,
     )
 
+
+if __name__ == "__main__":
+    main()
 
