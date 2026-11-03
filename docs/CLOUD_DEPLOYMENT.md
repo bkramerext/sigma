@@ -517,8 +517,8 @@ Before T129's first application start, run the read-only host checks documented 
 ## Explicit ChatGPT sponsor provisioning (#200)
 
 Hosted model discovery permits authenticated read-only checks; hosted personal
-OAuth and account mutation routes remain blocked. To use a designated sponsor, privately configure `SIGMA_CLOUD_SPONSOR_EMAIL`
-and explicitly select ChatGPT mode and provision its
+OAuth and account mutation routes remain blocked. To use a designated sponsor,
+privately configure `SIGMA_CLOUD_SPONSOR_EMAIL`, select ChatGPT mode, and provision its
 protected SIWC session on the VM. Google sign-in alone cannot create that grant.
 See [Sponsor connection and provisioning](T200_SPONSOR_CONNECTION.md) for the
 settings, private import procedure, refresh ownership, and acceptance boundary.

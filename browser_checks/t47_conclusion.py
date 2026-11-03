@@ -844,7 +844,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 "**/api/projects/research-sessions?*",
                 compilation_session_response,
             )
-            compilation_page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
+            with compilation_page.expect_response(
+                lambda response: "/api/projects/research-sessions?" in response.url
+            ):
+                compilation_page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
             expect(compilation_page.get_by_role("heading", name="Strategies")).to_be_visible()
             for state, label in (
                 ("pending", "Preparing references"),

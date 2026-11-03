@@ -4039,7 +4039,7 @@ class CloudAuthTests(TestCase):
         self.assertFalse(revoked["authorized"])
         self.assertIn("held_usd", revoked["spending"])
 
-    def test_fixture-member_domain_login_and_reload_request(self):
+    def test_fixture_member_domain_login_and_reload_request(self):
         admin_login = self.finish()
         self.assertEqual(admin_login.status_code, 303)
         self.client.cookies.set(

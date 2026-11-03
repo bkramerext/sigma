@@ -106,9 +106,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
             os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
             with self.assertLogs("sigma.configuration", level="ERROR") as captured:
                 server._report_configuration_issues()
-            self.assertTrue(
-                any("SIGMA_CLOUD_SPONSOR_EMAIL" in line for line in captured.output)
-            )
+            self.assertTrue(any("SIGMA_CLOUD_SPONSOR_EMAIL" in line for line in captured.output))
             self.assertFalse(any("sponsor@example.test" in line for line in captured.output))
 
     async def test_hosted_admin_connection_is_role_based(self):
