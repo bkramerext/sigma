@@ -5926,9 +5926,7 @@ or document markup."""
             if str(number) not in saved_sections
         ]
         if pending and progress:
-            await progress(
-                "sections", len(saved_sections), len(long_plan.sections), "active"
-            )
+            await progress("sections", len(saved_sections), len(long_plan.sections), "active")
         semaphore = asyncio.Semaphore(FAST_SECTION_CONCURRENCY)
         first_failure: Exception | None = None
 
