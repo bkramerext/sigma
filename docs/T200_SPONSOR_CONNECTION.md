@@ -1,6 +1,7 @@
 # Hosted ChatGPT sponsor connection (#200)
 
-The designated sponsor is `zetacontinuation@gmail.com`. Google OIDC grants
+The designated sponsor is configured privately through
+`SIGMA_CLOUD_SPONSOR_EMAIL`. Google OIDC grants
 SIGMA workspace access; it does not issue OpenAI model credentials. The sponsor
 must separately authorize ChatGPT plan use. Changing an OpenAI email does not
 create this authorization.
@@ -41,8 +42,11 @@ This is a protected operator workflow, not a public credential upload endpoint.
 
    ```dotenv
    SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt
-   SIGMA_CLOUD_SPONSOR_EMAIL=zetacontinuation@gmail.com
+   SIGMA_CLOUD_SPONSOR_EMAIL=your-sponsor@example.test
    ```
+
+   Replace the placeholder privately; never commit the actual address.
+   Backend startup logs flag missing sponsor configuration.
 
    Compose sets `SIGMA_CLOUD_CHATGPT_AUTH_HOME` to
    `/var/lib/sigma-auth/chatgpt-sponsor` on the persistent state volume.

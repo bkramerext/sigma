@@ -368,11 +368,7 @@
 .project-settings-dialog .project-preference-checkbox input { width: 17px; height: 17px; accent-color: #bd8355; }
 .project-settings-dialog .project-preferences-panel .settings-hint { margin-top: 4px; }
 
-/* Saved-paper actions follow the title's copy button, not the title itself. */
-.project-settings-dialog.ai-paper-dialog .saved-paper-inline-actions {
-  display: inline-flex; align-items: center; gap: 12px;
-  margin: 0; vertical-align: middle;
-}
+/* Copy, score star, and Explain share the title-tools gap. */
 .project-settings-dialog.ai-paper-dialog .saved-paper-score-star {
   display: inline-flex; align-items: center; justify-content: center;
   color: #e5ba69; font-size: 20px; line-height: 1.1;
@@ -404,9 +400,12 @@
   color: #f5d593; border-color: transparent; background: transparent; box-shadow: none; text-decoration: none;
 }
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining {
-  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
   font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
   white-space: nowrap; text-decoration: none; pointer-events: none;
+}
+.project-settings-dialog.ai-paper-dialog .ai-paper-explaining > span[aria-hidden] {
+  display: inline-flex; width: 20px; justify-content: center;
 }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-thanks { width: auto; padding: 0; margin: 0; font-size: 13px; }
 .ai-paper-eli5-output { max-width: 75ch; line-height: 1.65; }

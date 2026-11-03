@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CHROME = os.environ.get(
     "SIGMA_BROWSER_EXECUTABLE", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 )
-Z = "zetacontinuation@gmail.com"
-N = "nontrivialzeeros@gmail.com"
+Z = "sponsor@example.test"
+N = "member@example.test"
 UNINVITED = "new-user@example.org"
 UNINVITED_OTHER = "another-new-user@example.org"
 RETURNING = "returning-member@example.org"
@@ -60,7 +60,7 @@ def seed_state(auth_home: Path, credential_home: Path) -> dict[str, str]:
     assert cfg.enabled and cfg.local and cfg.database
     subjects = {
         Z: "google-subject-z",
-        "brian.kramer.personal@gmail.com": "google-subject-b",
+        "personal@example.test": "google-subject-b",
         N: "google-subject-n",
     }
     session_cookies: dict[str, str] = {}
@@ -460,7 +460,7 @@ def main() -> None:
                 assert ("POST", "/api/ai/mode") in requests, requests
                 pill.hover(position={"x": 25, "y": 15})
                 assert pill.get_attribute("title") == (
-                    "Sponsor Connected · zetacontinuation@gmail.com · Unlimited. "
+                    "Sponsor Connected · sponsor@example.test · Unlimited. "
                     "Click to connect your own ChatGPT account."
                 )
                 detail = page.locator(".sponsored-allowance-trigger")
