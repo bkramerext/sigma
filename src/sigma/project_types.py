@@ -189,16 +189,10 @@ def _optional_text(value: Any, label: str, limit: int) -> str:
 
 
 def common_research_references() -> tuple[dict[str, str], ...]:
-    """Shared research references from the unified named Project Types catalog."""
-    try:
-        catalog = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))
-        common = catalog.get("common_references", {})
-        return _validate_references(
-            common.get("research_standards_references", []),
-            "Common research references",
-        )
-    except (OSError, ValueError, KeyError, TypeError, ProjectError) as exc:
-        raise RuntimeError("Common research references are invalid") from exc
+    """Enabled shared research-method references; catalog defaults stay immutable."""
+    references = common_references()["research_standards_references"]
+    disabled = set(reference_preferences().get("common", {}).get("research_standards_references", []))
+    return tuple(ref for ref in references if ref["url"] not in disabled)
 
 
 def builtin_types() -> list[ProjectType]:
@@ -253,6 +247,64 @@ def common_references() -> dict[str, list[dict[str, str]]]:
     """Immutable curated defaults shared by every research discipline."""
     raw = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))["common_references"]
     return {field: list(_validate_references(raw[field], field)) for field in REFERENCE_FIELDS}
+
+
+def _validate_reference_preferences(
+    value: Any,
+    custom: list[ProjectType],
+    *,
+    drop_removed: bool = False,
+) -> dict[str, dict[str, list[str]]]:
+    """Validate disabled reference URLs against immutable and custom type definitions.
+
+    Preference keys are type IDs (or "common"), then research/publication
+    reference fields. No arbitrary URLs or modifications to built-ins are allowed.
+    """
+    if not isinstance(value, dict) or len(value) > 501:
+        raise ProjectError("Reference preferences must be a map of project types")
+    definitions = {item.id: item for item in [*builtin_types(), *custom]}
+    if "common" in definitions:
+        raise ProjectError("Project type name 'common' is reserved for shared references")
+    result: dict[str, dict[str, list[str]]] = {}
+    for owner, fields in value.items():
+        if not isinstance(owner, str) or not isinstance(fields, dict):
+            raise ProjectError("Reference preferences contain an invalid project type")
+        if owner == "common":
+            allowed = common_references()
+        else:
+            item = resolve_type_metadata(owner, definitions)
+            if item is None:
+                if drop_removed:
+                    continue
+                raise ProjectError("Reference preferences contain an unknown project type")
+            allowed = {field: list(getattr(item, field)) for field in REFERENCE_FIELDS}
+        if set(fields) - set(REFERENCE_FIELDS):
+            raise ProjectError("Reference preferences contain an unknown category")
+        chosen: dict[str, list[str]] = {}
+        for field, urls in fields.items():
+            if not isinstance(urls, list) or len(urls) > MAX_REFERENCES or any(
+                not isinstance(url, str) for url in urls
+            ):
+                raise ProjectError("Disabled references must be a list of URLs")
+            if len(set(urls)) != len(urls):
+                raise ProjectError("Disabled references contain duplicate URLs")
+            known = {ref["url"] for ref in allowed[field]}
+            if not drop_removed and any(url not in known for url in urls):
+                raise ProjectError("Only listed references may be disabled")
+            kept = sorted((url for url in urls if url in known), key=str.casefold)
+            if kept:
+                chosen[field] = kept
+        if chosen:
+            result[owner] = chosen
+    return result
+
+
+def reference_preferences() -> dict[str, dict[str, list[str]]]:
+    """Persisted, private presentation-independent reference usage switches."""
+    catalog = _read_catalog()
+    return _validate_reference_preferences(
+        catalog.get("reference_preferences", {}), custom_types()
+    )
 
 
 def resolve_type_metadata(
@@ -354,10 +406,21 @@ def get_type(identifier: str) -> ProjectType | None:
     if item is None:
         return None
     common = common_references()
+    disabled = reference_preferences()
     combined = {}
     for field in REFERENCE_FIELDS:
-        by_url = {ref["url"]: ref for ref in [*common[field], *getattr(item, field)]}
-        combined[field] = tuple(sorted(by_url.values(), key=lambda ref: ref["url"].casefold()))
+        shared_off = set(disabled.get("common", {}).get(field, []))
+        type_off = set(disabled.get(identifier, {}).get(field, []))
+        by_url = {
+            ref["url"]: ref
+            for ref in [*(ref for ref in common[field] if ref["url"] not in shared_off), *getattr(item, field)]
+            if ref["url"] not in type_off
+        }
+        # Shared disable applies to the same URL even if inherited or repeated.
+        combined[field] = tuple(
+            sorted((ref for url, ref in by_url.items() if url not in shared_off),
+                   key=lambda ref: ref["url"].casefold())
+        )
     return replace(item, **combined)
 
 
@@ -412,7 +475,12 @@ def normalize_project_snapshot(value: Any, identifier: str) -> dict[str, Any] | 
         return None
 
 
-def _write_custom(items: list[ProjectType], *, expected_revision: str | None = None) -> None:
+def _write_custom(
+    items: list[ProjectType],
+    *,
+    expected_revision: str | None = None,
+    reference_preferences_update: dict[str, dict[str, list[str]]] | None = None,
+) -> None:
     path = _store_path()
     lock_fd = os.open(
         path.parent / ".sigma-project-types.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600
@@ -430,7 +498,19 @@ def _write_custom(items: list[ProjectType], *, expected_revision: str | None = N
             raise ProjectError(
                 "Project types changed in another window; reload and review before saving"
             )
-        document = {"schema_version": 1, "project_types": [item.record() for item in items]}
+        current_preferences = (
+            _read_catalog().get("reference_preferences", {})
+            if reference_preferences_update is None
+            else reference_preferences_update
+        )
+        preferences = _validate_reference_preferences(
+            current_preferences, items, drop_removed=reference_preferences_update is None
+        )
+        document = {
+            "schema_version": 1,
+            "project_types": [item.record() for item in items],
+            "reference_preferences": preferences,
+        }
         payload = json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
         if len(payload.encode("utf-8")) > 16_000_000:
             raise ProjectError("Custom project type catalog exceeds the storage limit")
@@ -504,6 +584,7 @@ def replace_custom_types(
     *,
     expected_revision: str | None = None,
     confirmed_removals: dict[str, int] | None = None,
+    reference_preferences_update: dict[str, dict[str, list[str]]] | None = None,
 ) -> list[ProjectType]:
     if len(records) > 500:
         raise ProjectError("Too many custom project types")
@@ -545,5 +626,9 @@ def replace_custom_types(
         seen_ids.add(item.id)
         seen_names.add(key)
         result.append(item)
-    _write_custom(result, expected_revision=expected_revision)
+    _write_custom(
+        result,
+        expected_revision=expected_revision,
+        reference_preferences_update=reference_preferences_update,
+    )
     return sorted(result, key=lambda item: item.name.casefold())
