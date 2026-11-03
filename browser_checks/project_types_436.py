@@ -76,7 +76,7 @@ with sync_playwright() as playwright:
     # Home account pills occupy About / Google over Admin / ChatGPT at right.
     grid = page.locator(".home-account-grid")
     expect(grid).to_be_visible()
-    expect(grid.locator(".home-about-button")).to_have_text("About")
+    expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
         '"about google" "admin chatgpt"'
     )
@@ -737,14 +737,10 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Project Types", exact=True).click()
     home_types = page.get_by_role("dialog", name="Project Types")
     home_common = home_types.locator(".pt-common-references")
-    expect(home_common.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(
-        4
-    )
+    expect(home_common.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(4)
     for _ in range(4):
         home_common.locator(".pt-reference-toggle").filter(has_text="Enable").first.click()
-    expect(home_common.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(
-        4
-    )
+    expect(home_common.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(4)
     home_types.locator("header").get_by_role("button", name="Save", exact=True).click()
     expect(home_types).not_to_be_visible()
     saved_common = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
@@ -759,17 +755,17 @@ with sync_playwright() as playwright:
     adjust.click()
     shortcut_types = page.get_by_role("dialog", name="Project Types")
     shortcut_common = shortcut_types.locator(".pt-common-references")
-    expect(shortcut_common.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(
-        4
-    )
+    expect(
+        shortcut_common.locator(".pt-reference-toggle").filter(has_text="Disable")
+    ).to_have_count(4)
     expect(shortcut_types.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     shortcut_common.locator(".pt-reference-toggle").filter(has_text="Disable").first.click()
     shortcut_types.locator("header").get_by_role("button", name="Save", exact=True).click()
     expect(shortcut_types).not_to_be_visible()
     saved_common = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
-    assert len(
-        saved_common["reference_preferences"]["common"]["research_standards_references"]
-    ) == 1
+    assert (
+        len(saved_common["reference_preferences"]["common"]["research_standards_references"]) == 1
+    )
 
     page.goto(BASE_URL)
     page.get_by_role("button", name="Project Types", exact=True).click()
@@ -778,9 +774,9 @@ with sync_playwright() as playwright:
     expect(restored_common.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(
         1
     )
-    expect(restored_common.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(
-        3
-    )
+    expect(
+        restored_common.locator(".pt-reference-toggle").filter(has_text="Disable")
+    ).to_have_count(3)
     restored_types.locator("header").get_by_role("button", name="Close", exact=True).click()
 
     assert not errors, errors
