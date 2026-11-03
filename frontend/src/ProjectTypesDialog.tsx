@@ -183,6 +183,13 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     setRevision(data.revision);
   }
   useEffect(() => { void load().catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); }, []);
+  useEffect(() => {
+    if (!initialOpenTypeId || !revision) return;
+    const frame = requestAnimationFrame(() => dialog.current
+      ?.querySelector<HTMLElement>(`[data-project-type-id="${CSS.escape(initialOpenTypeId)}"]`)
+      ?.scrollIntoView({ block: 'center', behavior: 'auto' }));
+    return () => cancelAnimationFrame(frame);
+  }, [initialOpenTypeId, revision]);
   const sortedBuiltins = useMemo(() => [...builtins].sort((a, b) => a.name.localeCompare(b.name)), [builtins]);
   const sortedDrafts = useMemo(() => [...drafts].sort((a, b) => a.name.localeCompare(b.name)), [drafts]);
   function edit(id: string, patch: Partial<ProjectTypeRecord>) {
@@ -376,7 +383,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         onClick={() => edit(item.id, { [field]: [...references, { name: '', url: '' }] })}>New</button></td></tr>}
     </tbody></table>;
   };
-  const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" key={item.id} open={open === item.id}>
+  const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" data-project-type-id={item.id} key={item.id} open={open === item.id}>
     <summary onClick={event => { event.preventDefault(); setOpen(previous => previous === item.id ? null : item.id); }}>
       <span className="project-type-card-icon">{renderEffectiveIcon(item)}</span><strong>{item.name || 'New project type'}</strong>
       {!readonly && initialCustomIds.current.includes(item.id) && <button type="button" className="project-type-remove" disabled={busy} aria-label={`Remove project type ${item.name}`} onClick={event => { event.preventDefault(); event.stopPropagation(); removeDraft(item.id); }}>Remove</button>}
