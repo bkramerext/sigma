@@ -358,8 +358,7 @@ async def completed(
         # The SSE specification permits one UTF-8 BOM at stream start.
         if not saw_first_character:
             saw_first_character = True
-            if text.startswith("\ufeff"):
-                text = text[1:]
+            text = text.removeprefix("\ufeff")
         # A previous chunk's CR was already emitted as LF. Swallow its
         # matching LF instead of creating a fictitious blank event boundary.
         if pending_cr and text.startswith("\n"):
