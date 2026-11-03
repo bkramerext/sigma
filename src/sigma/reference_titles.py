@@ -135,6 +135,11 @@ def _fetch_title(url: str) -> str | None:
                 return None
             if target_parts.username is not None or target_parts.password is not None:
                 return None
+            # A third-party redirect must not turn a title lookup into a
+            # connection to an arbitrary non-web service port.
+            standard_port = 443 if target_parts.scheme == "https" else 80
+            if target_parts.port not in {None, standard_port}:
+                return None
         except ValueError:
             return None
         url = target
