@@ -25,11 +25,21 @@ import research_sessions as fixture
 from sigma import research_sessions
 
 
-async def verify_compilation(path: Path) -> None:
+async def verify_compilation(
+    path: Path, *, multiple_strategies: bool = False, compiler_rejection: bool = False
+) -> None:
     view, strategy, credential, config = await fixture.setup(path)
     limits = research_sessions.get_limits(str(path))
-    limits.update(research_rounds=1, model_calls=2)
+    limits.update(research_rounds=1, model_calls=4 if multiple_strategies else 2)
     research_sessions.save_limits(str(path), limits)
+    strategy_ids = [strategy.id]
+    if multiple_strategies:
+        from sigma.projects import create_strategy
+
+        extra = create_strategy(
+            path, "Independent counterexample route", "Try a direct boundary counterexample."
+        ).project.strategies[-1]
+        strategy_ids.append(extra.id)
     # Explicit frozen references make this a deterministic compiler contract,
     # independent of the calling account's enabled Common guide preferences.
     source_catalog = {
@@ -67,6 +77,8 @@ async def verify_compilation(path: Path) -> None:
         name = payload["text"]["format"]["name"]
         calls.append(name)
         if name == "research_reference_compilation":
+            if compiler_rejection:
+                return httpx.Response(400, json={"error": {"message": "Compiler unavailable"}})
             assert payload["store"] is False
             sources = json.loads(payload["input"])["uninspected_methodology_sources"]
             assert len(sources) >= 2
@@ -109,41 +121,51 @@ async def verify_compilation(path: Path) -> None:
             view.project.id,
             credential["identity"],
             expected_limits=limits,
+            strategy_ids=strategy_ids,
         )
         finished = await fixture.wait_for(path, started["id"])
 
     assert finished["status"] in {"ended", "completed"}, finished.get("message")
-    assert calls == [
-        "research_reference_compilation",
-        "research_investigator",
-        "research_skeptic",
-    ], calls
-    assert finished["calls_used"] == 2
-    assert len(finished["steps"]) == 2
-    assert [step["role"] for step in finished["steps"]] == ["investigator", "skeptic"]
+    assert calls.count("research_reference_compilation") == 1, calls
+    assert calls.count("research_investigator") == len(strategy_ids), calls
+    assert calls.count("research_skeptic") == len(strategy_ids), calls
+    assert calls[0] == "research_reference_compilation", calls
+    assert finished["calls_used"] == 2 * len(strategy_ids)
+    assert len(finished["steps"]) == 2 * len(strategy_ids)
+    assert {step["strategy_id"] for step in finished["steps"]} == set(strategy_ids)
+    assert {step["role"] for step in finished["steps"]} == {"investigator", "skeptic"}
     saved = research_sessions._read(str(path), started["id"])
     stage = saved["reference_compilation"]
-    assert stage["status"] == "completed", stage
-    assert stage["selected_source_ids"] == selection
-    assert stage["omitted_source_ids"]
-    assert stage["guidance_sha256"]
-    assert stage["token_usage"]["input_tokens"] == 120
-    assert stage["token_usage"]["output_tokens"] == 80
+    assert stage["status"] == ("fallback" if compiler_rejection else "completed"), stage
+    assert stage["source_sha256"] == saved["research_method_sources"]["sha256"]
+    assert stage["status"] != "pending"
+    if not compiler_rejection:
+        assert stage["selected_source_ids"] == selection
+        assert stage["omitted_source_ids"]
+        assert stage["guidance_sha256"]
+        assert stage["token_usage"]["input_tokens"] == 120
+        assert stage["token_usage"]["output_tokens"] == 80
     assert saved["research_method_sources"]["sha256"] == stage["source_sha256"]
     assert len(saved["research_method_sources"]["sources"]) >= 2
-    assert saved["outcome"]["source_material"]["compilation"]["guidance"] == stage["guidance"]
-    assert len(role_requests) == 2
+    assert len(role_requests) == 2 * len(strategy_ids)
+    assert len(saved["artifacts"]) == len(strategy_ids)
     for request in role_requests:
-        assert stage["guidance"] in request
-        assert all(url not in request for url in omitted_urls), omitted_urls
-    assert (
-        sum(1 for event in saved["events"] if event["kind"] == "references.compilation.completed")
-        == 1
-    )
+        if compiler_rejection:
+            assert "Mathematics proof methods" in request
+            assert "Check induction, boundary cases" in request
+        else:
+            assert stage["guidance"] in request
+            assert all(url not in request for url in omitted_urls), omitted_urls
+    if not compiler_rejection:
+        assert saved["outcome"]["source_material"]["compilation"]["guidance"] == stage["guidance"]
+        assert (
+            sum(1 for event in saved["events"] if event["kind"] == "references.compilation.completed")
+            == 1
+        )
     ledger = saved.get("hard_budget_ledger")
     if isinstance(ledger, dict):
-        assert len(ledger["calls"]) == 3, ledger["calls"]
-        assert all(item["status"] == "settled" for item in ledger["calls"])
+        assert len(ledger["calls"]) == 1 + 2 * len(strategy_ids), ledger["calls"]
+        assert all(item["status"] in {"settled", "rejected"} for item in ledger["calls"])
 
 
 def verify_compilation_preserves_first_turn_funding() -> None:
@@ -247,8 +269,11 @@ async def main() -> None:
     verify_compilation_preserves_first_turn_funding()
     verify_hard_budget_compiler_does_not_steal_first_turn()
     with TemporaryDirectory() as temporary:
-        await verify_compilation(Path(temporary) / "compiled.sigma")
-    print("PASS: compiled reference guide persisted, metered and reused by both agents")
+        root = Path(temporary)
+        await verify_compilation(root / "compiled.sigma")
+        await verify_compilation(root / "multi.sigma", multiple_strategies=True)
+        await verify_compilation(root / "fallback.sigma", compiler_rejection=True)
+    print("PASS: durable reference compilation, multi-strategy reuse, fallback and metering")
 
 
 if __name__ == "__main__":
