@@ -12710,7 +12710,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             _event(record, "references.compilation.skipped", compilation["reason"])
             _save(path, record)
             return True
-        if not isinstance(credential, dict) or (
+        if not isinstance(credential, Mapping) or (
             credential.get("mode") != record["mode"]
             or not isinstance(credential.get("identity"), str)
             or _digest(credential["identity"]) != record["identity_hash"]
