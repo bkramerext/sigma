@@ -426,5 +426,15 @@
 }
 
 .project-references-usage { margin-top: 18px; padding-top: 12px; border-top: 1px solid #36404a; }
-.project-references-usage p { margin: 0 0 9px; color: #cbd5dd; line-height: 1.55; }
-.project-references-usage .text-view-link { width: fit-content; }
+.project-references-usage p { margin: 0; color: #cbd5dd; line-height: 1.55; }
+.project-settings-dialog .project-references-usage .project-reference-adjust-link {
+  display: inline; width: auto; min-width: 0; min-height: 0; margin: 0 0 0 5px; padding: 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: #edc38d; font: inherit; text-decoration: underline; text-underline-offset: 3px;
+}
+.project-settings-dialog .project-references-usage .project-reference-adjust-link:hover:not(:disabled) {
+  background: transparent; color: #ffe5a6;
+}
+.project-settings-dialog .project-references-usage .project-reference-adjust-link:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 2px;
+}
