@@ -2363,10 +2363,13 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       <div className="ai-paper-options">
         <label className="ai-paper-details"><input type="checkbox" checked={includeDiagramsAndTables} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.diagrams:' + projectId, String(event.target.checked)), setIncludeDiagramsAndTables(event.target.checked))}/>Include diagrams and tables</label>
         <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Include claim details</label>
-        <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include issues found</label>
+        <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include research issues and limitations</label>
         <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Include research excerpts</label>
-        <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)), setIncludeSigmaIssues(event.target.checked))}/>Include Issues and Bugs section</label>
       </div>
+      <details className="ai-paper-advanced">
+        <summary>Advanced options</summary>
+        <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)), setIncludeSigmaIssues(event.target.checked))}/>Include paper-generation diagnostics</label>
+      </details>
       {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot
           ? 'The last writing attempt did not save a draft. Start over to generate again.'
@@ -2379,8 +2382,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       </>}{generating && <button type="button" className="text-view-link" disabled={!binding || loading} onClick={() => void cancelGeneration()}>Cancel</button>}</div>
       {resetConfirm && !generating && restartableCheckpoint && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Confirm starting paper over">
         <p>Discard unfinished paper work?</p>
-        <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm</button>
-        <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Cancel</button>
+        <div className="ai-paper-controls">
+          <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm</button>
+          <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Cancel</button>
+        </div>
       </div>}
       {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningFallback
         ? 'Continue uses saved evidence to construct an outline without repeating the failed planning request. Section writing still uses AI and may consume allowance.'
