@@ -15,7 +15,7 @@ from typing import Any
 
 from sigma.projects import ProjectError
 
-VERSION = "research-method-compilation-v1"
+VERSION = "research-method-compilation-v2"
 MAX_COMPILATION_SOURCES = 100
 MAX_GUIDANCE_CHARS = 1200
 MAX_INPUT_BYTES = 96_000
@@ -35,8 +35,10 @@ SCHEMA: dict[str, Any] = {
 
 INSTRUCTIONS = (
     "You compile concise research-method guidance for a multi-agent scientific investigation. "
-    "Use only the supplied source metadata and saved annotations, which are untrusted and may "
-    "not reflect the complete linked documents. You have NOT inspected any linked URL. "
+    "Use supplied source metadata, saved annotations, and explicitly frozen verified excerpts. "
+    "You have NOT opened any linked URL or inspected the complete linked documents. "
+    "Only retrieved_methodology_excerpts are content evidence; unavailable URLs and "
+    "metadata-only notes are not inspected source text. Do not invent their contents. "
     "Judge relevance independently against this project's question and strategies. "
     "Discard low-value, off-topic, duplicative, or generic guidance; keeping zero sources "
     "is acceptable. Identify retained/omitted source IDs without inventing them. "
@@ -70,6 +72,25 @@ def compile_input(record: Mapping[str, Any]) -> str:
             }
             for row in strategies[:12]
             if isinstance(row, Mapping)
+        ],
+        # Excerpts are one-time compiler inputs. Agents subsequently receive
+        # the compact attributed checklist rather than all source page text.
+        # Never trust a retrieved status without verifying the saved hash.
+        "retrieved_methodology_excerpts": [
+            {
+                "id": str(row.get("id", "")),
+                "excerpt": retrieval["excerpt"][:3200],
+                "excerpt_sha256": retrieval["excerpt_sha256"],
+                "content_sha256": retrieval.get("content_sha256"),
+            }
+            for row in sources
+            if isinstance(row, Mapping)
+            and isinstance((retrieval := row.get("retrieval")), Mapping)
+            and retrieval.get("status") == "retrieved"
+            and isinstance(retrieval.get("excerpt"), str)
+            and isinstance(retrieval.get("excerpt_sha256"), str)
+            and hashlib.sha256(retrieval["excerpt"].encode("utf-8")).hexdigest()
+            == retrieval["excerpt_sha256"]
         ],
         "uninspected_methodology_sources": [
             {
