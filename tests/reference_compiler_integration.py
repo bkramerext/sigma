@@ -669,6 +669,77 @@ async def verify_compiler_billing_settlement_failure(path: Path) -> None:
             assert hard["blocked_reason"]
 
 
+
+async def verify_precompiler_session_resume_rejected(path: Path) -> None:
+    """Pre-compiler sessions remain readable but cannot run legacy prompts."""
+    from sigma.projects import ProjectError
+
+    view, strategy, credential, config = await fixture.setup(path)
+    with (
+        patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "true"}),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=research_sessions.get_limits(str(path)),
+            strategy_ids=[strategy.id],
+        )
+        old = research_sessions._read(str(path), started["id"])
+        old.pop("reference_compilation", None)
+        old["status"] = "stopped"
+        research_sessions._save(str(path), old)
+        assert research_sessions.get_session(str(path), started["id"])["status"] == "stopped"
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "predates the reference compiler" in str(exc)
+        else:
+            raise AssertionError("Legacy research resumed without a compiler checkpoint")
+        still_saved = research_sessions._read(str(path), started["id"])
+        assert still_saved["status"] == "stopped"
+        assert still_saved["calls_used"] == 0
+
+        # Even a queued legacy checkpoint cannot bypass the compiler barrier.
+        old["status"] = "queued"
+        with (
+            patch.object(research_sessions, "_read", return_value=old),
+            patch.object(research_sessions, "_save") as persisted,
+        ):
+            assert not await research_sessions._ensure_reference_compilation(
+                started["id"], str(path)
+            )
+        assert old["status"] == "paused"
+        assert "Start a new session" in old["message"]
+        persisted.assert_called_once()
+
+
+async def verify_explicitly_disabled_compiler_checkpoint(path: Path) -> None:
+    """A new test-only disabled marker is explicit, not a legacy missing field."""
+    view, strategy, credential, config = await fixture.setup(path)
+    with (
+        patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "false"}),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=research_sessions.get_limits(str(path)),
+            strategy_ids=[strategy.id],
+        )
+        assert started["reference_compilation"]["status"] == "disabled"
+        assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
+
 async def main() -> None:
     verify_abandoned_compiler_preserves_future_review_recovery()
     verify_compiled_methods_survive_context_compaction()
@@ -684,6 +755,8 @@ async def main() -> None:
         await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
         await verify_compiler_preflight_auth_failure(root / "credential-unavailable.sigma")
         await verify_compiler_billing_settlement_failure(root / "settlement-unavailable.sigma")
+        await verify_precompiler_session_resume_rejected(root / "precompiler.sigma")
+        await verify_explicitly_disabled_compiler_checkpoint(root / "explicit-disabled.sigma")
     print(
         "PASS: pre-fanout barrier, two-round reuse, frozen reload, "
         "funding guard, HTTP 503 and interrupted compiler recovery"
