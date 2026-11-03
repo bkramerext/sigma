@@ -481,6 +481,160 @@ def verify_compiled_methods_survive_context_compaction() -> None:
     assert "methodology_source_material" not in raw
 
 
+async def verify_compiler_preflight_auth_failure(path: Path) -> None:
+    """Transient credential lookup failure must not abort the research session."""
+    view, strategy, credential, config = await fixture.setup(path)
+    catalog = {
+        "version": "methodology-catalog-v2",
+        "status": "selected",
+        "mode": "mathematical",
+        "branch": None,
+        "selection_key": "adversarial-preflight",
+        "sources": [
+            {
+                "id": "proof",
+                "tier": "discipline",
+                "title": "Proof checks",
+                "url": "https://example.org/proof",
+                "notes": "Check base cases.",
+                "project_type_id": "mathematical",
+            }
+        ],
+    }
+    with (
+        patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "true"}),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "select_method_sources", return_value=catalog),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=research_sessions.get_limits(str(path)),
+            strategy_ids=[strategy.id],
+        )
+        assert started["reference_compilation"]["status"] == "pending"
+        with patch.object(
+            research_sessions,
+            "auth_context",
+            new=AsyncMock(side_effect=RuntimeError("credential store unavailable")),
+        ):
+            assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
+        recovered = research_sessions._read(str(path), started["id"])
+        assert recovered["reference_compilation"]["status"] == "fallback"
+        assert recovered["status"] == "queued"
+        assert recovered["calls_used"] == 0
+        assert not recovered["hard_budget_ledger"]["calls"]
+
+
+async def verify_compiler_billing_settlement_failure(path: Path) -> None:
+    """An unavailable billing write must persist uncertainty without replaying."""
+    view, strategy, credential, config = await fixture.setup(path)
+    catalog = {
+        "version": "methodology-catalog-v2",
+        "status": "selected",
+        "mode": "mathematical",
+        "branch": None,
+        "selection_key": "adversarial-settlement",
+        "sources": [
+            {
+                "id": "proof",
+                "tier": "discipline",
+                "title": "Proof checks",
+                "url": "https://example.org/proof",
+                "notes": "Check base cases.",
+                "project_type_id": "mathematical",
+            }
+        ],
+    }
+    provider_calls = 0
+
+    async def provider(request: httpx.Request) -> httpx.Response:
+        nonlocal provider_calls
+        provider_calls += 1
+        payload = json.loads(request.content)
+        assert payload["text"]["format"]["name"] == "research_reference_compilation"
+        result = {
+            "guidance": "Validate base cases and attempt counterexamples.",
+            "selected_source_ids": ["proof"],
+            "omitted_source_ids": [],
+            "rationale": "Proof checks are relevant.",
+        }
+        return httpx.Response(200, json=fixture.provider_response(result))
+
+    with (
+        patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "true"}),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "select_method_sources", return_value=catalog),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=research_sessions.get_limits(str(path)),
+            strategy_ids=[strategy.id],
+        )
+
+        def verify_write_ahead(
+            session_id: str,
+            attempt_id: str,
+            _quote: float,
+            _tokens: int,
+            *,
+            maximum_liability_usd: float,
+        ) -> None:
+            assert session_id == started["id"]
+            assert maximum_liability_usd > 0
+            checkpoint = research_sessions._read(str(path), session_id)
+            assert checkpoint["reference_compilation"]["status"] == "running"
+            assert checkpoint["reference_compilation"]["attempt_id"] == attempt_id
+            assert checkpoint["hard_budget_ledger"]["calls"][0]["call_id"] == attempt_id
+
+        with (
+            patch.object(research_sessions.cloud_research, "billing_enabled", return_value=True),
+            patch.object(research_sessions.cloud_research, "reserve_call", side_effect=verify_write_ahead),
+            patch.object(
+                research_sessions.cloud_research,
+                "settle_call",
+                side_effect=research_sessions.cloud_research.CloudResearchUnavailable(
+                    "billing storage offline"
+                ),
+            ),
+            patch.object(
+                research_sessions, "_optional_reference_compilation_headroom", return_value=True
+            ),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: fixture.REAL_CLIENT(
+                    transport=httpx.MockTransport(provider), **kwargs
+                ),
+            ),
+        ):
+            assert not await research_sessions._ensure_reference_compilation(
+                started["id"], str(path)
+            )
+        paused = research_sessions._read(str(path), started["id"])
+        assert provider_calls == 1
+        assert paused["reference_compilation"]["status"] == "interrupted"
+        assert paused["status"] == "paused"
+        assert paused["reference_compilation"]["failure_type"] == (
+            "cloud_billing_settlement_unavailable"
+        )
+        assert paused["reference_compilation"]["token_usage"]["input_tokens"] == 120
+        assert paused["estimated_cost_reserved_usd"] > 0
+        assert paused["tokens_reserved"] > 0
+        assert paused["hard_budget_ledger"]["calls"][0]["status"] == "unknown"
+        assert paused["hard_budget_ledger"]["blocked_reason"]
+
+
 async def main() -> None:
     verify_abandoned_compiler_preserves_future_review_recovery()
     verify_compiled_methods_survive_context_compaction()
@@ -494,6 +648,8 @@ async def main() -> None:
         await verify_compilation(root / "server.sigma", compiler_server_error=True)
         await verify_compilation(root / "paused.sigma", pause_during_compilation=True)
         await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
+        await verify_compiler_preflight_auth_failure(root / "credential-unavailable.sigma")
+        await verify_compiler_billing_settlement_failure(root / "settlement-unavailable.sigma")
     print(
         "PASS: pre-fanout barrier, two-round reuse, frozen reload, "
         "funding guard, HTTP 503 and interrupted compiler recovery"
