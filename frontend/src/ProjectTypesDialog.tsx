@@ -139,6 +139,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
   const [drafts, setDrafts] = useState<ProjectTypeRecord[]>([]);
   const [commonReferences, setCommonReferences] = useState<ReferenceFields | null>(null);
+  const [commonCustomReferences, setCommonCustomReferences] = useState<ReferenceFields>({
+    research_standards_references: [], publication_standards_references: [],
+  });
+  const [savedCommonCustomReferences, setSavedCommonCustomReferences] = useState<ReferenceFields | null>(null);
   const [referencePreferences, setReferencePreferences] = useState<ReferencePreferences>({});
   const [savedReferencePreferences, setSavedReferencePreferences] = useState<ReferencePreferences | null>(null);
   const [placeholderIcon, setPlaceholderIcon] = useState<ProjectTypeRecord['icon'] | null>(null);
@@ -168,9 +172,15 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       icons: { placeholder: ProjectTypeRecord['icon'] };
       revision: string;
       common_references: ReferenceFields;
+      common_custom_references?: ReferenceFields;
       reference_preferences: ReferencePreferences;
     };
     setCommonReferences(data.common_references);
+    const commonCustom = data.common_custom_references ?? {
+      research_standards_references: [], publication_standards_references: [],
+    };
+    setCommonCustomReferences(commonCustom);
+    setSavedCommonCustomReferences(structuredClone(commonCustom));
     setReferencePreferences(data.reference_preferences ?? {});
     setSavedReferencePreferences(structuredClone(data.reference_preferences ?? {}));
     setBuiltins(data.project_types.filter(item => !item.user_defined));
@@ -210,6 +220,24 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         return next;
       });
     }
+  }
+  function editCommonReferences(field: ReferenceField, references: Reference[]) {
+    setError('');
+    setCommonCustomReferences(previous => ({ ...previous, [field]: references }));
+    const allowed = new Set([
+      ...(commonReferences?.[field] ?? []).map(ref => preferenceUrl(ref.url)),
+      ...references.map(ref => preferenceUrl(ref.url)),
+    ]);
+    setReferencePreferences(previous => {
+      const current = previous.common?.[field] ?? [];
+      const kept = current.filter(url => allowed.has(url));
+      if (kept.length === current.length) return previous;
+      const fields = { ...previous.common, [field]: kept };
+      if (!kept.length) delete fields[field];
+      const next = { ...previous, common: fields };
+      if (!Object.keys(fields).length) delete next.common;
+      return next;
+    });
   }
   function referenceDisabled(owner: string, field: ReferenceField, url: string): boolean {
     return referencePreferences[owner]?.[field]?.includes(preferenceUrl(url)) ?? false;
@@ -319,7 +347,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         confirmedRemovals[id] = usage.project_count;
         if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return;
       }
-      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
+      const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, common_custom_references: commonCustomReferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail ?? 'Project types could not be saved. Reload and review any changed types or project usage.');
       await load();
@@ -368,19 +396,31 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
                     next.delete(rowKey);
                     return next;
                   });
+                }}
+                onBlur={() => {
+                  if (!reference.url.trim() || urlError) return;
+                  setEditingReferences(previous => {
+                    const next = new Set(previous);
+                    next.delete(rowKey);
+                    return next;
+                  });
                 }}/> : <ReferenceLink reference={reference} onResolved={setResolved}/>}
               {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             </div>
             {referenceToggle(item.id, field, reference)}
-            {!editing && <>
-              <button type="button" disabled={busy} onClick={() => setEditingReferences(previous => new Set(previous).add(rowKey))}>Edit</button>
-              <button type="button" disabled={busy} onClick={() => { setEditingReferences(new Set()); edit(item.id, { [field]: references.filter((_, i) => i !== index) }); }}>Remove</button>
-            </>}
+            {!editing && <button type="button" disabled={busy} onClick={() => setEditingReferences(previous => new Set(previous).add(rowKey))}>Edit</button>}
+            <button type="button" disabled={busy} onClick={() => {
+              setEditingReferences(previous => { const next = new Set(previous); next.delete(rowKey); return next; });
+              edit(item.id, { [field]: references.filter((_, i) => i !== index) });
+            }}>Remove</button>
           </div>}
         </td></tr>;
       })}
       {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || references.some(reference => !reference.url.trim())}
-        onClick={() => edit(item.id, { [field]: [...references, { name: '', url: '' }] })}>New</button></td></tr>}
+        onClick={() => {
+          setEditingReferences(previous => new Set(previous).add(`${item.id}:${field}:${references.length}`));
+          edit(item.id, { [field]: [...references, { name: '', url: '' }] });
+        }}>New</button></td></tr>}
     </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" data-project-type-id={item.id} key={item.id} open={open === item.id}>
@@ -400,8 +440,11 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     </div>
   </details>;
   const hasChanges = savedDrafts !== null && (JSON.stringify(drafts) !== JSON.stringify(savedDrafts)
-    || JSON.stringify(referencePreferences) !== JSON.stringify(savedReferencePreferences));
-  const invalidDraft = drafts.some(item =>
+    || JSON.stringify(referencePreferences) !== JSON.stringify(savedReferencePreferences)
+    || JSON.stringify(commonCustomReferences) !== JSON.stringify(savedCommonCustomReferences));
+  const invalidDraft = Object.values(commonCustomReferences).some(references =>
+    references.length > 100 || references.some(reference => !!referenceUrlError(reference.url))
+  ) || drafts.some(item =>
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
     item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
