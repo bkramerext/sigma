@@ -38,7 +38,7 @@ def source(title: str, *, status: str = "retrieved", reason: str | None = None) 
             excerpt_sha256=None,
             excerpt=None,
         )
-    return {"title": title, "url": retrieval["url"], "retrieval": retrieval}
+    return {"id": title.lower(), "title": title, "url": retrieval["url"], "retrieval": retrieval}
 
 
 
@@ -54,7 +54,7 @@ def verify_compiler_receives_verified_excerpts() -> None:
     payload = json.loads(research_reference_compiler.compile_input(snapshot))
     supplied = payload["retrieved_methodology_excerpts"]
     assert len(supplied) == 3, supplied
-    assert {row["id"] for row in supplied} == {""}
+    assert {row["id"] for row in supplied} == {"uconn", "close-reading", "source-synthesis"}
     assert all(
         row["excerpt_sha256"]
         == hashlib.sha256(row["excerpt"].encode("utf-8")).hexdigest()
