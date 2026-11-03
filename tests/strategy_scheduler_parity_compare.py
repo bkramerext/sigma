@@ -99,12 +99,30 @@ def compare_historical(original: dict, candidate: dict) -> None:
         review = current["objective_review"]
         assert set(review) - set(saved["objective_review"]) == SCIENCE_OVERLAY
         assert review["policy_version"] == "scientific-v2"
+        assert review["status"] == "partial"
+        assert review["verification_status"] == "incomplete"
         assert review["independent_verification_followups"] == []
-        assert "objective_not_achieved" in review["blocking_reasons"]
-        assert all(
-            row["impact"] in {"undetermined", "blocking"}
-            for row in review["obligation_impacts"]
-        )
+        assert review["blocking_reasons"] == [
+            "objective_not_achieved",
+            "critical_reasoning_incomplete",
+            "objective_dependency_open",
+        ]
+        cycle = current["round"]
+        expected_open_duties = {
+            f"{prefix} {turn}"
+            for turn in range(1, cycle + 1)
+            for prefix in ("Obligation", "Resolve obligation", "Check boundary case")
+        }
+        actual_impacts = review["obligation_impacts"]
+        assert len(actual_impacts) == len(expected_open_duties) == cycle * 3
+        assert {row["text"] for row in actual_impacts} == expected_open_duties
+        for row in actual_impacts:
+            assert row["impact"] == "undetermined", row
+            assert row["basis_step_numbers"] == [], row
+            assert row["rationale"] == (
+                "No evidence-backed determination that this open item is independent "
+                "of the objective."
+            ), row
         cleaned = {
             **current,
             "objective_review": {

@@ -138,14 +138,35 @@ def test_global_spend_holds_full_provider_exposure() -> None:
     db.row_factory = sqlite3.Row
     db.execute(
         "CREATE TABLE calls (amount_usd REAL, maximum_liability_usd REAL, "
-        "status TEXT, created_at TEXT)"
+        "status TEXT, created_at TEXT, "
+        "global_cap_exempt INTEGER NOT NULL DEFAULT 0)"
     )
-    db.execute("INSERT INTO calls VALUES (0.04, 1.28, 'reserved', '2026-01-01')")
-    with patch.object(cloud_research, "_global_window_start", return_value=None):
+    db.execute(
+        "INSERT INTO calls (amount_usd, maximum_liability_usd, status, created_at) "
+        "VALUES (0.04, 1.28, 'reserved', '2026-01-01')"
+    )
+    with (
+        patch.object(cloud_research, "_global_window_start", return_value=None),
+        patch.object(cloud_research.cloud_workspaces, "enabled", return_value=False),
+        patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": ""}),
+    ):
         assert cloud_research._global_call_amount_units(db) == 1_280_000_000
         assert cloud_research._call_amount_units(db, "") == 40_000_000
-        db.execute("UPDATE calls SET amount_usd=0.08, status='usage_estimated'")
+        db.execute(
+            "INSERT INTO calls VALUES (0.02, 0.90, 'reserved', '2026-01-01', 1)"
+        )
+        # Local default excludes only the explicitly marked exempt row, but
+        # an operator-configured cap must count every outstanding liability.
+        assert cloud_research._global_call_amount_units(db) == 1_280_000_000
+        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00"}):
+            assert cloud_research._global_call_amount_units(db) == 2_180_000_000
+        db.execute(
+            "UPDATE calls SET amount_usd=0.08, status='usage_estimated' "
+            "WHERE global_cap_exempt=0"
+        )
         assert cloud_research._global_call_amount_units(db) == 80_000_000
+        with patch.object(cloud_research.cloud_workspaces, "enabled", return_value=True):
+            assert cloud_research._global_call_amount_units(db) == 980_000_000
     db.close()
 
 
