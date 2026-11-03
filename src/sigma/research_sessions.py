@@ -6191,12 +6191,10 @@ async def start_session(
             )
             # Pilot admission: every selected methodological reference must be
             # actually retrieved and hash-verified before billable provider work.
-            if os.environ.get("SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS", "").strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }:
+            strict_reference_acceptance = os.environ.get(
+                "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS", ""
+            ).strip().lower() in {"1", "true", "yes", "on"}
+            if strict_reference_acceptance:
                 reference_issues = retrieval_readiness_errors(record["research_method_sources"])
                 if reference_issues:
                     raise ProjectError(
@@ -6217,6 +6215,7 @@ async def start_session(
             ).strip().lower() in {"1", "true", "yes", "on"}
             record["reference_compilation"] = {
                 "version": research_reference_compiler.VERSION,
+                "required_for_acceptance": strict_reference_acceptance,
                 "status": (
                     "disabled"
                     if not compilation_enabled
@@ -14505,6 +14504,26 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
     return latest["status"] in {"queued", "running"}
 
 
+def _strict_compilation_block_reason(compilation: Any) -> str | None:
+    """A pilot that required references cannot quietly use uncompiled notes."""
+    if (
+        not isinstance(compilation, dict)
+        or compilation.get("required_for_acceptance") is not True
+    ):
+        return None
+    if compilation.get("status") == "completed":
+        return None
+    status = str(compilation.get("status") or "unknown")[:50]
+    reason = str(
+        compilation.get("reason") or "No successful reference compilation was saved."
+    )[:400]
+    return (
+        f"Research was not started: required reference compilation is {status}. "
+        f"{reason} Review Outcome → Research References, correct the cause, "
+        "and start a new session. No Investigator or Skeptic call was dispatched."
+    )
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -14527,6 +14546,35 @@ async def _worker(session_id: str, path: str) -> None:
         if initial.get("strategy_runs"):
             if not await _ensure_reference_compilation(session_id, path):
                 return
+            # Keep this gate after the final settled compilation attempt,
+            # before any Investigator wave, including after worker restarts.
+            async with _session_state_lock(session_id):
+                latest = _read(path, session_id)
+                blocked = _strict_compilation_block_reason(
+                    latest.get("reference_compilation")
+                )
+                if blocked:
+                    if latest["status"] not in {
+                        "paused",
+                        "stopped",
+                        "ended",
+                        "completed",
+                        "failed",
+                    }:
+                        latest["status"] = "paused"
+                        latest["current_action"] = "Paused · reference compilation required"
+                        latest["message"] = blocked
+                        latest["stopped_at"] = latest.get("stopped_at") or _now()
+                        for branch in latest.get("strategy_runs", []):
+                            if branch.get("status") in {"queued", "running"}:
+                                branch["status"] = "paused"
+                                branch["current_action"] = "Paused · reference compilation"
+                                branch["reason"] = blocked
+                        latest["outcome"] = _outcome(latest)
+                        latest["updated_at"] = _now()
+                        _event(latest, "references.compilation.acceptance_blocked", blocked)
+                        _save(path, latest)
+                    return
             await _portfolio_worker(session_id, path)
             return
         while True:

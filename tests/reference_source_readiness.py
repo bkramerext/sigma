@@ -137,16 +137,40 @@ async def verify_provider_free_admission() -> None:
             }
             with patch.object(research_sessions, "select_method_sources", return_value=ready):
                 started = await research_sessions.start_session(
-                    str(path), strategy.id, str(uuid4()), view.project.id,
-                    credential["identity"], expected_limits=limits,
+                    str(path),
+                    strategy.id,
+                    str(uuid4()),
+                    view.project.id,
+                    credential["identity"],
+                    expected_limits=limits,
                     strategy_ids=[strategy.id],
                 )
             assert started["status"] == "queued"
             saved = research_sessions._read(str(path), started["id"])
             assert saved["research_method_sources"]["retrieval_summary"]["retrieved"] == 3
             assert saved["reference_compilation"]["status"] == "pending"
+            assert saved["reference_compilation"]["required_for_acceptance"] is True
             assert saved["calls_used"] == 0
             assert saved["steps"] == []
+
+            # Simulate all compiler retries exhausted. The saved strict-policy
+            # checkpoint must prevent the worker from starting research.
+            saved["reference_compilation"]["status"] = "fallback"
+            saved["reference_compilation"]["reason"] = (
+                "Known provider validation failures, three attempts exhausted."
+            )
+            research_sessions._save(str(path), saved)
+
+        with patch.object(
+            research_sessions, "_portfolio_worker", new=AsyncMock()
+        ) as portfolio:
+            await research_sessions._worker(started["id"], str(path))
+            portfolio.assert_not_awaited()
+        blocked = research_sessions._read(str(path), started["id"])
+        assert blocked["status"] == "paused"
+        assert "required reference compilation" in blocked["message"]
+        assert blocked["calls_used"] == 0 and blocked["steps"] == []
+        assert blocked["outcome"]["source_material"]["compilation"]["status"] == "fallback"
 
 
 def verify_curated_method_reference_defaults() -> None:
