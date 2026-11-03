@@ -100,3 +100,105 @@ results to remain scoped to their actual hypotheses. Unbounded-height,
 convergence, correspondence, and other unresolved proof obligations must stay
 visible. The sample has no generated research history, and this change does not
 fabricate one or claim live agent performance.
+
+
+## P0 Scientific Outcome policy (scientific-v2)
+
+Research Session Outcome describes the *scientific acceptability of saved
+evidence*, never the execution lifecycle (Ended, Failed, etc.). The public
+assessment enum remains pending, positive, mixed, negative. Retain the current
+Outcome section and Simple/Advanced presentation; no separate scoring UI.
+
+| Outcome label | Required scientific disposition |
+| --- | --- |
+| Positive · solution candidate (unverified) | A complete, scoped, evidence-linked, critically reviewed candidate answer with no outstanding essential dependency or material conflict |
+| Mixed · promising finding; validation needed | Substantial finding, but essential validation or evidence is missing |
+| Mixed · partial progress, unresolved | Supported partial work with unresolved objective requirements |
+| Mixed · inconclusive | Neither a supported positive nor meaningful negative finding |
+| Mixed · conflicting findings, unresolved | Materially incompatible claims with cited unresolved conflict |
+| Mixed · claim retracted | Withdrawn candidate without a surviving complete result |
+| Negative · supported negative finding (unverified) | Reviewed and scoped objective-level counterexample or exclusion, not merely a failed strategy |
+| Mixed · counterexample reported; objective unresolved | Agent-reported counterexample without enough evidence to settle the objective |
+
+A supported negative result is valuable scientific work, not a low grade. A
+proof that impossibility holds is a Positive candidate when proving
+impossibility is the objective. Failure to find a proof, failure of one strategy,
+and execution failure are **not** negative findings.
+
+### Separate obligation status from objective dependency
+
+All obligations stay in the original ledger, even when a complete candidate
+is admitted. An unresolved item is objective_blocking, nonblocking_followup,
+or undetermined. Unknown dependencies block completion. A typed dependency
+review identifies the exact obligation text, an argument-step basis and a
+specific rationale; reviewer agreement alone does not establish closure.
+
+A historical mathematics-only compatibility path allows an explicitly
+independent peer-source inspection to remain open alongside a complete
+reviewed argument. The note must expressly disavow dependence on the proof
+and all critical argument steps must have accepted reviews. Merely containing
+words such as peer, citation, reference, literature or source does not suffice.
+A novelty claim may depend on source research even when a mathematical
+derivation does not.
+
+No automatic global closure of Investigator obligations is allowed just
+because a Skeptic reports objective achieved. Only separately evidenced
+dispositions resolve obligations. Unknown and truncated evidence remains
+visible, unresolved and ineligible for a candidate promotion.
+
+### Scientific sufficiency
+
+Candidate admission checks saved claim, scope, assumptions, evidence links,
+distinct objective/proof obligations, supporting cycle IDs, accepted
+stepwise criticism, and unresolved scientific dependencies. Mathematical
+conjectures and finite computations do not establish universal proofs.
+Conditional premises must be explicitly declared and independently reviewed
+as premises, not converted to theorems.
+
+Nonmathematical evidence review must connect stated objective requirements
+to concrete saved sources, models or observations. Mathematics needs sound
+inference, physical claims must separate consistency/simulation from
+realizability, biology needs relevant observational units and controls,
+AI engineering needs actual execution and meaningful test oracles, literature
+needs inspected primary text for text-dependent claims, and military planning
+needs scoped scenarios, alternatives and explicit uncertainty. These
+requirements depend on the **actual claim**, not a discipline stereotype.
+
+A complete but independently unverified solution remains an unverified
+candidate. Successful code execution, source URL retrieval, the Investigator
+agreeing with the Skeptic, and a legacy verified flag do not provide
+independent scientific verification. The conservative verification-label
+contract remains unchanged.
+
+### Portfolio and historical interpretation
+
+Determine each strategy's final applicable finding from strategy identity and
+cycle, not arbitrary global artifact completion order. Use concrete,
+scope-compatible, cited contradictions and retractions. Different wording is
+not contradiction; two partial arguments do not automatically make a proof.
+One complete candidate can coexist with another compatible incomplete or
+failed strategy. An objective-level contradiction must block an unqualified
+Positive candidate.
+
+Outcome is a read-only projection with a policy-version identifier.
+Frozen saved sessions and artifacts are never rewritten. A past mistaken
+partial review can be interpreted as an unverified candidate **only** when
+the saved original evidence passes the new scientific predicate. Historical
+incomplete arguments or missing evidence must fail closed.
+
+### Maximum Regions v4 calibration
+
+The original archive contains 12/12 accepted research turns, six artifacts,
+and final Skeptics claiming achievement with eight and nine accepted
+argument steps. The old objective gate treated peer-only proof-source
+inspection as blocking and also conflated scheduling stop with scientific
+completion. The derived Outcome may now be Positive · solution candidate
+(unverified) when the saved proof dependencies support this classification.
+The optional peer/source inspections remain visibly open. This is not formal
+or independent verification of the mathematics.
+
+Provider-free regression tests cover complete candidates with optional peer
+inspection, missing attainments or critical steps, unknown dependencies,
+conflicting/retracted claims, negative findings, order invariance, empirical
+data gaps and preservation of frozen records. Integrated engineering gates
+remain Chat A's responsibility.

@@ -1410,8 +1410,9 @@ def test_request_audit_truncation_tokens_and_reconciliation():
         == archived["artifacts"][1]["skeptic_output"]["remaining_obligations"]
     )
     assert archived["artifacts"][1]["skeptic_output"]["model_remaining_obligations"] == []
-    assert archived["artifacts"][1]["skeptic_output"]["coordinator_global_closure"]["accepted"]
-    assert archived["artifacts"][1]["skeptic_output"]["coordinator_closed_obligations"]
+    # An achieved declaration cannot globally close unreviewed obligations.
+    assert not archived["artifacts"][1]["skeptic_output"]["coordinator_global_closure"]["accepted"]
+    assert not archived["artifacts"][1]["skeptic_output"]["coordinator_closed_obligations"]
 
     strategy_id = "strategy-fixture"
     artifact_id = "artifact-fixture"
@@ -4931,14 +4932,15 @@ def test_outcome_classification():
     no_next_path = research_sessions._outcome(
         {"status": "ended", "artifacts": [{**artifact, "coordinator_decision": "stop_no_progress"}]}
     )
-    assert no_next_path["assessment"] == "mixed" and "objective unknown" in no_next_path["label"]
+    assert no_next_path["assessment"] == "mixed" and "inconclusive" in no_next_path["label"]
     negative = research_sessions._outcome(
         {
             "status": "completed",
             "artifacts": [{**artifact, "coordinator_decision": "stop_decisive_counterexample"}],
         }
     )
-    assert negative["assessment"] == "negative"
+    # A stop marker with no actual counterexample is not negative evidence.
+    assert negative["assessment"] == "mixed"
     failed_partial = research_sessions._outcome(
         {"status": "failed", "artifacts": [{**artifact, "coordinator_decision": "continue"}]}
     )
@@ -5286,8 +5288,9 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
             "artifacts": [artifact, conflicting_artifact],
         }
     )
-    assert "different candidate answers" in conflict["conclusion"]
-    assert "remains unresolved" in conflict["conclusion"]
+    # Distinct wording alone is not a cited scientific contradiction;
+    # the second unverified assertion does not erase a complete candidate.
+    assert "### Complete reviewed candidate answer" in conflict["conclusion"]
 
     # New sessions save the derived Markdown with their outcome. Historical
     # records without this version receive an honest fallback on read.
@@ -5771,7 +5774,7 @@ def test_e1_peer_inspection_does_not_hide_complete_unverified_candidate():
     }
     old = research_sessions._outcome_without_metrics(historical)
     assert old["assessment"] == "mixed"
-    assert "candidate reported" in old["label"]
+    assert "promising finding" in old["label"]
     # The historical frozen record was never rewritten.
     assert historical["artifacts"][0]["objective_review"]["status"] == "partial"
     contradictory = deepcopy(saved)
@@ -6458,7 +6461,9 @@ async def test_maximum_regions_false_candidate_is_rejected(path: Path):
     assert finished["terminal_reason"] == "stop_decisive_counterexample"
     assert finished["artifacts"][0]["coordinator_decision"] == "stop_decisive_counterexample"
     assert finished["artifacts"][0]["objections"] == genuine_objection["objections"]
-    assert finished["outcome"]["assessment"] == "negative"
+    # The counterexample refutes the attempted formula, not the global
+    # project objective of establishing the true maximum region count.
+    assert finished["outcome"]["assessment"] == "mixed"
     assert finished["outcome"]["solution_review"]["status"] == "not_achieved"
     assert finished["outcome"]["solution_review"]["unresolved_objections"] == [
         "The n=2 counterexample refutes the proposed candidate."
@@ -11063,7 +11068,7 @@ def test_epistemic_presentation_is_conservative_and_read_only() -> None:
                 assert availability["status"] == ("structured" if structured else "narrative")
                 if not structured:
                     assert "saved narrative is available" in availability["label"]
-                    assert "unstructured argument, unassessed" in outcome["label"]
+                    assert outcome["assessment"] == "mixed"
                     assert (
                         "cannot be assessed as a complete argument from this record"
                         not in outcome["summary"]
