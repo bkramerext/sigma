@@ -239,16 +239,6 @@ function parallelSessionActivity(session: ResearchSession): string | null {
   return `${active.size} in flight · ${waiting} waiting`;
 }
 
-function parallelSessionActivity(session: ResearchSession): string | null {
-  if (session.status !== 'running' || compilationBarrierActive(session)) return null;
-  if (!session.strategy_runs || session.strategy_runs.length <= 1) return null;
-  const active = new Set((session.steps ?? []).filter(step => step.status === 'running').map(step => step.strategy_id));
-  const waiting = session.strategy_runs.filter(branch =>
-    (branch.status === 'queued' || branch.status === 'running') && !active.has(branch.strategy_id),
-  ).length;
-  return `${active.size} in flight · ${waiting} waiting`;
-}
-
 function strategyLiveStatusLines(session: ResearchSession): { id: string; label: string; detail: string }[] {
   // Compilation is the session-wide barrier before any strategy fanout.
   const compilation = session.outcome.source_material?.compilation;
