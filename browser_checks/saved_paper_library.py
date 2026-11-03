@@ -134,13 +134,18 @@ with sync_playwright() as playwright:
     # Paper glyph actions match the scoring star's hover/focus highlight.
     normal_color = copy_button.evaluate("element => getComputedStyle(element).color")
     copy_button.hover()
-    assert copy_button.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
+    assert (
+        copy_button.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
+    )
     assert normal_color != "rgb(245, 213, 147)"
     balloon = title_line.locator(".ai-paper-eli5-balloon")
     expect(balloon).to_be_visible()
     balloon.hover()
     assert balloon.evaluate("element => getComputedStyle(element).color") == "rgb(245, 213, 147)"
-    assert balloon.evaluate("element => getComputedStyle(element).backgroundColor") == "rgba(0, 0, 0, 0)"
+    assert (
+        balloon.evaluate("element => getComputedStyle(element).backgroundColor")
+        == "rgba(0, 0, 0, 0)"
+    )
     page.mouse.move(1, 1)
     normal_copy_box = copy_button.bounding_box()
     normal_icon_box = copy_button.locator("svg").bounding_box()
