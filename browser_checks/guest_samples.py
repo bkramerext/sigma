@@ -360,6 +360,24 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible(timeout=15000)
         expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
+        # The Markdown icon must match the title pencil at rest and on hover.
+        markdown_button = page.locator(
+            ".project-pane-title-line .project-markdown-slot .sigma-render-toggle"
+        )
+        pencil_button = page.locator(".project-pane-title-line .project-title-pencil")
+        expect(markdown_button).to_be_visible()
+        expect(markdown_button).to_be_enabled()
+        expect(pencil_button).to_be_visible()
+        icon_style = (
+            "element => { const s = getComputedStyle(element); "
+            "return [s.color, s.backgroundImage, s.borderTopColor, s.borderTopLeftRadius]; }"
+        )
+        assert markdown_button.evaluate(icon_style) == pencil_button.evaluate(icon_style)
+        pencil_button.hover()
+        pencil_hover = pencil_button.evaluate(icon_style)
+        markdown_button.hover()
+        assert markdown_button.evaluate(icon_style) == pencil_hover
+        page.mouse.move(0, 0)
         project_google = page.get_by_role("link", name="Sign in with Google")
         expect(project_google).to_be_visible()
         # Guests have not selected a verified Google account, so they cannot
