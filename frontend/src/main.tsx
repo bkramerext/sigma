@@ -4218,6 +4218,10 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
         <input ref={nameInput} id="save-as-project-title" type="text" value={title}
           required maxLength={200} disabled={busy} spellCheck={false}
           onChange={event => { setTitle(event.target.value); setError(''); }}/>
+        {entry.pinned && recentProjectFamilyKey({
+          ...entry, title,
+        }) === recentProjectFamilyKey(entry) &&
+          <p className="settings-hint">This version is pinned. The new copy will open immediately, but other versions stay hidden under Saved until you unpin this one.</p>}
         {error && <p role="alert" className="error">{error}</p>}
       </div>
     </form>

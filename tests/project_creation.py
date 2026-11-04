@@ -1,7 +1,9 @@
 """Managed project creation, research modes, legacy reads and safe failure."""
 
+import hashlib
 import json
 import os
+import zlib
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -231,13 +233,16 @@ def main() -> None:
                 recent_paths = {item["path"] for item in recents.json()["projects"]}
                 assert imported.json()["path"] in recent_paths
 
-                # Save As is a full independent project, including persisted
-                # session provenance and binary attachments, not a fresh shell.
-                from sigma.project_bundle import update_files
+                # Every project-owned reference is rebased, not just the root ID.
+                from sigma.agentic_evidence import _bundle_entries
+                from sigma.project_bundle import list_files, update_files
+                from sigma.python_sandbox import list_executions
 
                 source_path = response.json()["path"]
                 source_id = response.json()["project"]["id"]
                 session_id = str(uuid4())
+                run_id = uuid4().hex
+                execution_id = str(uuid4())
                 session_member = f"research-sessions/{session_id}.json"
                 session = {
                     "id": session_id,
@@ -245,13 +250,106 @@ def main() -> None:
                     "project_path": source_path,
                     "session_number": 1,
                     "status": "completed",
+                    "artifacts": [
+                        {
+                            "id": str(uuid4()),
+                            "project_id": source_id,
+                            "session_id": session_id,
+                            "source_ref": f"project:{source_id}",
+                        }
+                    ],
+                }
+                run_member = f"evidence/agentic-runs/{run_id}.json"
+                run = {
+                    "schema_version": 1,
+                    "project_id": source_id,
+                    "run_id": run_id,
+                    "started_at": "2026-11-04T16:00:00+00:00",
+                    "steps": [{"session_id": session_id, "project_id": source_id}],
+                }
+                execution_member = f"research-executions/{execution_id}.json"
+                execution = {
+                    "id": execution_id,
+                    "project_id": source_id,
+                    "session_id": session_id,
+                    "status": "completed",
+                    "created_at": "2026-11-04T16:00:00+00:00",
                 }
                 attachment = b"%PDF-1.4\ncopied evidence\x00\xff"
+                paper_id = uuid4().hex
+                package = {
+                    "schema": "sigma-paper-evidence-v2",
+                    "project_id": source_id,
+                    "sources": [
+                        {"id": f"project:{source_id}", "kind": "project", "data": {"id": source_id}}
+                    ],
+                }
+                snapshot_bytes = json.dumps(
+                    package, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                ).encode()
+                digest = hashlib.sha256(snapshot_bytes).hexdigest()
+                paper = {
+                    "schema_version": 1,
+                    "project_id": source_id,
+                    "paper_id": paper_id,
+                    "created_at": "2026-11-04T16:01:00+00:00",
+                    "snapshot_sha256": digest,
+                    "snapshot_ref": digest,
+                    "draft": {"title": "Saved paper copy regression"},
+                    "validation_warnings": [],
+                    "generation": {},
+                    "pdf_size_bytes": len(attachment),
+                    "pdf_sha256": hashlib.sha256(attachment).hexdigest(),
+                }
+                qa_id = uuid4().hex
+                qa_record = {
+                    "qa_id": qa_id,
+                    "request_id": uuid4().hex,
+                    "project_id": source_id,
+                    "question": "What did the investigation establish?",
+                    "answer": "The research remains exploratory.",
+                    "snapshot_sha256": hashlib.sha256(b"snapshot").hexdigest(),
+                    "evidence_snapshot": [
+                        {
+                            "id": f"project:{source_id}",
+                            "kind": "project",
+                            "data": {"id": source_id},
+                        }
+                    ],
+                    "sources": [
+                        {
+                            "source_id": f"project:{source_id}",
+                            "kind": "project",
+                            "session_number": None,
+                        }
+                    ],
+                    "generation": {
+                        "model": "gpt-6.1-sol",
+                        "reasoning_effort": "high",
+                        "mode": "test",
+                        "generation_elapsed_seconds": 1,
+                    },
+                    "created_at": "2026-11-04T16:02:00+00:00",
+                }
+                qa_archive = {
+                    "schema_version": 1,
+                    "project_id": source_id,
+                    "records": [qa_record],
+                    "pending_requests": [],
+                }
                 update_files(
                     source_path,
                     {
                         session_member: json.dumps(session).encode(),
+                        run_member: json.dumps(run).encode(),
+                        execution_member: json.dumps(execution).encode(),
                         "papers/copy.pdf": attachment,
+                        f"artifacts/papers/{paper_id}.json": json.dumps(paper).encode(),
+                        f"artifacts/papers/{paper_id}.pdf": attachment,
+                        f"artifacts/papers/snapshots/{digest}.json.zlib": zlib.compress(
+                            snapshot_bytes
+                        ),
+                        "artifacts/research-qa/records.json": json.dumps(qa_archive).encode(),
                     },
                 )
                 before_copy = Path(source_path).read_bytes()
@@ -265,15 +363,63 @@ def main() -> None:
                 assert clone["project"]["id"] != source_id
                 assert clone["path"] != source_path
                 assert inspect_project(clone["path"]).project.title == "API math v2"
-                assert len(clone["project"]["events"]) == len(response.json()["project"]["events"]) + 1
+                assert len(clone["project"]["events"]) == (
+                    len(response.json()["project"]["events"]) + 1
+                )
                 assert clone["project"]["events"][-1]["kind"] == "project.updated"
-                assert read_file(clone["path"], "papers/copy.pdf") == attachment
-                copied_session = json.loads(read_file(clone["path"], session_member))
+                assert read_file(clone["path"], "artifacts/papers/copy.pdf") == attachment
+                from sigma import papers, research_qa
+
+                saved_paper = papers.get_paper(clone["path"], paper_id)
+                assert saved_paper["project_id"] == clone["project"]["id"]
+                assert saved_paper["snapshot"]["project_id"] == clone["project"]["id"]
+                assert saved_paper["snapshot_sha256"] != digest
+                assert saved_paper["pdf_available"]
+                assert papers.list_papers(clone["path"])[0]["paper_id"] == paper_id
+                saved_archive, _pending = research_qa._decode_archive(
+                    clone["path"],
+                    read_file(clone["path"], "artifacts/research-qa/records.json"),
+                )
+                assert saved_archive[0]["qa_id"] == qa_id
+                assert saved_archive[0]["project_id"] == clone["project"]["id"]
+                assert saved_archive[0]["sources"][0]["source_id"] == (
+                    f"project:{clone['project']['id']}"
+                )
+                session_members = [
+                    name
+                    for name in list_files(clone["path"])
+                    if name.startswith("research-sessions/")
+                    and name.endswith(".json")
+                    and name not in {
+                        "research-sessions/limits.json",
+                        "research-sessions/sequence.json",
+                        "research-sessions/obligation-ids.json",
+                    }
+                ]
+                assert len(session_members) == 1
+                assert session_members[0] != session_member
+                copied_session = json.loads(read_file(clone["path"], session_members[0]))
                 assert copied_session["project_id"] == clone["project"]["id"]
                 assert copied_session["project_path"] == clone["path"]
-                assert copied_session["id"] == session_id
+                assert copied_session["id"] != session_id
+                assert copied_session["artifacts"][0]["session_id"] == copied_session["id"]
+                assert copied_session["artifacts"][0]["project_id"] == clone["project"]["id"]
+                assert copied_session["artifacts"][0]["source_ref"] == (
+                    f"project:{clone['project']['id']}"
+                )
+                assert list_executions(clone["path"])[0]["session_id"] == copied_session["id"]
+                assert len(_bundle_entries(Path(clone["path"]), clone["project"]["id"])) == 1
+                assert (
+                    _bundle_entries(Path(clone["path"]), clone["project"]["id"])[0][2]["steps"][0][
+                        "session_id"
+                    ]
+                    == copied_session["id"]
+                )
                 assert Path(source_path).read_bytes() == before_copy
                 assert json.loads(read_file(source_path, session_member)) == session
+                for member in list_files(clone["path"]):
+                    if member.endswith(".json"):
+                        assert source_id not in read_file(clone["path"], member).decode(), member
                 assert (
                     client.post(
                         "/api/projects/save-as",
@@ -308,13 +454,25 @@ def main() -> None:
                 assert active_copy.status_code == 400
                 assert "Stop active research" in active_copy.json()["error"]
                 assert not (managed / "not-an-active-copy.json").exists()
-                update_files(source_path, {session_member: None, "papers/copy.pdf": None})
+                update_files(
+                    source_path,
+                    {
+                        session_member: None,
+                        run_member: None,
+                        execution_member: None,
+                        "papers/copy.pdf": None,
+                        f"artifacts/papers/{paper_id}.json": None,
+                        f"artifacts/papers/{paper_id}.pdf": None,
+                        f"artifacts/papers/snapshots/{digest}.json.zlib": None,
+                        "artifacts/research-qa/records.json": None,
+                    },
+                )
                 print(
-                    "PASS Save As identity, event history, full bundle, "
-                    "validation and active-copy safety"
+                    "PASS Save As full identity cascade, execution and agentic evidence, "
+                    "source preservation and validation"
                 )
 
-                # Competing Save As requests cannot silently overwrite one another.
+                # Concurrent Save As calls must publish exactly one destination.
                 from sigma.projects import save_project_as
 
                 def competing_save_as(_index):
@@ -328,6 +486,59 @@ def main() -> None:
                 assert sum(item is not None for item in copies) == 1
                 assert inspect_project(next(item.path for item in copies if item is not None))
 
+                # Exercise a genuine legacy research project with saved
+                # paper PDF/metadata, Q/A citations and session history.
+                from sigma import papers, research_qa
+                from sigma.project_bundle import list_files
+                from sigma.projects import save_project_as
+
+                legacy_fixture = ROOT / "projects/complete/xenopus-tadpoles.sigma"
+                legacy_id = inspect_project(legacy_fixture).project.id
+                original_papers = papers.list_papers(str(legacy_fixture))
+                original_answers = research_qa.list_answers(str(legacy_fixture))
+                assert original_papers, "The real-paper fixture is missing its papers"
+                assert original_answers, "The real-Q/A fixture is missing its answers"
+                source_session_ids = {
+                    item.stem for item in (legacy_fixture / "research-sessions").glob("*.json")
+                    if item.stem not in {"limits", "sequence", "obligation-ids"}
+                }
+                legacy_copy = save_project_as(
+                    legacy_fixture, "Xenopus Saved Project Copy Regression"
+                )
+                assert legacy_copy.project.id != legacy_id
+                assert legacy_copy.path.endswith(".json")
+                copied_papers = papers.list_papers(legacy_copy.path)
+                copied_answers = research_qa.list_answers(legacy_copy.path)
+                assert {row["paper_id"] for row in copied_papers} == {
+                    row["paper_id"] for row in original_papers
+                }
+                assert {row["qa_id"] for row in copied_answers} == {
+                    row["qa_id"] for row in original_answers
+                }
+                for paper in copied_papers:
+                    detail = papers.get_paper(legacy_copy.path, paper["paper_id"])
+                    assert detail["project_id"] == legacy_copy.project.id
+                    assert detail["pdf_available"], paper["paper_id"]
+                for answer in copied_answers:
+                    assert answer["project_id"] == legacy_copy.project.id
+                    for citation in answer["sources"]:
+                        assert legacy_id not in citation["source_id"]
+                copied_session_ids = {
+                    Path(name).stem
+                    for name in list_files(legacy_copy.path)
+                    if name.startswith("research-sessions/")
+                    and name.endswith(".json")
+                    and Path(name).stem not in {"limits", "sequence", "obligation-ids"}
+                }
+                assert len(copied_session_ids) == len(source_session_ids)
+                assert not (copied_session_ids & source_session_ids)
+                for member in list_files(legacy_copy.path):
+                    if member.endswith(".json"):
+                        assert legacy_id not in read_file(legacy_copy.path, member).decode(), member
+                assert inspect_project(legacy_fixture).project.id == legacy_id
+                assert papers.list_papers(str(legacy_fixture)) == original_papers
+                assert len(research_qa.list_answers(str(legacy_fixture))) == len(original_answers)
+                print("PASS legacy Save As real paper PDFs, Q/A, citation and session integrity")
 
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (

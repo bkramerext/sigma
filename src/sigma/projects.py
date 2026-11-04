@@ -1505,7 +1505,9 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                 original = inspect_project(source).project
                 payload = json.loads(export_complete_project(source))
                 new_id = str(uuid4())
-                renamed = replace(original, id=new_id, title=title, schema_version=max(11, original.schema_version))
+                renamed = replace(
+                    original, id=new_id, title=title, schema_version=max(11, original.schema_version)
+                )
                 renamed = replace(
                     renamed,
                     events=(
@@ -1521,25 +1523,16 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                     ),
                 )
                 payload["files"]["project.json"] = json.loads(_document(renamed))
-                for member, session in payload["files"].items():
-                    if not (
-                        member.startswith("research-sessions/")
-                        and member.endswith(".json")
-                        and member not in {
-                            "research-sessions/limits.json",
-                            "research-sessions/sequence.json",
-                            "research-sessions/obligation-ids.json",
-                        }
-                    ):
-                        continue
-                    if not isinstance(session, dict) or session.get("project_id") != original.id:
-                        raise ProjectError("Cannot copy a foreign or invalid research session.")
-                    if session.get("status") in {"queued", "running"}:
-                        raise ProjectError(
-                            "Stop active research before saving a copy of this project."
-                        )
-                    payload["files"][member] = {**session, "project_id": new_id}
-                imported = import_bundle(payload, destination)
+                from sigma.project_copy import rebase_copy
+
+                independent = rebase_copy(
+                    payload,
+                    source_id=original.id,
+                    new_id=new_id,
+                    source_path=str(source),
+                    destination_path=str(destination),
+                )
+                imported = import_bundle(independent, destination)
         view = inspect_project(imported)
         record_access(view)
         return view

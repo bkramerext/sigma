@@ -237,6 +237,31 @@ with sync_playwright() as playwright:
     save_as.get_by_role("button", name="Cancel").click()
     expect(save_as).not_to_be_visible()
     assert not save_as_payloads
+
+    # Saving a pinned sibling must explain the existing one-visible-version
+    # presentation rule rather than silently leaving a hidden new project.
+    saved_entries[-1]["pinned"] = True
+    page.goto(UI_URL)
+    page.get_by_role("tab", name="Saved").click()
+    group = page.locator(".recent-type-group").first
+    if group.get_attribute("open") is None:
+        group.locator("summary").click()
+    row = page.locator(".recent-entry").filter(
+        has=page.get_by_role("button", name="The Crucible v4")
+    )
+    row.get_by_role("button", name="Save project with a new name").click()
+    save_as = page.get_by_role("dialog", name="Save Project As")
+    expect(save_as.get_by_text("The new copy will open immediately", exact=False)).to_be_visible()
+    save_as.get_by_role("button", name="Cancel").click()
+    saved_entries[-1]["pinned"] = False
+    page.goto(UI_URL)
+    page.get_by_role("tab", name="Saved").click()
+    group = page.locator(".recent-type-group").first
+    if group.get_attribute("open") is None:
+        group.locator("summary").click()
+    row = page.locator(".recent-entry").filter(
+        has=page.get_by_role("button", name="The Crucible v4")
+    )
     row.get_by_role("button", name="Save project with a new name").click()
     save_as = page.get_by_role("dialog", name="Save Project As")
     save_as.get_by_label("New project name").fill("The Crucible alternate history")

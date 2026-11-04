@@ -141,6 +141,23 @@ jobs:
           curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           uv run --with playwright python browser_checks/t92_recent_running.py
+      - name: Save As browser acceptance
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8001 >/tmp/save-as-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort >/tmp/save-as-ui.log 2>&1 &
+          ui_pid=$!
+          trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null && curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null; then break; fi
+            sleep 1
+          done
+          export SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/project_create_contract.py
       - name: Preserve browser screenshots and debug logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -157,5 +174,7 @@ jobs:
             /tmp/t200-ui.log
             /tmp/t92-api.log
             /tmp/t92-ui.log
+            /tmp/save-as-api.log
+            /tmp/save-as-ui.log
           if-no-files-found: ignore
           retention-days: 14

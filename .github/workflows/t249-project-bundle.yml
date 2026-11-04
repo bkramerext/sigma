@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'src/sigma/project_bundle.py'
+      - 'src/sigma/project_copy.py'
       - 'src/sigma/projects.py'
       - 'src/sigma/api.py'
       - 'src/sigma/research_sessions.py'
