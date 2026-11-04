@@ -216,12 +216,16 @@ def _smtp_failure_hint(exc: Exception) -> str:
     return "SMTP failed at an unclassified stage. The provider's raw error is suppressed."
 
 
-def _execute(message: str) -> int:
+def _execute(message: str, *, verified_gmail_sender: str | None = None) -> int:
     from sigma import cloud_auth
 
     print("SIGMA feedback mail diagnostic (local CLI)")
     print("Submission: notification test only; no feedback database record.")
-    print("Browser identity: unavailable to CLI; configured local --signin identity is used.")
+    if verified_gmail_sender:
+        print(f"Contact source: Google OAuth verified account {verified_gmail_sender}")
+        print("Browser session cookies are not used by the CLI.")
+    else:
+        print("Browser identity: unavailable to CLI; configured local --signin identity is used.")
     contact_raw = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     contact_email: str | None = None
     if not contact_raw:
@@ -251,8 +255,8 @@ def _execute(message: str) -> int:
             uuid4().hex,
             message,
             int(time.time()),
-            account_email=contact_email,
-            contact_email=contact_email,
+            account_email=verified_gmail_sender or contact_email,
+            contact_email=verified_gmail_sender or contact_email,
             diagnostic_recipients=[contact_email],
         )
     except cloud_auth.SMTPDeliveryError as exc:
@@ -276,8 +280,10 @@ def _execute(message: str) -> int:
     return 0
 
 
-def run(message: str, *, transport: str = "configured") -> int:
-    """Exercise the feedback notification mail path without browser or persistence."""
+def run(
+    message: str, *, transport: str = "configured", reauthorize: bool = False
+) -> int:
+    """Exercise actual feedback delivery without a browser app or feedback record."""
     try:
         load_local_config()
     except RuntimeError as exc:
@@ -289,8 +295,10 @@ def run(message: str, *, transport: str = "configured") -> int:
     ):
         print("ERROR: Feedback must be 10 to 4,000 valid characters.", file=sys.stderr)
         return 2
-    if transport == "configured":
-        return _execute(message)
+    if reauthorize and transport != "gmail":
+        print("ERROR: --reauthorize requires --transport gmail.", file=sys.stderr)
+        return 2
+
     if transport == "smtp":
         with patch.dict(
             os.environ,
@@ -302,5 +310,30 @@ def run(message: str, *, transport: str = "configured") -> int:
         ):
             print("Override: using SMTP for this invocation only.")
             return _execute(message)
+
+    if transport in {"configured", "gmail"}:
+        from sigma.local_gmail_cli_auth import LocalGmailAuthError, authorize, existing_grant
+
+        grant = None if reauthorize else existing_grant()
+        if grant is None and transport == "gmail":
+            try:
+                print("No usable local Gmail Send grant; requesting Google authorization.")
+                grant = authorize()
+            except LocalGmailAuthError as exc:
+                print(f"RESULT: NOT SENT. {exc}", file=sys.stderr)
+                return 2
+        if grant is not None:
+            path, sender = grant
+            with patch.dict(
+                os.environ,
+                {
+                    "SIGMA_GMAIL_TOKEN_FILE": str(path),
+                    "SIGMA_GMAIL_SENDER": sender,
+                },
+            ):
+                print("Using Google Gmail Send permission from the local CLI.")
+                return _execute(message, verified_gmail_sender=sender)
+        return _execute(message)
+
     print("ERROR: Unsupported transport.", file=sys.stderr)
     return 2

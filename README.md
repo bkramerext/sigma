@@ -82,9 +82,21 @@ You can create projects and strategies without an AI connection. To use AI resea
 
 `./sigma setup` installs the locked Python development environment with `uv sync --locked --group dev` and the frontend dependencies with `npm ci`. Setup and local startup were verified in a fresh Git worktree on the existing macOS 14.6 Apple Silicon host (not on a clean machine); the frontend and local API both returned ready responses. This does not establish behavior on every macOS/Linux distribution. See [Getting Started](docs/GETTING_STARTED.md) for troubleshooting.
 
-## Optional: local feedback and Email Project (SMTP)
+## Optional: local feedback and Email Project (Gmail or SMTP)
 
-Local SIGMA can send **Send Feedback** notifications and **Email Project** messages (including JSON, PDF, and LaTeX attachments) through SMTP. **Google OAuth branding verification is not required for SMTP.** The sender needs an SMTP credential, such as a Gmail **app password**, not your normal Google-account password. Gmail accounts must meet Google's eligibility requirements for app passwords.
+Local SIGMA can send **Send Feedback** notifications and **Email Project** messages (including JSON, PDF, and LaTeX attachments).
+
+**Gmail through Google sign-in (recommended for localhost):** Set `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` (or its `_FILE` form) in this checkout's ignored `.env`. Use the **same local Google web OAuth client** as SIGMA's UI, with `http://127.0.0.1:5173/api/cloud-auth/callback` as an authorized redirect URI. Then run:
+
+```sh
+./sigma send_feedback "hello world" --transport gmail
+```
+
+The command opens your default browser for Google's explicit **Gmail Send** permission, captures the OAuth callback using a temporary localhost listener, stores an account-bound grant privately under `~/.sigma/local-cloud-auth/gmail-send-token.json`, and sends one feedback test message. It does **not** start the SIGMA UI, need a separate terminal, or read browser session cookies. It verifies the Google account you select through the OAuth identity token and uses that verified address as the feedback contact; `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` is the test recipient and can be a different mailbox. The command reuses an existing matching grant on later calls. Add `--reauthorize` if you want to choose a different sending account. Local port 5173 must be free while authorization runs; if your local SIGMA UI already occupies it, stop that UI first. Production is not modified.
+
+Gmail's `gmail.send` scope may require app verification or tester authorization. An External Testing OAuth app may issue a refresh token that expires after seven days. If consent is blocked, resolve it in the **local OAuth project**, not the production deployment.
+
+**SMTP alternative:** Local email can also use SMTP. **Google OAuth branding verification is not required for SMTP.** The sender needs an SMTP credential, such as a Gmail **app password**, not your normal Google-account password. Gmail accounts must meet Google's eligibility requirements for app passwords.
 
 *Needs a guinea pig to prove local setup works. Will pay with lettuce.*
 
@@ -114,7 +126,7 @@ From the checkout, test the SMTP transport directly (without requiring a running
 ./sigma send_feedback "hello world" --transport smtp
 ```
 
-The diagnostic prints which transport was selected, whether SMTP credentials are configured, and whether the mail provider accepted delivery; it never prints the password. It sends the test message to `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. The CLI does **not** read the current browser's Google session and cannot independently assert who is signed in. Normal **Send Feedback** uses the authenticated Google account's email as its contact address, or an optional unverified contact address for guests.
+The diagnostic prints which transport was selected, whether SMTP credentials are configured, and whether the mail provider accepted delivery; it never prints the password. It sends the test message to `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. SMTP testing uses the configured local contact address, while Gmail OAuth testing uses the Google-verified sender as its contact. Normal browser **Send Feedback** uses the authenticated Google account's email as its contact address, or an optional unverified contact address for guests.
 
 If you previously configured `SIGMA_GMAIL_TOKEN_FILE`, `SIGMA_EMAIL_GMAIL_TOKEN_FILE`, or `SIGMA_INVITATION_GMAIL_TOKEN_FILE`, ordinary feedback sending prefers the Gmail API path instead of SMTP. The `--transport smtp` flag overrides this **for the CLI invocation only**; to use SMTP in the browser, remove/disable the Gmail token-file setting from the local backend environment and restart `./sigma start`. Environment variables exported in your shell override the ignored `.env`, even if empty. Never commit credentials or copy the protected password file into Git.
 
