@@ -782,12 +782,8 @@ async def test_emailed_project_import_resumes_under_recipient_provider(path: Pat
             "token": "recipient-credential-" + label,
         }
         with (
-            patch.object(
-                research_sessions, "auth_context", new=AsyncMock(return_value=recipient)
-            ),
-            patch.object(
-                research_sessions, "configuration", new=AsyncMock(return_value=config)
-            ),
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=recipient)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(research_sessions, "_worker", new=idle_worker),
         ):
             resumed = await research_sessions.control_session(
@@ -799,9 +795,7 @@ async def test_emailed_project_import_resumes_under_recipient_provider(path: Pat
             assert saved["project_id"] == view.project.id
             assert saved["status"] == "queued"
             assert saved["calls_used"] == stopped["calls_used"]
-            assert saved["steps"] == research_sessions._read(str(path), started["id"])[
-                "steps"
-            ]
+            assert saved["steps"] == research_sessions._read(str(path), started["id"])["steps"]
             assert saved["transport_change_history"][-1]["to_mode"] == recipient_mode
             assert saved["identity_hash"] == research_sessions._digest(recipient["identity"])
             assert saved["imported_via_bundle"] is False
