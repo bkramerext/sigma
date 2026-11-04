@@ -3128,7 +3128,14 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
     try:
         research_sessions._agent_context(over_budget, "investigator", 1)
     except research_sessions.ResearchContextLimitError as exc:
-        assert "No provider call was made" in str(exc)
+        message = str(exc)
+        assert "No provider call was made" in message
+        assert "phase=agent_assembly" in message
+        assert "role=investigator" in message
+        assert f"limit {research_sessions.MAX_AGENT_CONTEXT_BYTES}B" in message
+        assert "problem=" in message
+        assert "😀" not in message  # Never dump an oversized private prompt.
+        assert len(message) < 1000
     else:
         raise AssertionError("UTF-8 over-budget mandatory question was accepted")
 
