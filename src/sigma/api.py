@@ -1107,7 +1107,10 @@ def record_project_diagnostic(body: ClientDiagnosticRequest):
         )
     except (ProjectError, OSError, ValueError):
         return JSONResponse(
-            {"recorded": False, "error": "Diagnostic not recorded (storage unavailable or full). The displayed error remains available to copy."},
+            {
+                "recorded": False,
+                "error": "Diagnostic not recorded (storage unavailable or full). The displayed error remains available to copy.",
+            },
             status_code=503,
         )
     return {"recorded": True, "diagnostic": diagnostic}
