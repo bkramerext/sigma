@@ -228,7 +228,7 @@ def _verified_google_identity(
 
 def _wait_for_existing_sigma(expected_state: str, authorize_url: str) -> str:
     """Use SIGMA's running local callback with a private, one-time handoff."""
-    from sigma.local_gmail_cli_bridge import pending_flow, result
+    from sigma.local_gmail_cli_bridge import pending_flow, ready_proof, result
 
     home = _private_home(create=True)
     try:
@@ -248,10 +248,14 @@ def _wait_for_existing_sigma(expected_state: str, authorize_url: str) -> str:
                     "run ./sigma shutdown to free the port, then retry. "
                     "Production is unaffected."
                 ) from exc
+            expected_proof = ready_proof(home, expected_state)
             if (
                 not isinstance(probe, dict)
                 or probe.get("protocol") != 1
                 or probe.get("ready") is not True
+                or not expected_proof
+                or not isinstance(probe.get("proof"), str)
+                or not secrets.compare_digest(expected_proof, probe["proof"])
             ):
                 raise LocalGmailAuthError(
                     "A listener owns port 5173, but it cannot receive this CLI's "

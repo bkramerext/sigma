@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from cloud_auth_fixture import CloudAuthFixture
 
-from sigma.local_gmail_cli_bridge import pending_flow, ready, receive, result
+from sigma.local_gmail_cli_bridge import pending_flow, ready, ready_proof, receive, result
 
 
 class LocalGmailCliBridgeTests(CloudAuthFixture):
@@ -28,7 +28,11 @@ class LocalGmailCliBridgeTests(CloudAuthFixture):
                 "/api/cloud-auth/mail/cli-bridge-ready", params={"state": state}
             )
             self.assertEqual(probe.status_code, 200, probe.text)
-            self.assertEqual(probe.json(), {"ready": True, "protocol": 1})
+            self.assertEqual(
+                probe.json(),
+                {"ready": True, "protocol": 1, "proof": ready_proof(self.root, state)},
+            )
+            self.assertTrue(ready_proof(self.root, state))
             callback = self.client.get(
                 "/api/cloud-auth/callback",
                 params={"state": state, "code": "google-auth-code"},
@@ -99,7 +103,7 @@ class LocalGmailCliBridgeTests(CloudAuthFixture):
             probe = self.client.get(
                 "/api/cloud-auth/mail/cli-bridge-ready", params={"state": other}
             )
-            self.assertEqual(probe.json(), {"ready": False, "protocol": 1})
+            self.assertEqual(probe.json(), {"ready": False, "protocol": 1, "proof": ""})
 
 
 if __name__ == "__main__":

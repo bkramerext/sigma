@@ -1653,9 +1653,10 @@ def local_cli_mail_bridge_ready(request: Request, state: str = ""):
         or request.client.host not in {"127.0.0.1", "::1", "localhost"}
     ):
         raise HTTPException(404, "Not found.")
-    from sigma.local_gmail_cli_bridge import ready
+    from sigma.local_gmail_cli_bridge import ready_proof
 
-    response = JSONResponse({"ready": ready(cfg.database.parent, state), "protocol": 1})
+    proof = ready_proof(cfg.database.parent, state)
+    response = JSONResponse({"ready": bool(proof), "protocol": 1, "proof": proof})
     response.headers["Cache-Control"] = "no-store"
     return response
 

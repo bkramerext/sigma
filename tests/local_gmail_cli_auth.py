@@ -149,7 +149,13 @@ class LocalGmailCliAuthTests(unittest.TestCase):
                     pass
 
                 def json(self):
-                    return {"ready": True, "protocol": 1}
+                    from sigma.local_gmail_cli_bridge import ready_proof
+
+                    return {
+                        "ready": True,
+                        "protocol": 1,
+                        "proof": ready_proof(home, state),
+                    }
 
             def authorize_browser(url, new):
                 self.assertIn("accounts.google.com", url)

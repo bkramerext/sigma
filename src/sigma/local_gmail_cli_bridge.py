@@ -8,8 +8,10 @@ This file is not used for hosted SIGMA.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
+import secrets
 import stat
 import time
 from collections.abc import Iterator
@@ -84,6 +86,7 @@ def pending_flow(home: Path, state: str) -> Iterator[None]:
                     "created": time.time(),
                     "state_hash": hashlib.sha256(state.encode("ascii")).hexdigest(),
                     "status": "pending",
+                    "bridge_key": secrets.token_urlsafe(32),
                 },
                 stream,
             )
@@ -97,6 +100,17 @@ def pending_flow(home: Path, state: str) -> Iterator[None]:
 def ready(home: Path, state: str) -> bool:
     flow = _read(home, state)
     return flow is not None and flow.get("status") == "pending"
+
+
+def ready_proof(home: Path, state: str) -> str:
+    """Prove the listener can read this CLI's private handoff before opening Google."""
+    flow = _read(home, state)
+    if flow is None or flow.get("status") != "pending":
+        return ""
+    key = flow.get("bridge_key")
+    if not isinstance(key, str) or len(key) < 32:
+        return ""
+    return hmac.new(key.encode("ascii"), state.encode("ascii"), hashlib.sha256).hexdigest()
 
 
 def receive(home: Path, state: str, *, code: str, error: str) -> bool:
