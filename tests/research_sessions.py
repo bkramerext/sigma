@@ -9120,11 +9120,13 @@ async def test_provider_limit_recovery_completes_full_v2_protocol(path: Path) ->
             replay = deepcopy(rejected)
             replay["id"] = str(uuid4())
             replay["attempt_id"] = str(uuid4())
-            ledger = record["hard_budget_ledger"]
-            reserve_before_dispatch(
-                ledger, call_id=replay["attempt_id"], request_body=b"rejected-provider-request"
-            )
-            settle_rejected(ledger, call_id=replay["attempt_id"])
+            ledger = record.get("hard_budget_ledger")
+            if ledger is not None:
+                assert isinstance(ledger, dict)
+                reserve_before_dispatch(
+                    ledger, call_id=replay["attempt_id"], request_body=b"rejected-provider-request"
+                )
+                settle_rejected(ledger, call_id=replay["attempt_id"])
             record["steps"].append(replay)
             record["calls_used"] += 1
         research_sessions._save(str(path), record)
