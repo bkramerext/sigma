@@ -47,7 +47,7 @@ def run_split(name: str, count: int, part: int, *, paper: bool = False) -> None:
         path = directory / f"{name}_part{number}.py"
         source = path.read_text(encoding="utf-8")
         previous = {key: id(value) for key, value in namespace.items()}
-        exec(compile(source, str(path), "exec"), namespace)
+        exec(compile(source, str(path), "exec"), namespace)  # noqa: S102
         for key, value in namespace.items():
             if (
                 key.startswith("test_")
@@ -57,7 +57,7 @@ def run_split(name: str, count: int, part: int, *, paper: bool = False) -> None:
                 assigned[key] = number
 
     driver = directory / f"{name}_driver.py"
-    exec(compile(driver.read_text(encoding="utf-8"), str(driver), "exec"), namespace)
+    exec(compile(driver.read_text(encoding="utf-8"), str(driver), "exec"), namespace)  # noqa: S102
     if not paper:
         for key, group in assigned.items():
             if group != part:
