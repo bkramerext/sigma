@@ -131,7 +131,10 @@ class LocalGmailCliAuthTests(unittest.TestCase):
                 )
                 with GoogleClient() as client, self.assertRaises(auth.LocalGmailAuthError):
                     auth._verified_google_identity(
-                        cast(httpx.Client, client), GoogleClient.id_token, client_id=CLIENT_ID, nonce="expected"
+                        cast(httpx.Client, client),
+                        GoogleClient.id_token,
+                        client_id=CLIENT_ID,
+                        nonce="expected",
                     )
                 self.assertFalse((home / auth.GRANT_FILENAME).exists())
 
