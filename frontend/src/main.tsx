@@ -2339,17 +2339,28 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   }
   async function explainPaper(paper: PaperSummary) {
     if (explainingRef.current) return;
-    explainingRef.current = true;
     setEli5Error('');
     setEli5ErrorId('');
-    setExplainingId(paper.paper_id);
+    // The currently open record already contains its archived explanation.
+    // Reopening it should switch from balloon to Hooray in the same render.
+    const cached = selected?.paper_id === paper.paper_id ? selected.eli5 : null;
+    if (cached?.version === 2 && cached.source_sha256 === selected?.pdf_sha256
+      && typeof cached.markdown === 'string' && cached.markdown.trim()) {
+      setEli5Id(paper.paper_id);
+      setExpandedPaperId(paper.paper_id);
+      return;
+    }
+    explainingRef.current = true;
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
       const record = await readPaperResponse(response, "Loading the paper");
       const saved = record.eli5;
-      let markdown = saved?.version === 2 && saved?.source_sha256 === record.pdf_sha256 && typeof saved.markdown === 'string' ? saved.markdown : '';
+      let markdown = saved?.version === 2 && saved?.source_sha256 === record.pdf_sha256 && typeof saved.markdown === 'string' ? saved.markdown.trim() : '';
       if (!markdown) {
         if (!binding) throw new Error('Connect an eligible AI provider to explain this paper.');
+        // Fetching a saved paper is not generation. Show Explaining only while
+        // the provider is actually asked to produce a missing explanation.
+        setExplainingId(paper.paper_id);
         const result = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/eli5`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
