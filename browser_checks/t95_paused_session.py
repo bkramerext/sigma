@@ -360,9 +360,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             for number, guidance in expected_guidance.items():
                 variant = page.locator(".session-row").filter(has_text=f"Session #{number}")
                 expect(variant.locator(".stopped-session-guidance")).to_contain_text(guidance)
-            completed_protocol_row = page.locator(
-                f'li[data-session-id="{completed_protocol_id}"]'
-            )
+            completed_protocol_row = page.locator(f'li[data-session-id="{completed_protocol_id}"]')
             incomplete_protocol_row = page.locator(
                 f'li[data-session-id="{incomplete_protocol_id}"]'
             )
