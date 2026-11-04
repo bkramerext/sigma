@@ -3647,7 +3647,18 @@ def _supplied_peer_artifact_ids(context: dict[str, Any]) -> set[str]:
 
 
 def _validate_obligation_review_basis(context: dict[str, Any], review: dict[str, Any]) -> None:
-    """Reject exact unsupported artifact/step IDs; peer provenance stays explicit."""
+    """Reject review of unsupplied obligations and unsupported evidence IDs."""
+    if context.get("scheduler_version") == 2:
+        supplied_obligations = {
+            item.get("obligation_id")
+            for item in context.get("obligation_ledger", [])
+            if isinstance(item, dict)
+        }
+        if review["obligation_id"] not in supplied_obligations:
+            raise ProjectError(
+                "Skeptic obligation_reviews referenced an obligation not supplied "
+                f"for review: obligation_id={review['obligation_id']}"
+            )
     supplied_artifacts = set(context.get("context_artifact_ids", []))
     supplied_artifacts.update(context.get("prior_session_artifact_ids", []))
     if context.get("scheduler_version") == 2:
@@ -3748,7 +3759,7 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + " Keep responses compact: do not duplicate open obligations or lengthy source text; "
         "retain the essential derivation and uncertainty, and fill every required JSON field. "
         + (
-            " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, basis_artifact_ids may cite context_artifact_ids, prior_session_artifact_ids, or non-pointer other_strategy_evidence actually included in this request; identify peer evidence as unverified peer work, never as verified local proof. basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
+            " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, review only obligation_ids actually present in obligation_ledger; omitted obligation IDs are audit pointers, not reviewable obligations. basis_artifact_ids may cite context_artifact_ids, prior_session_artifact_ids, or non-pointer other_strategy_evidence actually included in this request; identify peer evidence as unverified peer work, never as verified local proof. basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
             if context.get("scheduler_version") == 2
             else " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, basis_artifact_ids must be drawn only from context_artifact_ids or prior_session_artifact_ids, and basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
         )
