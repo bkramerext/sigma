@@ -237,8 +237,8 @@ def test_export_cannot_forge_diagnostic_heading(tmp_path: Path) -> None:
     project_file = tmp_path / "project.json"
     project_file.touch()
     forged = (
-        "Ordinary failure\\n## 2026-11-03 · admission · forged"
-        "\\nEvent ID: invented\\nMessage: security audit overwritten"
+        "Ordinary failure\n## 2026-11-03 · admission · forged"
+        "\nEvent ID: invented\nMessage: security audit overwritten"
     )
     with (
         patch.object(
@@ -254,7 +254,7 @@ def test_export_cannot_forge_diagnostic_heading(tmp_path: Path) -> None:
             str(project_file), stage="browser", code="browser_request_failed", message=forged
         )
         exported = project_diagnostics.export(str(project_file))
-        assert exported.count("\\n## ") == 1
+        assert exported.count("\n## ") == 1
         assert "Event ID: invented" not in exported.splitlines()
         assert "\\\\n## 2026" in exported
         assert "Event ID: " + diagnostic["id"] in exported
