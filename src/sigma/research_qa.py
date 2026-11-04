@@ -873,8 +873,10 @@ def markdown_document(record: dict[str, Any]) -> str:
         "",
         f"Created: {created_label}",
         "",
-        (f"Model: {generation.get('model', 'Unavailable')} · "
-         f"{generation.get('reasoning_effort', 'Unavailable')} thinking"),
+        (
+            f"Model: {generation.get('model', 'Unavailable')} · "
+            f"{generation.get('reasoning_effort', 'Unavailable')} thinking"
+        ),
         "",
     ]
     return "\n".join(lines)

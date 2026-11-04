@@ -398,9 +398,7 @@ with sync_playwright() as playwright:
         if not available:
             continue
         with browser_page.expect_navigation():
-            browser_page.locator("main ul a").filter(
-                has_text=available[0]["label"]
-            ).first.click()
+            browser_page.locator("main ul a").filter(has_text=available[0]["label"]).first.click()
         browser_page.wait_for_function(
             "key => new URL(location.href).searchParams.has(key)", arg=param
         )

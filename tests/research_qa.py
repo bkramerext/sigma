@@ -525,9 +525,7 @@ print("portable Q/A concurrent save/list/remove passed")
                 )
             )
             assert uncited["sources"] == []
-            assert "No validated citations were returned." in research_qa.markdown_document(
-                uncited
-            )
+            assert "No validated citations were returned." in research_qa.markdown_document(uncited)
             research_qa.delete_answer(str(path), partial["qa_id"])
             research_qa.delete_answer(str(path), uncited["qa_id"])
             forged = False
