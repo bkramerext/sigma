@@ -15,6 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+
 def _email_env(suffix: str) -> str:
     direct = os.environ.get(f"SIGMA_{suffix}")
     if direct is not None:
@@ -62,7 +63,9 @@ def send_admin_notification(subject: str, body: str, *, recipients: list[str]) -
     send_message(message, recipients=recipients)
 
 
-def send_message(message: EmailMessage, *, recipients: list[str], reply_to: str | None = None) -> None:
+def send_message(
+    message: EmailMessage, *, recipients: list[str], reply_to: str | None = None
+) -> None:
     """Deliver a complete MIME message through SIGMA's configured Gmail OAuth account.
 
     Gmail API accepts the MIME recipient headers rather than an SMTP envelope.
