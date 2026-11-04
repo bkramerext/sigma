@@ -57,6 +57,7 @@ from sigma.projects import (
     project_destination,
     remove_strategy,
     reorder_strategies,
+    save_project_as,
     set_strategy_enabled,
     update_project,
 )
@@ -1715,6 +1716,16 @@ def create_project_view(body: CreateProjectRequest):
     )
 
 
+class SaveProjectAsRequest(OpenRequest):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+
+
+@app.post("/api/projects/save-as", status_code=201)
+def save_project_as_view(body: SaveProjectAsRequest):
+    return asdict(save_project_as(body.path, body.title))
+
+
 class StageRequest(RemoveStrategyRequest):
     stage: str
 
@@ -1990,6 +2001,7 @@ def text_source_view(body: TextSourceRequest):
 
 class TextConversionRequest(OpenRequest):
     scope: str
+    qa_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     strategy_id: str | None = None
     session_id: str | None = Field(default=None, max_length=36)
     field_path: str | None = Field(default=None, max_length=160)
@@ -2020,6 +2032,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             body.expected_project_id,
             body.session_id,
             body.field_path,
+            body.qa_id,
         )
     )
     connection = asyncio.create_task(disconnected())

@@ -171,9 +171,11 @@ def main() -> None:
             nonlocal calls
             calls += 1
             if forged:
+                bogus = "session:99999999-9999-4999-8999-999999999999"
+                refs = [f"session:{s1}", bogus, f"session:{s1}"] if forged == "mixed" else [bogus]
                 return research_qa.AnswerDraft(
-                    answer="A forged answer.",
-                    source_refs=["session:99999999-9999-4999-8999-999999999999"],
+                    answer="The available record suggests a limited conclusion.",
+                    source_refs=refs,
                 ), "{}"
             if unsupported:
                 return research_qa.AnswerDraft(
@@ -218,6 +220,34 @@ def main() -> None:
             assert first["qa_id"] == repeated["qa_id"] and calls == 1
             assert [row["session_number"] for row in first["sources"]] == [1, 2]
             assert len(research_qa.list_answers(str(path))) == 1
+            from sigma.text_views import digest
+
+            original = research_qa.saved_answer_text(str(path), first["qa_id"])
+            assert original["markdown_answer"] is None
+            derived = research_qa.store_markdown_answer(
+                str(path),
+                first["qa_id"],
+                digest(original["answer"]),
+                "## Formatted answer\n\nMath: $R(n)$",
+                {"provider": "openai", "model": "test-model", "reasoning_effort": "low"},
+                [],
+            )
+            assert derived["plain"]["body"] == original["answer"]
+            assert derived["markdown"]["body"].startswith("## Formatted answer")
+            assert (
+                research_qa.saved_answer_text(str(path), first["qa_id"])["markdown_answer"]
+                == derived["markdown"]["body"]
+            )
+            cached = research_qa.store_markdown_answer(
+                str(path),
+                first["qa_id"],
+                digest(original["answer"]),
+                "Unexpected duplicate conversion",
+                {"provider": "openai", "model": "test-model", "reasoning_effort": "low"},
+                [],
+            )
+            assert cached["markdown"]["body"] == derived["markdown"]["body"]
+            assert research_qa.get_answer(str(path), first["qa_id"])["answer"] == original["answer"]
             markdown = research_qa.markdown_document(
                 research_qa.get_answer(str(path), first["qa_id"])
             )
@@ -225,6 +255,11 @@ def main() -> None:
                 "<script>alert(1)</script>" in markdown
             )  # Rendered by the safe React Markdown renderer.
             assert f"reveal_session={s1}" in markdown
+            assert "Created: " in markdown and " UTC" in markdown
+            assert "Model: " in markdown and " · " in markdown and " thinking" in markdown
+            assert "Generation duration:" not in markdown
+            assert "Research version:" not in markdown
+            assert "Thinking level:" not in markdown
             assert (
                 "## Question" in markdown and "## Answer" in markdown and "## Sources" in markdown
             )
@@ -464,21 +499,36 @@ print("portable Q/A concurrent save/list/remove passed")
                 raise AssertionError("Imported malformed Q/A citations must fail safely")
             archive_path.write_bytes(valid_archive)
 
-            forged = True
-            try:
-                asyncio.run(
-                    research_qa.answer(
-                        str(path),
-                        "<script>alert(1)</script>",
-                        before.project.id,
-                        credential["identity"],
-                        "b" * 32,
-                    )
+            # Provider citation errors are not a reason to discard a useful answer.
+            # Mixed refs keep only the exact frozen source, deduplicated.
+            forged = "mixed"
+            partial = asyncio.run(
+                research_qa.answer(
+                    str(path),
+                    "Question with some invalid citations",
+                    before.project.id,
+                    credential["identity"],
+                    "b" * 32,
                 )
-            except ProjectError as exc:
-                assert "citation" in str(exc)
-            else:
-                raise AssertionError("Forged citation must be rejected")
+            )
+            assert [ref["source_id"] for ref in partial["sources"]] == [f"session:{s1}"]
+            assert partial["answer"] == "The available record suggests a limited conclusion."
+            # An entirely invented citation list is omitted, never made clickable.
+            forged = "only"
+            uncited = asyncio.run(
+                research_qa.answer(
+                    str(path),
+                    "Question with no valid citations",
+                    before.project.id,
+                    credential["identity"],
+                    "3" * 32,
+                )
+            )
+            assert uncited["sources"] == []
+            assert "No validated citations were returned." in research_qa.markdown_document(uncited)
+            research_qa.delete_answer(str(path), partial["qa_id"])
+            research_qa.delete_answer(str(path), uncited["qa_id"])
+            forged = False
             assert len(research_qa.list_answers(str(path))) == 3
             assert inspect_project(path).project == before.project, (
                 "Q/A must not mutate research or project settings"
@@ -535,7 +585,21 @@ print("portable Q/A concurrent save/list/remove passed")
             {"id": refs[1], "kind": "strategy", "data": {"title": "Modular approach"}},
             {"id": refs[2], "kind": "session", "data": {"session_number": 8}},
             {"id": refs[3], "kind": "artifact", "data": {"sequence": 3}},
-            {"id": refs[4], "kind": "current_understanding", "data": {}},
+            {
+                "id": refs[4],
+                "kind": "current_understanding",
+                "data": {
+                    "findings": [
+                        {
+                            "source": {
+                                "project_id": qa_project_id,
+                                "session_id": session_id,
+                                "session_number": 8,
+                            }
+                        }
+                    ]
+                },
+            },
         ]
         record = {
             "qa_id": "1" * 32,
@@ -581,17 +645,19 @@ print("portable Q/A concurrent save/list/remove passed")
             "Strategy · Modular approach",
             "Session #8",
             "Session #8 · Artifact 3",
-            "Current Understanding",
+            "Session #8",
         ]
         assert all(
             source["navigation_available"] and source["navigation_url"].startswith("/project?")
             for source in enriched["sources"]
         )
+        assert "reveal_understanding=1" in enriched["sources"][0]["navigation_url"]
         assert "reveal_strategy=strategy-fixture" in enriched["sources"][1]["navigation_url"]
         assert "reveal_artifact=artifact-fixture" in enriched["sources"][3]["navigation_url"]
+        assert "reveal_session=session-fixture" in enriched["sources"][4]["navigation_url"]
         doc = research_qa.markdown_document(enriched)
         assert "[Project · Prime project]" in doc and "[Strategy · Modular approach]" in doc
-        assert "Session #unknown" not in doc and "Research version: `" in doc
+        assert "Session #unknown" not in doc and "Research version:" not in doc
         missing = research_qa._with_navigation(
             record,
             {
@@ -610,6 +676,8 @@ print("portable Q/A concurrent save/list/remove passed")
         )
         assert missing["sources"][1]["navigation_unavailable_reason"]
         assert missing["sources"][3]["navigation_unavailable_reason"]
+        assert missing["sources"][4]["label"] == "Current Understanding"
+        assert "reveal_understanding=1" in missing["sources"][4]["navigation_url"]
         print(
             "Research Q/A: validated citations, idempotent retry, safe browser rendering, durable save/remove, and no project mutation passed."
         )

@@ -2,11 +2,13 @@
 
 **Strategy Investigation, Generation, Measurement & Assessment**
 
-**[Open Hosted SIGMA →](https://sigma-research.duckdns.org/)**
+**[See it in action](https://sigma-research.duckdns.org/)**
 
-SIGMA is an experimental research workspace for investigating difficult questions through multiple approaches. It grew from an investigation into the Riemann Hypothesis and the idea that even an unsolved question should leave a useful, inspectable record of what was tried, what failed, and what remains unknown.
+SIGMA is a collaborative, cost-conscious research workspace for exploring difficult questions with AI. Researchers guide Investigator and Skeptic agents through competing approaches, preserving findings and open questions while keeping resource use in view.
 
-A project contains a question, candidate strategies, research sessions, and saved evidence. During a session, Investigator and Skeptic roles examine selected strategies in bounded exchanges. SIGMA records findings, objections, unresolved questions, and available computational results so a person can inspect and continue the investigation. Research can involve multiple strategies, with evidence carried forward between steps and sessions.
+This effort grew from an investigation into the Riemann Hypothesis and the idea that even an unsolved question should leave a useful, inspectable record of what was tried, what failed, and what remains unknown.
+
+A SIGMA project contains a question, candidate strategies, research sessions, and saved evidence. During a session, Investigator and Skeptic roles examine selected strategies in bounded exchanges. SIGMA records findings, objections, unresolved questions, and available computational results so a person can inspect and continue the investigation. Research can involve multiple strategies, with evidence carried forward between steps and sessions.
 
 SIGMA does **not** establish that an answer is correct. Investigator and Skeptic currently use the same underlying model; their exchange is structured criticism, not independent validation. Model agreement and computational results are evidence to examine, not mathematical proof. The Riemann Hypothesis sample is an open problem, not a claimed solution. Whether persistent multi-agent investigation produces better-supported research than a simpler assistant given comparable resources remains unproven. See [Product Rationale](docs/PRODUCT_RATIONALE.md) and [Research Quality Charter](docs/RESEARCH_QUALITY_CHARTER.md).
 
@@ -14,13 +16,9 @@ SIGMA does **not** establish that an answer is correct. Investigator and Skeptic
 
 Create a project or sample, then choose strategies to investigate. The overview below shows how SIGMA preserves findings for review and how you can optionally develop saved research into a paper. For session controls and limits, see [Connect AI and investigate](docs/GETTING_STARTED.md#connect-ai-and-investigate).
 
-### Workflow
+## Workflow
 
-```mermaid
-%%{init: {"flowchart": {"useMaxWidth": false, "nodeSpacing": 12, "rankSpacing": 32}, "themeVariables": {"fontSize": "13px"}}}%%
-flowchart LR
-    A[Project] --> B[Strategies] --> C[Research] --> D[Refine] --> E[Optional paper] --> F[Review/export]
-```
+<p align="center"><img src="assets/workflow.svg" alt="SIGMA workflow: Project → Strategies → Research → Refine → Optional paper → Review/export" width="75%" /></p>
 
 - **Create a project:** Choose a subject or sample and frame the question.
 - **Explore strategies:** Develop approaches to the question and select which to investigate.
@@ -33,29 +31,27 @@ SIGMA supports ordinary local use without a Google account, local testing of Goo
 
 ## Example Outcome Papers
 
-These papers are **proofs of concept**, demonstrating what SIGMA can produce today rather than its intended final quality. Research and paper authoring remain works in progress; further improvements to SIGMA are expected to improve the clarity, rigor, and presentation of future papers. **These examples are experimental AI-generated work, not independently verified publications.** The eight examples below include the six reference research papers, Maximum Regions by Lines, and Operation Narrow Passage. Each PDF is accompanied by its TeX source, with both archived under `papers/`.
+These papers are **proofs of concept**, demonstrating what SIGMA can produce today rather than its intended final quality. Research and paper authoring remain works in progress; further improvements to SIGMA are expected to improve the clarity, rigor, and presentation of future papers. **These examples are experimental AI-generated work, not independently verified publications.** Eight papers are available now, including the six reference research papers, Maximum Regions by Lines, and Operation Narrow Passage; a ninth literature example is coming soon. Each available PDF is accompanied by its TeX source, with both archived under `papers/`.
 
 <table>
 <tr>
-<td width="50%" valign="top"><p><sub><img src="papers/icons/mathematics.svg" width="20" height="20" alt="" /></sub> <strong>Mathematics · Easy</strong></p><p><strong><a href="papers/maximum-regions.pdf">Maximum Regions by Lines</a></strong> · <a href="papers/maximum-regions.tex">TeX</a></p><p>A geometric proof of the maximum number of regions formed by lines.</p></td>
-<td width="50%" valign="top"><p><sub><img src="papers/icons/mathematics.svg" width="20" height="20" alt="" /></sub> <strong>Mathematics · Hard</strong></p><p><strong><a href="papers/nonconsecutive-subset-sums-modulo-3-golden5.pdf">Nonconsecutive Subset Sums Modulo 3</a></strong> · <a href="papers/nonconsecutive-subset-sums-modulo-3-golden5.tex">TeX</a></p><p>Exact counts and a corrected identity; the proposed recurrence remains unproved.</p></td>
+<td width="33%" valign="top"><p><sub><img src="papers/icons/mathematics.svg" width="18" height="18" alt="" /></sub> <strong>Mathematics · Easy</strong></p><p><strong><a href="papers/maximum-regions.pdf">Maximum Regions by Lines</a></strong> · <a href="papers/maximum-regions.tex">TeX</a></p><p>A geometric proof of the maximum regions formed by lines.</p></td>
+<td width="33%" valign="top"><p><sub><img src="papers/icons/mathematics.svg" width="18" height="18" alt="" /></sub> <strong>Mathematics · Hard</strong></p><p><strong><a href="papers/nonconsecutive-subset-sums-modulo-3-golden5.pdf">Nonconsecutive Subset Sums Modulo 3</a></strong> · <a href="papers/nonconsecutive-subset-sums-modulo-3-golden5.tex">TeX</a></p><p>Exact counts and a corrected identity; the recurrence remains unproved.</p></td>
+<td width="34%" valign="top"><p><sub><img src="papers/icons/physics.svg" width="18" height="18" alt="" /></sub> <strong>Physics · Hard</strong></p><p><strong><a href="papers/warp-drive-design-golden5.pdf">Warp Drive Design</a></strong> · <a href="papers/warp-drive-design-golden5.tex">TeX</a></p><p>General-relativistic shift-bubble analysis, without claiming practical propulsion.</p></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><p><sub><img src="papers/icons/computing.svg" width="20" height="20" alt="" /></sub> <strong>AI systems · Hard</strong></p><p><strong><a href="papers/agent-reliability-v1-golden5.pdf">Agent Reliability v1</a></strong> · <a href="papers/agent-reliability-v1-golden5.tex">TeX</a></p><p>Distinguishing successful external actions from convincing agent completion reports, and evaluating recovery guarantees.</p></td>
-<td width="50%" valign="top"><p><sub><img src="papers/icons/computing.svg" width="20" height="20" alt="" /></sub> <strong>AI systems · Hard</strong></p><p><strong><a href="papers/sovereign-ai-federation-v2-golden5.pdf">Sovereign AI Federation v2</a></strong> · <a href="papers/sovereign-ai-federation-v2-golden5.tex">TeX</a></p><p>Assessing whether universities can share AI capacity while retaining data authority and spending controls.</p></td>
-</tr>
-
-<tr>
-<td width="50%" valign="top"><p><sub><img src="papers/icons/biology.svg" width="20" height="20" alt="" /></sub> <strong>Biology · Hard</strong></p><p><strong><a href="papers/xenopus-tadpoles-v9-golden5.pdf">Xenopus Tadpoles</a></strong> · <a href="papers/xenopus-tadpoles-v9-golden5.tex">TeX</a></p><p>Research on the developmental loss of tail regeneration competence, its evidence and unresolved questions.</p></td>
-<td width="50%" valign="top"><p><sub><img src="papers/icons/military.svg" width="20" height="20" alt="" /></sub> <strong>Military planning · Hard</strong></p><p><strong><a href="papers/operation-narrow-passage.pdf">Operation Narrow Passage</a></strong> · <a href="papers/operation-narrow-passage.tex">TeX</a></p><p>Conditional analysis of a fictional crisis, competing objectives, and uncertainty.</p></td>
+<td width="33%" valign="top"><p><sub><img src="papers/icons/computing.svg" width="18" height="18" alt="" /></sub> <strong>AI systems · Hard</strong></p><p><strong><a href="papers/agent-reliability-v1-golden5.pdf">Agent Reliability v1</a></strong> · <a href="papers/agent-reliability-v1-golden5.tex">TeX</a></p><p>Distinguishing real agent actions from convincing reports, and testing recovery guarantees.</p></td>
+<td width="33%" valign="top"><p><sub><img src="papers/icons/computing.svg" width="18" height="18" alt="" /></sub> <strong>AI systems · Hard</strong></p><p><strong><a href="papers/sovereign-ai-federation-v2-golden5.pdf">Sovereign AI Federation v2</a></strong> · <a href="papers/sovereign-ai-federation-v2-golden5.tex">TeX</a></p><p>Sharing university AI capacity while preserving data authority and spending controls.</p></td>
+<td width="34%" valign="top"><p><sub><img src="papers/icons/physics.svg" width="18" height="18" alt="" /></sub> <strong>Physics · Hard</strong></p><p><strong><a href="papers/when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1.pdf">Qubit Decoherence and Non-Markovian Models</a></strong> · <a href="papers/when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1.tex">TeX</a></p><p>When coherence decay can distinguish memory effects from alternatives.</p></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><p><sub><img src="papers/icons/physics.svg" width="20" height="20" alt="" /></sub> <strong>Physics · Hard</strong></p><p><strong><a href="papers/warp-drive-design-golden5.pdf">Warp Drive Design</a></strong> · <a href="papers/warp-drive-design-golden5.tex">TeX</a></p><p>A general-relativistic shift-bubble analysis, without claiming practical propulsion.</p></td>
-<td width="50%" valign="top"><p><sub><img src="papers/icons/physics.svg" width="20" height="20" alt="" /></sub> <strong>Physics · Hard</strong></p><p><strong><a href="papers/when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1.pdf">Qubit Decoherence and Non-Markovian Models</a></strong> · <a href="papers/when-does-qubit-decoherence-require-a-non-markovian-model-v1-v1.tex">TeX</a></p><p>When observed coherence decay can distinguish memory effects from alternatives.</p></td>
+<td width="33%" valign="top"><p><sub><img src="papers/icons/biology.svg" width="18" height="18" alt="" /></sub> <strong>Biology · Hard</strong></p><p><strong><a href="papers/xenopus-tadpoles-v9-golden5.pdf">Xenopus Tadpoles</a></strong> · <a href="papers/xenopus-tadpoles-v9-golden5.tex">TeX</a></p><p>Why tail regeneration fades during development; evidence and open questions.</p></td>
+<td width="33%" valign="top"><p><sub><img src="papers/icons/military.svg" width="18" height="18" alt="" /></sub> <strong>Military planning · Hard</strong></p><p><strong><a href="papers/operation-narrow-passage.pdf">Operation Narrow Passage</a></strong> · <a href="papers/operation-narrow-passage.tex">TeX</a></p><p>Competing objectives and uncertainty in a fictional crisis.</p></td>
+<td width="34%" valign="top"><p><sub><img src="papers/icons/literature.svg" width="18" height="18" alt="" /></sub> <strong>Literature · Hard</strong></p><p><strong>The Crucible: Early American Culture and Authorship</strong> · <em>Coming soon...</em></p><p>Miller’s Salem drama as a lens on early American culture, his influences, and artistic intentions.</p></td>
 </tr>
 </table>
 
-### Screenshots
+## Screenshots
 
 **Home** — start an investigation or explore sample projects.
 

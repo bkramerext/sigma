@@ -6,6 +6,8 @@ on:
       - 'src/sigma/project_email.py'
       - 'src/sigma/cloud_auth.py'
       - 'tests/project_email.py'
+      - 'src/sigma/project_copy.py'
+      - 'src/sigma/project_copy_logs.py'
       - 'src/sigma/projects.py'
       - 'src/sigma/api.py'
       - 'src/sigma/research_sessions.py'

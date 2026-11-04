@@ -118,6 +118,7 @@ async def convert_text(
     expected_project_id: str | None = None,
     session_id: str | None = None,
     field_path: str | None = None,
+    qa_id: str | None = None,
 ) -> dict:
     try:
         return await _convert_text(
@@ -130,6 +131,7 @@ async def convert_text(
             expected_project_id,
             session_id,
             field_path,
+            qa_id,
         )
     except TimeoutError as exc:
         raise ProjectError("Text conversion timed out; source text was kept") from exc
@@ -145,6 +147,7 @@ async def _convert_text(
     expected_project_id: str | None = None,
     session_id: str | None = None,
     field_path: str | None = None,
+    qa_id: str | None = None,
 ) -> dict:
     target_format = _format(target)
     # Serialize conversion calls instead of rejecting concurrent requests.
@@ -154,7 +157,30 @@ async def _convert_text(
             view = inspect_project(path)
             if expected_project_id is not None and view.project.id != expected_project_id:
                 raise ProjectError("Project identity changed; reopen it before converting")
-            if scope == "research-block":
+            if qa_id is not None and scope != "research-qa":
+                raise ProjectError("Q/A identifier requires a Q/A text scope")
+            if scope == "research-qa":
+                if (
+                    not qa_id
+                    or strategy_id is not None
+                    or session_id is not None
+                    or field_path is not None
+                    or target_format != "markdown"
+                ):
+                    raise ProjectError("Q/A conversion requires a saved answer and Markdown")
+                from sigma.research_qa import saved_answer_text
+
+                record = saved_answer_text(path, qa_id)
+                source = {
+                    "source_format": "plain",
+                    "source_digest": digest(record["answer"]),
+                    "plain": {"body": record["answer"]},
+                    "markdown": {"body": record["markdown_answer"], "current": True}
+                    if isinstance(record["markdown_answer"], str)
+                    and record["markdown_answer"].strip()
+                    else None,
+                }
+            elif scope == "research-block":
                 if (
                     not session_id
                     or strategy_id is not None
@@ -214,7 +240,7 @@ async def _convert_text(
             source_body: str = source[source_format]["body"]
             limit = (
                 20000
-                if scope in {"project", "research-conclusion", "research-block"}
+                if scope in {"project", "research-conclusion", "research-block", "research-qa"}
                 else MAX_STRATEGY_APPROACH
             )
             if len(source_body) > limit:
@@ -431,7 +457,7 @@ async def _convert_text(
                     "AI account/billing mode changed during conversion; nothing was saved"
                 )
             latest = inspect_project(path).project
-            if scope not in {"research-conclusion", "research-block"} and (
+            if scope not in {"research-conclusion", "research-block", "research-qa"} and (
                 latest.ai_model,
                 latest.reasoning_effort,
             ) != (
@@ -441,7 +467,29 @@ async def _convert_text(
                 raise ProjectError(
                     "Project model/Thinking changed during conversion; nothing was saved"
                 )
-            if scope in {"research-conclusion", "research-block"}:
+            if scope in {"research-conclusion", "research-block", "research-qa"}:
+                if scope == "research-qa":
+                    from sigma.research_qa import saved_answer_text, store_markdown_answer
+
+                    if qa_id is None:
+                        raise ProjectError("Saved Q/A identifier is required")
+                    latest_text = saved_answer_text(path, qa_id)["answer"]
+                    if digest(latest_text) != source["source_digest"]:
+                        raise ProjectError(
+                            "Saved Q/A answer changed during conversion; reopen before retrying"
+                        )
+                    return store_markdown_answer(
+                        path,
+                        qa_id,
+                        source["source_digest"],
+                        body,
+                        {
+                            "provider": "openai",
+                            "model": config["model"],
+                            "reasoning_effort": config["reasoning_effort"],
+                        },
+                        result.warnings,
+                    )
                 if scope == "research-block":
                     if session_id is None or field_path is None:
                         raise ProjectError("Saved research field binding is required")
