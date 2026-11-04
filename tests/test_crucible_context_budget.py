@@ -19,9 +19,7 @@ def _size(value: object) -> int:
 
 def _obligation(index: int, *, unique_scope: bool = False) -> dict[str, object]:
     group = index if unique_scope else index // 12
-    assumptions = [
-        f"Shared assumption {group} / {number}: " + "a" * 180 for number in range(6)
-    ]
+    assumptions = [f"Shared assumption {group} / {number}: " + "a" * 180 for number in range(6)]
     artifact_id = f"research-artifact-{index // 3}"
     return {
         "obligation_id": f"o{index}",
@@ -56,8 +54,7 @@ def _context(count: int, *, unique_scope: bool = False) -> dict[str, object]:
         "obligation_ledger_omitted_count": 0,
         "obligation_ledger_omitted_ids": [],
         "prior_session_findings": [
-            {"id": f"prior-{i}", "method": "historical provenance " + "p" * 14500}
-            for i in range(2)
+            {"id": f"prior-{i}", "method": "historical provenance " + "p" * 14500} for i in range(2)
         ],
         "prior_session_artifact_ids": ["prior-0", "prior-1"],
         "prior_artifacts": [
@@ -128,7 +125,8 @@ def test_crucible_three_rounds_growth_preserves_saved_research() -> None:
                     index_key = f"{field}_set_index"
                     if index_key in entry:
                         original = next(
-                            item for item in source["obligation_ledger"]
+                            item
+                            for item in source["obligation_ledger"]
                             if item["obligation_id"] == entry["obligation_id"]
                         )
                         assert dictionary[field][entry[index_key]] == original[field]
