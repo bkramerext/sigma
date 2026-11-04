@@ -5519,7 +5519,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
           destination = projectUrl(result.path);
           currentProjectPath = result.path;
         } catch {
-          // A paused research session cannot be snapshotted for guest access.
+          // Export/import validation or an active session may prevent a guest copy.
           // Never make logout depend on the optional copy succeeding.
           signOutCopyUnavailable = true;
           currentProjectPath = null;
