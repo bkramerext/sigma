@@ -4,7 +4,7 @@
 
 **[See it in action](https://sigma-research.duckdns.org/)**
 
-SIGMA is a collaborative, cost-conscious research workspace for exploring difficult questions with AI. People guide Investigator and Skeptic agents through competing approaches, preserving findings and open questions while keeping resource use in view.
+SIGMA is a collaborative, cost-conscious research workspace for exploring difficult questions with AI. Researchers guide Investigator and Skeptic agents through competing approaches, preserving findings and open questions while keeping resource use in view.
 
 The project grew from an investigation into the Riemann Hypothesis and the idea that even an unsolved question should leave a useful, inspectable record of what was tried, what failed, and what remains unknown.
 
