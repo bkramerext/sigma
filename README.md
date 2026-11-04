@@ -12,7 +12,7 @@ SIGMA does **not** establish that an answer is correct. Investigator and Skeptic
 
 ## Using SIGMA
 
-Create a project or sample, then choose strategies to investigate. The overview below shows how SIGMA preserves findings for review and how you can optionally develop saved research into a paper. For session controls and limits, see [Connect AI and investigate](docs/GETTING_STARTED.md#connect-ai-and-investigate).
+Create a project or sample, then choose strategies to investigate. The overview below shows how SIGMA preserves findings for review and how you can optionally develop saved research into a paper.
 
 ### Workflow
 
@@ -65,17 +65,42 @@ These papers are **proofs of concept**, demonstrating what SIGMA can produce tod
 
 ![SIGMA strategies for a mathematical theorem](assets/screenshot_strategies.png)
 
-## How research sessions, rounds, and turns work
+## How the research loop works
 
-SIGMA's research loop has three levels. They are not just progress labels: each level determines **what work runs and how earlier results inform later work**.
+SIGMA investigates a question using one or more **strategies**—different approaches to the same problem. An Investigator develops an idea; a Skeptic challenges it. The point of repeating that exchange is to **use what was learned to decide what to investigate next**, not merely to generate more text.
 
-- **Session — one bounded investigation.** A session runs the selected strategies against the project's question under a saved configuration and call, time, and spending limits. SIGMA schedules work and preserves evidence, objections, failed attempts, and unanswered questions. A session can stop before using its full budget; its **Session Outcome** summarizes what was learned and what remains uncertain. Starting another session begins a new investigation, not another round of the old one.
-- **Round — another opportunity to develop and challenge the approaches.** A round contains a configured number of turns *for each enabled strategy*. The value of later rounds is that agents can revisit their approaches using critiques, unresolved obligations, and selected evidence accumulated from earlier work, including relevant work from other strategies. A round is **not** one Investigator/Skeptic exchange, a global pause for all strategies, or an automatic merge of their findings.
-- **Turn — one Investigator/Skeptic pair within a strategy.** The Investigator proposes or revises an argument, investigation, or test; then the Skeptic examines its evidence, assumptions, and gaps. The resulting critique and any saved artifacts can guide the strategy's next turn. These are **two sequential agent calls**, not two independent strategies or a guaranteed accepted finding.
+### Session: the entire investigation
 
-Different strategies can advance concurrently, but the Investigator and Skeptic calls within a given turn happen in order. SIGMA supplies **bounded selections** of previous evidence and criticism to later calls; original records remain saved even when not all history fits into a call's context. The scheduler controls execution and persistence—it does not guarantee that later rounds improve the answer.
+A **session** is one run of the selected strategies, with its own settings, time and spending limits, saved research history, and final **Session Outcome**. It coordinates the strategies, preserves findings and objections (including failures), and can end early if limits are reached or further work is not useful. A new session is a separate run, not the next round of the previous one.
 
-With the usual configuration, **3 rounds × 3 turns per round × 3 strategies × 2 agent calls per turn = 54 maximum agent calls**. This is a ceiling, not a required number of calls or findings. There is no separate round-end synthesis step; the Session Outcome reports the overall result after the investigation. See [Getting Started](docs/GETTING_STARTED.md#connect-ai-and-investigate) for session controls and details.
+### Turn: one proposal and one critique
+
+A **turn** is one Investigator/Skeptic pair **within one strategy**:
+
+1. **Investigator call:** Develop or revise a claim, argument, experiment, or next question using selected earlier evidence.
+2. **Skeptic call:** Examine that work, challenge assumptions, look for counterexamples or unsupported claims, and record objections or remaining obligations.
+
+The two calls are sequential. Their output is saved and can influence the next turn. A turn may produce an accepted finding, a rejected idea, or unresolved questions—none is guaranteed.
+
+### Round: another pass over the strategies
+
+A **round** gives each enabled strategy a configured number of turns. In subsequent rounds, strategies can build on what earlier work established **or failed to establish**: unanswered questions, Skeptic objections, new tests, and relevant findings from other strategies.
+
+**Why have both turns and rounds?** Turns supply the immediate *propose → criticize → revise* feedback loop. Rounds provide a larger *revisit and deepen* opportunity across the configured strategies. They are a scheduling and research-organization boundary, **not a separate AI operation**, a requirement that every strategy finish in lockstep, or a magic quality-improvement step. There is **no automatic round-end merge or synthesis call**.
+
+### Example: the default 54-call ceiling
+
+| Level | Default | What it means |
+| --- | --- | --- |
+| Session | 1 | One investigation of the project question |
+| Strategies | 3 | Three approaches can make progress concurrently |
+| Rounds | 3 | Three passes of research across the enabled strategies |
+| Turns | 3 per strategy per round | Each strategy has three chances to propose, critique, and refine during a round |
+| Agent calls | 2 per turn | One Investigator call followed by one Skeptic call |
+
+**3 rounds × 3 turns × 3 strategies × 2 calls = 54 maximum agent calls.** This is a ceiling, not a promise to execute all calls or produce 27 accepted findings.
+
+Within a strategy, the Investigator finishes before its Skeptic reviews the work. Different strategies can run concurrently. Later calls see **selected, bounded portions** of prior research and peer evidence—not necessarily every saved artifact—while the full records remain available for review. After the session ends, its **Session Outcome** summarizes conclusions, evidence, objections, and remaining uncertainty; it does not certify that the agents' reasoning is correct.
 
 ## Run locally
 
