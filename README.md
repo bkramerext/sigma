@@ -102,6 +102,40 @@ Use the **Google Sign In** pill to choose a real Google account. **Do not pass `
 
 This is a **local authentication test**, not a hosted deployment. For hosted configuration and administrator operations, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). For a provider-free UI simulation of membership, allowances, and errors, see [Local Mock Authentication](docs/LOCAL_MOCK_AUTH.md). Mock identities are not real Google accounts and mock research is not AI inference.
 
+## Optional: local feedback and Email Project (SMTP)
+
+Local SIGMA can send **Send Feedback** notifications and **Email Project** messages (including JSON, PDF, and LaTeX attachments) through SMTP. **Google OAuth branding verification is not required for SMTP.** The sender needs an SMTP credential, such as a Gmail **app password**, not your normal Google-account password. Gmail accounts must meet Google's eligibility requirements for app passwords.
+
+Keep the credential outside the repository. For an existing local setup, check whether the password file already exists:
+
+```sh
+ls -l ~/.config/sigma/smtp-password
+```
+
+Do **not** print or paste its contents. A private password file should be accessible only to your user (for example, permissions `600`). If you need to create it, use a protected local file containing only the app password. The example path is a convention, **not** a password that SIGMA creates automatically.
+
+Configure the local checkout's ignored `.env` file (or export equivalent shell variables):
+
+```dotenv
+SIGMA_EMAIL_SMTP_HOST=smtp.gmail.com
+SIGMA_EMAIL_SMTP_PORT=587
+SIGMA_EMAIL_SMTP_USERNAME=your-sending-account@gmail.com
+SIGMA_EMAIL_SMTP_PASSWORD_FILE=/absolute/path/to/.config/sigma/smtp-password
+SIGMA_CLOUD_ADMIN_CONTACT_EMAIL=your-google-sign-in@gmail.com
+```
+
+Replace the example addresses and file path with your own; **the password-file path must be absolute**. In `.env`, `~` and `$HOME` are **not expanded**, so use your real home-directory path. The SMTP username is the account that sends mail. The administrator contact is the local sign-in/admin address; these may be different.
+
+From the checkout, test the SMTP transport directly (without requiring a running browser or sending a feedback database record):
+
+```sh
+./sigma send_feedback "hello world" --transport smtp
+```
+
+The diagnostic prints which transport was selected, whether SMTP credentials are configured, and whether the mail provider accepted delivery; it never prints the password. It sends the test message to `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. The CLI does **not** read the current browser's Google session and cannot independently assert who is signed in. Normal **Send Feedback** uses the authenticated Google account's email as its contact address, or an optional unverified contact address for guests.
+
+If you previously configured `SIGMA_GMAIL_TOKEN_FILE`, `SIGMA_EMAIL_GMAIL_TOKEN_FILE`, or `SIGMA_INVITATION_GMAIL_TOKEN_FILE`, ordinary feedback sending prefers the Gmail API path instead of SMTP. The `--transport smtp` flag overrides this **for the CLI invocation only**; to use SMTP in the browser, remove/disable the Gmail token-file setting from the local backend environment and restart `./sigma start`. Environment variables exported in your shell override the ignored `.env`, even if empty. Never commit credentials or copy the protected password file into Git.
+
 ## Optional: scientific computation
 
 Build the optional Python execution sandbox with:
