@@ -4180,7 +4180,6 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
   const submitting = useRef(false);
   const [title, setTitle] = useState(() => suggestedSaveAsName(entry.title));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   useEffect(() => {
     const element = dialog.current;
     if (!element) return;
@@ -4192,12 +4191,12 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (submitting.current || !title.trim()) return;
-    submitting.current = true; setBusy(true); setError('');
+    submitting.current = true; setBusy(true);
     try {
       const copy = await post<ProjectView>('save-as', { path: entry.path, title: title.trim() });
       onSaved(copy);
-    } catch (cause) {
-      setError(errorMessage(cause));
+    } catch {
+      // API failures already appear in SIGMA's dismissible request toast.
     } finally {
       submitting.current = false; setBusy(false);
     }
@@ -4217,8 +4216,7 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
         <label htmlFor="save-as-project-title">New project name</label>
         <input ref={nameInput} id="save-as-project-title" type="text" value={title}
           required maxLength={200} disabled={busy} spellCheck={false}
-          onChange={event => { setTitle(event.target.value); setError(''); }}/>
-        {error && <p role="alert" className="error">{error}</p>}
+          onChange={event => setTitle(event.target.value)}/>
       </div>
     </form>
   </dialog>;

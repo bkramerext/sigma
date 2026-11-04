@@ -9,6 +9,7 @@ from playwright.sync_api import expect, sync_playwright
 UI_URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173")
 API_URL = os.environ.get("SIGMA_BROWSER_API_URL", "http://127.0.0.1:8001")
 save_requests: list[dict] = []
+save_failure = {"enabled": False}
 saved = [
     {
         "id": f"00000000-0000-4000-8000-00000000000{number}",
@@ -63,6 +64,14 @@ def fixture(route):
     elif path == "/api/projects/save-as":
         request = json.loads(route.request.post_data or "{}")
         save_requests.append(request)
+        if save_failure["enabled"]:
+            save_failure["enabled"] = False
+            route.fulfill(
+                status=409,
+                content_type="application/json",
+                body=json.dumps({"error": "A project already uses that name."}),
+            )
+            return
         result = {
             "path": "/tmp/sigma-save-as/new-project.json",
             "project": {
@@ -125,7 +134,7 @@ with sync_playwright() as playwright:
     expect(copy).to_have_attribute("title", "Save project with a new name")
     copy.click()
     dialog = page.get_by_role("dialog", name="Save Copy")
-    save_button = dialog.get_by_role("button", name="Save", exact=True)
+    save_button = dialog.locator('button[type="submit"]')
     cancel_button = dialog.get_by_role("button", name="Cancel")
     for state in (False, True):
         save_button.evaluate(
@@ -144,6 +153,18 @@ with sync_playwright() as playwright:
     dialog.get_by_role("button", name="Cancel").click()
     expect(dialog).not_to_be_visible()
     assert save_requests == []
+
+    # The request-toast system reports Save failures once; the dialog has no
+    # redundant inline error or additional explanatory UI.
+    save_failure["enabled"] = True
+    row.get_by_role("button", name="Save project with a new name").click()
+    dialog = page.get_by_role("dialog", name="Save Copy")
+    dialog.get_by_role("button", name="Save", exact=True).click()
+    expect(page.get_by_role("alert").filter(has_text="Request Failed")).to_be_visible()
+    expect(dialog.locator(".error")).to_have_count(0)
+    dialog.get_by_role("button", name="Cancel").click()
+    page.get_by_role("button", name="Dismiss request error").click()
+    save_requests.clear()
 
     saved[1]["pinned"] = True
     row = row_for_v4()
