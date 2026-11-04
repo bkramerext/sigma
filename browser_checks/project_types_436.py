@@ -695,18 +695,37 @@ with sync_playwright() as playwright:
     assert replaced["project"]["investigation_type"] == "mathematical"
     assert replaced["project"]["project_type_snapshot"]["id"] == "mathematical"
 
-    # Preferences warns about extra token usage, then Adjust now navigates
-    # to Project Types with this project's discipline already expanded.
+    # Preferences links to Project Types with matching hint typography. Opening
+    # it preserves the Settings dialog and its unsaved draft underneath.
     page.get_by_role("button", name="Project settings", exact=True).click()
     settings = page.get_by_role("dialog", name="Project Settings")
     settings.get_by_role("tab", name="Preferences").click()
     expect(
         settings.get_by_text(
-            "Research and publication references may increase AI usage costs.", exact=False
+            "Reference guides for research and authoring papers can be found in", exact=False
         )
     ).to_be_visible()
-    settings.get_by_role("button", name="Adjust now").click()
-    expect(settings).not_to_be_visible()
+    reference_link = settings.get_by_role("button", name="Project Types")
+    hint = settings.locator(".project-references-usage .settings-hint")
+    assert reference_link.evaluate("el => getComputedStyle(el).fontSize") == hint.evaluate(
+        "el => getComputedStyle(el).fontSize"
+    )
+    # An unsaved change must survive a round trip through Project Types.
+    advanced = settings.get_by_role("checkbox", name="Show advanced Outcome details")
+    advanced.set_checked(not advanced.is_checked())
+    draft_checked = advanced.is_checked()
+    reference_link.click()
+    types_dialog = page.get_by_role("dialog", name="Project Types")
+    expect(types_dialog).to_be_visible()
+    types_dialog.locator("header").get_by_role("button", name="Close", exact=True).click()
+    expect(types_dialog).not_to_be_visible()
+    expect(settings).to_be_visible()
+    expect(settings.get_by_role("tab", name="Preferences")).to_have_attribute(
+        "aria-selected", "true"
+    )
+    assert advanced.is_checked() == draft_checked
+    expect(reference_link).to_be_focused()
+    reference_link.click()
     types_dialog = page.get_by_role("dialog", name="Project Types")
     expect(types_dialog).to_be_visible()
     selected_type = types_dialog.locator(
@@ -723,6 +742,7 @@ with sync_playwright() as playwright:
     ).to_have_count(1)
     types_dialog.locator("header").get_by_role("button", name="Save", exact=True).click()
     expect(types_dialog).not_to_be_visible()
+    expect(settings).to_be_visible()
     preferences = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     math_ref = next(item for item in preferences["project_types"] if item["id"] == "mathematical")[
         "research_standards_references"
@@ -731,8 +751,8 @@ with sync_playwright() as playwright:
         "research_standards_references"
     ] == [math_ref]
 
-    # Common reference choices must be durable across BOTH Project Types entry
-    # paths. Home -> Save -> Adjust now -> Save -> Home must not reset them.
+    # Common reference choices remain durable across Home and Settings entry
+    # paths, with Save returning to the Settings Preferences tab.
     page.goto(BASE_URL)
     page.get_by_role("button", name="Project Types", exact=True).click()
     home_types = page.get_by_role("dialog", name="Project Types")
@@ -750,8 +770,10 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Project settings", exact=True).click()
     settings = page.get_by_role("dialog", name="Project Settings")
     settings.get_by_role("tab", name="Preferences").click()
-    adjust = settings.get_by_role("button", name="Adjust now")
-    expect(adjust).to_have_css("font-size", "12px")
+    adjust = settings.get_by_role("button", name="Project Types")
+    assert adjust.evaluate("el => getComputedStyle(el).fontSize") == settings.locator(
+        ".project-references-usage .settings-hint"
+    ).evaluate("el => getComputedStyle(el).fontSize")
     adjust.click()
     shortcut_types = page.get_by_role("dialog", name="Project Types")
     shortcut_common = shortcut_types.locator(".pt-common-references")
@@ -762,6 +784,10 @@ with sync_playwright() as playwright:
     shortcut_common.locator(".pt-reference-toggle").filter(has_text="Disable").first.click()
     shortcut_types.locator("header").get_by_role("button", name="Save", exact=True).click()
     expect(shortcut_types).not_to_be_visible()
+    expect(settings).to_be_visible()
+    expect(settings.get_by_role("tab", name="Preferences")).to_have_attribute(
+        "aria-selected", "true"
+    )
     saved_common = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     assert (
         len(saved_common["reference_preferences"]["common"]["research_standards_references"]) == 1

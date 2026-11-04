@@ -408,6 +408,8 @@
 .workspace-page .strategy-title-editor { flex: 0 0 auto; min-width: 28px; }
 .workspace-page .strategy-title-pencil:focus-visible, .workspace-page .project-title-pencil:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .workspace-page .strategy-process-controls { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; padding-left: 8px; border-left: 1px solid var(--workspace-line); }
+/* Match the pulse center-to-center spacing to the Play and Stop control slots. */
+.workspace-page .strategy-process-controls .research-running-indicator-frame { flex: 0 0 38px; width: 38px; height: 38px; }
 .workspace-page .strategy-process-controls .process-control { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; min-width: 38px; min-height: 38px; padding: 6px; margin: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #c7a16d; cursor: pointer; }
 .workspace-page .strategy-process-controls svg { width: 20px; height: 20px; fill: currentColor; }
 .workspace-page .strategy-process-controls .process-control:hover:not(:disabled) { color: #fff2e9; background: var(--copper-gradient); border-color: #ac7054; }
