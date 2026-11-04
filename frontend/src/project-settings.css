@@ -408,37 +408,36 @@
 .project-settings-dialog .project-preference-checkbox input { width: 17px; height: 17px; accent-color: #bd8355; }
 .project-settings-dialog .project-preferences-panel .settings-hint { margin-top: 4px; }
 
-/* Copy, score star, and Explain share the title-tools gap. */
-.project-settings-dialog.ai-paper-dialog .saved-paper-score-star {
-  display: inline-flex; align-items: center; justify-content: center;
-  color: #e5ba69; font-size: 20px; line-height: 1.1;
-  text-decoration: none; cursor: pointer;
-}
-.project-settings-dialog.ai-paper-dialog .saved-paper-score-star:hover,
-.project-settings-dialog.ai-paper-dialog .saved-paper-score-star:focus-visible { color: #f5d593; }
-.project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:not(.saved-paper-expand) {
-  position: relative; display: inline-flex; flex: 0 0 28px; box-sizing: border-box;
+/* Saved paper title actions use the same 28px hover rectangle as Copy.
+   Avoid the old brightening-only star/balloon rules and gradient effects. */
+.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools :is(
+  .saved-paper-score-star, button.ai-paper-eli5-balloon, button.text-copy-button
+) {
+  position: relative; box-sizing: border-box; display: inline-flex; flex: 0 0 28px;
   align-items: center; justify-content: center;
   width: 28px; min-width: 28px; height: 28px; min-height: 28px;
-  padding: 0; margin: 0; left: -5px; overflow: visible;
-  border: 1px solid transparent; border-radius: 6px; background: transparent; box-shadow: none;
-  color: #e5ba69; line-height: 1; text-decoration: none; cursor: pointer;
-  transition: color 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+  margin: 0; padding: 4px; left: auto;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; box-shadow: none; text-decoration: none;
+  cursor: pointer;
 }
-.project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:hover:not(:disabled),
-.project-settings-dialog.ai-paper-dialog .settings-body button.ai-paper-eli5-balloon:focus-visible {
-  border-color: #ac7054; background: var(--copper-gradient);
-  color: #fff2e9; box-shadow: inset 0 1px 0 #ecc0a535, 0 4px 12px #0004;
+.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools .saved-paper-score-star {
+  color: #e5ba69; font-size: 20px; line-height: 1;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools button.ai-paper-eli5-balloon {
+  color: #e5ba69; line-height: 1;
+}
+.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools :is(
+  .saved-paper-score-star, button.ai-paper-eli5-balloon, button.text-copy-button
+):is(:hover, :focus-visible) {
+  border-color: #ac7054; background: #3b3029; box-shadow: none;
   text-decoration: none;
 }
+.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools :is(
+  .saved-paper-score-star, button.ai-paper-eli5-balloon, button.text-copy-button
+):focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
-/* Match the star's hover/focus color on Copy and Explain, without changing
-   icon spacing or adding a background against the title. */
-.project-settings-dialog.ai-paper-dialog .settings-body :is(button.text-copy-button, button.ai-paper-eli5-balloon):is(:hover:not(:disabled), :focus-visible),
-.project-settings-dialog.ai-paper-dialog .saved-paper-score-star:is(:hover, :focus-visible) {
-  color: #f5d593; border-color: transparent; background: transparent; box-shadow: none; text-decoration: none;
-}
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining {
   position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
   font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
@@ -530,3 +529,30 @@
   display: inline-flex; gap: 12px; align-items: baseline;
 }
 .project-settings-dialog.research-qa-dialog .research-qa-question-heading label { margin: 0; }
+
+/* Paper confirmation is a sibling of the scrolling settings-body. Match the
+   session Remove popover without clipping it inside the saved-paper card. */
+.project-settings-dialog.ai-paper-dialog .paper-remove-popover {
+  position: absolute; z-index: 100;
+  box-sizing: border-box; width: min(310px, calc(100% - 24px));
+  max-height: calc(100% - 24px); overflow-y: auto;
+  margin: 0; padding: 12px 14px;
+  border: 1px solid #66533d; border-radius: 6px;
+  background: #101820; color: #d5dfe7; line-height: 1.6;
+  box-shadow: 0 14px 35px #0009;
+}
+.project-settings-dialog.ai-paper-dialog .paper-remove-popover p { margin: 0 0 10px; }
+.project-settings-dialog.ai-paper-dialog .paper-remove-popover .session-remove-confirm-actions {
+  display: flex; align-items: center; gap: 18px;
+}
+.project-settings-dialog.ai-paper-dialog .paper-remove-popover button {
+  display: inline-flex; width: auto; min-width: 0; min-height: 0;
+  padding: 2px 0; margin: 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: #d9b17e; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.project-settings-dialog.ai-paper-dialog .paper-remove-popover button.destructive-action { color: #e6a092; }
+.project-settings-dialog.ai-paper-dialog .paper-remove-popover button:hover:not(:disabled) { background: transparent; color: #f3cd9e; }
+.project-settings-dialog.ai-paper-dialog .paper-remove-popover button.destructive-action:hover:not(:disabled) { color: #ffd5ca; }
+.project-settings-dialog.ai-paper-dialog .paper-remove-popover button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
