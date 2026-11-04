@@ -468,16 +468,16 @@ with sync_playwright() as playwright:
     mobile_markdown = mobile_title.get_by_role("button", name="Render answer as Markdown")
     mobile_markdown_box = mobile_markdown.bounding_box()
     assert mobile_markdown_box and mobile_copy_box
-    assert mobile_markdown_box["x"] >= mobile_last_line["right"] - 1
-    assert mobile_markdown_box["x"] - mobile_last_line["right"] <= 18
+    # A long title may wrap its controls to the next line on mobile.
+    # Check readable separation, then verify the controls keep their standard gap.
+    same_line = abs(mobile_markdown_box["y"] - mobile_last_line["y"]) < 15
+    if same_line:
+        assert mobile_markdown_box["x"] >= mobile_last_line["right"] - 1
+        assert mobile_markdown_box["x"] - mobile_last_line["right"] <= 18
+    else:
+        assert mobile_markdown_box["y"] >= mobile_last_line["y"] + 10
     assert mobile_copy_box["x"] - (mobile_markdown_box["x"] + mobile_markdown_box["width"]) == 12
-    assert (
-        abs(
-            (mobile_copy_box["y"] + mobile_copy_box["height"] / 2)
-            - (mobile_last_line["y"] + mobile_last_line["height"] / 2)
-        )
-        < 14
-    )
+    assert abs(mobile_copy_box["y"] - mobile_markdown_box["y"]) <= 2
     assert (
         mobile_title.locator(".saved-paper-expand").get_attribute("aria-expanded")
         == mobile_toggle_before_copy

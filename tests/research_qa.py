@@ -659,7 +659,7 @@ print("portable Q/A concurrent save/list/remove passed")
         assert "reveal_session=session-fixture" in enriched["sources"][4]["navigation_url"]
         doc = research_qa.markdown_document(enriched)
         assert "[Project · Prime project]" in doc and "[Strategy · Modular approach]" in doc
-        assert "Session #unknown" not in doc and "Research version: `" in doc
+        assert "Session #unknown" not in doc and "Research version:" not in doc
         missing = research_qa._with_navigation(
             record,
             {
