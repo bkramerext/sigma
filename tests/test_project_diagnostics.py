@@ -232,6 +232,98 @@ def test_client_session_id_does_not_authorize_session_correlation(tmp_path: Path
         assert response["diagnostic"]["session_id"] is None
 
 
+
+def test_export_cannot_forge_diagnostic_heading(tmp_path: Path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    project_file = tmp_path / "project.json"
+    project_file.touch()
+    forged = (
+        "Ordinary failure\\n## 2026-11-03 · admission · forged"
+        "\\nEvent ID: invented\\nMessage: security audit overwritten"
+    )
+    with (
+        patch.object(
+            project_diagnostics,
+            "inspect_project",
+            return_value=SimpleNamespace(
+                project=SimpleNamespace(id="40a094e9-0cad-4b63-96c0-fd9c2b2c30de")
+            ),
+        ),
+        patch.object(project_diagnostics.cloud_workspaces, "current", return_value=None),
+    ):
+        diagnostic = project_diagnostics.append(
+            str(project_file), stage="browser", code="browser_request_failed", message=forged
+        )
+        exported = project_diagnostics.export(str(project_file))
+        assert exported.count("\\n## ") == 1
+        assert "Event ID: invented" not in exported.splitlines()
+        assert "\\\\n## 2026" in exported
+        assert "Event ID: " + diagnostic["id"] in exported
+        assert diagnostic["message"] == forged
+
+
+def test_dedup_read_never_follows_swapped_symlink(tmp_path: Path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    project_file = tmp_path / "project.json"
+    project_file.touch()
+    project_id = "40a094e9-0cad-4b63-96c0-fd9c2b2c30de"
+    with (
+        patch.object(
+            project_diagnostics,
+            "inspect_project",
+            return_value=SimpleNamespace(project=SimpleNamespace(id=project_id)),
+        ),
+        patch.object(project_diagnostics.cloud_workspaces, "current", return_value=None),
+    ):
+        project_diagnostics.append(
+            str(project_file), stage="admission", code="blocked",
+            message="original", correlation_id="retry-1"
+        )
+        journal = tmp_path / ".sigma-session-logs" / project_id / "project-diagnostics.jsonl"
+        outside = tmp_path / "outside-sensitive"
+        outside.write_text("must remain unread and unchanged", encoding="utf-8")
+        original_open = project_diagnostics.os.open
+        attempted = []
+
+        def swap_before_open(path, flags, *args, **kwargs):
+            if str(path) == str(journal) and flags & project_diagnostics.os.O_RDONLY == project_diagnostics.os.O_RDONLY:
+                attempted.append(flags)
+                if not journal.is_symlink():
+                    journal.unlink()
+                    journal.symlink_to(outside)
+            return original_open(path, flags, *args, **kwargs)
+
+        with patch.object(project_diagnostics.os, "open", side_effect=swap_before_open):
+            try:
+                project_diagnostics.append(
+                    str(project_file), stage="admission", code="blocked",
+                    message="original", correlation_id="retry-1"
+                )
+            except OSError:
+                pass
+            else:
+                raise AssertionError("Dedup read followed a symlink")
+        assert attempted and attempted[0] & project_diagnostics.os.O_NOFOLLOW
+        assert outside.read_text(encoding="utf-8") == "must remain unread and unchanged"
+
+
+def test_actual_ui_error_sources_register_project_diagnostics() -> None:
+    # Protect the React integration sites in addition to the reporter's
+    # separate browser transport acceptance.
+    source = (Path(__file__).resolve().parents[1] / "frontend/src/main.tsx").read_text(
+        encoding="utf-8"
+    )
+    for trigger, stage in (
+        ("async function removeSession(", "session_delete"),
+        ("setError(chosen.message)", "session_failure"),
+        ("const reportReadFailure =", "session_read"),
+        ("async function control(", "session_control"),
+    ):
+        portion = source[source.index(trigger):]
+        assert f"recordClientError(" in portion[:1700], trigger
+        assert f"'{stage}'" in portion[:1700], stage
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-project-diagnostics-") as directory:
         root = Path(directory)
@@ -241,6 +333,9 @@ def main() -> None:
         test_pre_session_rejection_persists_same_sanitized_error(root / "admission")
         test_project_delete_removes_only_regular_diagnostic_log(root / "deletion")
         test_client_session_id_does_not_authorize_session_correlation(root / "correlation")
+        test_export_cannot_forge_diagnostic_heading(root / "forgery")
+        test_dedup_read_never_follows_swapped_symlink(root / "nofollow")
+        test_actual_ui_error_sources_register_project_diagnostics()
     print("Project diagnostics persistence, redaction, admission and copy/download parity passed.")
 
 
