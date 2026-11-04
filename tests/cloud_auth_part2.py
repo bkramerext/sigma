@@ -1,6 +1,6 @@
 """Hosted authentication scenarios, part 2 of 2."""
 
-from cloud_auth_fixture import *  # noqa: F403
+from cloud_auth_fixture import *
 
 
 class CloudAuthTests(CloudAuthFixture):
