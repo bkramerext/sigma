@@ -141,7 +141,6 @@ def freeze_reference_content(url: str) -> dict[str, object]:
     result: dict[str, object] = {
         "status": "unavailable",
         "url": url,
-        "requested_url": url,
         "retrieved_at": None,
         "content_sha256": None,
         "excerpt_sha256": None,
@@ -169,6 +168,8 @@ def freeze_reference_content(url: str) -> dict[str, object]:
             if len(text) < 80:
                 raise ValueError("insufficient_readable_content")
             excerpt = text[:_MAX_EXCERPT_CHARS]
+            if current != url:
+                result["requested_url"] = url
             result.update(
                 status="retrieved",
                 url=current,
