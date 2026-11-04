@@ -1,4 +1,4 @@
-# ruff: noqa: F401, F821, F811
+# ruff: noqa: F401, F811
 # pyright: reportUndefinedVariable=false
 """Persistent A17 sessions use deterministic provider fixtures only."""
 
@@ -43,13 +43,30 @@ from sigma.research_budget import (
     totals,
 )
 
+
+if __package__:
+    from .research_sessions_part1 import (
+        investigation,
+        provider_response,
+        setup,
+        skeptic,
+        wait_for,
+    )
+else:
+    from research_sessions_part1 import (
+        investigation,
+        provider_response,
+        setup,
+        skeptic,
+        wait_for,
+    )
+
 # Legacy role-only fixtures deliberately leave the new compiler off.
 # tests/reference_compiler_integration.py explicitly enables and tests it.
 os.environ.setdefault("SIGMA_REFERENCE_COMPILATION_ENABLED", "false")
 
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
-
 
 
 def test_t37_obligation_identity_lifecycle_and_history(path: Path):
@@ -3593,7 +3610,7 @@ async def test_duplicate_strategy_dispatch_is_fenced_during_provider_call(path: 
     assert len(finished["artifacts"]) == 1
 
 
-
 if __name__ == "__main__":
     from research_sessions_split_runner import run
+
     run(2)

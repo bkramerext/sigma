@@ -1,4 +1,4 @@
-# ruff: noqa: F401, F821, F811
+# ruff: noqa: F401
 # pyright: reportUndefinedVariable=false
 """Persistent A17 sessions use deterministic provider fixtures only."""
 
@@ -49,7 +49,6 @@ os.environ.setdefault("SIGMA_REFERENCE_COMPILATION_ENABLED", "false")
 
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
-
 
 
 def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
@@ -3214,7 +3213,7 @@ def test_project_compact_obligation_ids_preserve_legacy_references(path: Path):
         )
 
 
-
 if __name__ == "__main__":
     from research_sessions_split_runner import run
+
     run(1)

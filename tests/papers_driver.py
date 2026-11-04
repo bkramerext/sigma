@@ -1,4 +1,4 @@
-# ruff: noqa: F401, F821, F811
+# ruff: noqa: F401, F821
 # pyright: reportUndefinedVariable=false
 """Bounded paper evidence validation, rendering safety and durable version scenarios."""
 
@@ -25,7 +25,6 @@ from sigma import papers
 from sigma.api import app
 from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, initialize_project, inspect_project, read_project_artifact
-
 
 
 def main_part1() -> None:
@@ -722,5 +721,3 @@ def main_part2() -> None:
         "Paper snapshots, provenance/obligation fidelity, bounded fast indexing, retry, "
         "concurrent checkpoints, resume, cancellation, TeX styles, and version retention passed."
     )
-
-

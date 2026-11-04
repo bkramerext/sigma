@@ -1,4 +1,4 @@
-# ruff: noqa: F401, F821, F811
+# ruff: noqa: F401
 # pyright: reportUndefinedVariable=false
 """Bounded paper evidence validation, rendering safety and durable version scenarios."""
 
@@ -26,6 +26,10 @@ from sigma.api import app
 from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, initialize_project, inspect_project, read_project_artifact
 
+if __package__:
+    from .papers_part1 import draft, fast_package, mock_pdf_inspection
+else:
+    from papers_part1 import draft, fast_package, mock_pdf_inspection
 
 
 def test_paper_pdf_source_reader_accepts_only_substantial_extractable_text() -> None:
@@ -3390,7 +3394,7 @@ def test_paper_sse_bounds_generated_text_not_redundant_transport() -> None:
         raise AssertionError("Oversized generated text was accepted")
 
 
-
 if __name__ == "__main__":
     from papers_split_runner import run
+
     run(2)

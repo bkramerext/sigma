@@ -1,4 +1,4 @@
-# ruff: noqa: F401, F821, F811
+# ruff: noqa: F401, F821
 # pyright: reportUndefinedVariable=false
 """Persistent A17 sessions use deterministic provider fixtures only."""
 
@@ -49,7 +49,6 @@ os.environ.setdefault("SIGMA_REFERENCE_COMPILATION_ENABLED", "false")
 
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
-
 
 
 def main(part: int = 1):
@@ -621,5 +620,3 @@ def test_e001_reference_fetch_rejects_private_hosts_and_downgrade(monkeypatch):
         [sys.executable, str(Path(__file__).parent / "reference_compiler_integration.py")],
         check=True,
     )
-
-

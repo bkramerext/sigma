@@ -2681,6 +2681,5 @@ class CloudAuthTests(CloudAuthFixture):
         self.assertNotIn("admin@example.org", response.text)
 
 
-
 if __name__ == "__main__":
     main()

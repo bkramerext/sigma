@@ -1,4 +1,4 @@
-# ruff: noqa: F401, I001
+# ruff: noqa: F401
 """Deterministic tests for opt-in hosted Google authentication."""
 
 from __future__ import annotations
@@ -200,4 +200,3 @@ class CloudAuthFixture(TestCase):
         ai_store.write(path, state)
         if record_authorization:
             cloud_auth.record_personal_authorization(subject)
-

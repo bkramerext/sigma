@@ -9,8 +9,12 @@ scenarios run in one intact group, without modifying their AST.
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from unittest.mock import patch
+
+import httpx
 
 
 def _skip_unselected(name: str, original: Callable[..., Any]) -> Callable[..., Any]:
@@ -23,7 +27,7 @@ def _skip_unselected(name: str, original: Callable[..., Any]) -> Callable[..., A
     def dispatch(*args: Any, **kwargs: Any) -> Any:
         frame = inspect.currentframe()
         caller = frame.f_back if frame is not None else None
-        if caller is not None and caller.f_code.co_name == "main":
+        if caller is not None and caller.f_code.co_name in {"main", "main_part1"}:
             return skipped_coroutine() if async_function else None
         return original(*args, **kwargs)
 
@@ -58,18 +62,15 @@ def run_split(name: str, count: int, part: int, *, paper: bool = False) -> None:
 
     driver = directory / f"{name}_driver.py"
     exec(compile(driver.read_text(encoding="utf-8"), str(driver), "exec"), namespace)  # noqa: S102
+    for key, group in assigned.items():
+        if group != part:
+            namespace[key] = _skip_unselected(key, namespace[key])
+    assert sum(group == part for group in assigned.values()) > 0
     if not paper:
-        for key, group in assigned.items():
-            if group != part:
-                namespace[key] = _skip_unselected(key, namespace[key])
-        assert sum(group == part for group in assigned.values()) > 0
         namespace["main"](part)
     else:
         # Preserve the entire former main() integration scenario as one
         # independent unit; the standalone cases run in the other unit.
-        import httpx
-        from unittest.mock import patch
-
         papers = namespace["papers"]
         real_client = httpx.AsyncClient
 
@@ -88,7 +89,9 @@ def run_split(name: str, count: int, part: int, *, paper: bool = False) -> None:
             with patch.object(
                 papers, "_publication_compiler_has_writing_headroom", return_value=False
             ):
-                namespace[f"main_part{part}"]()
+                namespace["main_part1"]()
+                if part == 2:
+                    namespace["main_part2"]()
         finally:
             httpx.AsyncClient = real_client
     print(f"PASS {name}: part {part}/{count}")

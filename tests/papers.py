@@ -7,7 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 if __name__ == "__main__":
     directory = Path(__file__).resolve().parent
     for part in range(1, 3):

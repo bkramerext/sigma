@@ -1,4 +1,4 @@
-# ruff: noqa: F401, F821, F811
+# ruff: noqa: F401
 # pyright: reportUndefinedVariable=false
 """Bounded paper evidence validation, rendering safety and durable version scenarios."""
 
@@ -25,7 +25,6 @@ from sigma import papers
 from sigma.api import app
 from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, initialize_project, inspect_project, read_project_artifact
-
 
 
 def mock_pdf_inspection():
@@ -3488,7 +3487,7 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
     assert paper_writing_sources._valid_public_url("https://example.org/guide.pdf")
 
 
-
 if __name__ == "__main__":
     from papers_split_runner import run
+
     run(1)
