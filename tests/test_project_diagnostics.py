@@ -168,6 +168,70 @@ def test_pre_session_rejection_persists_same_sanitized_error(tmp_path: Path) -> 
         assert "verysecret" not in data["error"]
 
 
+
+def test_project_delete_removes_only_regular_diagnostic_log(tmp_path: Path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    project_file = tmp_path / "project.json"
+    project_file.touch()
+    project_id = "40a094e9-0cad-4b63-96c0-fd9c2b2c30de"
+    with (
+        patch.object(
+            project_diagnostics,
+            "inspect_project",
+            return_value=SimpleNamespace(project=SimpleNamespace(id=project_id)),
+        ),
+        patch.object(project_diagnostics.cloud_workspaces, "current", return_value=None),
+    ):
+        project_diagnostics.append(
+            str(project_file), stage="admission", code="blocked", message="source unavailable"
+        )
+        journal = tmp_path / ".sigma-session-logs" / project_id / "project-diagnostics.jsonl"
+        assert journal.is_file()
+        session_log.delete_project(project_id, project_file)
+        assert not journal.exists()
+        assert not journal.parent.exists()
+
+        journal.parent.mkdir(parents=True)
+        outside = tmp_path / "outside"
+        outside.write_text("must survive", encoding="utf-8")
+        journal.symlink_to(outside)
+        try:
+            session_log.delete_project(project_id, project_file)
+        except OSError as exc:
+            assert "Unexpected session log entry" in str(exc)
+        else:
+            raise AssertionError("Deletion accepted a diagnostic symlink")
+        assert outside.read_text(encoding="utf-8") == "must survive"
+        assert journal.is_symlink()
+
+
+def test_client_session_id_does_not_authorize_session_correlation(tmp_path: Path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    project_file = tmp_path / "project.json"
+    project_file.touch()
+    with (
+        patch.object(
+            project_diagnostics,
+            "inspect_project",
+            return_value=SimpleNamespace(
+                project=SimpleNamespace(id="40a094e9-0cad-4b63-96c0-fd9c2b2c30de")
+            ),
+        ),
+        patch.object(project_diagnostics.cloud_workspaces, "current", return_value=None),
+    ):
+        response = api.record_project_diagnostic(
+            api.ClientDiagnosticRequest(
+                path=str(project_file),
+                stage="browser",
+                code="browser_request_failed",
+                message="secret cannot be associated with another session",
+                session_id="f13e4354-5bb0-494d-9075-f77b0d93b837",
+            )
+        )
+        assert isinstance(response, dict)
+        assert response["diagnostic"]["session_id"] is None
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-project-diagnostics-") as directory:
         root = Path(directory)
@@ -175,6 +239,8 @@ def main() -> None:
         test_client_report_and_copy_download_share_canonical_record(root / "client")
         test_logging_failure_is_reported_without_breaking_admission(root / "capacity")
         test_pre_session_rejection_persists_same_sanitized_error(root / "admission")
+        test_project_delete_removes_only_regular_diagnostic_log(root / "deletion")
+        test_client_session_id_does_not_authorize_session_correlation(root / "correlation")
     print("Project diagnostics persistence, redaction, admission and copy/download parity passed.")
 
 
