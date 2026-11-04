@@ -105,6 +105,8 @@ def compilation_eligible_sources(sources: list[dict[str, Any]]) -> list[dict[str
         retrieval = row.get("retrieval")
         if not isinstance(retrieval, Mapping) or retrieval.get("status") != "retrieved":
             continue
+        if retrieval.get("requested_url", row.get("url")) != row.get("url"):
+            continue
         excerpt = retrieval.get("excerpt")
         excerpt_sha = retrieval.get("excerpt_sha256")
         full_sha = retrieval.get("content_sha256")
