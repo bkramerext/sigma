@@ -360,6 +360,27 @@
 .project-settings-dialog.ai-paper-dialog .ai-paper-progress span { color: #b8c4cb; }
 .ai-paper-preview { border-top: 1px solid #35404a; padding-top: 16px; color: #e6e0d7; line-height: 1.6; }
 .ai-paper-preview h3 { margin: 0 0 12px; color: #f0cfaa; font: 600 23px/1.25 Georgia, serif; }
+/* The paper-text copy action belongs to the expanded paper heading, not the
+   saved-version row. Keep it inline after a wrapping title, matching the 28px
+   copper hover surface used by other Copy controls. */
+.project-settings-dialog.ai-paper-dialog .ai-paper-preview-title-copy {
+  display: inline-flex; align-items: center; vertical-align: middle;
+  margin-left: 12px;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body .ai-paper-preview h3.ai-paper-preview-title button.text-copy-button {
+  box-sizing: border-box; display: inline-flex; flex: 0 0 28px;
+  align-items: center; justify-content: center; vertical-align: middle;
+  width: 28px; min-width: 28px; height: 28px; min-height: 28px;
+  margin: 0; padding: 4px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: #c7a16d; box-shadow: none; text-decoration: none;
+  cursor: pointer;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body .ai-paper-preview h3.ai-paper-preview-title button.text-copy-button:is(:hover:not(:disabled), :focus-visible) {
+  background: #3b3029; border-color: #ac7054; box-shadow: none; text-decoration: none;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body .ai-paper-preview h3.ai-paper-preview-title button.text-copy-button:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 2px;
+}
 .ai-paper-preview h4 { margin: 20px 0 8px; color: #e4bd8b; font: 600 17px/1.35 Georgia, serif; }
 .ai-paper-preview p { margin: 8px 0; }
 .ai-paper-preview ul { padding-left: 22px; }
