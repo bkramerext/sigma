@@ -248,7 +248,11 @@ def _wait_for_existing_sigma(expected_state: str, authorize_url: str) -> str:
                     "run ./sigma shutdown to free the port, then retry. "
                     "Production is unaffected."
                 ) from exc
-            if not isinstance(probe, dict) or probe.get("protocol") != 1 or probe.get("ready") is not True:
+            if (
+                not isinstance(probe, dict)
+                or probe.get("protocol") != 1
+                or probe.get("ready") is not True
+            ):
                 raise LocalGmailAuthError(
                     "A listener owns port 5173, but it cannot receive this CLI's "
                     "Google callback. Restart the local SIGMA UI with the updated "

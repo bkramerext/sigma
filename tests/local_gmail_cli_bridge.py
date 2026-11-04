@@ -7,6 +7,7 @@ import secrets
 from unittest.mock import patch
 
 from cloud_auth_fixture import CloudAuthFixture
+
 from sigma.local_gmail_cli_bridge import pending_flow, ready, receive, result
 
 

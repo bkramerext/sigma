@@ -12,10 +12,10 @@ import json
 import os
 import stat
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Iterator
 
 MAX_AGE_SECONDS = 300
 

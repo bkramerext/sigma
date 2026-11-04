@@ -1655,9 +1655,7 @@ def local_cli_mail_bridge_ready(request: Request, state: str = ""):
         raise HTTPException(404, "Not found.")
     from sigma.local_gmail_cli_bridge import ready
 
-    response = JSONResponse(
-        {"ready": ready(cfg.database.parent, state), "protocol": 1}
-    )
+    response = JSONResponse({"ready": ready(cfg.database.parent, state), "protocol": 1})
     response.headers["Cache-Control"] = "no-store"
     return response
 
