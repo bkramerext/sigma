@@ -479,8 +479,14 @@ def download_bytes(bundle_path: str | Path) -> bytes:
     )
 
 
-def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
-    """Import a complete JSON project with atomic no-replace publication."""
+def import_bundle(
+    payload: dict[str, Any], destination: str | Path, *, rekey_sessions: bool = True
+) -> Path:
+    """Import a complete JSON project with atomic no-replace publication.
+
+    Save As has already rekeyed sessions and depends on that mapping for logs;
+    only that internal path skips a second session rekey.
+    """
     members = _decode(payload)
     path = Path(destination)
     if path.suffix != ".json" or path.parent.is_symlink() or not path.parent.is_dir():
@@ -526,7 +532,9 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
             raise BundleError("Cannot import malformed research session")
         session_members[session_id] = session
 
-    replacements = {session_id: str(uuid4()) for session_id in session_members}
+    replacements = (
+        {session_id: str(uuid4()) for session_id in session_members} if rekey_sessions else {}
+    )
 
     def rebase_refs(value: Any) -> Any:
         """Rewrite exact session references without altering evidence or prose."""
