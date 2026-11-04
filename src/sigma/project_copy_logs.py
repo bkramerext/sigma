@@ -14,6 +14,7 @@ import shutil
 import stat
 import tempfile
 from pathlib import Path
+from uuid import UUID
 
 from sigma import session_log
 from sigma.project_copy import _rewrite
@@ -22,21 +23,13 @@ from sigma.projects import ProjectError
 
 def _safe_file(path: Path) -> None:
     info = path.lstat()
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or info.st_mode & 0o077
-    ):
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
         raise ProjectError("Session diagnostic log has unsafe ownership or permissions.")
 
 
 def _safe_directory(path: Path) -> None:
     info = path.lstat()
-    if (
-        not stat.S_ISDIR(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or info.st_mode & 0o077
-    ):
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
         raise ProjectError("Session diagnostic directory has unsafe ownership or permissions.")
 
 
@@ -45,9 +38,7 @@ def _flush_source(source_dir: Path) -> None:
     while True:
         with session_log._queues_guard:
             queues = [
-                work
-                for key, work in session_log._queues.items()
-                if Path(key).parent == source_dir
+                work for key, work in session_log._queues.items() if Path(key).parent == source_dir
             ]
         if not queues:
             return
@@ -117,7 +108,9 @@ def clone_project_logs(
                 _safe_file(child)
                 if child.name == ".short-name":
                     data = _rewrite(child.read_text(encoding="utf-8"), mapping)
-                    (staged / child.name).write_text(data, encoding="utf-8")
+                    target_file = staged / child.name
+                    target_file.write_text(data, encoding="utf-8")
+                    target_file.chmod(0o600)
                 elif child.name == "project-diagnostics.jsonl":
                     if child.stat().st_size > 1024 * 1024:
                         raise ProjectError("Project diagnostics exceed their size limit.")
@@ -131,6 +124,11 @@ def clone_project_logs(
                             raise ProjectError("Project diagnostics are not valid JSON.") from exc
                         if not isinstance(record, dict) or record.get("project_id") != source_id:
                             raise ProjectError("Project diagnostics belong to another project.")
+                        old_session = record.get("session_id")
+                        if isinstance(old_session, str) and old_session not in session_ids:
+                            # The source session has been deleted. Do not invent
+                            # a corresponding session in the independent copy.
+                            continue
                         lines.append(
                             json.dumps(
                                 _rewrite(record, mapping),
@@ -138,10 +136,20 @@ def clone_project_logs(
                                 separators=(",", ":"),
                             )
                         )
-                    (staged / child.name).write_text(
+                    target_file = staged / child.name
+                    target_file.write_text(
                         "\n".join(lines) + ("\n" if lines else ""),
                         encoding="utf-8",
                     )
+                    target_file.chmod(0o600)
+                elif child.suffix == ".md" and child.stem not in session_ids:
+                    try:
+                        UUID(child.stem)
+                    except ValueError as exc:
+                        raise ProjectError("Unexpected project diagnostic member.") from exc
+                    # The source session was deleted; its orphaned diagnostic
+                    # Markdown must not prevent the remaining project copy.
+                    continue
                 elif child.suffix == ".md" and child.stem in session_ids:
                     old_session = child.stem
                     new_session = session_ids[old_session]

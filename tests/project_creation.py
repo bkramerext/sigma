@@ -418,11 +418,14 @@ def main() -> None:
                     "project_id": clone["project"]["id"],
                     "evidence_snapshot": saved_archive[0]["evidence_snapshot"],
                 }
-                assert saved_archive[0]["snapshot_sha256"] == hashlib.sha256(
-                    json.dumps(
-                        derivative, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                    ).encode()
-                ).hexdigest()
+                assert (
+                    saved_archive[0]["snapshot_sha256"]
+                    == hashlib.sha256(
+                        json.dumps(
+                            derivative, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                        ).encode()
+                    ).hexdigest()
+                )
                 assert saved_archive[0]["project_id"] == clone["project"]["id"]
                 assert saved_archive[0]["sources"][0]["source_id"] == (
                     f"project:{clone['project']['id']}"
@@ -459,6 +462,38 @@ def main() -> None:
                 assert len(saved_diagnostics) == 1
                 assert saved_diagnostics[0]["project_id"] == clone["project"]["id"]
                 assert saved_diagnostics[0]["session_id"] == copied_session["id"]
+                # Clones can themselves be copied without reusing admission
+                # keys, losing audit history or altering source provenance.
+                twice = client.post(
+                    "/api/projects/save-as",
+                    json={"path": clone["path"], "title": "API math v3"},
+                )
+                assert twice.status_code == 201, twice.text
+                third = twice.json()
+                twice_sessions = [
+                    member
+                    for member in list_files(third["path"])
+                    if member.startswith("research-sessions/")
+                    and member.endswith(".json")
+                    and Path(member).stem
+                    not in {"limits", "sequence", "obligation-ids"}
+                ]
+                assert len(twice_sessions) == 1
+                twice_session = json.loads(read_file(third["path"], twice_sessions[0]))
+                assert twice_session["id"] != copied_session["id"]
+                assert twice_session["idempotency_key"] != copied_session["idempotency_key"]
+                twice_log = session_log.log_path(
+                    third["path"], third["project"]["id"], twice_session["id"]
+                )
+                assert twice_log.is_file()
+                assert session_log._frames(twice_log)[0][0]["session_id"] == twice_session["id"]
+                assert project_diagnostics.read(third["path"])[0]["session_id"] == twice_session["id"]
+                twice_answers = json.loads(
+                    read_file(third["path"], "artifacts/research-qa/records.json")
+                )
+                assert twice_answers["records"][0]["source_snapshot_sha256"] == (
+                    qa_record["snapshot_sha256"]
+                )
                 assert copied_session["artifacts"][0]["session_id"] == copied_session["id"]
                 assert copied_session["artifacts"][0]["project_id"] == clone["project"]["id"]
                 assert copied_session["artifacts"][0]["source_ref"] == (

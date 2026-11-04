@@ -211,14 +211,19 @@ def rebase_copy(
             original_data = data
             data = _rewrite(data, substitutions)
             session_match = _SESSION_FILE.fullmatch(name)
-            if session_match is not None and isinstance(data, dict):
-                if not isinstance(data.get("idempotency_key"), str):
-                    data["idempotency_key"] = str(uuid4())
+            if (
+                session_match is not None
+                and isinstance(data, dict)
+                and not isinstance(data.get("idempotency_key"), str)
+            ):
+                data["idempotency_key"] = str(uuid4())
             if name == "artifacts/research-qa/records.json" and isinstance(data, dict):
                 # An in-flight question belongs to the original provider request.
                 # A clone must never replay it using the old request identity.
                 data["pending_requests"] = []
-                old_records = original_data.get("records", []) if isinstance(original_data, dict) else []
+                old_records = (
+                    original_data.get("records", []) if isinstance(original_data, dict) else []
+                )
                 new_records = data.get("records", [])
                 if isinstance(old_records, list) and isinstance(new_records, list):
                     for old_record, copied_record in zip(old_records, new_records):
@@ -240,7 +245,9 @@ def rebase_copy(
                             _canonical(derivative)
                         ).hexdigest()
                         before_answer = old_record.get("answer")
-                        if isinstance(before_answer, str) and before_answer != copied_record.get("answer"):
+                        if isinstance(before_answer, str) and before_answer != copied_record.get(
+                            "answer"
+                        ):
                             copied_record["source_answer_sha256"] = hashlib.sha256(
                                 before_answer.encode("utf-8")
                             ).hexdigest()

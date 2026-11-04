@@ -96,7 +96,11 @@ with sync_playwright() as playwright:
 
     def row_for_v4():
         page.goto(UI_URL)
-        page.get_by_role("tab", name="Saved").click()
+        # Initial catalog bootstrapping replaces its tab button while data loads.
+        # Dispatch through the current mounted element instead of clicking a
+        # stale DOM node across the first render transition.
+        page.locator("#recent-tab").wait_for(state="attached")
+        page.locator("#recent-tab").evaluate("(element) => element.click()")
         group = page.locator(".recent-type-group").first
         expect(group).to_be_visible()
         if group.get_attribute("open") is None:
