@@ -75,9 +75,9 @@ def check_failures() -> None:
         assert any("pyright" in command for command in commands)
         assert any("tests/lifecycle.py" in command for command in commands)
 
-    # All four CI shards must be exhaustive together, disjoint, and independent.
+    # All eight CI shards must be exhaustive together, disjoint, and independent.
     plans: dict[str, list[list[str]]] = {}
-    shard_names = ("1", "2", "3", "4")
+    shard_names = tuple(str(index) for index in range(1, 9))
     for shard in ("", *shard_names):
         with (
             patch.dict(
@@ -97,12 +97,12 @@ def check_failures() -> None:
             )
     whole = plans[""]
     combined = [step for shard in shard_names for step in plans[shard]]
-    assert all(len(plans[shard]) > 10 for shard in shard_names)
+    assert all(len(plans[shard]) >= 5 for shard in shard_names)
     assert sum(len(plans[shard]) for shard in shard_names) == len(whole)
     assert len({tuple(step) for step in combined}) == len(whole)
     assert {tuple(step) for step in combined} == {tuple(step) for step in whole}
     for index, step in enumerate(whole):
-        assert step == plans[shard_names[index % 4]][index // 4]
+        assert step == plans[shard_names[index % 8]][index // 8]
     assert not any("ruff" in step for step in combined)
     assert any("tests/papers.py" in step for step in combined)
     assert any("tests/cloud_auth.py" in step for step in combined)
