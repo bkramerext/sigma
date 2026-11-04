@@ -67,9 +67,7 @@ These papers are **proofs of concept**, demonstrating what SIGMA can produce tod
 
 ## Research loop
 
-**Session → Research rounds → Turns per strategy → Investigator call → Skeptic call.** One turn is an Investigator/Skeptic pair; each round allows **3 turns per strategy** by default. Strategies can advance concurrently, but the two calls within a turn run in order.
-
-With three selected strategies, the default ceiling is **3 rounds × 3 turns × 3 strategies × 2 calls = 54 agent calls**—a maximum, not a promise of completion. Saved findings, criticism, unresolved obligations, and bounded selections of earlier evidence can inform later turns and rounds; **there is no separate round-end merge**. The **Session Outcome** summarizes results and remaining uncertainty. See [Getting Started](docs/GETTING_STARTED.md#connect-ai-and-investigate) for details.
+A research **session** runs selected strategies through **rounds** of Investigator/Skeptic **turns**. Each turn pairs one Investigator proposal with one Skeptic critique; later turns and rounds can use selected earlier findings and objections. The default configuration allows up to **54 agent calls** across 3 rounds, 3 turns per strategy per round, and 3 strategies. See [Information Flow](docs/INFORMATION_FLOW.md) for how work and evidence move between turns, rounds, and strategies—and how Session Outcome and Current Understanding summarize the results.
 
 ## Run locally
 
