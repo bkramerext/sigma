@@ -127,19 +127,26 @@ def main() -> None:
                     "cursor": cursor,
                     "short_name": "Xenopus Tadpoles",
                     "project_title": "Long Research Project Title",
-                    "session": {"number": 1, "status": "completed" if state["polls"] >= 5 else "running"},
+                    "session": {
+                        "number": 1,
+                        "status": "completed" if state["polls"] >= 5 else "running",
+                    },
                     "reference_preparation": {
                         "selected_count": 2,
                         "verified_count": 1 if degraded else 2,
                         "references": [
                             {
-                                "title": "Method A", "url": "https://example.org/a",
-                                "retrieval_status": "retrieved", "reason": None,
-                                "http_status": 200, "excerpt_present": True,
+                                "title": "Method A",
+                                "url": "https://example.org/a",
+                                "retrieval_status": "retrieved",
+                                "reason": None,
+                                "http_status": 200,
+                                "excerpt_present": True,
                                 "excerpt_integrity": True,
                             },
                             {
-                                "title": "Method B", "url": "https://example.org/b",
+                                "title": "Method B",
+                                "url": "https://example.org/b",
                                 "retrieval_status": "unavailable" if degraded else "retrieved",
                                 "reason": "http_403" if degraded else None,
                                 "http_status": 403 if degraded else 200,
@@ -154,7 +161,8 @@ def main() -> None:
                             "retrieved_excerpts_used": "unknown/not recorded",
                             "attempts": [
                                 {
-                                    "number": 1, "status": "rejected" if degraded else "completed",
+                                    "number": 1,
+                                    "status": "rejected" if degraded else "completed",
                                     "http_status": 429 if degraded else 200,
                                     "error_code": "rate_limit_exceeded" if degraded else None,
                                     "retry_decision": "retry" if degraded else "completed",
@@ -255,9 +263,11 @@ def main() -> None:
         expect(page.locator(".session-log-reference-degraded")).to_contain_text(
             "Compilation failed/degraded", timeout=6000
         )
-        expect(page.locator(".session-log-reference-warning").filter(
-            has_text="Compilation was not possible."
-        )).to_be_visible()
+        expect(
+            page.locator(".session-log-reference-warning").filter(
+                has_text="Compilation was not possible."
+            )
+        ).to_be_visible()
         expect(page.locator(".session-log-reference-summary")).to_contain_text("HTTP 403")
         with page.expect_download() as download_info:
             download = page.get_by_role("link", name="Download session log")

@@ -827,7 +827,14 @@ def export_filename(saved_short_name: str | None, project_title: str, session_nu
     label = unicodedata.normalize("NFKC", (saved_short_name or "").strip() or project_title)
     stem = "".join(char if char.isalnum() or char in "-_." else "_" for char in label)
     stem = re.sub(r"_+", "_", stem).strip("._-")[:80].rstrip("._-") or "project"
-    if stem.upper() in {"CON", "PRN", "AUX", "NUL", *{f"COM{i}" for i in range(1, 10)}, *{f"LPT{i}" for i in range(1, 10)}}:
+    if stem.upper() in {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *{f"COM{i}" for i in range(1, 10)},
+        *{f"LPT{i}" for i in range(1, 10)},
+    }:
         stem += "_project"
     return f"{stem}.session_{session_number}.log"
 
@@ -851,9 +858,11 @@ def reference_preparation_summary(session: dict[str, Any]) -> dict[str, Any]:
         digest = info.get("excerpt_sha256")
         excerpt_present = isinstance(excerpt, str) and bool(excerpt)
         integrity = (
-            hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == digest
+            hashlib.sha256(str(excerpt).encode("utf-8")).hexdigest() == digest
             if excerpt_present and isinstance(digest, str)
-            else None if not excerpt_present and not isinstance(digest, str) else False
+            else None
+            if not excerpt_present and not isinstance(digest, str)
+            else False
         )
         if status == "retrieved" and integrity is True:
             verified += 1
@@ -868,7 +877,9 @@ def reference_preparation_summary(session: dict[str, Any]) -> dict[str, Any]:
                 "http_status": (
                     info["http_status"]
                     if type(info.get("http_status")) is int
-                    else int(match.group(1)) if match else None
+                    else int(match.group(1))
+                    if match
+                    else None
                 ),
                 "excerpt_present": excerpt_present,
                 "excerpt_integrity": integrity,
@@ -878,22 +889,26 @@ def reference_preparation_summary(session: dict[str, Any]) -> dict[str, Any]:
     raw_compilation = session.get("reference_compilation")
     compiler = raw_compilation if isinstance(raw_compilation, dict) else {}
     raw_attempts = compiler.get("attempts")
-    attempts = [
-        {
-            "number": entry.get("number"),
-            "status": entry.get("status"),
-            "failure_type": entry.get("failure_type"),
-            "http_status": entry.get("provider_http_status"),
-            "error_code": entry.get("provider_error_code"),
-            "validation_failure": entry.get("validation_failure"),
-            "usage_status": entry.get("usage_status"),
-            "token_usage": entry.get("token_usage"),
-            "retry_decision": entry.get("retry_decision"),
-            "reason": str(entry.get("reason") or "")[:320] or None,
-        }
-        for entry in raw_attempts
-        if isinstance(entry, dict)
-    ] if isinstance(raw_attempts, list) else []
+    attempts = (
+        [
+            {
+                "number": entry.get("number"),
+                "status": entry.get("status"),
+                "failure_type": entry.get("failure_type"),
+                "http_status": entry.get("provider_http_status"),
+                "error_code": entry.get("provider_error_code"),
+                "validation_failure": entry.get("validation_failure"),
+                "usage_status": entry.get("usage_status"),
+                "token_usage": entry.get("token_usage"),
+                "retry_decision": entry.get("retry_decision"),
+                "reason": str(entry.get("reason") or "")[:320] or None,
+            }
+            for entry in raw_attempts
+            if isinstance(entry, dict)
+        ]
+        if isinstance(raw_attempts, list)
+        else []
+    )
     status = str(compiler.get("status") or "unknown/not recorded")
     source_hash_match = (
         compiler["source_sha256"] == selection["sha256"]
@@ -901,9 +916,7 @@ def reference_preparation_summary(session: dict[str, Any]) -> dict[str, Any]:
         and isinstance(selection.get("sha256"), str)
         else None
     )
-    dispatched_attempts = sum(
-        entry["status"] not in {"not_dispatched"} for entry in attempts
-    )
+    dispatched_attempts = sum(entry["status"] not in {"not_dispatched"} for entry in attempts)
     calls_used = session.get("calls_used")
     if status == "completed" and source_hash_match is not False:
         disposition = "Compiled guidance available; agent delivery unknown/not recorded"
@@ -933,7 +946,8 @@ def reference_preparation_summary(session: dict[str, Any]) -> dict[str, Any]:
         },
         "guidance_disposition": disposition,
         "strategy_count": len(session.get("strategy_ids", []))
-        if isinstance(session.get("strategy_ids"), list) else None,
+        if isinstance(session.get("strategy_ids"), list)
+        else None,
     }
 
 
@@ -943,10 +957,12 @@ def _reference_markdown(summary: dict[str, Any]) -> list[str]:
     rows = [
         "## Research-reference preparation",
         "",
-        f"{summary['selected_count'] if summary['selected_count'] is not None else 'unknown/not recorded'} selected · "
-        f"{summary['verified_count']} retrieved with verified excerpts · "
-        f"Compilation {compiler['status']} "
-        f"({compiler['attempt_count']}/3 dispatched attempts).",
+        (
+            f"{summary['selected_count'] if summary['selected_count'] is not None else 'unknown/not recorded'} selected · "
+            f"{summary['verified_count']} retrieved with verified excerpts · "
+            f"Compilation {compiler['status']} "
+            f"({compiler['attempt_count']}/3 dispatched attempts)."
+        ),
         "",
         f"**Guidance disposition:** {summary['guidance_disposition']}",
         "",
@@ -965,31 +981,41 @@ def _reference_markdown(summary: dict[str, Any]) -> list[str]:
             if ref["excerpt_integrity"] is False
             else "unknown/not recorded"
         )
-        rows.extend([
-            f"{index}. {ref['title']} — {ref['url']}",
-            f"   Retrieval: {ref['retrieval_status']}; "
-            f"HTTP: {ref['http_status'] if ref['http_status'] is not None else 'unknown/not recorded'}; "
-            f"reason: {ref['reason'] or 'none recorded'}; "
-            f"excerpt: {'present' if ref['excerpt_present'] else 'absent'}; "
-            f"excerpt integrity: {verified}.",
-        ])
+        rows.extend(
+            [
+                f"{index}. {ref['title']} — {ref['url']}",
+                (
+                    f"   Retrieval: {ref['retrieval_status']}; "
+                    f"HTTP: {ref['http_status'] if ref['http_status'] is not None else 'unknown/not recorded'}; "
+                    f"reason: {ref['reason'] or 'none recorded'}; "
+                    f"excerpt: {'present' if ref['excerpt_present'] else 'absent'}; "
+                    f"excerpt integrity: {verified}."
+                ),
+            ]
+        )
     rows.append("")
     for attempt in compiler["attempts"]:
-        rows.extend([
-            f"- Compiler attempt {attempt['number']}: {attempt['status']} · "
-            f"HTTP {attempt['http_status'] if attempt['http_status'] is not None else 'unknown/not recorded'} · "
-            f"code {attempt['error_code'] or 'unknown/not recorded'} · "
-            f"failure {attempt['failure_type'] or 'none'} · "
-            f"validation {attempt['validation_failure'] or 'none'} · "
-            f"usage {attempt['usage_status'] or 'unknown/not recorded'} · "
-            f"retry {attempt['retry_decision'] or 'unknown/not recorded'}."
-        ])
+        rows.extend(
+            [
+                (
+                    f"- Compiler attempt {attempt['number']}: {attempt['status']} · "
+                    f"HTTP {attempt['http_status'] if attempt['http_status'] is not None else 'unknown/not recorded'} · "
+                    f"code {attempt['error_code'] or 'unknown/not recorded'} · "
+                    f"failure {attempt['failure_type'] or 'none'} · "
+                    f"validation {attempt['validation_failure'] or 'none'} · "
+                    f"usage {attempt['usage_status'] or 'unknown/not recorded'} · "
+                    f"retry {attempt['retry_decision'] or 'unknown/not recorded'}."
+                ),
+            ]
+        )
     rows.extend(["", "---", ""])
     return rows
 
 
 def markdown_export(
-    events: list[dict[str, Any]], session: dict[str, Any], short_name: str,
+    events: list[dict[str, Any]],
+    session: dict[str, Any],
+    short_name: str,
     reference_preparation: dict[str, Any] | None = None,
 ) -> str:
     """Render old or new canonical frames as a readable, disposable Markdown download."""

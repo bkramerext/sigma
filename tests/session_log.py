@@ -518,7 +518,9 @@ def test_session_log_filename_short_name_fallback_and_sanitization() -> None:
         session_log.export_filename("", "Nonconsecutive Subset Sums", 54)
         == "Nonconsecutive_Subset_Sums.session_54.log"
     )
-    assert session_log.export_filename(r"../COM1:\\bad?/..", "Ignored", 2) == "COM1_bad.session_2.log"
+    assert (
+        session_log.export_filename(r"../COM1:\\bad?/..", "Ignored", 2) == "COM1_bad.session_2.log"
+    )
     assert session_log.export_filename("CON", "Ignored", 1) == "CON_project.session_1.log"
     assert session_log.export_filename("Étude / 数学", "Ignored", 9) == "Étude_数学.session_9.log"
     assert session_log.export_filename("..//", "??", 7) == "project.session_7.log"
@@ -552,8 +554,10 @@ def test_saved_reference_diagnostics_and_markdown_export() -> None:
                 "title": "Methodology Three",
                 "url": "https://example.org/three",
                 "retrieval": {
-                    "status": "retrieved", "excerpt": excerpt,
-                    "excerpt_sha256": "tampered-hash", "content_sha256": "saved-document-hash",
+                    "status": "retrieved",
+                    "excerpt": excerpt,
+                    "excerpt_sha256": "tampered-hash",
+                    "content_sha256": "saved-document-hash",
                 },
             },
         ],
@@ -566,13 +570,18 @@ def test_saved_reference_diagnostics_and_markdown_export() -> None:
             "reason": "Compiler rejected after bounded attempts.",
             "attempts": [
                 {
-                    "number": 1, "status": "rejected", "provider_http_status": 429,
+                    "number": 1,
+                    "status": "rejected",
+                    "provider_http_status": 429,
                     "provider_error_code": "rate_limit_exceeded",
-                    "retry_decision": "retry", "usage_status": "rejected",
+                    "retry_decision": "retry",
+                    "usage_status": "rejected",
                 },
                 {
-                    "number": 2, "status": "not_dispatched",
-                    "retry_decision": "budget_exhausted", "usage_status": "not_dispatched",
+                    "number": 2,
+                    "status": "not_dispatched",
+                    "retry_decision": "budget_exhausted",
+                    "usage_status": "not_dispatched",
                 },
             ],
         },
@@ -606,7 +615,8 @@ def test_saved_reference_diagnostics_and_markdown_export() -> None:
     assert session_log.reference_preparation_summary({})["selected_count"] is None
     assert excerpt not in exported  # No full frozen excerpts duplicated in downloads.
     record["reference_compilation"] = {
-        "status": "completed", "source_sha256": "frozen-source-checksum",
+        "status": "completed",
+        "source_sha256": "frozen-source-checksum",
         "attempts": [{"number": 1, "status": "completed", "retry_decision": "completed"}],
     }
     completed = session_log.reference_preparation_summary(record)
@@ -631,10 +641,7 @@ def test_session_log_download_route_content_and_name() -> None:
     }
     with patch.object(api.session_log, "read", return_value=record):
         active = api.research_session_log_download_view("test-session-id", "/fixture")
-    assert (
-        'filename="Tadpole_Research.session_7.log"'
-        in active.headers["content-disposition"]
-    )
+    assert 'filename="Tadpole_Research.session_7.log"' in active.headers["content-disposition"]
     assert active.media_type is not None and active.media_type.startswith("text/markdown")
     assert b"## Research-reference preparation" in active.body
     assert b"still recording" in active.body
@@ -646,9 +653,7 @@ def test_session_log_download_route_content_and_name() -> None:
     record["saved_short_name"] = None
     with patch.object(api.session_log, "read", return_value=record):
         fallback = api.research_session_log_download_view("test-session-id", "/fixture")
-    assert 'filename="A_Long_Project_Name.session_7.log"' in fallback.headers[
-        "content-disposition"
-    ]
+    assert 'filename="A_Long_Project_Name.session_7.log"' in fallback.headers["content-disposition"]
 
 
 def main() -> None:
@@ -667,7 +672,9 @@ def main() -> None:
         test_session_log_filename_short_name_fallback_and_sanitization()
         test_saved_reference_diagnostics_and_markdown_export()
         test_session_log_download_route_content_and_name()
-    print("Session log append, reference diagnostics, filenames, concurrency, redaction and recovery scenarios passed.")
+    print(
+        "Session log append, reference diagnostics, filenames, concurrency, redaction and recovery scenarios passed."
+    )
 
 
 if __name__ == "__main__":

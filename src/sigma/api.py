@@ -1111,8 +1111,7 @@ def research_session_log_download_view(session_id: str, path: str):
             body,
             media_type="text/markdown; charset=utf-8",
             headers={
-                "Content-Disposition":
-                f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(filename)}'
+                "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
             },
         )
     except (ProjectError, ValueError, OSError) as exc:
