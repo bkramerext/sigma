@@ -1,4 +1,4 @@
-"""Gmail API invitation notifications using a locally authorized OAuth refresh token.
+"""Gmail API message delivery using a locally authorized OAuth refresh token.
 
 The token file is created by the operator using the gmail.send scope. Never
 commit it, include it in images, or expose it to the browser.

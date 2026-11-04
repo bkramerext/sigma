@@ -1565,7 +1565,7 @@ class EmailProjectRequest(OpenRequest):
 
 @app.post("/api/projects/email")
 def email_project_view(body: EmailProjectRequest, request: Request):
-    """Mail an importable project and optional paper via server-configured SMTP."""
+    """Mail an importable project and optional paper via the shared mail transport."""
     cfg = cloud_auth.config()
     allowed = {"http://127.0.0.1:5173", "http://localhost:5173"}
     if cfg.origin:
@@ -1597,7 +1597,7 @@ def email_project_view(body: EmailProjectRequest, request: Request):
         raise HTTPException(503, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(
-            503, "Project email could not be delivered. Check SMTP configuration or retry."
+            503, "Project email could not be delivered. Check email configuration or retry."
         ) from exc
     return {"sent": count}
 

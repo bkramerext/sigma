@@ -1,7 +1,7 @@
 """Importable SIGMA project mail with optional saved-paper attachments.
 
-Only the explicit SMTP configuration on the SIGMA server is used. Saved
-papers are intentionally excluded from the importable project attachment:
+The shared mail transport selects configured SMTP or Gmail API delivery.
+Saved papers are intentionally excluded from the importable project attachment:
 recipients can resume the research and generate their own papers.
 """
 

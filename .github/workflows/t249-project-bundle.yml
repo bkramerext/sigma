@@ -6,6 +6,8 @@ on:
       - 'src/sigma/project_email.py'
       - 'src/sigma/feedback_diagnostic.py'
       - 'src/sigma/local_gmail_cli_auth.py'
+      - 'src/sigma/mail_transport.py'
+      - 'tests/mail_transport_integration.py'
       - 'src/sigma/local_gmail_cli_bridge.py'
       - 'tests/local_gmail_cli_bridge.py'
       - 'tests/local_gmail_cli_auth.py'
@@ -48,6 +50,8 @@ jobs:
         run: python tests/project_bundle.py
       - name: Verify project email and SMTP attachments
         run: python tests/project_email.py
+      - name: Verify About feedback and Email Project use the same Gmail sender
+        run: python tests/mail_transport_integration.py
       - name: Verify feedback CLI diagnostic
         run: python tests/feedback_diagnostic.py
       - name: Verify standalone Gmail authorization
