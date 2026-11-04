@@ -234,7 +234,10 @@ def main() -> None:
                         ),
                     )
                     panel.get_by_role("button", name="Copy project diagnostics").click()
-                    expect(panel.get_by_role("status")).to_contain_text("copied")
+                    page.wait_for_function(
+                        """async () => (await navigator.clipboard.readText())
+                          .includes('Session removal failed: stale project revision.')"""
+                    )
                     copied_after_delete = page.evaluate("navigator.clipboard.readText()")
                     assert deleted_message in copied_after_delete
                     with page.expect_download() as deletion_download:
