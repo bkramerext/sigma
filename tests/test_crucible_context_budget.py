@@ -20,8 +20,7 @@ def _size(value: object) -> int:
 def _obligation(index: int, *, unique_scope: bool = False) -> dict[str, object]:
     group = index if unique_scope else index // 12
     assumptions = [
-        f"Shared assumption {group} / {number}: " + "a" * 180
-        for number in range(6)
+        f"Shared assumption {group} / {number}: " + "a" * 180 for number in range(6)
     ]
     artifact_id = f"research-artifact-{index // 3}"
     return {
@@ -108,7 +107,11 @@ def test_crucible_three_rounds_growth_preserves_saved_research() -> None:
         assert dispatch["problem"] == source["problem"]
         selected = dispatch["obligation_ledger"]
         selected_ids = {item["obligation_id"] for item in selected}
-        omitted = [item for item in source["obligation_ledger"] if item["obligation_id"] not in selected_ids]
+        omitted = [
+            item
+            for item in source["obligation_ledger"]
+            if item["obligation_id"] not in selected_ids
+        ]
         assert dispatch["obligation_ledger_omitted_count"] == len(omitted)
         if omitted:
             any_omitted = True
