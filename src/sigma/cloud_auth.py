@@ -1640,6 +1640,68 @@ def login(
     return response
 
 
+
+@router.get("/mail/authorize")
+def authorize_local_gmail_send(request: Request):
+    """Ask the already signed-in local Google identity for Gmail Send consent."""
+    from sigma.local_gmail_grant import GMAIL_SEND_SCOPE
+
+    cfg = config()
+    if not cfg.local:
+        raise HTTPException(404, "Not found.")
+    if cfg.error or not cfg.origin or not cfg.client_id or not cfg.client_secret:
+        raise HTTPException(503, "Local Google sign-in is not configured.")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if (
+        principal is None
+        or principal.role != "admin"
+        or principal.subject.startswith(("local-admin:", "mock:"))
+        or principal.email != cfg.admin_contact_email
+    ):
+        raise HTTPException(
+            403,
+            "Sign into local SIGMA with the real Google admin account first. "
+            "The --signin shortcut does not perform Google OAuth.",
+        )
+    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+    with _db(cfg) as db:
+        db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
+        db.execute(
+            "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to) VALUES(?,?,?,?,?)",
+            (_hash(state), nonce, verifier, _now() + FLOW_SECONDS, "mail:" + principal.subject),
+        )
+    params = {
+        "client_id": cfg.client_id,
+        "redirect_uri": cfg.origin + "/api/cloud-auth/callback",
+        "response_type": "code",
+        "scope": "openid email profile " + GMAIL_SEND_SCOPE,
+        "state": state,
+        "nonce": nonce,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "access_type": "offline",
+        "prompt": "consent select_account",
+        "include_granted_scopes": "true",
+        "login_hint": principal.email,
+    }
+    response = RedirectResponse(
+        "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params), status_code=302
+    )
+    response.set_cookie(
+        _cookie_name(FLOW_COOKIE, cfg),
+        state,
+        **_cookie_options(cfg, FLOW_COOKIE, max_age=FLOW_SECONDS),
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
 @router.get("/callback")
 async def callback(
     request: Request,
@@ -1737,6 +1799,50 @@ async def callback(
             raise ValueError("Invalid subject")
     except (httpx.HTTPError, jwt.PyJWTError, ValueError, KeyError, TypeError, AttributeError):
         raise HTTPException(401, "Google sign-in could not be verified.") from None
+    # Gmail Send consent is a distinct, explicitly initiated local flow. Never
+    # provision it in hosted mode, and never accept a different Google subject
+    # than the one already signed into the browser before consent.
+    mail_subject = str(flow["return_to"] or "").removeprefix("mail:")
+    if str(flow["return_to"] or "").startswith("mail:"):
+        from sigma.local_gmail_grant import GMAIL_SEND_SCOPE, save_grant
+
+        principal = resolve_session(session_cookie)
+        if (
+            not cfg.local
+            or principal is None
+            or principal.role != "admin"
+            or principal.subject.startswith(("mock:", "local-admin:"))
+            or principal.subject != mail_subject
+            or principal.subject != subject
+            or principal.email != email
+            or cfg.admin_contact_email != email
+        ):
+            raise HTTPException(403, "Gmail permission must match the signed-in Google account.")
+        scopes = str(token_data.get("scope", ""))
+        refresh = token_data.get("refresh_token")
+        if GMAIL_SEND_SCOPE not in scopes.split() or not isinstance(refresh, str) or not refresh:
+            raise HTTPException(
+                403, "Google did not issue offline Gmail Send permission for this account."
+            )
+        try:
+            assert cfg.database is not None
+            save_grant(
+                cfg.database.parent,
+                subject=subject,
+                sender=email,
+                client_id=cfg.client_id,
+                client_secret=cfg.client_secret,
+                refresh_token=refresh,
+                scope=scopes,
+            )
+        except (OSError, ValueError) as exc:
+            raise HTTPException(503, "Could not save the private local Gmail grant.") from exc
+        response = RedirectResponse("/?gmail_send=authorized", status_code=303)
+        _clear_cookie(response, cfg, FLOW_COOKIE)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
     invite_intent = request.cookies.get(_cookie_name(INVITE_INTENT_COOKIE, cfg)) == state
     auto_domain_member = False
     with _db(cfg) as db:
@@ -1985,10 +2091,35 @@ def denied_identity(request: Request):
     return response
 
 
+def _local_gmail_sender_grant() -> tuple[Path, str] | None:
+    """Find local opt-in Gmail permission; never read it in hosted mode."""
+    if not _local_mode() or os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").lower() not in {
+        "1", "true", "yes"
+    }:
+        return None
+    from sigma.local_gmail_grant import grant_for_account
+
+    home = Path(
+        os.environ.get("SIGMA_CLOUD_AUTH_HOME", "")
+        or str(Path.home() / ".sigma" / "local-cloud-auth")
+    )
+    email = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip().casefold()
+    client_id = os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip()
+    grant = grant_for_account(home, email=email, client_id=client_id)
+    return (grant[0], email) if grant is not None else None
+
+
 def email_env(suffix: str, default: str = "") -> str:
-    """Shared mail setting; prefer SIGMA_EMAIL_* while honoring legacy names."""
+    """Shared mail settings, plus local-only opt-in Gmail authorization."""
     if suffix.startswith("GMAIL_"):
         direct = os.environ.get(f"SIGMA_{suffix}")
+        # An explicit empty setting disables Gmail for this invocation.
+        if direct is not None and not direct.strip():
+            return ""
+        if suffix in {"GMAIL_TOKEN_FILE", "GMAIL_SENDER"}:
+            local = _local_gmail_sender_grant()
+            if local:
+                return str(local[0]) if suffix == "GMAIL_TOKEN_FILE" else local[1]
         if direct is not None:
             return direct.strip()
     modern = os.environ.get(f"SIGMA_EMAIL_{suffix}")
