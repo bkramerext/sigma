@@ -747,7 +747,9 @@ def main() -> None:
             )
             assert copies and logouts == ["POST"], (copies, logouts)
             assert member.evaluate("localStorage.getItem('sigma.currentProject')") is None
-            expect(member.locator(".request-toast").filter(has_text="safely copied")).to_have_count(0)
+            expect(member.locator(".request-toast").filter(has_text="safely copied")).to_have_count(
+                0
+            )
             member.reload()
             expect(member.locator(".home-signout-copy-notice")).to_have_count(0)
 
