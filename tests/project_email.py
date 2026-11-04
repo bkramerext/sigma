@@ -15,7 +15,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from sigma import cloud_auth, project_email, research_sessions
-from sigma.project_bundle import import_bundle, portable_bundle, read_file
+from sigma.project_bundle import import_bundle, list_files, portable_bundle, read_file
 from sigma.projects import ProjectError
 
 
@@ -81,7 +81,15 @@ class ProjectEmailTests(unittest.TestCase):
             self.assertNotIn("artifacts/papers/old.pdf", payload["files"])
             self.assertIn(f"research-sessions/{session_id}.json", payload["files"])
             import_bundle(payload, target)
-            imported = json.loads(read_file(target, f"research-sessions/{session_id}.json"))
+            session_paths = [
+                name for name in list_files(target)
+                if name.startswith("research-sessions/") and name.endswith(".json")
+                and name not in {"research-sessions/sequence.json", "research-sessions/limits.json"}
+            ]
+            self.assertEqual(len(session_paths), 1)
+            imported = json.loads(read_file(target, session_paths[0]))
+            self.assertNotEqual(imported["id"], session_id)
+            self.assertEqual(imported["source_session_id"], session_id)
             self.assertEqual(imported["status"], "stopped")
             self.assertTrue(imported["imported_via_bundle"])
             self.assertEqual(imported["project_id"], project_id)
@@ -152,6 +160,7 @@ class ProjectEmailTests(unittest.TestCase):
 
     def test_concurrent_reservation_and_idempotent_completion(self):
         identity = str(uuid4())
+
         def reserve():
             try:
                 return project_email._reserve_delivery("subject:alice", identity, "digest", 1)
@@ -179,9 +188,11 @@ class ProjectEmailTests(unittest.TestCase):
         self.assertIsNone(
             project_email._reserve_delivery("subject:b", str(uuid4()), "other", 1)
         )
-        with patch.object(project_email, "DAILY_GLOBAL_LIMIT", 6):
-            with self.assertRaises(project_email.MailRateLimit):
-                project_email._reserve_delivery("subject:c", str(uuid4()), "global", 1)
+        with (
+            patch.object(project_email, "DAILY_GLOBAL_LIMIT", 6),
+            self.assertRaises(project_email.MailRateLimit),
+        ):
+            project_email._reserve_delivery("subject:c", str(uuid4()), "global", 1)
 
     def test_partial_and_unknown_smtp_are_not_replayed(self):
         for outcome in ("partial", "unknown"):
@@ -211,8 +222,9 @@ class ProjectEmailTests(unittest.TestCase):
                         sending.return_value = {"second@example.com": (550, b"no")}
                     else:
                         sending.side_effect = smtplib.SMTPServerDisconnected("after DATA")
+                    initial_error = None
                     for attempt in range(2):
-                        with self.assertRaises(project_email.MailDispatchConflict):
+                        with self.assertRaises(project_email.MailDispatchConflict) as caught:
                             project_email.send_project_email(
                                 "/project.json",
                                 "first@example.com second@example.com",
@@ -221,7 +233,11 @@ class ProjectEmailTests(unittest.TestCase):
                                 None,
                                 identity,
                             )
+                        if attempt == 0:
+                            initial_error = str(caught.exception)
                     sending.assert_called_once()
+                    if outcome == "partial":
+                        self.assertIn("second@example.com", initial_error)
                     with sqlite3.connect(project_email._delivery_database_path()) as db:
                         self.assertEqual(
                             db.execute(
@@ -299,9 +315,14 @@ class ProjectEmailTests(unittest.TestCase):
                 )
             )
             import_bundle(json.loads(sender.read_text()), receiver)
-            imported = json.loads(
-                read_file(receiver, f"research-sessions/{session_id}.json")
+            imported_path = next(
+                name for name in list_files(receiver)
+                if name.startswith("research-sessions/")
+                and name.endswith(".json")
+                and name not in {"research-sessions/limits.json", "research-sessions/sequence.json"}
             )
+            imported = json.loads(read_file(receiver, imported_path))
+            self.assertNotEqual(imported["id"], session_id)
             self.assertTrue(imported["imported_via_bundle"])
             model = next(iter(research_sessions.TOKEN_PRICES_PER_MILLION))
             credential = {"mode": "api_key", "identity": "recipient-provider"}
@@ -338,6 +359,133 @@ class ProjectEmailTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ProjectError, "unsettled"):
             research_sessions._validate_imported_transport_change(record, next_model="gpt-5")
+
+    def test_rebased_imports_have_private_session_ids_and_repaired_links(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project_id = str(uuid4())
+            first, second = str(uuid4()), str(uuid4())
+            source = root / "source.json"
+            refs = {"primary": first, "related": [second, f"research-sessions/{first}.json"]}
+            members = {
+                "project.json": json.dumps(
+                    {"schema_version": 11, "id": project_id, "title": "Two session sample"}
+                ).encode(),
+                f"research-sessions/{first}.json": json.dumps(
+                    {
+                        "id": first,
+                        "project_id": project_id,
+                        "project_path": str(source),
+                        "session_number": 1,
+                        "status": "stopped",
+                        "linked_session_id": second,
+                        "idempotency_key": "sender-request",
+                    }
+                ).encode(),
+                f"research-sessions/{second}.json": json.dumps(
+                    {
+                        "id": second,
+                        "project_id": project_id,
+                        "project_path": str(source),
+                        "session_number": 2,
+                        "status": "stopped",
+                        "linked_session_id": first,
+                        "idempotency_key": "sender-request-2",
+                    }
+                ).encode(),
+                "artifacts/session-references.json": json.dumps(refs).encode(),
+                "artifacts/binary.bin": b"\\x00\\xff",
+            }
+            bundle = portable_bundle(members)
+            copies = []
+            for label in ("a", "b"):
+                target = root / f"recipient-{label}.json"
+                import_bundle(bundle, target)
+                sessions = [
+                    json.loads(read_file(target, name))
+                    for name in list_files(target)
+                    if name.startswith("research-sessions/")
+                    and name.endswith(".json")
+                ]
+                self.assertEqual(len(sessions), 2)
+                mapped = {item["source_session_id"]: item for item in sessions}
+                self.assertEqual(set(mapped), {first, second})
+                self.assertEqual(mapped[first]["linked_session_id"], mapped[second]["id"])
+                self.assertEqual(mapped[second]["linked_session_id"], mapped[first]["id"])
+                self.assertNotIn(first, [item["id"] for item in sessions])
+                self.assertNotIn(second, [item["id"] for item in sessions])
+                self.assertNotEqual(mapped[first]["idempotency_key"], "sender-request")
+                rewritten = json.loads(read_file(target, "artifacts/session-references.json"))
+                self.assertEqual(rewritten["primary"], mapped[first]["id"])
+                self.assertEqual(rewritten["related"][0], mapped[second]["id"])
+                self.assertEqual(
+                    rewritten["related"][1],
+                    f"research-sessions/{mapped[first]['id']}.json",
+                )
+                self.assertEqual(read_file(target, "artifacts/binary.bin"), b"\\x00\\xff")
+                copies.append({item["id"] for item in sessions})
+            self.assertTrue(copies[0].isdisjoint(copies[1]))
+
+    def test_definite_no_send_can_retry_with_same_uuid_but_is_capped(self):
+        identity = str(uuid4())
+        sender = "subject:alice"
+        self.assertIsNone(project_email._reserve_delivery(sender, identity, "payload", 2))
+        for attempt in range(1, project_email.MAX_SEND_ATTEMPTS):
+            project_email._finish_delivery(sender, identity, "failed", 0)
+            self.assertIsNone(project_email._reserve_delivery(sender, identity, "payload", 2))
+        project_email._finish_delivery(sender, identity, "failed", 0)
+        with self.assertRaises(project_email.MailDispatchConflict):
+            project_email._reserve_delivery(sender, identity, "payload", 2)
+        with sqlite3.connect(project_email._delivery_database_path()) as db:
+            self.assertEqual(
+                db.execute(
+                    "SELECT attempts FROM project_email_dispatches WHERE request_id=?",
+                    (identity,),
+                ).fetchone()[0],
+                project_email.MAX_SEND_ATTEMPTS,
+            )
+
+    @patch.object(project_email.cloud_auth, "send_smtp_message")
+    @patch.object(project_email, "email_project_bundle", return_value=(b"{}", "shared.json"))
+    @patch.object(project_email, "inspect_project")
+    def test_failed_smtp_request_retries_without_double_dispatch(self, inspect, _bundle, smtp):
+        inspect.return_value.project.title = "Project"
+        identity = str(uuid4())
+        smtp.side_effect = [
+            cloud_auth.SMTPDeliveryError("SMTP credentials missing", state="failed"),
+            None,
+        ]
+        with self.assertRaises(project_email.MailDeliveryNotSent):
+            project_email.send_project_email(
+                "/project.json", "bob@example.com", "", "project", None, identity
+            )
+        self.assertEqual(
+            project_email.send_project_email(
+                "/project.json", "bob@example.com", "", "project", None, identity
+            ),
+            1,
+        )
+        self.assertEqual(smtp.call_count, 2)
+
+    @patch.object(project_email.cloud_auth, "send_smtp_message")
+    @patch.object(project_email, "email_project_bundle", return_value=(b"{}", "shared.json"))
+    @patch.object(project_email, "inspect_project")
+    def test_local_reply_to_can_use_explicit_operator_contact(self, inspect, _bundle, smtp):
+        inspect.return_value.project.title = "Project"
+        with (
+            patch.object(cloud_auth, "current_principal", return_value=None),
+            patch.dict(
+                "os.environ",
+                {
+                    "SIGMA_PROJECT_EMAIL_REPLY_TO": "researcher@example.org",
+                    "SIGMA_INVITATION_SMTP_USERNAME": "relay@example.org",
+                },
+            ),
+        ):
+            project_email.send_project_email(
+                "/project.json", "recipient@example.org", "", "project", None
+            )
+        self.assertEqual(smtp.call_args.kwargs["reply_to"], "researcher@example.org")
 
     def test_smtp_envelope_recipients_are_bcc(self):
         message = EmailMessage()

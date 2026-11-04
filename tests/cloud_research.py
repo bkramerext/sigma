@@ -88,6 +88,113 @@ def workspace(root: Path, identifier: str, email: str | None = None) -> cloud_wo
     return cloud_workspaces.Workspace(identifier, identifier, path, email)
 
 
+def test_imported_session_keys_do_not_alias_hosted_jobs(
+    root: Path, ledger_root: Path
+) -> None:
+    """Recipient imports must not reuse the sender's globally keyed job UUID."""
+    from sigma.project_bundle import import_bundle, list_files, read_file
+
+    owner_a = workspace(root / "email-hosted-a", "a" * 32)
+    owner_b = workspace(root / "email-hosted-b", "b" * 32)
+    original = initialize_project(
+        owner_a.path / "emailed.sigma",
+        "Emailed research",
+        "Verify a conjecture",
+        research_mode="mathematical",
+    )
+    sender_id = str(uuid4())
+    sender_key = str(uuid4())
+    record = {
+        "id": sender_id,
+        "project_id": original.project.id,
+        "project_path": str(Path(original.path).resolve()),
+        "session_number": 1,
+        "status": "stopped",
+        "mode": "api_key",
+        "model": "gpt-6-luna",
+        "reasoning_effort": "low",
+        "idempotency_key": sender_key,
+    }
+    member = Path(original.path) / "research-sessions" / f"{sender_id}.json"
+    member.parent.mkdir(exist_ok=True)
+    member.write_text(json.dumps(record))
+    destination = owner_b.path / "recipient.json"
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "100",
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+            },
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch.object(
+            cloud_research,
+            "_effective_user_spend_ceiling_decimal",
+            return_value=Decimal("100"),
+        ),
+        patch("sigma.cloud_sponsor.inference_provider", return_value="api_key"),
+    ):
+        token = cloud_workspaces._CURRENT.set(owner_a)
+        try:
+            sender_job = job(owner_a.workspace_id, session=sender_id, key=sender_key)
+            sender_job.update(
+                {
+                    "project_id": original.project.id,
+                    "project_path": original.path,
+                }
+            )
+            cloud_research.prepare_job(sender_job)
+            assert cloud_research.job_status(sender_id) == "queued"
+            portable = json.loads(export_complete_project(original.path))
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
+        token = cloud_workspaces._CURRENT.set(owner_b)
+        try:
+            import_bundle(portable, destination)
+            paths = [
+                item for item in list_files(destination)
+                if item.startswith("research-sessions/")
+                and item.endswith(".json")
+                and item not in {
+                    "research-sessions/sequence.json",
+                    "research-sessions/limits.json",
+                    "research-sessions/obligation-ids.json",
+                }
+            ]
+            assert len(paths) == 1
+            imported = json.loads(read_file(destination, paths[0]))
+            assert imported["id"] != sender_id
+            assert imported["source_session_id"] == sender_id
+            assert imported["idempotency_key"] != sender_key
+            receiver_job = dict(sender_job)
+            receiver_job.update(
+                {
+                    "id": imported["id"],
+                    "idempotency_key": imported["idempotency_key"],
+                    "project_path": str(destination),
+                }
+            )
+            cloud_research.prepare_job(receiver_job)
+            assert cloud_research.job_status(imported["id"]) == "queued"
+            with cloud_research._connect() as db:
+                rows = db.execute(
+                    "SELECT session_id,workspace_id FROM jobs "
+                    "WHERE session_id IN (?,?) ORDER BY session_id",
+                    (sender_id, imported["id"]),
+                ).fetchall()
+                assert len(rows) == 2
+                assert {row["workspace_id"] for row in rows} == {
+                    owner_a.workspace_id,
+                    owner_b.workspace_id,
+                }
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
+
 def global_reserved_spend() -> float:
     db = cloud_research._connect()
     try:
@@ -3720,6 +3827,9 @@ def main() -> None:
         eight_user_ledger = root / "eight-user-admission-ledger"
         eight_user_ledger.mkdir(mode=0o700)
         test_eight_research_users_fill_exactly_thirty_two_admissions(root, eight_user_ledger)
+        imported_ledger = root / "email-import-hosted-ledger"
+        imported_ledger.mkdir(mode=0o700)
+        test_imported_session_keys_do_not_alias_hosted_jobs(root, imported_ledger)
         test_local_limits_remain_unmodified(root)
         test_local_global_spend_default_supports_small_team_pilot()
         monthly_ledger = root / "monthly-global-ledger"

@@ -2035,10 +2035,18 @@ def _deliver_admin_notice(subject: str, body: str) -> None:
 class SMTPDeliveryError(RuntimeError):
     """Known no-delivery, partial acceptance, or ambiguous SMTP outcome."""
 
-    def __init__(self, message: str, *, state: str, accepted_count: int = 0):
+    def __init__(
+        self,
+        message: str,
+        *,
+        state: str,
+        accepted_count: int = 0,
+        refused_recipients: tuple[str, ...] = (),
+    ):
         super().__init__(message)
         self.state = state
         self.accepted_count = accepted_count
+        self.refused_recipients = refused_recipients
 
 
 def send_smtp_message(
@@ -2050,19 +2058,19 @@ def send_smtp_message(
     to one another. Credentials and provider details never reach the client.
     """
     if not recipients:
-        raise RuntimeError("Email requires a recipient.")
+        raise SMTPDeliveryError("Email requires a recipient.", state="failed")
     raw_username = os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
     try:
         username = _normalize_email(raw_username)
         recipients = [_normalize_email(address) for address in recipients]
     except ValueError as exc:
-        raise RuntimeError("SMTP delivery is not configured.") from exc
+        raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed") from exc
     try:
         password = secret_value("SIGMA_INVITATION_SMTP_PASSWORD")
     except SecretConfigurationError as exc:
-        raise RuntimeError("SMTP delivery is not configured.") from exc
+        raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed") from exc
     if not password:
-        raise RuntimeError("SMTP delivery is not configured.")
+        raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed")
     host = os.environ.get("SIGMA_INVITATION_SMTP_HOST", "smtp.gmail.com").strip()
     try:
         port = int(os.environ.get("SIGMA_INVITATION_SMTP_PORT", "587"))
@@ -2087,7 +2095,18 @@ def send_smtp_message(
                     "Some recipients were refused by the SMTP server.",
                     state="partial" if accepted else "failed",
                     accepted_count=accepted,
+                    refused_recipients=tuple(
+                        address for address in recipients if address in refused
+                    ),
                 )
+    except smtplib.SMTPRecipientsRefused as exc:
+        raise SMTPDeliveryError(
+            "All SMTP recipients were refused.",
+            state="failed",
+            refused_recipients=tuple(
+                address for address in recipients if address in exc.recipients
+            ),
+        ) from exc
     except SMTPDeliveryError:
         raise
     except (OSError, ValueError, smtplib.SMTPException) as exc:

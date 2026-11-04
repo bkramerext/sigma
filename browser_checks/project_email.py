@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from urllib.parse import quote
 from uuid import uuid4
@@ -65,7 +64,7 @@ def main() -> None:
         path = created["body"]["path"]
         project_id = created["body"]["project"]["id"]
         stars = [paper("new", 3, 20), paper("star", 2, 70), paper("old", 1, 52)]
-        state = {"papers": stars, "fail": True}
+        state = {"papers": stars, "fail": True, "fail_email": False}
         requests: list[dict] = []
 
         def paper_route(route):
@@ -83,14 +82,11 @@ def main() -> None:
 
         def email_route(route):
             requests.append(route.request.post_data_json)
-            route.fulfill(
-                status=503 if len(requests) == 1 else 200,
-                json=(
-                    {"error": "SMTP delivery uncertain."}
-                    if len(requests) == 1
-                    else {"sent": 2}
-                ),
-            )
+            if len(requests) == 1 or state["fail_email"]:
+                state["fail_email"] = False
+                route.fulfill(status=503, json={"error": "SMTP was unavailable; nothing sent."})
+            else:
+                route.fulfill(status=200, json={"sent": 2})
 
         page.route("**/api/projects/papers?**", paper_route)
         page.route("**/api/projects/email", email_route)
@@ -135,7 +131,7 @@ def main() -> None:
         expect(dialog.locator("#email-project-paper")).to_have_value("new")
         expect(dialog.get_by_role("button", name="Send")).to_be_enabled()
         dialog.get_by_role("button", name="Send").click()
-        expect(dialog).to_contain_text("SMTP delivery uncertain.")
+        expect(dialog).to_contain_text("SMTP was unavailable; nothing sent.")
         dialog.get_by_role("button", name="Send").click()
         expect(dialog).not_to_be_visible()
         assert len(requests) == 2
@@ -143,6 +139,16 @@ def main() -> None:
         assert requests[0]["mode"] == "pdf_tex"
         assert requests[0]["paper_id"] == "new"
         assert requests[0]["recipients"] == "first@example.org second@example.org"
+        # Project-only Send must work when the paper-list endpoint is down.
+        state["fail"] = True
+        page.get_by_role("button", name="Email project").click()
+        expect(dialog).to_contain_text("Paper list unavailable")
+        dialog.get_by_label("Just attach project").check()
+        expect(dialog.get_by_role("button", name="Send")).to_be_enabled()
+        dialog.get_by_role("button", name="Send").click()
+        expect(dialog).not_to_be_visible()
+        assert requests[-1]["mode"] == "project"
+        state["fail"] = False
         # A removed paper falls back to the first starred available version.
         state["papers"] = stars[1:]
         page.get_by_role("button", name="Email project").click()
@@ -154,6 +160,15 @@ def main() -> None:
         expect(dialog.get_by_label("Also attach paper as PDF", exact=True)).to_be_disabled()
         expect(dialog.get_by_label("Also attach paper as PDF and its source LaTeX")).to_be_disabled()
         expect(dialog.locator("#email-project-paper")).to_have_count(0)
+        # Changing content after a definite no-send starts a new idempotent request.
+        state["fail_email"] = True
+        dialog.get_by_role("button", name="Send").click()
+        expect(dialog).to_contain_text("SMTP was unavailable; nothing sent.")
+        failed_request_id = requests[-1]["request_id"]
+        dialog.locator("#email-project-body").fill("A revised, explicit request.")
+        dialog.get_by_role("button", name="Send").click()
+        expect(dialog).not_to_be_visible()
+        assert requests[-1]["request_id"] != failed_request_id
         assert any(project_id in key for key in page.evaluate("Object.keys(localStorage)"))
         assert not errors, errors
         browser.close()

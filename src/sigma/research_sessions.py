@@ -7063,7 +7063,7 @@ async def control_session(
         record["message"] = "Project identity changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
-    switch_transport = credential["mode"] != record["mode"]
+    switch_transport = credential["mode"] != record["mode"] or record.get("imported_via_bundle") is True
     config = await _frozen_session_configuration(view, credential, record)
     if switch_transport:
         # Imported research can use the recipient's explicitly configured
@@ -7113,9 +7113,9 @@ async def control_session(
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
             if switch_transport:
-                if record["mode"] != credential["mode"]:
-                    _rebind_imported_transport(record, credential, config)
-                    _save(path, record)
+                # Stage the transfer only in memory. Never commit a new owner
+                # before capacity, billing and worker admission succeed.
+                _rebind_imported_transport(record, credential, config)
             if record.get("stopped_at"):
                 stopped_for = datetime.now(UTC) - datetime.fromisoformat(record["stopped_at"])
                 record["stopped_duration_seconds"] = (

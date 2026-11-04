@@ -2102,6 +2102,15 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
   // An ambiguous SMTP outcome must not be retried with a new request ID.
   // Reopening the dialog is an explicit new send.
   const requestId = useRef<string | null>(null);
+  const lastSendDefinitelyFailed = useRef(false);
+  function payloadChanged() {
+    if (lastSendDefinitelyFailed.current) {
+      // After a confirmed no-send, edited content is a new request. Ambiguous
+      // deliveries retain the original UUID to prevent silent duplication.
+      requestId.current = null;
+      lastSendDefinitelyFailed.current = false;
+    }
+  }
   const initial = useRef(projectEmailPreferences(projectId)).current;
   const [recipients, setRecipients] = useState(initial.recipients);
   const [body, setBody] = useState(initial.body);
@@ -2148,8 +2157,8 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
   }, [path, paperRetry]);
   useEffect(() => {
     if (!loaded) return;
-    if (selectedPaperId !== paperId) setPaperId(selectedPaperId);
-    if (effectiveMode !== mode) setMode(effectiveMode);
+    if (selectedPaperId !== paperId) { payloadChanged(); setPaperId(selectedPaperId); }
+    if (effectiveMode !== mode) { payloadChanged(); setMode(effectiveMode); }
   }, [loaded, paperId, selectedPaperId, mode, effectiveMode]);
   useEffect(() => {
     window.localStorage.setItem('sigma.projectEmail:' + projectId,
@@ -2158,7 +2167,7 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
   function cancel() { if (!submitting.current) onCancel(); }
   async function send(event: FormEvent) {
     event.preventDefault();
-    if (submitting.current || !loaded) return;
+    if (submitting.current || (!loaded && effectiveMode !== 'project')) return;
     const addresses = recipients.trim();
     if (!addresses) { setError('Enter at least one recipient email address.'); addressInput.current?.focus(); return; }
     submitting.current = true; setBusy(true); setError('');
@@ -2169,7 +2178,12 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
         body: JSON.stringify({ request_id: requestId.current, path, recipients: addresses, body, mode: effectiveMode, paper_id: effectiveMode === 'project' ? null : selectedPaperId }),
       });
       const detail = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(detail?.error ?? detail?.detail ?? 'Project email could not be delivered.');
+      if (!response.ok) {
+        // The server reports uncertain/partial sends as 409. Only definitive
+        // pre-dispatch or no-delivery responses permit changing the request.
+        lastSendDefinitelyFailed.current = [422, 429, 503].includes(response.status);
+        throw new Error(detail?.error ?? detail?.detail ?? 'Project email could not be delivered.');
+      }
       onSent(detail.sent as number);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { submitting.current = false; setBusy(false); }
@@ -2185,19 +2199,19 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
         <p className="settings-hint">The current project, <strong>{title}</strong>, will be sent as an importable attachment to the email addresses you provide.</p>
         <label htmlFor="email-project-recipients">Email addresses (comma or space separated)</label>
         <input ref={addressInput} id="email-project-recipients" type="text" value={recipients} disabled={busy} required spellCheck={false}
-          onChange={event => { setRecipients(event.target.value); setError(''); }} placeholder="name@example.com, other@example.com" />
+          onChange={event => { payloadChanged(); setRecipients(event.target.value); setError(''); }} placeholder="name@example.com, other@example.com" />
         <label htmlFor="email-project-body">Message (optional)</label>
         <textarea id="email-project-body" rows={3} value={body} maxLength={10000} disabled={busy}
-          onChange={event => setBody(event.target.value)} />
+          onChange={event => { payloadChanged(); setBody(event.target.value); }} />
         <fieldset className="export-type-options" disabled={busy}>
           <legend>Attachments</legend>
-          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'project'} onChange={() => setMode('project')}/>Just attach project</label>
-          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf'} disabled={!loaded || papersByDate.length === 0} onChange={() => setMode('pdf')}/>Also attach paper as PDF</label>
-          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf_tex'} disabled={!loaded || papersByDate.length === 0} onChange={() => setMode('pdf_tex')}/>Also attach paper as PDF and its source LaTeX</label>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'project'} onChange={() => { payloadChanged(); setMode('project'); }}/>Just attach project</label>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf'} disabled={!loaded || papersByDate.length === 0} onChange={() => { payloadChanged(); setMode('pdf'); }}/>Also attach paper as PDF</label>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf_tex'} disabled={!loaded || papersByDate.length === 0} onChange={() => { payloadChanged(); setMode('pdf_tex'); }}/>Also attach paper as PDF and its source LaTeX</label>
         </fieldset>
         {paperLoad === 'error' ? <p className="settings-hint" role="status">Paper list unavailable. Your saved attachment choice is unchanged. <button type="button" className="text-view-link" disabled={busy} onClick={() => setPaperRetry(value => value + 1)}>Retry</button></p> : loaded && !papersByDate.length ? <p className="email-no-papers">No papers generated.</p> : loaded && papersByDate.length > 0 ? <>
           <label htmlFor="email-project-paper">Generated paper</label>
-          <select id="email-project-paper" value={selectedPaperId} disabled={busy || effectiveMode === 'project'} onChange={event => setPaperId(event.target.value)}>
+          <select id="email-project-paper" value={selectedPaperId} disabled={busy || effectiveMode === 'project'} onChange={event => { payloadChanged(); setPaperId(event.target.value); }}>
             {papersByDate.map(paper => <option key={paper.paper_id} value={paper.paper_id}>{paper.title} (v{paper.paper_version}){(paper.score?.total ?? 0) >= 50 ? ' ★' : ''}</option>)}
           </select>
         </> : <p className="settings-hint" role="status">Loading generated papers…</p>}

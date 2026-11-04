@@ -503,7 +503,9 @@ def main() -> None:
             assert read_session_snapshot(created.path) == ([record], 0)
             imported_session_path = root / "imported-session.json"
             import_bundle(json.loads(export_complete_project(created.path)), imported_session_path)
-            imported_session = _read(str(imported_session_path), session_id)
+            imported_session = _all(str(imported_session_path))[0]
+            assert imported_session["id"] != session_id
+            assert imported_session["source_session_id"] == session_id
             assert imported_session["project_path"] == str(imported_session_path.resolve())
             assert imported_session["project_id"] == created.project.id
             assert imported_session["backend_build_commit"] == "a" * 40
@@ -515,7 +517,7 @@ def main() -> None:
             legacy_bundle["files"][f"research-sessions/{session_id}.json"] = legacy_session
             legacy_destination = root / "legacy-session-import.json"
             import_bundle(legacy_bundle, legacy_destination)
-            assert "backend_build_commit" not in _read(str(legacy_destination), session_id)
+            assert "backend_build_commit" not in _all(str(legacy_destination))[0]
             # Reject a bundle whose session filename and embedded ID disagree.
             malformed_bundle = json.loads(export_complete_project(created.path))
             bad_session = dict(record, id=str(uuid4()))
@@ -721,7 +723,7 @@ def main() -> None:
                 read_file(created.path, "project.json")
             )
             assert json.loads(read_file(imported_path, "legacy-data/one.json")) == {"turn": 1}
-            assert _read(str(imported_path), session_id)["project_path"] == str(
+            assert _all(str(imported_path))[0]["project_path"] == str(
                 imported_path.resolve()
             )
             assert read_file(imported_path, "artifacts/trace.bin") == bytes(range(256))

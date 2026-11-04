@@ -1577,7 +1577,12 @@ def email_project_view(body: EmailProjectRequest, request: Request):
     principal = cloud_auth.current_principal()
     if cfg.enabled and (principal is None or principal.role == "guest"):
         raise HTTPException(403, "Member access is required to email a project.")
-    from sigma.project_email import MailDispatchConflict, MailRateLimit, send_project_email
+    from sigma.project_email import (
+        MailDeliveryNotSent,
+        MailDispatchConflict,
+        MailRateLimit,
+        send_project_email,
+    )
 
     try:
         count = send_project_email(
@@ -1587,6 +1592,8 @@ def email_project_view(body: EmailProjectRequest, request: Request):
         raise HTTPException(429, str(exc)) from exc
     except MailDispatchConflict as exc:
         raise HTTPException(409, str(exc)) from exc
+    except MailDeliveryNotSent as exc:
+        raise HTTPException(503, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(
             503, "Project email could not be delivered. Check SMTP configuration or retry."

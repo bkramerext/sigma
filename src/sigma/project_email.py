@@ -31,6 +31,7 @@ DAILY_SEND_LIMIT = 20
 DAILY_GLOBAL_LIMIT = 100
 DAILY_RECIPIENT_LIMIT = 100
 RECORD_TTL_SECONDS = 7 * 24 * 3600
+MAX_SEND_ATTEMPTS = 3
 
 
 class MailRateLimit(RuntimeError):
@@ -39,6 +40,10 @@ class MailRateLimit(RuntimeError):
 
 class MailDispatchConflict(RuntimeError):
     """The request has already been processed or has uncertain delivery."""
+
+
+class MailDeliveryNotSent(RuntimeError):
+    """SMTP definitely did not deliver this request; an explicit retry is safe."""
 
 
 def _delivery_database_path() -> Path:
@@ -78,10 +83,17 @@ def _delivery_connection():
                 started_at INTEGER NOT NULL,
                 recipients INTEGER NOT NULL,
                 accepted INTEGER NOT NULL DEFAULT 0,
+                attempts INTEGER NOT NULL DEFAULT 1,
                 state TEXT NOT NULL CHECK(state IN ('sending','sent','partial','unknown','failed')),
                 PRIMARY KEY(sender_hash, request_id)
             )"""
         )
+        # Preserve ledgers from earlier development builds of this feature.
+        columns = {item["name"] for item in db.execute("PRAGMA table_info(project_email_dispatches)")}
+        if "attempts" not in columns:
+            db.execute(
+                "ALTER TABLE project_email_dispatches ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1"
+            )
         yield db
         db.execute("COMMIT")
     except BaseException:
@@ -91,9 +103,7 @@ def _delivery_connection():
         db.close()
 
 
-def _reserve_delivery(
-    sender: str, request_id: str, digest: str, recipients: int
-) -> int | None:
+def _reserve_delivery(sender: str, request_id: str, digest: str, recipients: int) -> int | None:
     """Atomically check idempotency and hourly/daily sender and global quotas."""
     try:
         if str(UUID(request_id)) != request_id:
@@ -108,7 +118,7 @@ def _reserve_delivery(
             (now - RECORD_TTL_SECONDS,),
         )
         prior = db.execute(
-            """SELECT payload_hash, state, accepted FROM project_email_dispatches
+            """SELECT payload_hash, state, accepted, attempts FROM project_email_dispatches
                WHERE sender_hash=? AND request_id=?""",
             (sender_hash, request_id),
         ).fetchone()
@@ -117,6 +127,16 @@ def _reserve_delivery(
                 raise MailDispatchConflict("This email request ID has different content.")
             if prior["state"] == "sent":
                 return int(prior["accepted"])
+            if prior["state"] == "failed" and prior["attempts"] < MAX_SEND_ATTEMPTS:
+                # A documented no-send can be retried without changing UUID.
+                # Attempt caps prevent unlimited SMTP requests under one quota entry.
+                db.execute(
+                    """UPDATE project_email_dispatches
+                       SET state='sending', attempts=attempts+1
+                       WHERE sender_hash=? AND request_id=?""",
+                    (sender_hash, request_id),
+                )
+                return None
             raise MailDispatchConflict(
                 "This email request was already attempted; delivery is not confirmed. "
                 "Check recipients before starting a new send."
@@ -158,8 +178,6 @@ def _finish_delivery(sender: str, request_id: str, state: str, accepted: int) ->
                WHERE sender_hash=? AND request_id=? AND state='sending'""",
             (state, accepted, sender_hash, request_id),
         )
-
-
 
 
 def parse_recipients(raw: str) -> list[str]:
@@ -270,7 +288,10 @@ def send_project_email(
     reply_to = (
         principal.email
         if principal is not None
-        else os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
+        else (
+            os.environ.get("SIGMA_PROJECT_EMAIL_REPLY_TO", "").strip()
+            or os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
+        )
     )
     if reply_to:
         try:
@@ -290,20 +311,29 @@ def send_project_email(
         cloud_auth.send_smtp_message(message, recipients, reply_to=reply_to or None)
     except cloud_auth.SMTPDeliveryError as exc:
         _finish_delivery(sender, identity, exc.state, exc.accepted_count)
+        refused = (
+            " Not delivered to: " + ", ".join(exc.refused_recipients) + "."
+            if exc.refused_recipients
+            else ""
+        )
+        if exc.state == "failed":
+            raise MailDeliveryNotSent(
+                "Project email was not delivered." + refused + " You can retry Send."
+            ) from exc
         raise MailDispatchConflict(
             "Project email delivery was "
-            + (
-                "partial"
-                if exc.state == "partial"
-                else "uncertain"
-                if exc.state == "unknown"
-                else "unsuccessful"
-            )
-            + ". Check the recipients before making a new send."
+            + ("partial" if exc.state == "partial" else "uncertain")
+            + "."
+            + refused
+            + " Check recipients before starting a new send."
+        ) from exc
+    except Exception as exc:
+        # Unexpected failures after the reservation might follow SMTP DATA.
+        _finish_delivery(sender, identity, "unknown", 0)
+        raise MailDispatchConflict(
+            "Project email delivery is uncertain. Check recipients before starting a new send."
         ) from exc
     except BaseException:
-        # Even an unexpected exception may follow SMTP DATA acceptance.
-        # Retain the reservation as uncertain; never replay automatically.
         _finish_delivery(sender, identity, "unknown", 0)
         raise
     _finish_delivery(sender, identity, "sent", len(recipients))

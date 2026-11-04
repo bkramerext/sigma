@@ -765,7 +765,10 @@ async def test_emailed_project_import_resumes_under_recipient_provider(path: Pat
     for label, recipient_mode in (("same", "api_key"), ("different", "chatgpt")):
         receiver_path = path.parent / f"email-recipient-{label}.json"
         import_bundle(json.loads(payload), receiver_path)
-        imported = research_sessions._read(str(receiver_path), started["id"])
+        imported = research_sessions._all(str(receiver_path))[0]
+        recipient_session_id = imported["id"]
+        assert recipient_session_id != started["id"]
+        assert imported["source_session_id"] == started["id"]
         assert imported["imported_via_bundle"] is True
         assert imported["project_path"] == str(receiver_path.resolve())
         assert imported["status"] == "stopped"
@@ -787,10 +790,10 @@ async def test_emailed_project_import_resumes_under_recipient_provider(path: Pat
             patch.object(research_sessions, "_worker", new=idle_worker),
         ):
             resumed = await research_sessions.control_session(
-                str(receiver_path), started["id"], "resume"
+                str(receiver_path), recipient_session_id, "resume"
             )
             assert resumed["status"] == "queued", resumed.get("message")
-            saved = research_sessions._read(str(receiver_path), started["id"])
+            saved = research_sessions._read(str(receiver_path), recipient_session_id)
             assert saved["mode"] == recipient_mode
             assert saved["project_id"] == view.project.id
             assert saved["status"] == "queued"
@@ -798,9 +801,9 @@ async def test_emailed_project_import_resumes_under_recipient_provider(path: Pat
             assert saved["steps"] == research_sessions._read(str(path), started["id"])[
                 "steps"
             ]
-            if recipient_mode != sender["mode"]:
-                assert saved["transport_change_history"][-1]["to_mode"] == recipient_mode
-                assert saved["identity_hash"] == research_sessions._digest(recipient["identity"])
+            assert saved["transport_change_history"][-1]["to_mode"] == recipient_mode
+            assert saved["identity_hash"] == research_sessions._digest(recipient["identity"])
+            assert saved["imported_via_bundle"] is False
 
 
 async def test_legacy_resume_accepts_reverted_eligibility_events(path: Path):
