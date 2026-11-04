@@ -82,26 +82,6 @@ You can create projects and strategies without an AI connection. To use AI resea
 
 `./sigma setup` installs the locked Python development environment with `uv sync --locked --group dev` and the frontend dependencies with `npm ci`. Setup and local startup were verified in a fresh Git worktree on the existing macOS 14.6 Apple Silicon host (not on a clean machine); the frontend and local API both returned ready responses. This does not establish behavior on every macOS/Linux distribution. See [Getting Started](docs/GETTING_STARTED.md) for troubleshooting.
 
-## Optional: test Google sign-in locally
-
-Google authentication is **not required** for ordinary local use. To exercise the authenticated account flow, create a Google OAuth **web** client with:
-
-- Authorized JavaScript origin: `http://127.0.0.1:5173`
-- Authorized redirect URI: `http://127.0.0.1:5173/api/cloud-auth/callback`
-
-Put `GOOGLE_OIDC_CLIENT_ID` (the Google OAuth application's identifier) and `GOOGLE_OIDC_CLIENT_SECRET` (its server-side credential) in the checkout-root `.env` or the server environment. **Each Git checkout/worktree needs its own `.env`**: Git ignores this file, so it will not follow you into a new checkout. If another local checkout already has working credentials, copy its `.env` to this checkout and restrict access with `chmod 600 .env`. Never commit or share the secrets. Exported shell variables take precedence over `.env`, even when exported as empty strings.
-
-Set your administrator contact in `.env` or export it, then launch SIGMA:
-
-```sh
-export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"
-./sigma start --navigate
-```
-
-Use the **Google Sign In** pill to choose a real Google account. **Do not pass `--signin` for this test**: that option now supplies a local administrator identity without performing Google OAuth. Sign in with the account matching `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to establish the local administrator; other accounts require membership grants. Local authentication state is stored under `~/.sigma/local-cloud-auth`. Use separate browser profiles when testing multiple accounts.
-
-This is a **local authentication test**, not a hosted deployment. For hosted configuration and administrator operations, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). For a provider-free UI simulation of membership, allowances, and errors, see [Local Mock Authentication](docs/LOCAL_MOCK_AUTH.md). Mock identities are not real Google accounts and mock research is not AI inference.
-
 ## Optional: local feedback and Email Project (SMTP)
 
 Local SIGMA can send **Send Feedback** notifications and **Email Project** messages (including JSON, PDF, and LaTeX attachments) through SMTP. **Google OAuth branding verification is not required for SMTP.** The sender needs an SMTP credential, such as a Gmail **app password**, not your normal Google-account password. Gmail accounts must meet Google's eligibility requirements for app passwords.
@@ -135,6 +115,26 @@ From the checkout, test the SMTP transport directly (without requiring a running
 The diagnostic prints which transport was selected, whether SMTP credentials are configured, and whether the mail provider accepted delivery; it never prints the password. It sends the test message to `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. The CLI does **not** read the current browser's Google session and cannot independently assert who is signed in. Normal **Send Feedback** uses the authenticated Google account's email as its contact address, or an optional unverified contact address for guests.
 
 If you previously configured `SIGMA_GMAIL_TOKEN_FILE`, `SIGMA_EMAIL_GMAIL_TOKEN_FILE`, or `SIGMA_INVITATION_GMAIL_TOKEN_FILE`, ordinary feedback sending prefers the Gmail API path instead of SMTP. The `--transport smtp` flag overrides this **for the CLI invocation only**; to use SMTP in the browser, remove/disable the Gmail token-file setting from the local backend environment and restart `./sigma start`. Environment variables exported in your shell override the ignored `.env`, even if empty. Never commit credentials or copy the protected password file into Git.
+
+## Optional: test Google sign-in locally
+
+Google authentication is **not required** for ordinary local use. To exercise the authenticated account flow, create a Google OAuth **web** client with:
+
+- Authorized JavaScript origin: `http://127.0.0.1:5173`
+- Authorized redirect URI: `http://127.0.0.1:5173/api/cloud-auth/callback`
+
+Put `GOOGLE_OIDC_CLIENT_ID` (the Google OAuth application's identifier) and `GOOGLE_OIDC_CLIENT_SECRET` (its server-side credential) in the checkout-root `.env` or the server environment. **Each Git checkout/worktree needs its own `.env`**: Git ignores this file, so it will not follow you into a new checkout. If another local checkout already has working credentials, copy its `.env` to this checkout and restrict access with `chmod 600 .env`. Never commit or share the secrets. Exported shell variables take precedence over `.env`, even when exported as empty strings.
+
+Set your administrator contact in `.env` or export it, then launch SIGMA:
+
+```sh
+export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"
+./sigma start --navigate
+```
+
+Use the **Google Sign In** pill to choose a real Google account. **Do not pass `--signin` for this test**: that option now supplies a local administrator identity without performing Google OAuth. Sign in with the account matching `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to establish the local administrator; other accounts require membership grants. Local authentication state is stored under `~/.sigma/local-cloud-auth`. Use separate browser profiles when testing multiple accounts.
+
+This is a **local authentication test**, not a hosted deployment. For hosted configuration and administrator operations, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). For a provider-free UI simulation of membership, allowances, and errors, see [Local Mock Authentication](docs/LOCAL_MOCK_AUTH.md). Mock identities are not real Google accounts and mock research is not AI inference.
 
 ## Optional: scientific computation
 
