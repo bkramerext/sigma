@@ -2,6 +2,7 @@ import { Component, createContext, createElement, lazy, Suspense, useCallback, u
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
+import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -1389,10 +1390,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   };
   const readErrorReported = useRef(false);
   const lastAnnouncement = useRef('');
-  type ProjectDiagnostic = { id: string; timestamp: string; stage: string; code: string; message: string; correlation_id: string | null; session_id: string | null };
   const [projectDiagnostics, setProjectDiagnostics] = useState<ProjectDiagnostic[]>([]);
   const [diagnosticStatus, setDiagnosticStatus] = useState('');
-  const diagnosticsUrl = `/api/projects/diagnostics/download?${new URLSearchParams({ path })}`;
   const reloadDiagnostics = useCallback(async () => {
     const response = await fetch(`/api/projects/diagnostics?${new URLSearchParams({ path })}`, { cache: 'no-store' });
     if (!response.ok) throw new Error('Project diagnostics could not be retrieved.');
@@ -1415,14 +1414,6 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     } catch {
       setDiagnosticStatus(`Error not recorded (offline or logging unavailable). Correlation ID: ${correlation_id}.`);
     }
-  };
-  const copyProjectDiagnostics = async () => {
-    try {
-      const response = await fetch(diagnosticsUrl, { credentials: 'same-origin', cache: 'no-store' });
-      if (!response.ok) throw new Error('Could not fetch the complete export');
-      await navigator.clipboard.writeText(await response.text());
-      setDiagnosticStatus('Project diagnostic export copied.');
-    } catch { setDiagnosticStatus('Project diagnostic export could not be copied.'); }
   };
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
@@ -1769,19 +1760,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
-    <section aria-label="Project diagnostics" className="project-diagnostics-panel">
-      <details>
-        <summary>Project diagnostics ({projectDiagnostics.length})</summary>
-        <p>Includes errors before Session #1 exists. Sanitized readable export; not the full raw provider-wire audit log.</p>
-        <button type="button" aria-label="Copy project diagnostics" onClick={() => void copyProjectDiagnostics()}>Copy diagnostics</button>
-        <a href={diagnosticsUrl} aria-label="Download project diagnostics">Download diagnostics</a>
-        <ol>{projectDiagnostics.map(item => <li key={item.id}>
-          <time>{item.timestamp}</time> · {item.stage} · {item.code}: {item.message}
-          <small> Event {item.id}{item.session_id ? ` · Session ${item.session_id}` : ' · pre-session'}</small>
-        </li>)}</ol>
-      </details>
-      {diagnosticStatus && <p role="status">{diagnosticStatus}</p>}
-    </section>
+    <ProjectDiagnosticsPanel path={path} diagnostics={projectDiagnostics} status={diagnosticStatus}/>
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
