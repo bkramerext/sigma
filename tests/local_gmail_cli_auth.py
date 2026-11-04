@@ -9,6 +9,7 @@ import threading
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import urlopen
@@ -130,7 +131,7 @@ class LocalGmailCliAuthTests(unittest.TestCase):
                 )
                 with GoogleClient() as client, self.assertRaises(auth.LocalGmailAuthError):
                     auth._verified_google_identity(
-                        client, GoogleClient.id_token, client_id=CLIENT_ID, nonce="expected"
+                        cast(httpx.Client, client), GoogleClient.id_token, client_id=CLIENT_ID, nonce="expected"
                     )
                 self.assertFalse((home / auth.GRANT_FILENAME).exists())
 
