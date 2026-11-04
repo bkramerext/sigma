@@ -1089,6 +1089,8 @@ class ClientDiagnosticRequest(OpenRequest):
     code: str = Field(min_length=1, max_length=64)
     message: str = Field(min_length=1, max_length=1600)
     correlation_id: str | None = Field(default=None, max_length=80)
+    # Browser-authored errors are project-scoped, never authoritative
+    # evidence of membership in a research session.
     session_id: str | None = Field(default=None, max_length=80)
 
 
@@ -1100,12 +1102,12 @@ def record_project_diagnostic(body: ClientDiagnosticRequest):
             stage=body.stage,
             code=body.code,
             message=body.message,
-            session_id=body.session_id,
+            session_id=None,  # Untrusted browser claims cannot enter session exports.
             correlation_id=body.correlation_id,
         )
     except (ProjectError, OSError, ValueError):
         return JSONResponse(
-            {"recorded": False, "error": "Diagnostic could not be recorded."},
+            {"recorded": False, "error": "Diagnostic not recorded (storage unavailable or full). The displayed error remains available to copy."},
             status_code=503,
         )
     return {"recorded": True, "diagnostic": diagnostic}
