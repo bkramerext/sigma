@@ -7,6 +7,7 @@ persisting a feedback record or claiming a browser-authenticated identity.
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import smtplib
 import socket
@@ -14,12 +15,57 @@ import ssl
 import stat
 import sys
 import time
+from email.message import EmailMessage
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
 from sigma.local_config import load_local_config
 from sigma.projects import ROOT
+
+MAX_FEEDBACK_ATTACHMENT_BYTES = 18 * 1024 * 1024
+
+
+def _read_attachment(path_string: str) -> tuple[str, bytes, str, str]:
+    """Read a user-selected local attachment, bounded before mail or OAuth begins."""
+    candidate = Path(path_string).expanduser()
+    if not candidate.is_file():
+        raise ValueError("Attachment must be an existing regular file.")
+    try:
+        with candidate.open("rb") as stream:
+            data = stream.read(MAX_FEEDBACK_ATTACHMENT_BYTES + 1)
+    except OSError as exc:
+        raise ValueError("Attachment could not be read.") from exc
+    if len(data) > MAX_FEEDBACK_ATTACHMENT_BYTES:
+        raise ValueError("Attachment exceeds the 18 MB email attachment limit.")
+    name = candidate.name
+    if not name or any(ord(char) < 32 or ord(char) == 127 for char in name):
+        raise ValueError("Attachment filename contains invalid characters.")
+    mime, _encoding = mimetypes.guess_type(name)
+    if mime is None or "/" not in mime:
+        mime = "application/octet-stream"
+    main, sub = mime.split("/", 1)
+    return name, data, main, sub
+
+
+def _attached_feedback_message(
+    *, feedback_id: str, text: str, submitted_at: int,
+    account_email: str, contact_email: str,
+    attachment: tuple[str, bytes, str, str],
+) -> EmailMessage:
+    """Match the existing feedback notification, with an additional MIME attachment."""
+    filename, payload, maintype, subtype = attachment
+    message = EmailMessage()
+    message["Subject"] = "New SIGMA feedback"
+    message.set_content(
+        f"Feedback ID: {feedback_id}\n"
+        f"Submitted at (UTC epoch): {submitted_at}\n"
+        f"Verified account: {account_email}\n"
+        f"Contact email (signed-in Google account): {contact_email}\n\n"
+        f"Message:\n{text}\n"
+    )
+    message.add_attachment(payload, maintype=maintype, subtype=subtype, filename=filename)
+    return message
 
 
 def _active_setting(*names: str) -> tuple[str, str]:
@@ -216,7 +262,10 @@ def _smtp_failure_hint(exc: Exception) -> str:
     return "SMTP failed at an unclassified stage. The provider's raw error is suppressed."
 
 
-def _execute(message: str, *, verified_gmail_sender: str | None = None) -> int:
+def _execute(
+    message: str, *, verified_gmail_sender: str | None = None,
+    attachment: tuple[str, bytes, str, str] | None = None,
+) -> int:
     from sigma import cloud_auth
 
     print("SIGMA feedback mail diagnostic (local CLI)")
@@ -249,16 +298,34 @@ def _execute(message: str, *, verified_gmail_sender: str | None = None) -> int:
         print("RESULT: NOT SENT (configuration incomplete).")
         return 2
 
+    if attachment is not None:
+        print(f"Attachment: {attachment[0]} ({len(attachment[1])} bytes)")
     print("Configuration: ready. Attempting one send; no automatic retry.")
     try:
-        cloud_auth._deliver_feedback(
-            uuid4().hex,
-            message,
-            int(time.time()),
-            account_email=verified_gmail_sender or contact_email,
-            contact_email=verified_gmail_sender or contact_email,
-            diagnostic_recipients=[contact_email],
-        )
+        if attachment is None:
+            cloud_auth._deliver_feedback(
+                uuid4().hex,
+                message,
+                int(time.time()),
+                account_email=verified_gmail_sender or contact_email,
+                contact_email=verified_gmail_sender or contact_email,
+                diagnostic_recipients=[contact_email],
+            )
+        else:
+            outgoing = _attached_feedback_message(
+                feedback_id=uuid4().hex,
+                text=message,
+                submitted_at=int(time.time()),
+                account_email=verified_gmail_sender or contact_email,
+                contact_email=verified_gmail_sender or contact_email,
+                attachment=attachment,
+            )
+            if gmail:
+                from sigma.gmail_delivery import send_message
+
+                send_message(outgoing, recipients=[contact_email])
+            else:
+                cloud_auth.send_smtp_message(outgoing, [contact_email])
     except cloud_auth.SMTPDeliveryError as exc:
         print(
             f"RESULT: FAILED (SMTP state: {exc.state}; accepted recipients: {exc.accepted_count}).",
@@ -280,7 +347,10 @@ def _execute(message: str, *, verified_gmail_sender: str | None = None) -> int:
     return 0
 
 
-def run(message: str, *, transport: str = "configured", reauthorize: bool = False) -> int:
+def run(
+    message: str, *, transport: str = "configured",
+    reauthorize: bool = False, attach: str | None = None,
+) -> int:
     """Exercise actual feedback delivery without a browser app or feedback record."""
     try:
         load_local_config()
@@ -296,6 +366,13 @@ def run(message: str, *, transport: str = "configured", reauthorize: bool = Fals
     if reauthorize and transport != "gmail":
         print("ERROR: --reauthorize requires --transport gmail.", file=sys.stderr)
         return 2
+    attachment = None
+    if attach is not None:
+        try:
+            attachment = _read_attachment(attach)
+        except ValueError as exc:
+            print(f"RESULT: NOT SENT. {exc}", file=sys.stderr)
+            return 2
 
     if transport == "smtp":
         with patch.dict(
@@ -307,7 +384,7 @@ def run(message: str, *, transport: str = "configured", reauthorize: bool = Fals
             },
         ):
             print("Override: using SMTP for this invocation only.")
-            return _execute(message)
+            return _execute(message, attachment=attachment)
 
     if transport in {"configured", "gmail"}:
         from sigma.local_gmail_cli_auth import LocalGmailAuthError, authorize, existing_grant
@@ -330,8 +407,10 @@ def run(message: str, *, transport: str = "configured", reauthorize: bool = Fals
                 },
             ):
                 print("Using Google Gmail Send permission from the local CLI.")
-                return _execute(message, verified_gmail_sender=sender)
-        return _execute(message)
+                return _execute(
+                    message, verified_gmail_sender=sender, attachment=attachment
+                )
+        return _execute(message, attachment=attachment)
 
     print("ERROR: Unsupported transport.", file=sys.stderr)
     return 2

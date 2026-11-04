@@ -90,7 +90,10 @@ Local SIGMA can send **Send Feedback** notifications and **Email Project** messa
 
 ```sh
 ./sigma send_feedback "hello world" --transport gmail
+./sigma send_feedback "hello world" --transport gmail --attach ./path/to/file.pdf
 ```
+
+Use `--attach PATH` to send a single local file as a MIME attachment with a feedback test message. Both Gmail API and SMTP are supported. Relative, absolute, and `~/` paths work. Files over 18 MB, missing files, and unreadable files are rejected before opening Google authorization or contacting the mail provider. The CLI does not persist an application Feedback record, and the browser Feedback endpoint is unchanged.
 
 The command opens your default browser for Google's explicit **Gmail Send** permission, captures the OAuth callback using a temporary localhost listener, stores an account-bound grant privately under `~/.sigma/local-cloud-auth/gmail-send-token.json`, and sends one feedback test message. It does **not** start the SIGMA UI, need a separate terminal, or read browser session cookies. It verifies the Google account you select through the OAuth identity token and uses that verified address as the feedback contact; `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` is the test recipient and can be a different mailbox. The command reuses an existing matching grant on later calls. Add `--reauthorize` if you want to choose a different sending account. If port 5173 is free, the CLI listens for the Google callback itself. If your **updated local SIGMA UI is already running** on that port, the CLI uses its local-only callback handoff instead; you do not need to navigate through the UI or stop it. An older running SIGMA process without the new handoff must be restarted once, or shut down with `./sigma shutdown`. An unrelated process on the port is never stopped or trusted. Production is not modified.
 

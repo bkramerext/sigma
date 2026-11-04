@@ -149,7 +149,8 @@ COMMAND_DETAILS = {
         (
             "Uses the locally configured Google sign-in address from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL; "
             "the Gmail transport opens a browser for explicit Google Send consent if needed, "
-            "without starting SIGMA UI. --transport smtp forces SMTP for one invocation."
+            "without starting SIGMA UI. --transport smtp forces SMTP for one invocation. "
+            "--attach PATH includes a single local file."
         ),
     ),
     "start": (
@@ -286,6 +287,9 @@ def main() -> None:
     feedback = add_command(commands, "send_feedback")
     feedback.add_argument("message")
     feedback.add_argument(
+        "--attach", metavar="PATH", help="Attach one local file (maximum 18 MB)"
+    )
+    feedback.add_argument(
         "--transport", choices=("configured", "smtp", "gmail"), default="configured"
     )
     feedback.add_argument(
@@ -377,7 +381,14 @@ def main() -> None:
     if args.command == "send_feedback":
         from sigma.feedback_diagnostic import run
 
-        sys.exit(run(args.message, transport=args.transport, reauthorize=args.reauthorize))
+        sys.exit(
+            run(
+                args.message,
+                transport=args.transport,
+                reauthorize=args.reauthorize,
+                attach=args.attach,
+            )
+        )
     if args.command == "start":
         sys.exit(
             run_ui(
