@@ -455,15 +455,16 @@
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining > span[aria-hidden] {
   display: inline-flex; width: 20px; justify-content: center;
 }
-/* Once ELI5 is open, show a gold prayer icon in the exact same 28px action
-   slot as Copy, Star, and the explanation balloon. */
+/* Once ELI5 is open, show a solid gold thumbs-up, centered in the
+   same 28px hover rectangle as Copy, Star, and the explanation balloon. */
 .project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools button.ai-paper-eli5-thanks {
-  width: 28px; min-width: 28px; height: 28px; min-height: 28px;
+  display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center;
+  box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px;
   padding: 0; color: #e5ba69;
 }
-.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-prayer-icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; font-size: 20px; line-height: 1;
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-thumbs-up {
+  display: block; flex: 0 0 20px;
+  width: 20px; height: 20px; color: #f4cc69;
 }
 .ai-paper-eli5-output { max-width: 75ch; line-height: 1.65; }
 
