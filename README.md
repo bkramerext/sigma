@@ -99,6 +99,21 @@ A **pair** and a **turn** mean the same thing in SIGMA: one Investigator call fo
 
 **Saved history is not the same as model context.** SIGMA preserves the full original research records, but each agent call receives a **bounded selection** of relevant prior material, source identifiers, and explicit omissions when necessary to fit context limits. A finding that was saved but not supplied to a particular call cannot legitimately be claimed as reviewed by that call. The **Session Outcome** summarizes the session afterward; it is not an additional Investigator/Skeptic turn.
 
+### After the last round: Session Outcome and Current Understanding
+
+**Session Outcome** answers, as far as the saved evidence allows, *“What did this particular investigation establish?”* SIGMA evaluates the **latest saved reviewed finding from each participating strategy** instead of arbitrarily selecting the last agent to finish. It also checks recorded contradictions, negative findings, and retractions from earlier artifacts. The Outcome describes candidate conclusions, findings across strategies, limitations, and uncertainty. **All completed rounds remain in the saved history**, but there is **no extra final AI call that rereads and jointly reasons over every artifact from every round**. Earlier arguments are not all independently re-proved or given equal weight by the outcome evaluator.
+
+**Current Understanding** answers a different question: *“Across this project's saved sessions, where does the research stand now?”* It is a **read-only, evidence-linked overview** built from project history, not another agent or a new research session. It shows the latest recorded reviews **per strategy**, earlier findings and reported changes, unresolved or unreconciled obligations, failed/partial attempts, and possible next investigations. A later session can contribute to it without erasing earlier work.
+
+| | Session Outcome | Current Understanding |
+| --- | --- | --- |
+| Scope | One session, across its strategies and completed rounds | All available saved sessions in the project |
+| Purpose | Assess what this investigation established | Show the current state of research and what might be worth investigating next |
+| Evidence | Saved session artifacts; latest strategy findings plus relevant recorded conflicts and retractions | Saved findings and explicit evidence-linked changes/obligation dispositions across session history |
+| Limits | Not a new synthesis/proof pass over all rounds | Not an independently verified truth model; later wording alone does not erase, refute, or supersede earlier findings |
+
+Neither view declares a project solved merely because an Investigator and Skeptic agree. In Current Understanding, an earlier claim is marked refuted or superseded only when a suitably supported, explicit saved relationship says so; otherwise the earlier record remains inspectable.
+
 ### Example: the default 54-call ceiling
 
 | Level | Default | What it means |
