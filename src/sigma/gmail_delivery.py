@@ -69,8 +69,11 @@ def send_message(message: EmailMessage, *, recipients: list[str], reply_to: str 
     if any(header in message for header in ("From", "To", "Cc", "Bcc")):
         raise ValueError("Recipient and sender headers must be assigned by the transport.")
     message["From"] = sender
-    message["To"] = sender
-    message["Bcc"] = ", ".join(recipients)
+    if len(recipients) == 1:
+        message["To"] = recipients[0]
+    else:
+        message["To"] = sender
+        message["Bcc"] = ", ".join(recipients)
     if reply_to:
         message["Reply-To"] = reply_to
     try:
