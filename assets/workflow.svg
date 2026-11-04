@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1092" height="104" viewBox="0 0 1092 104" role="img" aria-labelledby="title description">
+  <title id="title">SIGMA research workflow</title>
+  <desc id="description">Project to Strategies to Research to Refine to Optional paper to Review and export</desc>
+  <rect width="1092" height="104" rx="8" fill="#fbfaff"/>
+  <g font-family="Arial, Helvetica, sans-serif" dominant-baseline="middle">
+  <path d="M 167 52 H 187" stroke="#343b43" stroke-width="2" fill="none"/>
+  <path d="M 186 47 L 193 52 L 186 57 Z" fill="#343b43"/>
+  <path d="M 351 52 H 371" stroke="#343b43" stroke-width="2" fill="none"/>
+  <path d="M 370 47 L 377 52 L 370 57 Z" fill="#343b43"/>
+  <path d="M 535 52 H 555" stroke="#343b43" stroke-width="2" fill="none"/>
+  <path d="M 554 47 L 561 52 L 554 57 Z" fill="#343b43"/>
+  <path d="M 719 52 H 739" stroke="#343b43" stroke-width="2" fill="none"/>
+  <path d="M 738 47 L 745 52 L 738 57 Z" fill="#343b43"/>
+  <path d="M 903 52 H 923" stroke="#343b43" stroke-width="2" fill="none"/>
+  <path d="M 922 47 L 929 52 L 922 57 Z" fill="#343b43"/>
+  <rect x="12" y="24" width="148" height="56" rx="5" fill="#efebff" stroke="#a37bf9" stroke-width="1.8"/>
+  <text x="86" y="57" font-size="16" font-weight="600" text-anchor="middle" fill="#24292f">Project</text>
+  <rect x="196" y="24" width="148" height="56" rx="5" fill="#efebff" stroke="#a37bf9" stroke-width="1.8"/>
+  <text x="270" y="57" font-size="16" font-weight="600" text-anchor="middle" fill="#24292f">Strategies</text>
+  <rect x="380" y="24" width="148" height="56" rx="5" fill="#efebff" stroke="#a37bf9" stroke-width="1.8"/>
+  <text x="454" y="57" font-size="16" font-weight="600" text-anchor="middle" fill="#24292f">Research</text>
+  <rect x="564" y="24" width="148" height="56" rx="5" fill="#efebff" stroke="#a37bf9" stroke-width="1.8"/>
+  <text x="638" y="57" font-size="16" font-weight="600" text-anchor="middle" fill="#24292f">Refine</text>
+  <rect x="748" y="24" width="148" height="56" rx="5" fill="#efebff" stroke="#a37bf9" stroke-width="1.8"/>
+  <text x="822" y="57" font-size="16" font-weight="600" text-anchor="middle" fill="#24292f">Optional paper</text>
+  <rect x="932" y="24" width="148" height="56" rx="5" fill="#efebff" stroke="#a37bf9" stroke-width="1.8"/>
+  <text x="1006" y="57" font-size="16" font-weight="600" text-anchor="middle" fill="#24292f">Review/export</text>
+  </g>
+</svg>
