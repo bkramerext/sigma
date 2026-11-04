@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from typing import Any
 
 from sigma import research_sessions
 from sigma.projects import ProjectError
@@ -19,7 +20,7 @@ def _size(value: object) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
 
 
-def _obligation(index: int, *, unique_scope: bool = False) -> dict[str, object]:
+def _obligation(index: int, *, unique_scope: bool = False) -> dict[str, Any]:
     group = index if unique_scope else index // 12
     assumptions = [f"Shared assumption {group} / {number}: " + "a" * 180 for number in range(6)]
     artifact_id = f"research-artifact-{index // 3}"
@@ -44,7 +45,7 @@ def _obligation(index: int, *, unique_scope: bool = False) -> dict[str, object]:
     }
 
 
-def _context(count: int, *, unique_scope: bool = False) -> dict[str, object]:
+def _context(count: int, *, unique_scope: bool = False) -> dict[str, Any]:
     ledger = [_obligation(i, unique_scope=unique_scope) for i in range(count)]
     return {
         "scheduler_version": 2,
