@@ -4109,7 +4109,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         <p id="allow-unattended-background-execution-help" className="settings-hint">This user-wide setting applies across all your projects. When enabled, the backend can keep research running after you close the browser page, potentially incurring unexpected AI-provider costs. When disabled, SIGMA pauses browser-started research after the last viewer disconnects, keeping already-dispatched provider results and requiring an explicit Resume.</p>
       </fieldset>
       <div className="project-references-usage">
-        <p>Research and publication references may increase AI usage costs. <button type="button" className="project-reference-adjust-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Adjust now</button></p>
+        <p className="settings-hint">Reference guides for research and authoring papers can be found in <button type="button" className="project-reference-adjust-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Project Types</button>.</p>
       </div>
       {error && <p role="alert" className="error">{error}</p>}
     </section>}
