@@ -23,7 +23,7 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         ):
             status = feedback_diagnostic.run("hello world")
         self.assertEqual(status, 0)
-        self.assertIn("Contact: signer@example.org", output.getvalue())
+        self.assertIn("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL: signer@example.org", output.getvalue())
         self.assertIn("ACCEPTED", output.getvalue())
         self.assertEqual(send.call_args.args[1], "hello world")
         self.assertEqual(send.call_args.kwargs["account_email"], "signer@example.org")
@@ -79,11 +79,12 @@ class FeedbackDiagnosticTests(unittest.TestCase):
             patch.dict(os.environ, {}, clear=True),
             patch.object(feedback_diagnostic, "load_local_config"),
             patch.object(cloud_auth, "_deliver_feedback") as send,
-            redirect_stderr(io.StringIO()) as errors,
+            redirect_stdout(io.StringIO()) as output,
         ):
             status = feedback_diagnostic.run("hello world")
         self.assertEqual(status, 2)
-        self.assertIn("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", errors.getvalue())
+        self.assertIn("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", output.getvalue())
+        self.assertIn("RESULT: NOT SENT", output.getvalue())
         send.assert_not_called()
 
     def test_rejects_invalid_feedback_before_sending(self):
@@ -96,6 +97,41 @@ class FeedbackDiagnosticTests(unittest.TestCase):
             status = feedback_diagnostic.run("short")
         self.assertEqual(status, 2)
         send.assert_not_called()
+
+
+    def test_missing_smtp_settings_explain_exact_environment_variables(self):
+        with (
+            patch.dict(os.environ, {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "you@example.org"}, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch.object(cloud_auth, "_deliver_feedback") as send,
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            status = feedback_diagnostic.run("hello world", transport="smtp")
+        self.assertEqual(status, 2)
+        rendered = output.getvalue()
+        self.assertIn("[MISSING] SIGMA_EMAIL_SMTP_USERNAME", rendered)
+        self.assertIn("[MISSING] SIGMA_EMAIL_SMTP_PASSWORD_FILE", rendered)
+        self.assertIn("Gmail app password, NOT the normal account password", rendered)
+        self.assertIn("RESULT: NOT SENT", rendered)
+        send.assert_not_called()
+
+    def test_smtp_file_missing_is_diagnosed_without_attempting_send(self):
+        with (
+            patch.dict(os.environ, {
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "you@example.org",
+                "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
+                "SIGMA_EMAIL_SMTP_PASSWORD_FILE": "/nonexistent/test-sigma-app-password",
+            }, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch.object(cloud_auth, "_deliver_feedback") as send,
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            status = feedback_diagnostic.run("hello world", transport="smtp")
+        self.assertEqual(status, 2)
+        self.assertIn("file not found", output.getvalue())
+        self.assertNotIn("BEGIN PRIVATE KEY", output.getvalue())
+        send.assert_not_called()
+
 
 
 if __name__ == "__main__":
