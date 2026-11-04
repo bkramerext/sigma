@@ -16,6 +16,9 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 def _email_env(suffix: str) -> str:
+    direct = os.environ.get(f"SIGMA_{suffix}")
+    if direct is not None:
+        return direct.strip()
     modern = os.environ.get(f"SIGMA_EMAIL_{suffix}")
     if modern is not None:
         return modern.strip()

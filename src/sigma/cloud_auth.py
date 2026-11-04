@@ -1987,6 +1987,10 @@ def denied_identity(request: Request):
 
 def email_env(suffix: str, default: str = "") -> str:
     """Shared mail setting; prefer SIGMA_EMAIL_* while honoring legacy names."""
+    if suffix.startswith("GMAIL_"):
+        direct = os.environ.get(f"SIGMA_{suffix}")
+        if direct is not None:
+            return direct.strip()
     modern = os.environ.get(f"SIGMA_EMAIL_{suffix}")
     if modern is not None:
         return modern.strip()
