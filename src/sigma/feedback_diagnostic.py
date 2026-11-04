@@ -40,17 +40,23 @@ def _execute(message: str) -> int:
         print("Transport: Gmail API")
         print("Gmail OAuth token file configured: yes")
         print(f"Gmail OAuth token file present: {'yes' if Path(gmail_file).is_file() else 'no'}")
-        print(f"Gmail sender configured: {'yes' if bool(cloud_auth.email_env('GMAIL_SENDER')) else 'no'}")
+        print(
+            f"Gmail sender configured: {'yes' if bool(cloud_auth.email_env('GMAIL_SENDER')) else 'no'}"
+        )
     else:
         host = cloud_auth.email_env("SMTP_HOST", "smtp.gmail.com")
         port = cloud_auth.email_env("SMTP_PORT", "587")
         print("Transport: SMTP")
         print(f"SMTP host: {host}")
         print(f"SMTP port: {port}")
-        print(f"SMTP username configured: {'yes' if bool(cloud_auth.email_env('SMTP_USERNAME')) else 'no'}")
+        print(
+            f"SMTP username configured: {'yes' if bool(cloud_auth.email_env('SMTP_USERNAME')) else 'no'}"
+        )
         try:
-            print(f"SMTP password configured: {'yes' if bool(cloud_auth.email_secret('SMTP_PASSWORD')) else 'no'}")
-        except Exception:
+            print(
+                f"SMTP password configured: {'yes' if bool(cloud_auth.email_secret('SMTP_PASSWORD')) else 'no'}"
+            )
+        except (OSError, RuntimeError, ValueError):
             print("SMTP password configuration: invalid or unreadable")
 
     try:
