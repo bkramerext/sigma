@@ -1,3 +1,4 @@
+# ruff: noqa: F401, I001
 """Deterministic tests for opt-in hosted Google authentication."""
 
 from __future__ import annotations
