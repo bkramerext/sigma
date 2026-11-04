@@ -205,8 +205,137 @@ def test_context_limit_byte_diagnostics_are_safe_and_actionable() -> None:
     }
     message = research_sessions._context_byte_breakdown(context)
     assert "Context size:" in message
+    assert f"limit {research_sessions.MAX_AGENT_CONTEXT_BYTES}B" in message
+    assert "phase=context_assembly" in message
     assert "problem=" in message
     assert "obligation_ledger=" in message
     assert "context_manifest=" in message
     assert "private prose" not in message
     assert "unverified evidence" not in message
+
+
+def test_context_diagnostics_include_bounded_execution_identity() -> None:
+    context = {
+        "secret_project_name": "confidential text " * 100,
+        "obligation_ledger": [{"text": "do-not-log-evidence"}],
+        "context_manifest": {},
+    }
+    message = research_sessions._context_byte_breakdown(
+        context,
+        phase="portfolio_dispatch",
+        strategy_id="strategy-1234",
+        role="skeptic",
+    )
+    assert "phase=portfolio_dispatch" in message
+    assert "strategy=strategy-1234" in message
+    assert "role=skeptic" in message
+    assert f"limit {LIMIT}B" in message
+    assert "do-not-log-evidence" not in message
+    assert "confidential text" not in message
+    assert len(message) < 700
+    assert "strategy=unknown" in research_sessions._context_byte_breakdown(
+        context, strategy_id="private narrative: " + "z" * 100, role="skeptic"
+    )
+
+
+def test_both_roles_reconstruct_pooled_ledger_and_reject_omitted_reviews() -> None:
+    source = _context(128)
+    saved = deepcopy(source)
+    original_by_id = {
+        row["obligation_id"]: row for row in source["obligation_ledger"]
+    }
+    for role in ("investigator", "skeptic"):
+        dispatch = deepcopy(source)
+        dispatch["role"] = role
+        assert compact_dispatch_context(dispatch, limit=LIMIT)
+        restrict_obligation_citations_to_supplied_context(dispatch)
+        dictionary = dispatch["obligation_ledger_dictionary"]
+        assert dictionary["index_base"] == 0
+        selected_ids = set()
+        for item in dispatch["obligation_ledger"]:
+            original = original_by_id[item["obligation_id"]]
+            selected_ids.add(item["obligation_id"])
+            reconstructed = dict(item)
+            for field in ("scope_assumptions", "source_refs"):
+                index_key = f"{field}_set_index"
+                if index_key in reconstructed:
+                    exact_values = dictionary[field][reconstructed.pop(index_key)]
+                    reconstructed[field] = exact_values
+                assert reconstructed[field] == original[field]
+            assert reconstructed == original
+        omitted = set(original_by_id) - selected_ids
+        assert omitted  # This fixture must actually test the omission barrier.
+        assert dispatch["obligation_ledger_omitted_count"] == len(omitted)
+        if role == "skeptic":
+            allowed_artifact = dispatch["context_artifact_ids"][0]
+            common_review = {
+                "status": "retracted",
+                "basis_artifact_ids": [allowed_artifact],
+                "basis_step_ids": [],
+                "rationale": "The cited source contains material negative evidence.",
+            }
+            supported = research_sessions.ObligationReview.model_validate(
+                {**common_review, "obligation_id": next(iter(selected_ids))}
+            ).model_dump()
+            research_sessions._validate_obligation_review_basis(dispatch, supported)
+            omitted_review = research_sessions.ObligationReview.model_validate(
+                {**common_review, "obligation_id": next(iter(omitted))}
+            ).model_dump()
+            try:
+                research_sessions._validate_obligation_review_basis(dispatch, omitted_review)
+            except ProjectError as exc:
+                assert "not supplied" in str(exc)
+            else:
+                raise AssertionError("A syntactically valid review resolved an omitted item")
+    assert source == saved
+
+
+def test_recent_negative_evidence_and_unresolved_win_over_old_unresolved() -> None:
+    source = _context(128, unique_scope=True)
+    for item in source["obligation_ledger"]:
+        item["status"] = "unresolved"
+    source["obligation_ledger"][126]["status"] = "retracted"
+    source["obligation_ledger"][126]["text"] = (
+        "Recent negative evidence disproves a previously accepted conclusion. " + "n" * 570
+    )
+    original = deepcopy(source)
+    dispatch = deepcopy(source)
+    assert compact_dispatch_context(dispatch, limit=LIMIT)
+    assert _size(dispatch) <= LIMIT
+    selected = {row["obligation_id"]: row for row in dispatch["obligation_ledger"]}
+    assert len(selected) < 128
+    assert "o126" in selected  # Recent retraction is not displaced by old obligations.
+    assert "o127" in selected  # Recent unresolved outranks older unresolved work.
+    assert "o0" not in selected
+    assert selected["o126"]["status"] == "retracted"
+    assert selected["o126"]["text"] == original["obligation_ledger"][126]["text"]
+    assert dispatch["obligation_ledger_omitted_count"] == 128 - len(selected)
+    assert source == original
+
+
+def test_post_assembly_guard_rejects_oversized_mandatory_human_input() -> None:
+    original = _context(128, unique_scope=True)
+    dispatch = deepcopy(original)
+    assert compact_dispatch_context(dispatch, limit=LIMIT)
+    selected_before = len(dispatch["obligation_ledger"])
+    omitted_before = dispatch["obligation_ledger_omitted_count"]
+    # Mimics additions after the first assembly, while retaining all saved evidence.
+    dispatch["human_guidance"] = [
+        {
+            "intervention_id": "human-live-input",
+            "text": "MANDATORY-LIVE-EVIDENCE-" + "z" * (LIMIT + 25_000),
+        }
+    ]
+    dispatch["execution_tools"] = [{"name": "python", "capability": "read-only"}]
+    dispatch["other_strategy_evidence"] = [
+        {"artifact_id": "peer-negative", "claim_or_question": "Recent counterexample"}
+    ]
+    assert not compact_dispatch_context(dispatch, limit=LIMIT)
+    assert _size(dispatch) > LIMIT
+    assert dispatch["human_guidance"][0]["text"].startswith("MANDATORY-LIVE-EVIDENCE-")
+    assert len(dispatch["human_guidance"][0]["text"]) > LIMIT
+    assert len(dispatch["obligation_ledger"]) == selected_before
+    assert dispatch["obligation_ledger_omitted_count"] == omitted_before
+    manifest = dispatch["context_manifest"]["omitted_obligations"]
+    assert manifest["count"] == omitted_before
+    assert original == _context(128, unique_scope=True)
