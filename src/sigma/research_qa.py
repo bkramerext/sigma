@@ -465,7 +465,7 @@ def _with_navigation(record: dict[str, Any], context: dict[str, Any]) -> dict[st
             )
             contributing: dict[str, int] = {}
 
-            def collect_pointers(value: Any) -> None:
+            def collect_pointers(value: Any, found: dict[str, int]) -> None:
                 if isinstance(value, dict):
                     sid = value.get("session_id")
                     number = value.get("session_number")
@@ -476,23 +476,25 @@ def _with_navigation(record: dict[str, Any], context: dict[str, Any]) -> dict[st
                         and sessions[sid].get("session_number") == number
                         and value.get("project_id") == record.get("project_id")
                     ):
-                        contributing[sid] = number
+                        found[sid] = number
                     for nested in value.values():
-                        collect_pointers(nested)
+                        collect_pointers(nested, found)
                 elif isinstance(value, list):
                     for nested in value:
-                        collect_pointers(nested)
+                        collect_pointers(nested, found)
 
-            collect_pointers(frozen)
+            collect_pointers(frozen, contributing)
             if contributing:
                 for sid, number in sorted(
                     contributing.items(), key=lambda entry: (entry[1], entry[0])
                 ):
-                    sources.append({
-                        **item,
-                        "label": f"Session #{number}",
-                        "navigation_url": f"/project?{urlencode({**base_query, 'reveal_session': sid})}",
-                    })
+                    sources.append(
+                        {
+                            **item,
+                            "label": f"Session #{number}",
+                            "navigation_url": f"/project?{urlencode({**base_query, 'reveal_session': sid})}",
+                        }
+                    )
                 continue
         sources.append(item)
     result["sources"] = sources
