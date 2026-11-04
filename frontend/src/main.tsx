@@ -2884,7 +2884,7 @@ function AboutArchitecture() {
     session: 'When you press Play, SIGMA runs an investigation of your selected approaches. Each approach can be tried, challenged and revised over several rounds, within the limits you set.',
     orchestration: "SIGMA's session engine selects bounded evidence, dispatches Investigator and Skeptic calls, coordinates strategies and manages limits.",
     investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
-    investigatorFollowup: 'A later Investigator turn can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
+    investigatorFollowup: 'A later Investigator call can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
     tools: 'The Investigator can draw on tools such as SciPy and SageMath to explore ideas, test patterns, and carry out calculations.',
     workingEvidence: 'Claims, objections, code outputs, prior artifacts and source identifiers inform subsequent work. Relevant evidence is selected into bounded role contexts; this is not a global chat memory.',
     skeptic: "A separate role-specific AI agent that examines the Investigator's claims and assumptions, looks for counterexamples or gaps, and suggests next tests. Its review is model-reported, not independent proof certification.",
