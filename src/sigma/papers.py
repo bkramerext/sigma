@@ -2447,12 +2447,28 @@ def _read_one(path: str, identifier: str) -> dict[str, Any]:
         raise ProjectError("Paper record is invalid")
     if "snapshot_ref" in record:
         digest = record["snapshot_ref"]
-        if not isinstance(digest, str) or "snapshot" in record:
+        if not isinstance(digest, str):
             raise ProjectError("Paper snapshot reference is invalid")
         if digest != record.get("snapshot_sha256"):
             raise ProjectError("Paper snapshot reference does not match provenance")
-        record["snapshot"] = _load_frozen_snapshot(path, digest, record["project_id"])
+        frozen = _load_frozen_snapshot(path, digest, record["project_id"])
+        # Older ELI5/score writers accidentally persisted this hydrated snapshot
+        # alongside its reference. Accept only an *identical* duplicate, so
+        # affected papers remain readable without weakening provenance checks.
+        if "snapshot" in record and record["snapshot"] != frozen:
+            raise ProjectError("Paper snapshot conflicts with its frozen archive")
+        record["snapshot"] = frozen
     return record
+
+
+def _stored_paper_record_json(record: dict[str, Any]) -> bytes:
+    """Serialize a hydrated paper without duplicating its archived snapshot."""
+    stored = dict(record)
+    if "snapshot_ref" in stored:
+        if stored["snapshot_ref"] != stored.get("snapshot_sha256"):
+            raise ProjectError("Paper snapshot reference does not match provenance")
+        stored.pop("snapshot", None)
+    return _json(stored)
 
 
 def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
