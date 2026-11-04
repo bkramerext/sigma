@@ -1,0 +1,31 @@
+name: TEMP literature reference live retrieval
+on:
+  pull_request:
+    paths:
+      - 'src/sigma/data/builtin_project_types.json'
+      - '.github/workflows/temp-literature-reference-check.yml'
+jobs:
+  retrieve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify Literature and common research defaults using SIGMA retriever
+        run: |
+          PYTHONPATH=src python - <<'PY'
+          from sigma.project_types import builtin_types, curated_common_references
+          from sigma.research_reference_content import freeze_reference_content
+          common = curated_common_references()['research_standards_references']
+          literature = next(x for x in builtin_types() if x.id == 'literature')
+          references = [*common, *literature.research_standards_references]
+          failures = []
+          for ref in references:
+              result = freeze_reference_content(ref['url'])
+              print(ref['name'], result['status'], result.get('reason'), result.get('response_bytes'))
+              if result['status'] != 'retrieved':
+                  failures.append((ref['name'], result.get('reason')))
+          assert not failures, failures
+          PY
