@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sigma import cloud_workspaces
+from sigma import cloud_workspaces, session_log
 from sigma.projects import inspect_project
 
 MAX_BYTES = 1024 * 1024
@@ -90,47 +90,65 @@ def append(
         data = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode(
             "utf-8"
         )
-    with _LOCK:
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if target.is_symlink():
-            raise OSError("Unsafe diagnostics file")
-        # An HTTP retry with the same request correlation must not fabricate
-        # multiple copies of the identical error. Reconcile only exact
-        # (correlation, stage, code, message, session) matches.
-        if target.exists() and record["correlation_id"]:
-            for line in target.read_bytes().splitlines():
-                try:
-                    previous = json.loads(line)
-                except (ValueError, UnicodeDecodeError):
-                    continue
-                if not isinstance(previous, dict):
-                    continue
-                if all(
-                    previous.get(key) == record[key]
-                    for key in ("correlation_id", "stage", "code", "message", "session_id")
-                ):
-                    return previous
-        existing_bytes = target.stat().st_size if target.exists() else 0
-        if existing_bytes + len(data) > MAX_BYTES:
+    project_dir = target.parent
+    # Match session_log.delete_project's project-level guard; do not recreate
+    # diagnostic state after deletion begins.
+    with session_log._lock(project_dir / ".project-read-guard"):
+        with session_log._queues_guard:
+            if str(project_dir) in session_log._closing_projects:
+                raise OSError("Project diagnostics are being deleted")
+        with _LOCK:
+            return _write_record(target, record, data)
+
+
+def _write_record(target: Path, record: dict[str, Any], data: bytes) -> dict[str, Any]:
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if target.is_symlink() or (target.exists() and not target.is_file()):
+        raise OSError("Unsafe diagnostics file")
+    # Retries on one correlation must not create duplicate error records.
+    if target.exists() and record["correlation_id"]:
+        if target.stat().st_size > MAX_BYTES:
             raise OSError("Project diagnostics capacity reached; event was not recorded")
-        fd = os.open(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, "ab") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
+        for line in target.read_bytes().splitlines():
+            try:
+                previous = json.loads(line)
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if not isinstance(previous, dict):
+                continue
+            if all(
+                previous.get(key) == record[key]
+                for key in ("correlation_id", "stage", "code", "message", "session_id")
+            ):
+                return previous
+    existing_bytes = target.stat().st_size if target.exists() else 0
+    if existing_bytes + len(data) > MAX_BYTES:
+        raise OSError("Project diagnostics capacity reached; event was not recorded")
+    fd = os.open(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "ab") as stream:
+        stream.write(data)
+        stream.flush()
+        os.fsync(stream.fileno())
     return record
 
 
 def read(path: str) -> list[dict[str, Any]]:
     _, target = _file(path)
-    with _LOCK:
-        if target.is_symlink():
-            raise OSError("Unsafe diagnostics file")
-        try:
-            with target.open("rb") as stream:
+    project_dir = target.parent
+    with session_log._lock(project_dir / ".project-read-guard"):
+        with session_log._queues_guard:
+            if str(project_dir) in session_log._closing_projects:
+                raise OSError("Project diagnostics are being deleted")
+        with _LOCK:
+            if target.is_symlink() or (target.exists() and not target.is_file()):
+                raise OSError("Unsafe diagnostics file")
+            try:
+                # O_NOFOLLOW is required even if the earlier symlink check raced.
+                fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+            except FileNotFoundError:
+                return []
+            with os.fdopen(fd, "rb") as stream:
                 payload = stream.read(MAX_BYTES + 1)
-        except FileNotFoundError:
-            return []
     if len(payload) > MAX_BYTES:
         raise OSError("Project diagnostic log exceeds safe size")
     results: list[dict[str, Any]] = []
