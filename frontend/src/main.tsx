@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
+import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -1400,20 +1401,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   }, [path]);
   useEffect(() => { void reloadDiagnostics().catch(() => setDiagnosticStatus('Project diagnostics unavailable; previous errors may not be shown.')); }, [reloadDiagnostics]);
   const recordClientError = async (message: string, stage: string) => {
-    const correlation_id = crypto.randomUUID();
-    try {
-      const response = await fetch('/api/projects/diagnostics', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, stage, code: 'browser_request_failed', message, correlation_id }),
-      });
-      if (!response.ok) throw new Error('diagnostic write failed');
-      const result = await response.json() as { recorded?: boolean };
-      if (!result.recorded) throw new Error('diagnostic not recorded');
-      setDiagnosticStatus(`Error recorded in Project diagnostics (${correlation_id}).`);
-      void reloadDiagnostics().catch(() => {});
-    } catch {
-      setDiagnosticStatus(`Error not recorded (offline or logging unavailable). Correlation ID: ${correlation_id}.`);
-    }
+    const result = await reportProjectDiagnostic(path, message, stage, crypto.randomUUID());
+    setDiagnosticStatus(result.status);
+    if (result.recorded) void reloadDiagnostics().catch(() => {});
   };
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
@@ -1494,9 +1484,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const reportReadFailure = useCallback((cause: unknown) => {
     const message = errorMessage(cause);
     setReadError(message);
-    if (!readErrorReported.current) reportRequestFailure(message);
+    if (!readErrorReported.current) {
+      reportRequestFailure(message);
+      void recordClientError(message, 'session_read');
+    }
     readErrorReported.current = true;
-  }, []);
+  }, [path]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1589,7 +1582,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     if (!target) return;
     setBusy(true); setError('');
     try { await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action }); await load(target.id); }
-    catch (cause) { await load(target.id).catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    catch (cause) {
+      await load(target.id).catch(() => {});
+      const message = errorMessage(cause);
+      setError(message); reportRequestFailure(message);
+      void recordClientError(message, 'session_control');
+    }
     finally { setBusy(false); }
   }
 
