@@ -202,9 +202,7 @@ def _smtp_failure_hint(exc: Exception) -> str:
         return "SMTP TLS handshake/certificate failed. Check system certificates and TLS access."
     if isinstance(cause, (ConnectionError, TimeoutError, smtplib.SMTPServerDisconnected)):
         return "SMTP connection closed, was refused, or timed out. Check network/firewall access."
-    if isinstance(cause, smtplib.SMTPRecipientsRefused) or getattr(
-        exc, "refused_recipients", ()
-    ):
+    if isinstance(cause, smtplib.SMTPRecipientsRefused) or getattr(exc, "refused_recipients", ()):
         return "SMTP rejected a recipient address. Verify the destination mailbox."
     if isinstance(cause, smtplib.SMTPResponseException):
         code = cause.smtp_code if isinstance(cause.smtp_code, int) else None
