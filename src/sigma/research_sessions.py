@@ -5942,6 +5942,19 @@ async def start_session(
     config = await configuration(view=view, context=credential)
     if not config["available"]:
         raise ProjectError(config["message"])
+    # References are advisory network inputs. Never hold the global async
+    # manager lock or the project filesystem lock while resolving a remote URL;
+    # unrelated sessions must remain responsive when a web server is slow.
+    # The chosen source snapshot is frozen for this admission attempt.
+    prefetched_method_sources = await asyncio.to_thread(
+        select_method_sources,
+        getattr(view.project.investigation_type, "value", view.project.investigation_type),
+        view.project.title,
+        view.project.problem,
+        (item.approach for item in selected_strategies if item is not None),
+        _all(view.path),
+        fetch_content=True,
+    )
     async with _manager_lock:
         with _project_manager_lock(view.path):
             # The session is created from the preflight's frozen research inputs.
@@ -6192,14 +6205,7 @@ async def start_session(
             # Deterministic source-discovery step *before* either agent turn.
             # Frozen in the saved session; reuse the last sufficiently
             # comprehensive set and never block on unavailable web material.
-            record["research_method_sources"] = select_method_sources(
-                getattr(view.project.investigation_type, "value", view.project.investigation_type),
-                view.project.title,
-                view.project.problem,
-                (item.approach for item in selected_strategies if item is not None),
-                records,
-                fetch_content=True,
-            )
+            record["research_method_sources"] = prefetched_method_sources
             # Preserve every selected source and its retrieval result. A failed
             # fetch is a frozen uninspected pointer, not an admission failure.
             # Forged/invalid "retrieved" content still fails before dispatch.
