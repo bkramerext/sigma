@@ -27,13 +27,13 @@ from sigma import (
     cloud_workspaces,
     paper_scores,
     papers,
+    project_diagnostics,
     project_types,
     proposals,
     python_sandbox,
     research_qa,
     research_sessions,
     session_log,
-    project_diagnostics,
 )
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
