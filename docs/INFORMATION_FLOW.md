@@ -4,6 +4,21 @@ This document describes how SIGMA's research is organized and how saved informat
 
 SIGMA investigates a question using one or more **strategies**—different approaches to the same problem. An Investigator develops an idea; a Skeptic challenges it. The point of repeating that exchange is to **use what was learned to decide what to investigate next**, not merely to generate more text.
 
+## Reference materials: guidance entering the workflow
+
+SIGMA distinguishes **reference materials selected for the project's research type** from **evidence generated during investigation**. Some references are common to all project types; others are specific to a field such as Mathematics or Physics. References carry a title and a source link so people can inspect the original material.
+
+| Category | When it enters the workflow | Purpose |
+| --- | --- | --- |
+| **Research Standards** | At research-session startup and in subsequent Investigator/Skeptic work | Guide research methods: how to develop and test claims, scrutinize assumptions, evaluate evidence, and describe uncertainty |
+| **Publication Standards** | When producing a paper from saved research | Guide presentation and writing: structure, clarity, disclosure of limitations, and publication conventions |
+
+**Research Standards are not research results.** When a new session starts, SIGMA selects the applicable methodological references and attempts to retrieve usable source text. Selected sources must have verified, nonempty retrieved excerpts before the session can dispatch research calls; an inaccessible or invalid selected reference blocks a new session with an actionable error. Selecting **no references** is permitted. If reference compilation is enabled with selected sources, SIGMA prepares bounded methodological guidance from those references before research, and does not silently substitute uncompiled notes when that compilation fails.
+
+During the research loop, the compiled methodological guidance or selected source material helps orient Investigator and Skeptic calls. This is different from the **saved findings, objections, evidence, and obligations** produced by previous turns. Source material should be attributed and assessed; a methodology document is not proof that a particular research claim is true. Because agent context is bounded, do not assume every reference or every saved finding is reproduced in full in every subsequent call.
+
+**Publication Standards have a different entry point.** They inform optional paper planning and drafting **after research has been saved**. They do not act as another Investigator/Skeptic turn and should not be confused with the research standards used for the investigation. Paper-writing standards guide how results are reported; they do not independently validate them.
+
 ## Session: the entire investigation
 
 A **session** is one run of the selected strategies, with its own settings, time and spending limits, saved research history, and final **Session Outcome**. It coordinates the strategies, preserves findings and objections (including failures), and can end early if limits are reached or further work is not useful. A new session is a separate run, not the next round of the previous one.
