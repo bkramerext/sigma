@@ -241,9 +241,7 @@ def test_context_diagnostics_include_bounded_execution_identity() -> None:
 def test_both_roles_reconstruct_pooled_ledger_and_reject_omitted_reviews() -> None:
     source = _context(128)
     saved = deepcopy(source)
-    original_by_id = {
-        row["obligation_id"]: row for row in source["obligation_ledger"]
-    }
+    original_by_id = {row["obligation_id"]: row for row in source["obligation_ledger"]}
     for role in ("investigator", "skeptic"):
         dispatch = deepcopy(source)
         dispatch["role"] = role
@@ -272,9 +270,8 @@ def test_both_roles_reconstruct_pooled_ledger_and_reject_omitted_reviews() -> No
             original = original_by_id[item["obligation_id"]]
             for field in ("scope_assumptions", "source_refs"):
                 key = f"{field}_set_index"
-                assert (
-                    dictionary[field][item[key]] if key in item else item[field]
-                ) == original[field]
+                actual_values = dictionary[field][item[key]] if key in item else item[field]
+                assert actual_values == original[field]
         if role == "skeptic":
             allowed_artifact = dispatch["context_artifact_ids"][0]
             common_review = {
