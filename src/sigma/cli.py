@@ -289,7 +289,9 @@ def main() -> None:
         "--transport", choices=("configured", "smtp", "gmail"), default="configured"
     )
     feedback.add_argument(
-        "--reauthorize", action="store_true", help="Reauthorize Gmail with a different Google account"
+        "--reauthorize",
+        action="store_true",
+        help="Reauthorize Gmail with a different Google account",
     )
     ui_command = add_command(
         commands, "start", help="Start or safely restart this checkout's browser UI"
