@@ -3447,8 +3447,9 @@ function FeedbackForm() {
       {sent ? <p role="status">Thanks for your feedback. It has been sent for administrator review.</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
         <label>Feedback<textarea required minLength={10} maxLength={4000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Share a suggestion or describe a problem."/></label>
         <button type="submit" className="admin-text-action about-feedback-send" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send Feedback'}</button>
-        <label>Contact email <span>(optional)</span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>
-        <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider. Read the <a href={privacyNoticeHref('about')}>Privacy Notice</a>.</p>
+        <label><span className="about-contact-email-label">Contact email <span>(optional)</span></span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>
+        <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider.</p>
+        <p>Read the <a href={privacyNoticeHref('about')}>Privacy Notice</a>.</p>
         {error && <p role="alert">{error}</p>}
       </form>}
   </>;
