@@ -96,9 +96,7 @@ def main() -> None:
         expect(dialog).to_be_visible()
         expect(dialog).to_contain_text("Paper list unavailable")
         expect(dialog).not_to_contain_text("No papers generated.")
-        dialog.locator("#email-project-recipients").fill(
-            "first@example.org second@example.org"
-        )
+        dialog.locator("#email-project-recipients").fill("first@example.org second@example.org")
         dialog.locator("#email-project-body").fill("Here is the research.")
         state["fail"] = False
         dialog.get_by_role("button", name="Retry").click()
@@ -114,9 +112,7 @@ def main() -> None:
         expect(dialog.locator("#email-project-recipients")).to_have_value(
             "first@example.org second@example.org"
         )
-        expect(dialog.locator("#email-project-body")).to_have_value(
-            "Here is the research."
-        )
+        expect(dialog.locator("#email-project-body")).to_have_value("Here is the research.")
         expect(dialog.get_by_label("Also attach paper as PDF and its source LaTeX")).to_be_checked()
         expect(dialog.locator("#email-project-paper")).to_have_value("new")
         # A temporary list failure must not reset the sticky attachment mode.
@@ -158,7 +154,9 @@ def main() -> None:
         page.get_by_role("button", name="Email project").click()
         expect(dialog).to_contain_text("No papers generated.")
         expect(dialog.get_by_label("Also attach paper as PDF", exact=True)).to_be_disabled()
-        expect(dialog.get_by_label("Also attach paper as PDF and its source LaTeX")).to_be_disabled()
+        expect(
+            dialog.get_by_label("Also attach paper as PDF and its source LaTeX")
+        ).to_be_disabled()
         expect(dialog.locator("#email-project-paper")).to_have_count(0)
         # Changing content after a definite no-send starts a new idempotent request.
         state["fail_email"] = True
