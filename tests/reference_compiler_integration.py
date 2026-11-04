@@ -373,7 +373,13 @@ async def verify_compilation(
             assert "Mathematics proof methods" in request
             assert "Check induction, boundary cases" in request
         else:
-            assert stage["guidance"] in request
+            # Inspect the decoded request rather than JSON-escaped bytes:
+            # compaction can end in Unicode ellipsis (\\u2026 on the wire).
+            context = json.loads(json.loads(request)["input"])
+            assert any(
+                source.get("notes") == stage["guidance"]
+                for source in context["methodology_source_material"]
+            )
             assert all(url not in request for url in omitted_urls), omitted_urls
     if compiled_ok:
         assert saved["outcome"]["source_material"]["compilation"]["guidance"] == stage["guidance"]
