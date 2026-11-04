@@ -76,6 +76,13 @@ def set_qa_control(body: dict[str, object]):
     return {"configured": True}
 
 
+@app.get("/api/__fixture/browser-presence")
+def browser_presence(path: str):
+    from sigma.research_presence import has_live_viewer
+
+    return {"connected": has_live_viewer(path)}
+
+
 @app.get("/api/__fixture/qa-state")
 def qa_fixture_state():
     return dict(_qa_control)

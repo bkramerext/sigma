@@ -160,7 +160,13 @@ async def _convert_text(
             if qa_id is not None and scope != "research-qa":
                 raise ProjectError("Q/A identifier requires a Q/A text scope")
             if scope == "research-qa":
-                if not qa_id or strategy_id is not None or session_id is not None or field_path is not None or target_format != "markdown":
+                if (
+                    not qa_id
+                    or strategy_id is not None
+                    or session_id is not None
+                    or field_path is not None
+                    or target_format != "markdown"
+                ):
                     raise ProjectError("Q/A conversion requires a saved answer and Markdown")
                 from sigma.research_qa import saved_answer_text
 
@@ -170,7 +176,8 @@ async def _convert_text(
                     "source_digest": digest(record["answer"]),
                     "plain": {"body": record["answer"]},
                     "markdown": {"body": record["markdown_answer"], "current": True}
-                    if isinstance(record["markdown_answer"], str) and record["markdown_answer"].strip()
+                    if isinstance(record["markdown_answer"], str)
+                    and record["markdown_answer"].strip()
                     else None,
                 }
             elif scope == "research-block":
@@ -464,12 +471,23 @@ async def _convert_text(
                 if scope == "research-qa":
                     from sigma.research_qa import saved_answer_text, store_markdown_answer
 
+                    if qa_id is None:
+                        raise ProjectError("Saved Q/A identifier is required")
                     latest_text = saved_answer_text(path, qa_id)["answer"]
                     if digest(latest_text) != source["source_digest"]:
-                        raise ProjectError("Saved Q/A answer changed during conversion; reopen before retrying")
+                        raise ProjectError(
+                            "Saved Q/A answer changed during conversion; reopen before retrying"
+                        )
                     return store_markdown_answer(
-                        path, qa_id, source["source_digest"], body,
-                        {"provider": "openai", "model": config["model"], "reasoning_effort": config["reasoning_effort"]},
+                        path,
+                        qa_id,
+                        source["source_digest"],
+                        body,
+                        {
+                            "provider": "openai",
+                            "model": config["model"],
+                            "reasoning_effort": config["reasoning_effort"],
+                        },
                         result.warnings,
                     )
                 if scope == "research-block":

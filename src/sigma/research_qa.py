@@ -217,9 +217,7 @@ def _validate_record(record: Any, project_id: str) -> None:
     ):
         raise ProjectError("Q/A archive contains a malformed answer")
     rendered = record.get("markdown_answer")
-    if rendered is not None and (
-        not isinstance(rendered, str) or not 1 <= len(rendered) <= 20000
-    ):
+    if rendered is not None and (not isinstance(rendered, str) or not 1 <= len(rendered) <= 20000):
         raise ProjectError("Q/A archive contains invalid derived Markdown")
     if rendered is not None and (
         not isinstance(record.get("markdown_provenance"), dict)
@@ -702,7 +700,6 @@ def get_answer(path: str, qa_id: str) -> dict[str, Any]:
     return _with_navigation(record, _navigation_context(path))
 
 
-
 def saved_answer_text(path: str, qa_id: str) -> dict[str, Any]:
     """Read the immutable answer and any durable AI-derived Markdown formatting."""
     if not re.fullmatch(r"[0-9a-f]{32}", qa_id):
@@ -718,8 +715,12 @@ def saved_answer_text(path: str, qa_id: str) -> dict[str, Any]:
 
 
 def store_markdown_answer(
-    path: str, qa_id: str, expected_digest: str, markdown: str,
-    provenance: dict[str, Any], warnings: list[str],
+    path: str,
+    qa_id: str,
+    expected_digest: str,
+    markdown: str,
+    provenance: dict[str, Any],
+    warnings: list[str],
 ) -> dict[str, Any]:
     """Publish one derived representation without changing the original answer."""
     if not re.fullmatch(r"[0-9a-f]{32}", qa_id):

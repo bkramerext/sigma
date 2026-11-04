@@ -223,16 +223,23 @@ def main() -> None:
             original = research_qa.saved_answer_text(str(path), first["qa_id"])
             assert original["markdown_answer"] is None
             derived = research_qa.store_markdown_answer(
-                str(path), first["qa_id"], digest(original["answer"]),
+                str(path),
+                first["qa_id"],
+                digest(original["answer"]),
                 "## Formatted answer\n\nMath: $R(n)$",
                 {"provider": "openai", "model": "test-model", "reasoning_effort": "low"},
                 [],
             )
             assert derived["plain"]["body"] == original["answer"]
             assert derived["markdown"]["body"].startswith("## Formatted answer")
-            assert research_qa.saved_answer_text(str(path), first["qa_id"])["markdown_answer"] == derived["markdown"]["body"]
+            assert (
+                research_qa.saved_answer_text(str(path), first["qa_id"])["markdown_answer"]
+                == derived["markdown"]["body"]
+            )
             cached = research_qa.store_markdown_answer(
-                str(path), first["qa_id"], digest(original["answer"]),
+                str(path),
+                first["qa_id"],
+                digest(original["answer"]),
                 "Unexpected duplicate conversion",
                 {"provider": "openai", "model": "test-model", "reasoning_effort": "low"},
                 [],

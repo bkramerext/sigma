@@ -7,7 +7,6 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
 UI = os.environ.get("SIGMA_QA_UI", "http://127.0.0.1:5174").rstrip("/")
-FIXTURE = os.environ.get("SIGMA_QA_FIXTURE", "http://127.0.0.1:8012").rstrip("/")
 OUT = Path("docs/evaluations/research_qa")
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -29,11 +28,6 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
-        # Presence is a long-lived SSE stream. Route.fetch buffers indefinitely,
-        # so let the browser use Vite's normal streaming API proxy instead.
-        if "/api/projects/research-presence?" in route.request.url:
-            route.continue_()
-            return
         if "/api/projects/research-qa?" in route.request.url and missing_archive_reads[0]:
             missing_archive_reads[0] -= 1
             route.fulfill(
@@ -50,16 +44,11 @@ with sync_playwright() as playwright:
                 body='{"error":"fixture archive unavailable"}',
             )
             return
-        route.fulfill(
-            response=route.fetch(
-                url=route.request.url.replace(
-                    UI.replace("http://", ""), FIXTURE.replace("http://", "")
-                ),
-                headers={**route.request.headers, "origin": "http://127.0.0.1:5173"},
-            )
-        )
+        route.continue_()
 
-    context.route("**/api/**", forward)
+    # Intercept only the two intentional archive failure injections. All other
+    # requests, especially the browser-presence SSE stream, use Vite's proxy.
+    context.route(re.compile(r"/api/projects/research-qa\?"), forward)
     page.goto(UI + "/")
     welcome = page.locator("#invitation-welcome-dialog")
     if welcome.count() and welcome.is_visible():
@@ -76,6 +65,14 @@ with sync_playwright() as playwright:
     ).click()
     page.wait_for_url("**/project?*")
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
+    page.wait_for_function(
+        """async path => {
+            const response = await fetch('/api/__fixture/browser-presence?' + new URLSearchParams({path}));
+            return response.ok && (await response.json()).connected;
+        }""",
+        arg=path,
+        timeout=20000,
+    )
     page.get_by_role("button", name="Start a new research session", exact=True).click()
     page.get_by_role("button", name="Start Session #1", exact=True).click()
     expect(page.locator("li[data-session-id]").first.locator(".session-status")).to_have_text(
@@ -330,9 +327,11 @@ with sync_playwright() as playwright:
     conversion_requests = []
     page.on(
         "request",
-        lambda request: conversion_requests.append(request.url)
-        if "/api/projects/text/convert" in request.url
-        else None,
+        lambda request: (
+            conversion_requests.append(request.url)
+            if "/api/projects/text/convert" in request.url
+            else None
+        ),
     )
     markdown_icon.click()
     expect(title_line.get_by_role("button", name="Show plain answer")).to_be_visible(timeout=30000)
