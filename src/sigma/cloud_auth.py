@@ -2085,6 +2085,11 @@ def _notification_admin_recipients(cfg: Config) -> list[str]:
                 "SELECT value FROM grants WHERE kind='email' AND role='admin' AND active=1"
             )
         )
+        # The local --signin shortcut has no Google identity record. The
+        # configured operator email remains a trusted local recipient, but
+        # hosted notification recipients still require explicit authorization.
+        if cfg.local and cfg.admin_contact_email:
+            recipients.add(cfg.admin_contact_email)
         return sorted(recipients)
 
 
