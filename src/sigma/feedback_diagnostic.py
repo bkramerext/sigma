@@ -280,9 +280,7 @@ def _execute(message: str, *, verified_gmail_sender: str | None = None) -> int:
     return 0
 
 
-def run(
-    message: str, *, transport: str = "configured", reauthorize: bool = False
-) -> int:
+def run(message: str, *, transport: str = "configured", reauthorize: bool = False) -> int:
     """Exercise actual feedback delivery without a browser app or feedback record."""
     try:
         load_local_config()
