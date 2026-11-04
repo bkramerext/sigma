@@ -5,6 +5,14 @@ The SIGMA CI test plan invokes each part separately for parallel sharding.
 
 # The scheduler parity workflow imports these historical fixture helpers from
 # this module. Preserve that import contract after splitting the test suite.
+from research_sessions_part4 import (
+    test_paired_round_protocol_requires_every_accepted_role,
+    test_paired_round_pipeline_orders_roles_without_paid_calls,
+    test_paired_round_positions_are_explicit_and_legacy_is_unchanged,
+    test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs,
+    test_paired_round_defaults_and_enabled_call_ceiling,
+)
+
 from research_sessions_part1 import (  # noqa: F401
     REAL_CLIENT,
     investigation,
