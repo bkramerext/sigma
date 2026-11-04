@@ -7756,7 +7756,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             ]
             if isinstance(record.get("reference_compilation"), dict)
             and record["reference_compilation"].get("status") == "completed"
-            else record.get("research_method_sources", {}).get("sources", [])
+            else research_reference_compiler.compilation_eligible_sources(
+                record.get("research_method_sources", {}).get("sources", [])
+            )
             if isinstance(record.get("research_method_sources"), dict)
             else []
         ),
@@ -7850,6 +7852,18 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
                 if isinstance(row, dict) and row.get("id") in retained
             }
             named = [ref for ref in named if ref["url"] in retained_urls]
+        elif isinstance(record.get("research_method_sources"), dict):
+            frozen_sources = record["research_method_sources"].get("sources", [])
+            if isinstance(frozen_sources, list) and any(
+                isinstance(row, dict) and "retrieval" in row for row in frozen_sources
+            ):
+                verified_urls = {
+                    row["url"]
+                    for row in research_reference_compiler.compilation_eligible_sources(
+                        frozen_sources
+                    )
+                }
+                named = [ref for ref in named if ref["url"] in verified_urls]
         context["research_method_references"] = named
         context["research_method_reference_urls"] = [ref["url"] for ref in named]
         context["research_method_references_omitted"] = max(0, len(method_references) - 20)
