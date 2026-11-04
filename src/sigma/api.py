@@ -1146,10 +1146,14 @@ def research_session_log_download_view(session_id: str, path: str):
         # Same sanitized project diagnostic records appear in readable session
         # exports when explicitly correlated to this session. Do not import
         # pre-session errors into unrelated historical session logs.
-        related = [
-            item for item in project_diagnostics.read(path)
-            if item.get("session_id") == session_id
-        ]
+        try:
+            related = [
+                item for item in project_diagnostics.read(path)
+                if item.get("session_id") == session_id
+            ]
+        except (ProjectError, OSError, ValueError):
+            # Diagnostic storage failure must never make the session log unavailable.
+            related = []
         if related:
             body += "\n## Exportable UI diagnostics\n\n"
             for item in related:
