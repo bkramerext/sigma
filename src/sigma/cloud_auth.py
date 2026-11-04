@@ -1640,7 +1640,6 @@ def login(
     return response
 
 
-
 @router.get("/mail/authorize")
 def authorize_local_gmail_send(request: Request):
     """Ask the already signed-in local Google identity for Gmail Send consent."""
@@ -1666,9 +1665,9 @@ def authorize_local_gmail_send(request: Request):
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(48)
-    challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(verifier.encode()).digest()
-    ).rstrip(b"=").decode()
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    )
     with _db(cfg) as db:
         db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
         db.execute(
@@ -2094,7 +2093,9 @@ def denied_identity(request: Request):
 def _local_gmail_sender_grant() -> tuple[Path, str] | None:
     """Find local opt-in Gmail permission; never read it in hosted mode."""
     if not _local_mode() or os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").lower() not in {
-        "1", "true", "yes"
+        "1",
+        "true",
+        "yes",
     }:
         return None
     from sigma.local_gmail_grant import grant_for_account
