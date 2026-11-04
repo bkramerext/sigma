@@ -20,6 +20,12 @@ Create a project or sample, then choose strategies to investigate. The overview 
 
 ![SIGMA workflow: Project → Strategies → Research → Refine → Optional paper → Review/export](assets/workflow.svg)
 
+<p><sub>Hover the stage labels below for a quick description.</sub></p>
+<table>
+<tr><td width="33%" align="center"><abbr title="Define the research question and scope.">01 · Project</abbr></td><td width="33%" align="center"><abbr title="Develop and compare approaches.">02 · Strategies</abbr></td><td width="33%" align="center"><abbr title="Investigator and Skeptic examine each strategy.">03 · Research</abbr></td></tr>
+<tr><td width="33%" align="center"><abbr title="Inspect and share results, evidence, and limitations.">06 · Review/export</abbr></td><td width="33%" align="center"><abbr title="Turn saved research into a draft for critical review.">05 · Optional paper</abbr></td><td width="33%" align="center"><abbr title="Inspect findings; revise or continue the inquiry.">04 · Refine</abbr></td></tr>
+</table>
+
 - **Create a project:** Choose a subject or sample and frame the question.
 - **Explore strategies:** Develop approaches to the question and select which to investigate.
 - **Run research:** Investigator and Skeptic examine selected strategies; SIGMA saves findings, evidence, objections, and open questions.
