@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from playwright.sync_api import expect, sync_playwright
@@ -10,6 +11,17 @@ URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5196")
 
 
 def main() -> None:
+    # Keep user-facing hierarchy labels aligned with the scheduler and the README.
+    root = Path(__file__).resolve().parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    ui = (root / "frontend/src/main.tsx").read_text(encoding="utf-8")
+    assert "## Research loop" in readme
+    assert "3 rounds × 3 turns × 3 strategies × 2 calls = 54 agent calls" in readme
+    assert "there is no separate round-end merge" in readme
+    assert "researchPositionLabel(session, branch.cycle)" in ui
+    assert "branch.calls_used} agent calls" in ui
+    assert "branch.calls_used} agent turns" not in ui
+
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             executable_path=os.environ.get(
@@ -176,7 +188,7 @@ def main() -> None:
                 details = dialog.locator("#about-session-details")
                 expect(details.locator(".about-multi-agent-intro")).to_contain_text("one strategy")
                 expect(details.locator(".about-multi-agent-intro")).to_contain_text(
-                    "instead of ending after the first answer"
+                    "Later turns can respond to criticism"
                 )
                 expect(dialog.locator(".about-strategy-parallel-note")).to_contain_text(
                     "Press Play"
@@ -187,18 +199,18 @@ def main() -> None:
                     expect(strategy_rounds.nth(i)).to_contain_text("Investigator")
                     expect(strategy_rounds.nth(i)).to_contain_text("Skeptic")
                 expect(details.locator(".about-shared-budget")).to_be_visible()
-                expect(details.locator(".about-shared-budget")).to_contain_text("Why repeat?")
+                expect(details.locator(".about-shared-budget")).to_contain_text("Why more rounds?")
                 expect(details.locator(".about-exploration-space")).to_be_visible()
                 expect(details.locator(".about-exploration-row")).to_have_count(3)
                 expect(details.locator(".about-exploration-round")).to_have_count(9)
                 expect(details.locator(".about-exploration-space")).to_contain_text(
-                    "maximum number of turns for the whole session"
+                    "54 maximum calls"
                 )
                 expect(dialog.locator(".about-evidence-report-note")).to_contain_text(
                     "Export the research or write a report"
                 )
                 expect(
-                    details.get_by_role("heading", name="How an idea grows over six agent turns")
+                    details.get_by_role("heading", name="How one research round works")
                 ).to_be_visible()
                 expect(details.locator(".about-agent-round")).to_have_count(3)
                 expect(details.locator(".about-agent-turn")).to_have_count(6)
@@ -207,26 +219,23 @@ def main() -> None:
                 expect(details.locator(".about-round-definition")).to_contain_text(
                     "One research round"
                 )
-                expect(details.locator(".about-round-definition")).to_contain_text("One agent turn")
+                expect(details.locator(".about-round-definition")).to_contain_text("two")
                 expect(details.locator(".about-agent-instantiation h5")).to_have_text(
-                    "One strategy · Three rounds · Six turns"
+                    "One strategy · One round · Three turns"
                 )
                 for turn in range(1, 7):
                     expect(details.locator(".about-turn-number").nth(turn - 1)).to_have_text(
-                        f"TURN {turn}"
+                        f"CALL {turn}"
                     )
-                for round_number in range(1, 4):
+                for turn_number in range(1, 4):
                     expect(
-                        details.locator(".about-agent-round-heading").nth(round_number - 1)
-                    ).to_contain_text(f"Round {round_number}")
+                        details.locator(".about-agent-round-heading").nth(turn_number - 1)
+                    ).to_contain_text(f"Turn {turn_number} of 3")
                 expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
-                    "9 possible rounds, or 18 agent turns"
+                    "3 rounds × 3 turns × 3 strategies × 2 agent calls = 54 maximum calls"
                 )
-                expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
-                    "12-turn limit"
-                )
-                expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
-                    "at most 6 complete rounds"
+                expect(details.locator(".about-exploration-round").first).to_contain_text(
+                    "3 turns"
                 )
                 expect(
                     details.locator(
@@ -244,7 +253,7 @@ def main() -> None:
                 )
                 expect(details.locator(".about-agent-return svg path")).to_have_count(2)
                 expect(details.locator(".about-agent-instantiation-note")).to_contain_text(
-                    "arguments, challenges, and results for review"
+                    "These six calls illustrate one round"
                 )
                 expect(details.locator(".about-multiple-sessions-note")).to_contain_text(
                     "revisit a strategy with new evidence"
