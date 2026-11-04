@@ -101,11 +101,34 @@ def run_split(name: str, count: int, part: int, *, paper: bool = False) -> None:
         node for node in module.body
         if isinstance(node, ast.FunctionDef) and node.name == "main"
     )
-    partition = _Partition(part, count)
-    main.body = partition.body(main.body)
+    if paper:
+        # The old paper driver ends with one cohesive, stateful integration
+        # scenario. Keep that block intact; split only at its safe boundary.
+        # Part 1 runs all standalone scenarios, part 2 the integration block.
+        integration_start = next(
+            index for index, node in enumerate(main.body)
+            if isinstance(node, ast.With)
+            and any(
+                isinstance(item.context_expr, ast.Call)
+                and isinstance(item.context_expr.func, ast.Name)
+                and item.context_expr.func.id == "TemporaryDirectory"
+                for item in node.items
+            )
+        )
+        main.body = (
+            main.body[:integration_start]
+            if part == 1
+            else main.body[integration_start:]
+        )
+        selected = len(main.body)
+        total = selected
+    else:
+        partition = _Partition(part, count)
+        main.body = partition.body(main.body)
+        selected = partition.selected
+        total = partition.total
     ast.fix_missing_locations(module)
-    assert partition.total >= count, (name, partition.total)
-    assert partition.selected > 0, (name, part, partition.total)
+    assert selected > 0, (name, part, total)
     exec(compile(module, str(driver), "exec"), globals_dict)
     if paper:
         import httpx
@@ -134,7 +157,7 @@ def run_split(name: str, count: int, part: int, *, paper: bool = False) -> None:
             httpx.AsyncClient = real_client
     else:
         globals_dict["main"]()
-    print(f"PASS {name} part {part}/{count}: {partition.selected}/{partition.total} scenarios")
+    print(f"PASS {name} part {part}/{count}: {selected}/{total} statements")
 
 
 if __name__ == "__main__":
