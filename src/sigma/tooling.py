@@ -208,28 +208,14 @@ def run_tooling(command: str) -> int:
                 and step[4] == "ruff"
             )
         ]
-    # All four CI jobs cover the whole test plan exactly once. Most commands
-    # use round-robin placement. A small number of known expensive tests are
-    # placed on lighter shards using observed CI durations (2026-11-04), so
-    # shard 1 and 2 do not dominate the workflow wall clock.
-    # These explicit placements move two tests from each of shards 1/2 to 3/4.
-    # Local './sigma test' remains the complete, unsharded suite.
+    # Eight independent CI jobs cover the entire test plan exactly once.
+    # Assign checks in round-robin order; local './sigma test' remains whole.
     shard = os.environ.get("SIGMA_CI_TEST_SHARD") if command == "test" else None
     if shard:
-        if shard not in {"1", "2", "3", "4"}:
-            print("SIGMA_CI_TEST_SHARD must be 1, 2, 3, or 4.", file=sys.stderr)
+        if shard not in {str(index) for index in range(1, 9)}:
+            print("SIGMA_CI_TEST_SHARD must be an integer from 1 to 8.", file=sys.stderr)
             return 2
-        rebalanced_tests = {
-            "tests/research_ladder.py": 3,
-            "tests/cloud_research_api.py": 3,
-            "tests/papers.py": 4,
-            "tests/cloud_workspaces.py": 4,
-        }
-        steps = [
-            step
-            for index, step in enumerate(steps)
-            if rebalanced_tests.get(step[-1], index % 4 + 1) == int(shard)
-        ]
+        steps = [step for index, step in enumerate(steps) if index % 8 == int(shard) - 1]
     unsupported_steps = [step for step in steps if not _test_step_allowed(step)]
     if command == "test" and unsupported_steps:
         print(
