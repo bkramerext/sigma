@@ -88,6 +88,17 @@ A **round** gives each enabled strategy a configured number of turns. In subsequ
 
 **Why have both turns and rounds?** Turns supply the immediate *propose → criticize → revise* feedback loop. Rounds provide a larger *revisit and deepen* opportunity across the configured strategies. They are a scheduling and research-organization boundary, **not a separate AI operation**, a requirement that every strategy finish in lockstep, or a magic quality-improvement step. There is **no automatic round-end merge or synthesis call**.
 
+### How information moves between calls, turns, and rounds
+
+A **pair** and a **turn** mean the same thing in SIGMA: one Investigator call followed by one Skeptic call. Information moves at different boundaries:
+
+1. **Within a pair (one turn):** The Investigator receives its research question and a selected context packet. Its proposed reasoning, assumptions, evidence, tests, and open questions are then available to the Skeptic, which challenges them and records criticism and unresolved obligations. The Skeptic does not independently redo the whole investigation by default.
+2. **From one turn to the next:** SIGMA saves the pair's research artifact, including the Investigator's work, Skeptic feedback, objections, evidence references, and next question. A later Investigator can use **selected portions** of this history to revise a claim, test an objection, or pursue a new line of inquiry. It is not a blank restart, but the previous exchange is not blindly accepted as true.
+3. **From one round to the next:** There is **no special handoff or merge at the round boundary**. Saved work and still-open obligations remain available for selection just as they do between turns. A later round gives strategies more opportunities to build on earlier results and criticism; the next round does not automatically receive a complete, consolidated report of every strategy's work.
+4. **Between strategies:** SIGMA can supply selected findings or objections from another strategy as **peer evidence** in later calls. Those results are attributed to their source and must be evaluated rather than treated as independently verified. Strategies may progress concurrently, so a call cannot assume it has received everything other strategies will eventually produce.
+
+**Saved history is not the same as model context.** SIGMA preserves the full original research records, but each agent call receives a **bounded selection** of relevant prior material, source identifiers, and explicit omissions when necessary to fit context limits. A finding that was saved but not supplied to a particular call cannot legitimately be claimed as reviewed by that call. The **Session Outcome** summarizes the session afterward; it is not an additional Investigator/Skeptic turn.
+
 ### Example: the default 54-call ceiling
 
 | Level | Default | What it means |
@@ -100,7 +111,7 @@ A **round** gives each enabled strategy a configured number of turns. In subsequ
 
 **3 rounds × 3 turns × 3 strategies × 2 calls = 54 maximum agent calls.** This is a ceiling, not a promise to execute all calls or produce 27 accepted findings.
 
-Within a strategy, the Investigator finishes before its Skeptic reviews the work. Different strategies can run concurrently. Later calls see **selected, bounded portions** of prior research and peer evidence—not necessarily every saved artifact—while the full records remain available for review. After the session ends, its **Session Outcome** summarizes conclusions, evidence, objections, and remaining uncertainty; it does not certify that the agents' reasoning is correct.
+The 54-call calculation describes possible work, not a promise of 54 completed calls. The Session Outcome records conclusions and remaining uncertainty; it does not certify that the agents' reasoning is correct.
 
 ## Run locally
 
