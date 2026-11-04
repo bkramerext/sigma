@@ -62,8 +62,9 @@ def _config_help() -> None:
         print(f"  Candidate password file not found at: {example}")
 
 
-def _smtp_ready(cloud_auth: object) -> bool:
+def _smtp_ready() -> bool:
     """Check settings without exposing SMTP credentials or contacting Gmail."""
+    from sigma import cloud_auth
     from sigma.config_secrets import SecretConfigurationError
 
     ready = True
@@ -139,7 +140,9 @@ def _smtp_ready(cloud_auth: object) -> bool:
     return ready
 
 
-def _gmail_ready(cloud_auth: object) -> bool:
+def _gmail_ready() -> bool:
+    from sigma import cloud_auth
+
     ready = True
     token_key, token_path = _active_setting(
         "SIGMA_GMAIL_TOKEN_FILE",
@@ -235,7 +238,7 @@ def _execute(message: str) -> int:
 
     gmail = bool(cloud_auth.email_env("GMAIL_TOKEN_FILE"))
     print(f"Transport: {'Gmail API' if gmail else 'SMTP'}")
-    ready = _gmail_ready(cloud_auth) if gmail else _smtp_ready(cloud_auth)
+    ready = _gmail_ready() if gmail else _smtp_ready()
     if not ready or contact_email is None:
         if ready:
             print("Set SIGMA_CLOUD_ADMIN_CONTACT_EMAIL in the checkout's ignored .env.")
