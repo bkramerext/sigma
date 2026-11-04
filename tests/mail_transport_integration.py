@@ -168,6 +168,63 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
                 self.assertEqual(attachments[2].get_content_type(), "application/x-tex")
                 self.assertIn(b"begin{document}", attachments[2].get_payload(decode=True))
 
+    def test_local_about_feedback_with_signin_shortcut_still_sends(self):
+        """Local --signin users have no Google identity row, but can mail the operator."""
+        captured = []
+
+        def fake_urlopen(request, timeout):
+            if request.full_url == gmail_delivery.TOKEN_ENDPOINT:
+                return FakeResponse({"access_token": "fixture-access"})
+            raw = json.loads(request.data)["raw"]
+            captured.append(
+                message_from_bytes(base64.urlsafe_b64decode(raw), policy=policy.default)
+            )
+            return FakeResponse({"id": "feedback-id"})
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                    "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                    "SIGMA_LOCAL_AUTO_ADMIN": "true",
+                },
+            ),
+            patch.object(gmail_delivery, "urlopen", side_effect=fake_urlopen),
+        ):
+            _save_grant(
+                sender="admin@example.org",
+                subject="google-sub-1",
+                client_id=CLIENT_ID,
+                client_secret="fixture-secret",
+                refresh_token="fixture-refresh",
+                scope=GMAIL_SEND_SCOPE,
+            )
+            self.assertEqual(
+                cloud_auth._notification_admin_recipients(cloud_auth.config()),
+                ["admin@example.org"],
+            )
+            sent = self.client.post(
+                "/api/cloud-auth/feedback",
+                json={"message": "Local About Feedback should notify the operator."},
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            self.assertEqual(sent.status_code, 200, sent.text)
+            self.assertEqual(sent.json()["status"], "received")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                row = db.execute(
+                    "SELECT notification_error FROM feedback_requests WHERE id=?",
+                    (sent.json()["id"],),
+                ).fetchone()
+            self.assertIsNone(row["notification_error"])
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0]["To"], "admin@example.org")
+        self.assertEqual(captured[0]["Subject"], "New SIGMA feedback")
+        self.assertIn(
+            b"Local About Feedback should notify the operator.",
+            captured[0].get_payload(decode=True),
+        )
+
     def test_hosted_smtp_is_unchanged_by_local_gmail_grant(self):
         _save_grant(
             sender="admin@example.org",
