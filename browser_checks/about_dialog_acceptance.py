@@ -234,9 +234,7 @@ def main() -> None:
                 expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
                     "3 rounds × 3 turns × 3 strategies × 2 agent calls = 54 maximum calls"
                 )
-                expect(details.locator(".about-exploration-round").first).to_contain_text(
-                    "3 turns"
-                )
+                expect(details.locator(".about-exploration-round").first).to_contain_text("3 turns")
                 expect(
                     details.locator(
                         ".about-agent-turn .about-diagram-node-title", has_text="Investigator"
