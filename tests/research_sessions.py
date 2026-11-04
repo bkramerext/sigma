@@ -13010,7 +13010,6 @@ def test_reference_compilation_is_bounded_and_source_attributed() -> None:
         {**response, "selected_source_ids": ["invented"]},
         {**response, "omitted_source_ids": []},
         {**response, "selected_source_ids": ["proof", "proof"]},
-        {**response, "guidance": "x" * (compiler.MAX_GUIDANCE_CHARS + 1)},
     ):
         try:
             compiler.validate_result(invalid, sources)
@@ -13018,6 +13017,21 @@ def test_reference_compilation_is_bounded_and_source_attributed() -> None:
             pass
         else:
             raise AssertionError("Invalid reference compilation was accepted")
+
+    # The model may exceed a presentation length despite valid, metered
+    # structured output. Bound the usable guide without silently accepting
+    # invalid source provenance or losing its original length.
+    oversized = compiler.validate_result(
+        {**response, "guidance": "Verify the evidence carefully. " * 70}, sources
+    )
+    assert oversized["guidance_compacted"] is True
+    assert oversized["guidance_original_chars"] > compiler.MAX_GUIDANCE_CHARS
+    assert 0 < len(oversized["guidance"]) <= compiler.MAX_GUIDANCE_CHARS
+    assert oversized["guidance"].endswith("…")
+    assert oversized["guidance_sha256"] == hashlib.sha256(
+        oversized["guidance"].encode("utf-8")
+    ).hexdigest()
+    assert compiler.validate_result(oversized, sources)["guidance"] == oversized["guidance"]
 
     context = {
         "problem": session["problem"],
