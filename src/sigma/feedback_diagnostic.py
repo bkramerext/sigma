@@ -216,16 +216,12 @@ def _smtp_failure_hint(exc: Exception) -> str:
     return "SMTP failed at an unclassified stage. The provider's raw error is suppressed."
 
 
-def _execute(message: str, *, using_google_grant: bool = False) -> int:
+def _execute(message: str) -> int:
     from sigma import cloud_auth
 
     print("SIGMA feedback mail diagnostic (local CLI)")
     print("Submission: notification test only; no feedback database record.")
-    if using_google_grant:
-        print("Identity: Gmail Send authorized via real local Google UI sign-in.")
-        print("CLI reads an account-bound grant, not a browser cookie.")
-    else:
-        print("Browser identity: unavailable to CLI; configured local --signin identity is used.")
+    print("Browser identity: unavailable to CLI; configured local --signin identity is used.")
     contact_raw = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     contact_email: str | None = None
     if not contact_raw:
@@ -280,33 +276,6 @@ def _execute(message: str, *, using_google_grant: bool = False) -> int:
     return 0
 
 
-def _local_google_grant() -> tuple[Path, str] | None:
-    from sigma.local_gmail_grant import grant_for_account
-
-    home = Path(
-        os.environ.get("SIGMA_CLOUD_AUTH_HOME", "")
-        or str(Path.home() / ".sigma" / "local-cloud-auth")
-    )
-    email = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip().casefold()
-    client_id = os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip()
-    found = grant_for_account(home, email=email, client_id=client_id)
-    return (found[0], email) if found else None
-
-
-def _google_consent_instructions() -> None:
-    print("Local Google Gmail Send authorization is missing for the configured account.")
-    print("Regular SIGMA Google login grants identity only (openid/email/profile).")
-    print("Gmail sending requires additional explicit consent; no SMTP password is needed.")
-    print("  1. Start local SIGMA with ./sigma start --navigate (NOT --signin).")
-    print("  2. Sign into the UI using the configured real Google admin account.")
-    print("  3. In that signed-in browser, open:")
-    print("     http://127.0.0.1:5173/api/cloud-auth/mail/authorize")
-    print("  4. Approve Gmail Send, then rerun:")
-    print('     ./sigma send_feedback "hello world" --transport gmail')
-    print("If Google blocks consent, the OAuth app may need verification or tester access.")
-    print("This flow does not change SIGMA production settings.")
-
-
 def run(message: str, *, transport: str = "configured") -> int:
     """Exercise the feedback notification mail path without browser or persistence."""
     try:
@@ -320,7 +289,8 @@ def run(message: str, *, transport: str = "configured") -> int:
     ):
         print("ERROR: Feedback must be 10 to 4,000 valid characters.", file=sys.stderr)
         return 2
-
+    if transport == "configured":
+        return _execute(message)
     if transport == "smtp":
         with patch.dict(
             os.environ,
@@ -332,24 +302,5 @@ def run(message: str, *, transport: str = "configured") -> int:
         ):
             print("Override: using SMTP for this invocation only.")
             return _execute(message)
-
-    if transport in {"configured", "gmail"}:
-        grant = _local_google_grant()
-        if grant is not None:
-            path, sender = grant
-            with patch.dict(
-                os.environ,
-                {
-                    "SIGMA_GMAIL_TOKEN_FILE": str(path),
-                    "SIGMA_GMAIL_SENDER": sender,
-                },
-            ):
-                print("Using local Gmail Send permission from Google UI sign-in.")
-                return _execute(message, using_google_grant=True)
-        if transport == "gmail":
-            _google_consent_instructions()
-            return 2
-        return _execute(message)
-
     print("ERROR: Unsupported transport.", file=sys.stderr)
     return 2

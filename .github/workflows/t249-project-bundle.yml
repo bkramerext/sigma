@@ -5,9 +5,6 @@ on:
       - 'src/sigma/project_bundle.py'
       - 'src/sigma/project_email.py'
       - 'src/sigma/feedback_diagnostic.py'
-      - 'src/sigma/local_gmail_grant.py'
-      - 'tests/local_gmail_grant.py'
-      - 'tests/local_gmail_auth.py'
       - 'src/sigma/cli.py'
       - 'tests/feedback_diagnostic.py'
       - 'src/sigma/cloud_auth.py'
@@ -49,10 +46,6 @@ jobs:
         run: python tests/project_email.py
       - name: Verify feedback CLI diagnostic
         run: python tests/feedback_diagnostic.py
-      - name: Verify private Gmail Send grant
-        run: python tests/local_gmail_grant.py
-      - name: Verify local Google Gmail consent
-        run: python tests/local_gmail_auth.py
       - name: Verify project creation and API
         run: python tests/project_creation.py
       - name: Build Python sandbox image
