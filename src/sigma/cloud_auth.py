@@ -972,6 +972,7 @@ async def middleware(request: Request, call_next):
             "/api/cloud-auth/status",
             "/api/cloud-auth/login",
             "/api/cloud-auth/callback",
+            "/api/cloud-auth/mail/cli-bridge-ready",
             "/api/cloud-auth/denied",
         }
     )
@@ -1640,6 +1641,27 @@ def login(
     return response
 
 
+@router.get("/mail/cli-bridge-ready")
+def local_cli_mail_bridge_ready(request: Request, state: str = ""):
+    """Only a loopback local backend can acknowledge a private CLI OAuth handoff."""
+    cfg = config()
+    if (
+        not cfg.local
+        or cfg.error
+        or cfg.database is None
+        or request.client is None
+        or request.client.host not in {"127.0.0.1", "::1", "localhost"}
+    ):
+        raise HTTPException(404, "Not found.")
+    from sigma.local_gmail_cli_bridge import ready
+
+    response = JSONResponse(
+        {"ready": ready(cfg.database.parent, state), "protocol": 1}
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @router.get("/callback")
 async def callback(
     request: Request,
@@ -1650,6 +1672,24 @@ async def callback(
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.origin or not cfg.client_id or not cfg.client_secret:
         raise HTTPException(503, "Cloud authentication is not ready.")
+    if (
+        cfg.local
+        and cfg.database is not None
+        and request.client is not None
+        and request.client.host in {"127.0.0.1", "::1", "localhost"}
+        and state
+    ):
+        from sigma.local_gmail_cli_bridge import receive
+
+        if receive(cfg.database.parent, state, code=code, error=error):
+            result = HTMLResponse(
+                "<!doctype html><meta charset='utf-8'><title>SIGMA Gmail</title>"
+                "<p>Google responded to the SIGMA CLI. Return to your terminal.</p>"
+            )
+            result.headers["Cache-Control"] = "no-store"
+            result.headers["Content-Security-Policy"] = "default-src 'none'"
+            result.headers["X-Content-Type-Options"] = "nosniff"
+            return result
     flow_cookie = request.cookies.get(_cookie_name(FLOW_COOKIE, cfg))
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
