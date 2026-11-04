@@ -292,6 +292,8 @@ def test_score_write_preserves_archived_paper_snapshot() -> None:
         assert saved["snapshot_ref"] == digest and "snapshot" not in saved
         assert papers.get_paper(str(path), paper_id)["score"] == score
         assert papers.get_pdf(str(path), paper_id) == b"%PDF-score-archive"
+
+
 def main() -> None:
     test_scoring_weights_and_normalized_total()
     test_score_bounds_and_best_known_only()
