@@ -2195,6 +2195,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
   const [copiedPaperId, setCopiedPaperId] = useState('');
+  const [copiedExplanationId, setCopiedExplanationId] = useState('');
   const [copyError, setCopyError] = useState('');
   const [binding, setBinding] = useState('');
   const [model, setModel] = useState('');
@@ -2425,6 +2426,17 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setCopiedPaperId(id); window.setTimeout(() => setCopiedPaperId(current => current === id ? '' : current), 1600);
     } catch { setCopyError('Could not copy the saved paper. Check browser clipboard permissions and try again.'); }
   }
+  async function copyExplanation(id: string, markdown: string) {
+    if (!markdown) return;
+    setCopyError('');
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setCopiedExplanationId(id);
+      window.setTimeout(() => setCopiedExplanationId(current => current === id ? '' : current), 1600);
+    } catch {
+      setCopyError('Could not copy the explanation. Check browser clipboard permissions and try again.');
+    }
+  }
   async function cancelGeneration() {
     if (!binding || (!busy && paperProgress?.status !== 'active')) return;
     try {
@@ -2631,7 +2643,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
                 {bestScoredPaper?.paper_id === paper.paper_id && <a className="saved-paper-score-star" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" aria-label="Top scoring paper, click to view" data-tooltip="Top scoring paper, click to view">★</a>}
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="text-view-link ai-paper-eli5-thanks" onClick={() => setEli5Id('')}>Thanks</button>
-                  : <button type="button" className="ai-paper-eli5-balloon" disabled={!!explainingId} data-tooltip="Explain it to me like I'm 5" aria-label="Explain it to me like I'm 5" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
+                  : <button type="button" className={`ai-paper-eli5-balloon${explainingId === paper.paper_id ? ' is-explaining' : ''}`} disabled={!!explainingId} data-tooltip={explainingId === paper.paper_id ? undefined : "Explain it to me like I'm 5"} aria-label="Explain it to me like I'm 5" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
               </>}/>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}>Remove</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
@@ -2643,7 +2655,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         {eli5Error && eli5ErrorId === paper.paper_id && <p className="error" role="alert">{eli5Error}</p>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
-          ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""}/></Suspense></div>
+          ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""} questionHeadingAction={<CopyToClipboardButton name="explaination" copied={copiedExplanationId === paper.paper_id} onCopy={() => void copyExplanation(paper.paper_id, selected.eli5?.markdown ?? '')}/>}/></Suspense></div>
           : <><h3>{selected.draft.title}</h3>
         {selected.generation.publication_status === 'needs_review' && <p role="status" className="ai-paper-warning"><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</p>}
         <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
@@ -4265,6 +4277,14 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
   </dialog>;
 }
 
+function ProjectOpeningHourglass() {
+  return <span className="project-opening-hourglass" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 3h14M5 21h14M7 3v4c0 3 5 5 5 5s5-2 5-5V3M7 21v-4c0-3 5-5 5-5s5 2 5 5v4"/>
+    </svg>
+  </span>;
+}
+
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4364,7 +4384,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     else groups.push({ type, projects: [project] });
     return groups;
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
-  return <div className="empty home-empty home-recents">
+  return <div className="empty home-empty home-recents" data-opening={!!opening}>
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
@@ -4380,7 +4400,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         <div className="recent-entry">
           <div className="recent-title-row">
             {entry.best_paper_score != null && entry.best_paper_score >= 50 && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="Top scoring paper, click to view" data-tooltip="Top scoring paper, click to view" data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
-            <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : undefined} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{opening === entry.id && <ProjectOpeningHourglass/>}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
           </div>
           <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}<button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
@@ -4439,11 +4459,11 @@ function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView)
     else result.push({ type: sample.investigation_type, samples: [sample] });
     return result;
   }, []);
-  return <div className="empty home-empty home-samples">
+  return <div className="empty home-empty home-samples" data-opening={!!opening}>
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
     {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
-      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= 50 && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip="Top scoring paper, click to view" data-tooltip-follow-cursor="true" aria-label={`Top scoring paper, click to view (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= 50 && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip="Top scoring paper, click to view" data-tooltip-follow-cursor="true" aria-label={`Top scoring paper, click to view (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{opening === sample.id && <ProjectOpeningHourglass/>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
