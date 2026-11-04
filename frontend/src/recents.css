@@ -471,3 +471,11 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
     padding: 11px 18px 16px;
   }
 }
+
+/* Save Copy errors must remain readable above the modal backdrop. */
+.home-page .project-settings-dialog.save-as-project-dialog .save-as-project-error {
+  margin: 9px 0 0;
+  color: #f5aaa1;
+  font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}

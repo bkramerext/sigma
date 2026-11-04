@@ -1922,9 +1922,12 @@ type TextDisplay = 'plain' | 'rendered';
 type TextVersion = { body: string; kind: 'authored' | 'ai_derived'; current: boolean; source_digest: string; source_format: TextFormat; created_at: string; provenance: { provider: string; model: string; reasoning_effort: string | null } | null; warnings: string[] };
 type TextRepresentations = { source_format: TextFormat; source_digest: string; plain: TextVersion | null; markdown: TextVersion | null };
 
-async function post<T>(route: string, body: object = {}, signal?: AbortSignal): Promise<T> {
+async function post<T>(route: string, body: object = {}, signal?: AbortSignal, handleErrorLocally = false): Promise<T> {
   const response = await fetch(`/api/projects/${route}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: {
+      'Content-Type': 'application/json',
+      ...(handleErrorLocally ? { 'X-Sigma-Error-Handled': 'true' } : {}),
+    },
     body: JSON.stringify(body), signal,
   });
   const data = await response.json();
@@ -4178,6 +4181,7 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
   const submitting = useRef(false);
   const [title, setTitle] = useState(() => suggestedSaveAsName(entry.title));
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   useEffect(() => {
     const element = dialog.current;
     if (!element) return;
@@ -4189,12 +4193,12 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (submitting.current || !title.trim()) return;
-    submitting.current = true; setBusy(true);
+    submitting.current = true; setBusy(true); setError('');
     try {
-      const copy = await post<ProjectView>('save-as', { path: entry.path, title: title.trim() });
+      const copy = await post<ProjectView>('save-as', { path: entry.path, title: title.trim() }, undefined, true);
       onSaved(copy);
-    } catch {
-      // API failures already appear in SIGMA's dismissible request toast.
+    } catch (cause) {
+      setError(errorMessage(cause));
     } finally {
       submitting.current = false; setBusy(false);
     }
@@ -4214,7 +4218,9 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
         <label htmlFor="save-as-project-title">New project name</label>
         <input ref={nameInput} id="save-as-project-title" type="text" value={title}
           required maxLength={200} disabled={busy} spellCheck={false}
-          onChange={event => setTitle(event.target.value)}/>
+          aria-invalid={!!error} aria-describedby={error ? 'save-as-project-error' : undefined}
+          onChange={event => { setTitle(event.target.value); setError(''); }}/>
+        {error && <p className="save-as-project-error" id="save-as-project-error" role="alert">{error}</p>}
       </div>
     </form>
   </dialog>;

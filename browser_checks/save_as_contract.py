@@ -155,16 +155,22 @@ with sync_playwright() as playwright:
     expect(dialog).not_to_be_visible()
     assert save_requests == []
 
-    # The request-toast system reports Save failures once; the dialog has no
-    # redundant inline error or additional explanatory UI.
+    # A modal backdrop dims global toasts. Save Copy handles its own request
+    # failures, directly beneath the field, without adding a hidden toast.
     save_failure["enabled"] = True
     row.get_by_role("button", name="Save project with a new name").click()
     dialog = page.get_by_role("dialog", name="Save Copy")
     dialog.get_by_role("button", name="Save", exact=True).click()
-    expect(page.get_by_role("alert").filter(has_text="Request Failed")).to_be_visible()
-    expect(dialog.locator(".error")).to_have_count(0)
+    error = dialog.get_by_role("alert")
+    expect(error).to_have_text("A project already uses that name.")
+    field = dialog.get_by_label("New project name")
+    expect(field).to_have_attribute("aria-invalid", "true")
+    assert field.get_attribute("aria-describedby") == "save-as-project-error"
+    expect(page.locator(".request-toast")).to_have_count(0)
+    field.fill("A different name")
+    expect(error).to_have_count(0)
+    expect(field).to_have_attribute("aria-invalid", "false")
     dialog.get_by_role("button", name="Cancel").click()
-    page.get_by_role("button", name="Dismiss request error").click()
     save_requests.clear()
 
     saved[1]["pinned"] = True
