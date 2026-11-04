@@ -11,6 +11,7 @@ import http.client
 import ipaddress
 import socket
 import ssl
+import time
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from urllib.parse import quote, urljoin, urlsplit
@@ -87,6 +88,7 @@ def _public_endpoint(url: str) -> tuple[str, str, int, str, tuple]:
 def _read_remote(url: str) -> tuple[int, str, bytes, str | None]:
     host, host_header, _port, path, address_info = _public_endpoint(url)
     family, socktype, proto, _, address = address_info
+    deadline = time.monotonic() + _TIMEOUT_SECONDS
     request = (
         f"GET {path} HTTP/1.1\r\nHost: {host_header}\r\n"
         "Accept: text/html, text/plain\r\nAccept-Encoding: identity\r\n"
@@ -95,7 +97,15 @@ def _read_remote(url: str) -> tuple[int, str, bytes, str | None]:
     with socket.socket(family, socktype, proto) as raw:
         raw.settimeout(_TIMEOUT_SECONDS)
         raw.connect(address)  # DNS result pinned to verified public IP.
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("reference_deadline_exceeded")
+        raw.settimeout(remaining)
         with ssl.create_default_context().wrap_socket(raw, server_hostname=host) as secure:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("reference_deadline_exceeded")
+            secure.settimeout(remaining)
             secure.sendall(request)
             response = http.client.HTTPResponse(secure)
             response.begin()
@@ -108,10 +118,22 @@ def _read_remote(url: str) -> tuple[int, str, bytes, str | None]:
                 raise ValueError("unsupported_compression")
             if "text/html" not in kind and "text/plain" not in kind:
                 raise ValueError("unsupported_media_type")
-            payload = response.read(_MAX_RESPONSE_BYTES + 1)
+            # read1() performs a bounded single underlying read. A malicious
+            # server trickling bytes cannot repeatedly reset an idle timeout
+            # to hold the session creation endpoint indefinitely.
+            payload = bytearray()
+            while len(payload) <= _MAX_RESPONSE_BYTES:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("reference_deadline_exceeded")
+                secure.settimeout(remaining)
+                chunk = response.read1(min(16_384, _MAX_RESPONSE_BYTES + 1 - len(payload)))
+                if not chunk:
+                    break
+                payload.extend(chunk)
             if len(payload) > _MAX_RESPONSE_BYTES:
                 raise ValueError("response_too_large")
-            return status, kind, payload, None
+            return status, kind, bytes(payload), None
 
 
 def freeze_reference_content(url: str) -> dict[str, object]:
@@ -119,6 +141,7 @@ def freeze_reference_content(url: str) -> dict[str, object]:
     result: dict[str, object] = {
         "status": "unavailable",
         "url": url,
+        "requested_url": url,
         "retrieved_at": None,
         "content_sha256": None,
         "excerpt_sha256": None,
