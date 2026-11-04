@@ -97,13 +97,10 @@ def append(
         if target.exists() and target.stat().st_size + len(data) > MAX_BYTES:
             raise OSError("Project diagnostics capacity reached; event was not recorded")
         fd = os.open(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-        try:
-            with os.fdopen(fd, "ab") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-        except BaseException:
-            raise
+        with os.fdopen(fd, "ab") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
     return record
 
 
