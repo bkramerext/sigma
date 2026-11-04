@@ -716,8 +716,8 @@ def main() -> None:
             expect(member.get_by_role("link", name="Administrator Settings")).to_have_count(0)
             expect(member.get_by_text("member@example.org", exact=True)).to_have_count(0)
 
-            # A project with paused research cannot be guest-copied. Its 400
-            # must not block Google sign-out or discard the private original.
+            # A guest-copy export/import failure must not block Google
+            # sign-out or discard the private original.
             copies: list[str] = []
             logouts: list[str] = []
 
