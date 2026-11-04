@@ -18,7 +18,7 @@ Create a project or sample, then choose strategies to investigate. The overview 
 
 ### Workflow
 
-![SIGMA workflow: Project → Strategies → Research → Refine → Optional paper → Review/export](assets/workflow.svg)
+<p align="center"><img src="assets/workflow.svg" alt="SIGMA workflow: Project → Strategies → Research → Refine → Optional paper → Review/export" width="75%" /></p>
 
 - **Create a project:** Choose a subject or sample and frame the question.
 - **Explore strategies:** Develop approaches to the question and select which to investigate.
