@@ -4301,6 +4301,11 @@ function Home({ initialPath, onOpen }: {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
+  const [signOutCopyUnavailable] = useState(() => {
+    const unavailable = window.sessionStorage.getItem('sigma.signOutCopyUnavailable') === 'true';
+    window.sessionStorage.removeItem('sigma.signOutCopyUnavailable');
+    return unavailable;
+  });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
@@ -4403,6 +4408,7 @@ function Home({ initialPath, onOpen }: {
           <HomeInvitationAction/>
         </div></div>
       </div>
+      {signOutCopyUnavailable && <p className="home-signout-copy-notice" role="status">Signed out of Google. The original project remains saved in your Google account, but SIGMA could not make a guest copy. Sign back in to open that project.</p>}
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -5499,16 +5505,25 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         ? new URLSearchParams(window.location.search).get('path')
         : null;
       let destination = '/';
+      let signOutCopyUnavailable = false;
       if (currentProjectPath && !authenticatedGuest) {
-        const copied = await fetch('/api/projects/guest-copy', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: currentProjectPath }),
-        });
-        if (!copied.ok) throw await cloudFailure(copied, 'The project could not be kept open after sign-out.');
-        const result = await copied.json() as { path: string };
-        destination = projectUrl(result.path);
-        currentProjectPath = result.path;
+        try {
+          const copied = await fetch('/api/projects/guest-copy', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+            body: JSON.stringify({ path: currentProjectPath }),
+          });
+          if (!copied.ok) throw new Error('Guest copy unavailable.');
+          const result = await copied.json() as { path: string };
+          if (!result.path) throw new Error('Guest copy path unavailable.');
+          destination = projectUrl(result.path);
+          currentProjectPath = result.path;
+        } catch {
+          // A paused research session cannot be snapshotted for guest access.
+          // Never make logout depend on the optional copy succeeding.
+          signOutCopyUnavailable = true;
+          currentProjectPath = null;
+        }
       } else if (currentProjectPath) {
         destination = projectUrl(currentProjectPath);
       }
@@ -5519,6 +5534,8 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true');
       window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed');
       if (currentProjectPath) window.localStorage.setItem('sigma.currentProject', currentProjectPath);
+      else window.localStorage.removeItem('sigma.currentProject');
+      if (signOutCopyUnavailable) window.sessionStorage.setItem('sigma.signOutCopyUnavailable', 'true');
       window.location.assign(destination);
     } catch (cause) {
       const message = errorMessage(cause);
