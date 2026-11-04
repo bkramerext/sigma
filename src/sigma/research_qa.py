@@ -451,6 +451,49 @@ def _with_navigation(record: dict[str, Any], context: dict[str, Any]) -> dict[st
             elif ref_text.startswith("strategy:"):
                 target_query["reveal_strategy"] = ref_text.split(":", 1)[1]
             item["navigation_url"] = f"/project?{urlencode(target_query)}"
+        if ref_text.startswith("current-understanding:") and available:
+            # Current Understanding is an aggregate, not a research session.
+            # Expose actual contributing session numbers from this answer's
+            # *frozen* understanding snapshot; never guess a session number.
+            frozen = next(
+                (
+                    row.get("data")
+                    for row in record.get("evidence_snapshot", [])
+                    if isinstance(row, dict) and row.get("id") == ref_text
+                ),
+                None,
+            )
+            contributing: dict[str, int] = {}
+
+            def collect_pointers(value: Any) -> None:
+                if isinstance(value, dict):
+                    sid = value.get("session_id")
+                    number = value.get("session_number")
+                    if (
+                        isinstance(sid, str)
+                        and type(number) is int
+                        and sid in sessions
+                        and sessions[sid].get("session_number") == number
+                        and value.get("project_id") == record.get("project_id")
+                    ):
+                        contributing[sid] = number
+                    for nested in value.values():
+                        collect_pointers(nested)
+                elif isinstance(value, list):
+                    for nested in value:
+                        collect_pointers(nested)
+
+            collect_pointers(frozen)
+            if contributing:
+                for sid, number in sorted(
+                    contributing.items(), key=lambda entry: (entry[1], entry[0])
+                ):
+                    sources.append({
+                        **item,
+                        "label": f"Session #{number}",
+                        "navigation_url": f"/project?{urlencode({**base_query, 'reveal_session': sid})}",
+                    })
+                continue
         sources.append(item)
     result["sources"] = sources
     return result

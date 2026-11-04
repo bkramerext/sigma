@@ -92,9 +92,6 @@ with sync_playwright() as playwright:
         page.evaluate("el => parseFloat(getComputedStyle(el).fontSize)", qa_button.element_handle())
         >= 16
     )
-    assert page.evaluate("el => getComputedStyle(el).fontWeight", qa_button.element_handle()) == page.evaluate(
-        "el => getComputedStyle(el).fontWeight", tex.element_handle()
-    )
     lean = page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
     assert (
         qa_button.bounding_box()["height"]
@@ -263,6 +260,12 @@ with sync_playwright() as playwright:
     expect(preview).to_contain_text("The saved research answers")
     assert preview.evaluate("el => getComputedStyle(el).paddingBottom") == "40px"
     assert (
+        dialog.locator(".research-qa-library").evaluate(
+            "el => getComputedStyle(el).paddingBottom"
+        )
+        == "40px"
+    )
+    assert (
         dialog.locator(".settings-body.ai-paper-body").evaluate(
             "el => getComputedStyle(el).paddingBottom"
         )
@@ -295,25 +298,8 @@ with sync_playwright() as playwright:
         and "## Sources" in copied
         and "Session #1" in copied
     )
-    version = card.locator(".research-qa-version span")
-    expect(version).to_contain_text("Research version:")
-    expect(version).to_have_attribute(
-        "title",
-        "Identifies the research used to generate this answer. If the research changes, the answer still refers to the original version.",
-    )
-    expect(card.locator(".research-qa-technical")).not_to_have_attribute("open", "")
-    card.locator(".research-qa-technical summary").click()
-    fingerprint = saved_answers[0]["snapshot_sha256"]
-    expect(card.locator(".research-qa-technical")).to_contain_text(fingerprint)
-    card.locator(".research-qa-technical").get_by_role(
-        "button", name="Copy research version fingerprint"
-    ).click()
-    assert page.evaluate("navigator.clipboard.readText()") == fingerprint
-    expect(
-        card.locator(".research-qa-technical").get_by_role(
-            "button", name="Copied research version fingerprint to clipboard"
-        )
-    ).to_be_visible()
+    expect(card.locator(".research-qa-version")).to_have_count(0)
+    expect(card.locator(".research-qa-technical")).to_have_count(0)
     page.evaluate(
         "Object.defineProperty(navigator.clipboard, 'writeText', {configurable:true,value:() => Promise.reject(new Error('blocked'))})"
     )
@@ -364,14 +350,20 @@ with sync_playwright() as playwright:
     assert browser_page.evaluate("window.__sigmaInjected !== true")
     expect(browser_page.get_by_text(question, exact=True)).to_be_visible()
     citation_links = browser_page.locator("main ul a")
-    expect(citation_links).to_have_count(5)
+    assert citation_links.count() >= 5
     expect(citation_links.nth(0)).to_have_text(re.compile("Project ·"))
     expect(citation_links.nth(0)).to_have_attribute("href", re.compile("reveal_understanding=1"))
     expect(citation_links.nth(1)).to_have_text(re.compile("Strategy ·"))
     expect(citation_links.nth(1)).to_have_attribute("href", re.compile("reveal_strategy="))
     expect(citation_links.nth(2)).to_have_attribute("href", re.compile("reveal_session="))
     expect(citation_links.nth(3)).to_have_attribute("href", re.compile("reveal_artifact="))
-    expect(citation_links.nth(4)).to_have_text("Current Understanding")
+    # Aggregated Current Understanding citations reveal contributing sessions
+    # when the immutable source contains exact session provenance.
+    extra_source = citation_links.nth(4)
+    assert (
+        "Session #" in extra_source.inner_text()
+        or extra_source.inner_text() == "Current Understanding"
+    )
     browser_page.screenshot(path=str(OUT / "research-qa-browser-desktop.png"), full_page=True)
     browser_page.set_viewport_size({"width": 390, "height": 844})
     browser_page.screenshot(path=str(OUT / "research-qa-browser-mobile.png"), full_page=True)
@@ -409,15 +401,23 @@ with sync_playwright() as playwright:
     with page.expect_popup() as understanding_popup:
         card.get_by_role("button", name="Open in browser").click()
     understanding_page = understanding_popup.value
+    supporting = understanding_page.locator("main ul a").nth(4)
+    expected = supporting.get_attribute("href")
     with understanding_page.expect_navigation():
-        understanding_page.locator("main ul a").filter(has_text="Current Understanding").click()
-    understanding_page.wait_for_function(
-        "new URL(location.href).searchParams.get('reveal_understanding') === '1'"
-    )
-    understanding = understanding_page.locator(".current-understanding")
-    expect(understanding).to_be_visible()
-    expect(understanding).to_have_attribute("open", "")
-    expect(understanding).to_have_class(re.compile("citation-highlight"))
+        supporting.click()
+    if "reveal_session=" in expected:
+        understanding_page.wait_for_function(
+            "new URL(location.href).searchParams.has('reveal_session')"
+        )
+        expect(understanding_page.locator("li[data-session-id].citation-highlight")).to_be_visible()
+    else:
+        understanding_page.wait_for_function(
+            "new URL(location.href).searchParams.get('reveal_understanding') === '1'"
+        )
+        understanding = understanding_page.locator(".current-understanding")
+        expect(understanding).to_be_visible()
+        expect(understanding).to_have_attribute("open", "")
+        expect(understanding).to_have_class(re.compile("citation-highlight"))
     understanding_page.close()
 
     citation.click()

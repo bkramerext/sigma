@@ -484,7 +484,9 @@
 /* Q/A has two independent scrollports: the dialog and each expanded answer.
    Keep 40px of real blank space at the bottom of both so the last line is readable. */
 .project-settings-dialog.ai-paper-dialog.research-qa-dialog > .settings-body.ai-paper-body { padding-bottom: 40px; }
+.project-settings-dialog.ai-paper-dialog.research-qa-dialog .research-qa-library { padding-bottom: 40px; }
 .project-settings-dialog.ai-paper-dialog.research-qa-dialog .saved-paper-card .ai-paper-preview { padding-bottom: 40px; }
+.project-settings-dialog.ai-paper-dialog.research-qa-dialog .saved-paper-card:last-child { margin-bottom: 16px; }
 
 /* Match the Project and Strategy Markdown action: same 28px slot, glyph, hover and tooltip. */
 .project-settings-dialog.ai-paper-dialog .saved-paper-title-tools .qa-markdown-action {

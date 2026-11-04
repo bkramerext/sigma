@@ -563,7 +563,21 @@ print("portable Q/A concurrent save/list/remove passed")
             {"id": refs[1], "kind": "strategy", "data": {"title": "Modular approach"}},
             {"id": refs[2], "kind": "session", "data": {"session_number": 8}},
             {"id": refs[3], "kind": "artifact", "data": {"sequence": 3}},
-            {"id": refs[4], "kind": "current_understanding", "data": {}},
+            {
+                "id": refs[4],
+                "kind": "current_understanding",
+                "data": {
+                    "findings": [
+                        {
+                            "source": {
+                                "project_id": qa_project_id,
+                                "session_id": session_id,
+                                "session_number": 8,
+                            }
+                        }
+                    ]
+                },
+            },
         ]
         record = {
             "qa_id": "1" * 32,
@@ -609,7 +623,7 @@ print("portable Q/A concurrent save/list/remove passed")
             "Strategy · Modular approach",
             "Session #8",
             "Session #8 · Artifact 3",
-            "Current Understanding",
+            "Session #8",
         ]
         assert all(
             source["navigation_available"] and source["navigation_url"].startswith("/project?")
@@ -618,6 +632,7 @@ print("portable Q/A concurrent save/list/remove passed")
         assert "reveal_understanding=1" in enriched["sources"][0]["navigation_url"]
         assert "reveal_strategy=strategy-fixture" in enriched["sources"][1]["navigation_url"]
         assert "reveal_artifact=artifact-fixture" in enriched["sources"][3]["navigation_url"]
+        assert "reveal_session=session-fixture" in enriched["sources"][4]["navigation_url"]
         doc = research_qa.markdown_document(enriched)
         assert "[Project · Prime project]" in doc and "[Strategy · Modular approach]" in doc
         assert "Session #unknown" not in doc and "Research version: `" in doc
@@ -639,6 +654,8 @@ print("portable Q/A concurrent save/list/remove passed")
         )
         assert missing["sources"][1]["navigation_unavailable_reason"]
         assert missing["sources"][3]["navigation_unavailable_reason"]
+        assert missing["sources"][4]["label"] == "Current Understanding"
+        assert "reveal_understanding=1" in missing["sources"][4]["navigation_url"]
         print(
             "Research Q/A: validated citations, idempotent retry, safe browser rendering, durable save/remove, and no project mutation passed."
         )
