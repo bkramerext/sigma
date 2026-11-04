@@ -184,6 +184,7 @@ def main() -> None:
                             content_type="application/json",
                             body='{"recorded":true,"diagnostic":{"message":"Session removal failed: stale project revision.","code":"browser_request_failed","correlation_id":"delete-525"}}',
                         )
+
                     page.route("**/api/projects/diagnostics", report_deletion)
                     page.evaluate(
                         """async () => {
