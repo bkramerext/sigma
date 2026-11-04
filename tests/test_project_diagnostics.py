@@ -147,6 +147,16 @@ def test_pre_session_rejection_persists_same_sanitized_error(tmp_path: Path) -> 
 
         data = json.loads(response.body)
         saved = project_diagnostics.read(str(project_file))
+        repeated = project_diagnostics.append(
+            str(project_file),
+            stage="admission",
+            code="research_admission_failed",
+            message="Retrieval HTTP 404 api_key=verysecret",
+            correlation_id="request-1",
+            http_status=400,
+        )
+        assert repeated == saved[0]
+        assert project_diagnostics.read(str(project_file)) == saved
         assert response.status_code == 400
         assert len(saved) == 1
         assert data["diagnostic_recorded"] is True
