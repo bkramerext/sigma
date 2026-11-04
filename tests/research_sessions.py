@@ -8745,11 +8745,11 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
     assert finished["status"] == "paused"
     assert len(provider_calls) == 1
     assert provider_calls == [first.id]
-    assert "Research paused after a confirmed provider usage-limit rejection" in finished["message"]
+    assert "Provider usage limit reached" in finished["message"]
     branches = {branch["strategy_id"]: branch for branch in finished["strategy_runs"]}
     assert branches[first.id]["status"] == "paused"
     assert branches[second.id]["status"] == "paused"
-    assert "explicitly resume this session" in branches[second.id]["reason"]
+    assert "Continue Research" in branches[second.id]["reason"]
     limited = next(step for step in finished["steps"] if step["status"] == "failed")
     assert limited["failure_kind"] == "provider_limited"
     assert limited["provider_http_status"] == (200 if streamed else 429)
@@ -8787,7 +8787,7 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
 async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Path):
     view, strategy, credential, config = await setup(path)
     credential["mode"] = "chatgpt"
-    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2}
     research_sessions.save_limits(str(path), limits)
     provider_limited = True
     calls: list[str] = []
@@ -8844,22 +8844,40 @@ async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Pat
         assert paused["status"] == "paused"
         assert paused["calls_used"] == 1 and calls == ["research_investigator"]
         rejected_attempt = paused["steps"][0]["attempt_id"]
+        original_token_ceiling = paused["total_token_limit"]
+
+        # Provider entitlement still exhausted: one explicit Continue only
+        # attempts one new role, stops safely and preserves the same evidence.
+        repeated = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert repeated["status"] == "queued"
+        paused_again = await wait_for(path, started["id"])
+        assert paused_again["status"] == "paused"
+        assert paused_again["calls_used"] == 2
+        assert paused_again["call_limit"] == 3
+        assert sum(step["status"] == "completed" for step in paused_again["steps"]) == 0
 
         provider_limited = False
         resumed = await research_sessions.control_session(str(path), started["id"], "resume")
         assert resumed["status"] == "queued"
+        # A repeated Resume while already queued cannot add a second budget.
+        duplicate = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert duplicate["call_limit"] == resumed["call_limit"]
         finished = await wait_for(path, started["id"])
 
-    assert len(calls) == 3
-    assert finished["calls_used"] == 3
+    assert len(calls) == 4
+    assert finished["calls_used"] == 4
+    assert finished["call_limit"] == 4  # Two accepted role slots, two rejected attempts.
+    assert finished["total_token_limit"] == original_token_ceiling
     assert [step["status"] for step in finished["steps"]] == [
+        "failed",
         "failed",
         "completed",
         "completed",
     ]
     assert finished["steps"][0]["attempt_id"] == rejected_attempt
     assert finished["provider_usage_limited"] is False
-    assert [step["role"] for step in finished["steps"][1:]] == ["investigator", "skeptic"]
+    assert sum(step["status"] == "completed" for step in finished["steps"]) == 2
+    assert [step["role"] for step in finished["steps"][2:]] == ["investigator", "skeptic"]
 
 
 async def test_invalid_completed_response_is_not_marked_dispatch_unknown(path: Path):
@@ -8920,6 +8938,227 @@ async def test_invalid_completed_response_is_not_marked_dispatch_unknown(path: P
     }
     assert skeptic_step["token_usage_status"] == "reported"
     assert "not supplied" in finished["message"].lower()
+
+
+def test_provider_limit_v2_40_of_54_offers_ordinary_resume_and_correct_progress():
+    # Crucible acceptance: 36 completed agent calls + four known rejected
+    # attempts leave 18 missing protocol slots but only 14 funded attempts.
+    strategy_ids = ["formalist", "historical", "reception"]
+    steps = []
+    runs = []
+    for strategy_id in strategy_ids:
+        runs.append(
+            {
+                "strategy_id": strategy_id,
+                "strategy_title": strategy_id.title(),
+                "status": "failed",
+                "cycle": 7,
+                "pending_investigation": None,
+                "termination_reason_code": "provider_limited",
+            }
+        )
+        for cycle in range(1, 7):
+            for role in ("investigator", "skeptic"):
+                steps.append(
+                    {
+                        "id": f"{strategy_id}-{cycle}-{role}",
+                        "strategy_id": strategy_id,
+                        "role": role,
+                        "cycle": cycle,
+                        "status": "completed",
+                    }
+                )
+    for index, strategy_id in enumerate(["formalist", "formalist", "historical", "reception"]):
+        steps.append(
+            {
+                "id": f"rejected-{index}",
+                "strategy_id": strategy_id,
+                "role": "investigator",
+                "cycle": 7,
+                "status": "failed",
+                "failure_kind": "provider_limited",
+                "provider_input_audit": {"status": "provider_response_rejected"},
+            }
+        )
+    record = {
+        "id": "crucible-40-of-54",
+        "status": "failed",
+        "scheduler_version": 2,
+        "provider_usage_limited": True,
+        "cycle": 7,
+        "cycle_limit": 9,
+        "turns_per_round": 3,
+        "research_round_limit": 3,
+        "call_limit": 54,
+        "calls_used": 40,
+        "strategy_runs": runs,
+        "steps": steps,
+        "artifacts": [],
+        "message": "The provider account usage limit was reached.",
+    }
+
+    preview = research_sessions._public(record)
+    recovery = preview["provider_limit_continuation"]
+    assert recovery == {
+        "eligible": True,
+        "missing_calls": 18,
+        "reason": None,
+    }
+    assert preview["protocol_completed_calls"] == 36
+    assert preview["protocol_target_calls"] == 54
+    assert "Continue Research" in preview["next_step_guidance"]
+    assert "authorize" not in preview["next_step_guidance"].lower()
+    assert record["call_limit"] == 54  # A read must not authorize extra calls.
+    reason_code, message = research_sessions._portfolio_termination(record, runs)
+    assert reason_code == "provider_or_strategy_failure"
+    assert "40 of 54 agent calls" in message
+    assert "Round 3 of 3, Turn 1 of 3" in message
+    assert "round 7 of 9" not in message
+
+    # Unsafe states must not present a one-click recovery action.
+    record["steps"][-1]["failure_kind"] = "provider_error"
+    preview = research_sessions._public(record)
+    assert preview["provider_limit_continuation"]["eligible"] is False
+
+
+async def test_provider_limit_recovery_completes_full_v2_protocol(path: Path) -> None:
+    """Account-limit recovery fills 54 accepted slots without replaying saved work."""
+    view, first, credential, config = await setup(path)
+    second_view = create_strategy(path, "Historical route", "Test independent evidence.")
+    second = next(row for row in second_view.project.strategies if row.id != first.id)
+    third_view = create_strategy(path, "Critical route", "Check a competing explanation.")
+    third = next(
+        row for row in third_view.project.strategies if row.id not in {first.id, second.id}
+    )
+    ids = [first.id, second.id, third.id]
+    credential["mode"] = "chatgpt"
+    # v2 uses three rounds * three paired turns per round * three strategies:
+    # 54 accepted role calls. model_calls is 18 per strategy, not 54 globally.
+    limits = research_sessions.save_limits(str(path), dict(research_sessions.NEW_DEFAULT_LIMITS))
+    accepted = 0
+    exhausted = False
+    requests: list[tuple[str, str, int]] = []
+
+    async def handler(request):
+        nonlocal accepted, exhausted
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"][0]["content"])
+        role = payload["text"]["format"]["name"]
+        key = (context["strategy"]["id"], role, context["cycle"])
+        requests.append(key)
+        if accepted >= 36 and not exhausted:
+            return httpx.Response(
+                429,
+                json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
+            )
+        accepted += 1
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"])
+        )
+        # The ChatGPT Responses adapter requires a streamed response, unlike
+        # the API-key mode's plain JSON response. Match the actual protocol.
+        response_id = f"crucible-recovery-{len(requests)}"
+        envelope = {
+            "id": response_id,
+            "status": "completed",
+            "usage": {"input_tokens": 25, "output_tokens": 12},
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": json.dumps(output)}],
+                }
+            ],
+        }
+        events = [
+            {"type": "response.created", "sequence_number": 0, "response": {"id": response_id}},
+            {"type": "response.completed", "sequence_number": 1, "response": envelope},
+        ]
+        body = "".join(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events)
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=ids,
+        )
+        paused = await wait_for(path, started["id"])
+        assert paused["status"] == "paused", paused["message"]
+        assert accepted == 36
+        assert len(paused["artifacts"]) == 18
+        assert paused["provider_usage_limited"] is True
+        assert paused["provider_limit_continuation"]["eligible"] is True
+        saved_ids = {item["id"] for item in paused["artifacts"]}
+        previous_steps = deepcopy(paused["steps"])
+        previous_cost_limit = paused.get("maximum_estimated_cost_usd")
+        previous_token_limit = paused["total_token_limit"]
+        # Simulate three more *definitively rejected* provider requests at
+        # the same unfinished role boundary. They have no accepted output.
+        record = research_sessions._read(str(path), started["id"])
+        rejected = next(
+            step
+            for step in reversed(record["steps"])
+            if step.get("failure_kind") == "provider_limited"
+        )
+        for index in range(3):
+            replay = deepcopy(rejected)
+            replay["id"] = str(uuid4())
+            replay["attempt_id"] = str(uuid4())
+            ledger = record["hard_budget_ledger"]
+            reserve_before_dispatch(
+                ledger, call_id=replay["attempt_id"], request_body=b"rejected-provider-request"
+            )
+            settle_rejected(ledger, call_id=replay["attempt_id"])
+            record["steps"].append(replay)
+            record["calls_used"] += 1
+        research_sessions._save(str(path), record)
+        snapshot = research_sessions.get_session(str(path), started["id"])
+        assert snapshot["calls_used"] == 40
+        assert snapshot["protocol_completed_calls"] == 36
+        assert snapshot["protocol_target_calls"] == 54
+        assert snapshot["provider_limit_continuation"]["eligible"]
+        # Refresh and repeated reads cannot perform a provider request.
+        assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 40
+        assert accepted == 36
+
+        exhausted = True
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        assert resumed["call_limit"] == 58
+        assert resumed["total_token_limit"] == previous_token_limit
+        assert resumed.get("maximum_estimated_cost_usd") == previous_cost_limit
+        finished = await wait_for(path, started["id"])
+
+    assert finished["calls_used"] == 58
+    accepted_steps = [step for step in finished["steps"] if step.get("status") == "completed"]
+    assert len(accepted_steps) == 54
+    assert (
+        len({(step["strategy_id"], step["role"], step["cycle"]) for step in accepted_steps}) == 54
+    )
+    assert saved_ids <= {item["id"] for item in finished["artifacts"]}
+    assert len(finished["artifacts"]) == 27
+    assert [step["id"] for step in finished["steps"][: len(previous_steps)]] == [
+        step["id"] for step in previous_steps
+    ]
+    assert finished["termination_reason_code"] == "protocol_complete"
+    assert len(finished["call_limit_adjustments"]) == 1
+    assert finished["call_limit_adjustments"][0]["automatic_provider_limit_replacement"] is True
 
 
 def test_provider_limit_recovery_requires_known_dispatch_and_enough_turns():
@@ -13351,6 +13590,12 @@ def main():
         asyncio.run(
             test_invalid_completed_response_is_not_marked_dispatch_unknown(
                 root / "invalid-completed-response.sigma"
+            )
+        )
+        test_provider_limit_v2_40_of_54_offers_ordinary_resume_and_correct_progress()
+        asyncio.run(
+            test_provider_limit_recovery_completes_full_v2_protocol(
+                root / "provider-limit-full-recovery.sigma"
             )
         )
         test_provider_limit_recovery_requires_known_dispatch_and_enough_turns()

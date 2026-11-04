@@ -3127,7 +3127,7 @@ def main() -> None:
                                 "rejected provider call never reached a saved state"
                             )
                         assert calls.await_count == 1
-                        assert failed["status"] in {"ended", "failed"}, failed["message"]
+                        assert failed["status"] == "paused", failed["message"]
                         assert failed["steps"][0]["failure_kind"] == "provider_limited"
                         assert failed["steps"][0]["attempt_status"] == "provider_rejected"
                         assert failed["tokens_reserved"] == 0
