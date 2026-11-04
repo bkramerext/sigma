@@ -113,6 +113,26 @@ async def verify_compilation(
     }
     # URL/notes-only references are not sufficient for a new session.
     attach_verified_excerpts(source_catalog)
+    if compiler_retry_scenario == "unavailable_reference":
+        source_catalog["sources"].append(
+            {
+                "id": "blocked-site",
+                "tier": "discipline",
+                "title": "Unreachable methodology page",
+                "url": "https://example.org/restricted",
+                "notes": "Uninspected pointer; not verified source material.",
+                "project_type_id": "mathematical",
+                "retrieval": {
+                    "status": "unavailable",
+                    "url": "https://example.org/restricted",
+                    "requested_url": "https://example.org/restricted",
+                    "excerpt": None,
+                    "excerpt_sha256": None,
+                    "content_sha256": None,
+                    "reason": "http_403",
+                },
+            }
+        )
     calls: list[str] = []
     role_requests: list[str] = []
     selection: list[str] = []
@@ -157,6 +177,8 @@ async def verify_compilation(
             assert payload["store"] is False
             sources = json.loads(payload["input"])["uninspected_methodology_sources"]
             assert len(sources) >= 2
+            if compiler_retry_scenario == "unavailable_reference":
+                assert {row["id"] for row in sources} == {"proof", "irrelevant"}
             selection[:] = [sources[0]["id"]]
             omitted_urls[:] = [source["url"] for source in sources[1:]]
             result = {
@@ -347,6 +369,14 @@ async def verify_compilation(
         assert saved["outcome"]["source_material"]["compilation"]["attempts"] == attempts
     assert stage["source_sha256"] == saved["research_method_sources"]["sha256"]
     assert stage["status"] != "pending"
+    if compiler_retry_scenario == "unavailable_reference":
+        assert stage["status"] == "completed"
+        assert stage["verified_source_count"] == 2
+        assert stage["unavailable_source_count"] == 1
+        assert "blocked-site" in stage["omitted_source_ids"]
+        assert "blocked-site" not in stage["selected_source_ids"]
+        assert calls.count("research_reference_compilation") == 1
+        assert not any("https://example.org/restricted" in request for request in role_requests)
     if compiler_retry_scenario == "oversized_guidance":
         assert stage["status"] == "completed"
         assert stage["guidance_compacted"] is True
@@ -1013,6 +1043,9 @@ async def main() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
         await verify_compilation(root / "compiled.sigma")
+        await verify_compilation(
+            root / "partial.sigma", compiler_retry_scenario="unavailable_reference"
+        )
         await verify_compilation(
             root / "oversized.sigma", compiler_retry_scenario="oversized_guidance"
         )

@@ -16,6 +16,7 @@ import socket
 import ssl
 from collections.abc import Awaitable, Callable, Mapping
 from html.parser import HTMLParser
+from time import monotonic
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -25,6 +26,8 @@ MAX_HTML_BYTES = 256_000
 MAX_PDF_BYTES = 4_000_000
 MAX_SELECTED = 3
 MAX_EXCERPT_CHARS = 3_500
+MAX_SELECTION_SECONDS = 12.0
+MAX_CACHED_REFERENCES = 256
 _CACHE: dict[str, str] = {}
 
 
@@ -192,7 +195,11 @@ async def _fetch(url: str) -> str | None:
     ):
         return None
     if result is not None:
-        _CACHE[url] = result  # Do not permanently cache missing/temporarily blocked material.
+        # Cache only verified readable excerpts and keep memory bounded across
+        # arbitrarily many user-defined public URL selections.
+        if url not in _CACHE and len(_CACHE) >= MAX_CACHED_REFERENCES:
+            _CACHE.pop(next(iter(_CACHE)))
+        _CACHE[url] = result
     return result
 
 
@@ -279,12 +286,18 @@ async def select(
         common_urls = set()
     priority = sorted(references, key=lambda item: item["url"] in common_urls)
     reference_sha = _reference_fingerprint(references)
+    started = monotonic()
     for item in priority:
         if len(selected) == MAX_SELECTED:
             break
+        remaining = MAX_SELECTION_SECONDS - (monotonic() - started)
+        if remaining <= 0:
+            # Broken publication links are not paper-generation blockers.
+            # A long list of them must not stall paper preparation either.
+            break
         url = item["url"]
         try:
-            body = await asyncio.wait_for(fetch(url), timeout=3.0)
+            body = await asyncio.wait_for(fetch(url), timeout=min(3.0, remaining))
         except (
             OSError,
             ValueError,

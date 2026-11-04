@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from sigma import papers
+from sigma import paper_writing_sources, papers
 from sigma import publication_reference_compiler as compiler
 from sigma.projects import initialize_project
 
@@ -661,7 +661,31 @@ def test_large_frozen_snapshot_preserves_complete_evidence() -> None:
             raise AssertionError("Corrupted frozen evidence was accepted")
 
 
+def test_unavailable_publication_links_have_a_total_time_budget() -> None:
+    """A long list of 403/404 references must not stall paper preparation."""
+    urls = [
+        {"name": f"Unreachable guide {index}", "url": f"https://example.org/guide-{index}"}
+        for index in range(30)
+    ]
+    attempted: list[str] = []
+
+    async def unavailable(url: str) -> None:
+        attempted.append(url)
+
+    async def exercise() -> None:
+        with patch.object(paper_writing_sources, "monotonic", side_effect=[0.0, 1.0, 12.1]):
+            selected, status = await paper_writing_sources.select(
+                {"publication_references": urls, "investigation_type": "engineering"},
+                fetch=unavailable,
+            )
+        assert selected == [] and status == "unavailable"
+        assert len(attempted) == 1
+
+    asyncio.run(exercise())
+
+
 if __name__ == "__main__":
+    test_unavailable_publication_links_have_a_total_time_budget()
     test_large_frozen_snapshot_preserves_complete_evidence()
     test_project_scoped_compilation_reuse_and_selection_invalidation()
     test_interrupted_attempt_never_replayed_and_falls_back_to_original_excerpts()

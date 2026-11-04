@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 # Advisory only: do not truncate inherited or user-specified references.
 RECOMMENDED_SOURCE_COUNT = 3
+# Keep a long list of broken sites from extending pre-session preparation indefinitely.
+MAX_REFERENCE_SNAPSHOT_SECONDS = 15.0
 # IDs and notes have been individually source-checked against readable HTML.
 # "notes" are concise method implications written by the SIGMA coordinator.
 CATALOG: tuple[dict[str, str], ...] = (
@@ -336,16 +339,39 @@ def select_method_sources(
     if fetch_content:
         from sigma.research_reference_content import freeze_reference_content
 
+        started = time.monotonic()
         for row in sources:
             previous_retrieval = row.get("retrieval")
             if (
                 isinstance(previous_retrieval, dict)
                 and previous_retrieval.get("status") == "retrieved"
+                and previous_retrieval.get("requested_url", row["url"]) == row["url"]
                 and isinstance(previous_retrieval.get("excerpt"), str)
+                and previous_retrieval["excerpt"].strip()
                 and isinstance(previous_retrieval.get("excerpt_sha256"), str)
                 and hashlib.sha256(previous_retrieval["excerpt"].encode("utf-8")).hexdigest()
                 == previous_retrieval["excerpt_sha256"]
+                and isinstance(previous_retrieval.get("content_sha256"), str)
+                and len(previous_retrieval["content_sha256"]) == 64
+                and all(
+                    c in "0123456789abcdef" for c in previous_retrieval["content_sha256"].lower()
+                )
             ):
+                continue
+            if time.monotonic() - started >= MAX_REFERENCE_SNAPSHOT_SECONDS:
+                # The full configured source list is still frozen, but the
+                # unattempted tail is explicitly uninspected, not silently
+                # dropped or promoted to methodological evidence.
+                row["retrieval"] = {
+                    "status": "unavailable",
+                    "url": row["url"],
+                    "requested_url": row["url"],
+                    "retrieved_at": None,
+                    "content_sha256": None,
+                    "excerpt_sha256": None,
+                    "excerpt": None,
+                    "reason": "reference_snapshot_time_budget_exhausted",
+                }
                 continue
             row["retrieval"] = freeze_reference_content(row["url"])
     advisory = (
@@ -389,10 +415,11 @@ def select_method_sources(
 
 
 def retrieval_readiness_errors(selection: Mapping[str, Any]) -> list[str]:
-    """Audit selected method sources before new-session provider dispatch.
+    """Reject malformed or forged retrieval snapshots, not unreachable URLs.
 
-    URLs and notes are not content. An empty selection is valid; malformed
-    selections are not.
+    An unavailable link is a documented methodological limitation, never
+    inspected evidence and never a reason to cancel a research session.
+    Retrieved content must still pass exact frozen excerpt integrity checks.
     """
     rows = selection.get("sources")
     if not isinstance(rows, list):
@@ -409,9 +436,20 @@ def retrieval_readiness_errors(selection: Mapping[str, Any]) -> list[str]:
         if not isinstance(retrieval, Mapping):
             errors.append(f"{title}: no frozen retrieval result.")
             continue
-        if retrieval.get("status") != "retrieved":
-            reason = str(retrieval.get("reason") or "not retrieved")[:120]
-            errors.append(f"{title}: {reason}.")
+        # Redirect targets may differ from the configured URL. For new frozen
+        # snapshots the explicit request identity must still match exactly.
+        requested = retrieval.get("requested_url")
+        if requested is not None and requested != row.get("url"):
+            errors.append(f"{title}: frozen retrieval source URL mismatch.")
+            continue
+        status = retrieval.get("status")
+        if status == "unavailable":
+            # HTTP 403/404, too-large payloads, timeouts, unsupported media,
+            # invalid/private URLs and other fetch failures remain frozen as
+            # uninspected pointers. Never promote them to source evidence.
+            continue
+        if status != "retrieved":
+            errors.append(f"{title}: invalid frozen retrieval status.")
             continue
         excerpt = retrieval.get("excerpt")
         digest = retrieval.get("excerpt_sha256")

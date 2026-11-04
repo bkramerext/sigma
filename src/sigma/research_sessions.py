@@ -5942,6 +5942,19 @@ async def start_session(
     config = await configuration(view=view, context=credential)
     if not config["available"]:
         raise ProjectError(config["message"])
+    # References are advisory network inputs. Never hold the global async
+    # manager lock or the project filesystem lock while resolving a remote URL;
+    # unrelated sessions must remain responsive when a web server is slow.
+    # The chosen source snapshot is frozen for this admission attempt.
+    prefetched_method_sources = await asyncio.to_thread(
+        select_method_sources,
+        getattr(view.project.investigation_type, "value", view.project.investigation_type),
+        view.project.title,
+        view.project.problem,
+        (item.approach for item in selected_strategies if item is not None),
+        _all(view.path),
+        fetch_content=True,
+    )
     async with _manager_lock:
         with _project_manager_lock(view.path):
             # The session is created from the preflight's frozen research inputs.
@@ -6192,29 +6205,26 @@ async def start_session(
             # Deterministic source-discovery step *before* either agent turn.
             # Frozen in the saved session; reuse the last sufficiently
             # comprehensive set and never block on unavailable web material.
-            record["research_method_sources"] = select_method_sources(
-                getattr(view.project.investigation_type, "value", view.project.investigation_type),
-                view.project.title,
-                view.project.problem,
-                (item.approach for item in selected_strategies if item is not None),
-                records,
-                fetch_content=True,
-            )
-            # Every selected methodology reference must have inspected,
-            # hash-verified content before this new session can spend provider
-            # capacity. No references selected is a valid configuration.
+            record["research_method_sources"] = prefetched_method_sources
+            # Preserve every selected source and its retrieval result. A failed
+            # fetch is a frozen uninspected pointer, not an admission failure.
+            # Forged/invalid "retrieved" content still fails before dispatch.
             reference_issues = retrieval_readiness_errors(record["research_method_sources"])
             if reference_issues:
                 raise ProjectError(
-                    "Research-reference admission blocked before provider dispatch: "
+                    "Research-reference integrity blocked before provider dispatch: "
                     + "; ".join(reference_issues)[:1600]
-                    + " Disable or replace the inaccessible references, or repair "
-                    "source retrieval before starting research."
+                    + " Repair the malformed or inconsistent frozen source records."
                 )
             record["research_method_sources"]["sha256"] = methodology_digest(
                 record["research_method_sources"]
             )
-            source_count = len(record["research_method_sources"].get("sources", []))
+            frozen_sources = record["research_method_sources"].get("sources", [])
+            source_count = len(frozen_sources)
+            verified_source_count = len(
+                research_reference_compiler.compilation_eligible_sources(frozen_sources)
+            )
+            unavailable_source_count = source_count - verified_source_count
             # New session records always declare their compiler policy.
             # The explicit disabled state isolates deterministic role fixtures;
             # old saved sessions with no marker are not silently compatible.
@@ -6223,22 +6233,30 @@ async def start_session(
             ).strip().lower() in {"1", "true", "yes", "on"}
             record["reference_compilation"] = {
                 "version": research_reference_compiler.VERSION,
-                "required_for_acceptance": bool(source_count and compilation_enabled),
+                "required_for_acceptance": bool(verified_source_count and compilation_enabled),
                 "status": (
                     "disabled"
                     if not compilation_enabled
                     else "pending"
-                    if source_count
+                    if verified_source_count
                     else "not_needed"
                 ),
                 "source_sha256": record["research_method_sources"]["sha256"],
                 "source_count": source_count,
+                "verified_source_count": verified_source_count,
+                "unavailable_source_count": unavailable_source_count,
+                "reason": (
+                    "No verifiable methodology excerpts were retrieved; original URLs "
+                    "remain recorded as uninspected pointers. Research uses default methods."
+                    if source_count and not verified_source_count and compilation_enabled
+                    else None
+                ),
                 "created_at": _now(),
                 "attempts": [],
             }
             if (
                 compilation_enabled
-                and source_count
+                and verified_source_count
                 and isinstance(record.get("hard_budget_ledger"), dict)
             ):
                 # Up to three independent compiler attempts, never Investigator/
@@ -6249,11 +6267,18 @@ async def start_session(
                     int(record["hard_budget_ledger"]["call_limit"])
                     + research_reference_compiler.MAX_COMPILATION_ATTEMPTS,
                 )
-            if compilation_enabled and source_count:
+            if unavailable_source_count:
+                _event(
+                    record,
+                    "references.retrieval.limited",
+                    f"{unavailable_source_count} of {source_count} selected methodology "
+                    "references were unavailable and remain uninspected pointers.",
+                )
+            if compilation_enabled and verified_source_count:
                 _event(
                     record,
                     "references.compilation.queued",
-                    "Preparing one-time AI compilation of research references.",
+                    "Preparing one-time AI compilation of verified research references.",
                 )
             # _outcome was initialized before all session metadata existed.
             record["outcome"] = _outcome(record)
@@ -7737,7 +7762,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             ]
             if isinstance(record.get("reference_compilation"), dict)
             and record["reference_compilation"].get("status") == "completed"
-            else record.get("research_method_sources", {}).get("sources", [])
+            else research_reference_compiler.compilation_eligible_sources(
+                record.get("research_method_sources", {}).get("sources", [])
+            )
             if isinstance(record.get("research_method_sources"), dict)
             else []
         ),
@@ -7831,6 +7858,18 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
                 if isinstance(row, dict) and row.get("id") in retained
             }
             named = [ref for ref in named if ref["url"] in retained_urls]
+        elif isinstance(record.get("research_method_sources"), dict):
+            frozen_sources = record["research_method_sources"].get("sources", [])
+            if isinstance(frozen_sources, list) and any(
+                isinstance(row, dict) and "retrieval" in row for row in frozen_sources
+            ):
+                verified_urls = {
+                    row["url"]
+                    for row in research_reference_compiler.compilation_eligible_sources(
+                        frozen_sources
+                    )
+                }
+                named = [ref for ref in named if ref["url"] in verified_urls]
         context["research_method_references"] = named
         context["research_method_reference_urls"] = [ref["url"] for ref in named]
         context["research_method_references_omitted"] = max(0, len(method_references) - 20)
@@ -14316,8 +14355,16 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             validation_failure = "output_text_not_json"
             raise ProjectError("Reference compiler output text was not JSON.") from exc
         frozen_sources = record["research_method_sources"]["sources"]
+        eligible_sources = research_reference_compiler.compilation_eligible_sources(frozen_sources)
         try:
-            compiled = research_reference_compiler.validate_result(data, frozen_sources)
+            compiled = research_reference_compiler.validate_result(data, eligible_sources)
+            # The compiler never sees inaccessible references as source text.
+            # Preserve the complete frozen selection partition for durable
+            # session integrity checks and report unavailable IDs as omitted.
+            eligible_ids = {row["id"] for row in eligible_sources}
+            compiled["omitted_source_ids"].extend(
+                row["id"] for row in frozen_sources if row["id"] not in eligible_ids
+            )
         except (ProjectError, KeyError, TypeError, ValueError) as exc:
             validation_failure = str(exc)[:240]
             raise
