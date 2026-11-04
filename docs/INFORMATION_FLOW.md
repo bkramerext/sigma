@@ -1,0 +1,62 @@
+# SIGMA Information Flow
+
+This document describes how SIGMA's research is organized and how saved information informs subsequent work, both within a session and across sessions.
+
+SIGMA investigates a question using one or more **strategies**—different approaches to the same problem. An Investigator develops an idea; a Skeptic challenges it. The point of repeating that exchange is to **use what was learned to decide what to investigate next**, not merely to generate more text.
+
+## Session: the entire investigation
+
+A **session** is one run of the selected strategies, with its own settings, time and spending limits, saved research history, and final **Session Outcome**. It coordinates the strategies, preserves findings and objections (including failures), and can end early if limits are reached or further work is not useful. A new session is a separate run, not the next round of the previous one.
+
+## Turn: one proposal and one critique
+
+A **turn** is one Investigator/Skeptic pair **within one strategy**:
+
+1. **Investigator call:** Develop or revise a claim, argument, experiment, or next question using selected earlier evidence.
+2. **Skeptic call:** Examine that work, challenge assumptions, look for counterexamples or unsupported claims, and record objections or remaining obligations.
+
+The two calls are sequential. Their output is saved and can influence the next turn. A turn may produce an accepted finding, a rejected idea, or unresolved questions—none is guaranteed.
+
+## Round: another pass over the strategies
+
+A **round** gives each enabled strategy a configured number of turns. In subsequent rounds, strategies can build on what earlier work established **or failed to establish**: unanswered questions, Skeptic objections, new tests, and relevant findings from other strategies.
+
+**Why have both turns and rounds?** Turns supply the immediate *propose → criticize → revise* feedback loop. Rounds provide a larger *revisit and deepen* opportunity across the configured strategies. They are a scheduling and research-organization boundary, **not a separate AI operation**, a requirement that every strategy finish in lockstep, or a magic quality-improvement step. There is **no automatic round-end merge or synthesis call**.
+
+## How information moves between calls, turns, and rounds
+
+A **pair** and a **turn** mean the same thing in SIGMA: one Investigator call followed by one Skeptic call. Information moves at different boundaries:
+
+1. **Within a pair (one turn):** The Investigator receives its research question and a selected context packet. Its proposed reasoning, assumptions, evidence, tests, and open questions are then available to the Skeptic, which challenges them and records criticism and unresolved obligations. The Skeptic does not independently redo the whole investigation by default.
+2. **From one turn to the next:** SIGMA saves the pair's research artifact, including the Investigator's work, Skeptic feedback, objections, evidence references, and next question. A later Investigator can use **selected portions** of this history to revise a claim, test an objection, or pursue a new line of inquiry. It is not a blank restart, but the previous exchange is not blindly accepted as true.
+3. **From one round to the next:** There is **no special handoff or merge at the round boundary**. Saved work and still-open obligations remain available for selection just as they do between turns. A later round gives strategies more opportunities to build on earlier results and criticism; the next round does not automatically receive a complete, consolidated report of every strategy's work.
+4. **Between strategies:** SIGMA can supply selected findings or objections from another strategy as **peer evidence** in later calls. Those results are attributed to their source and must be evaluated rather than treated as independently verified. Strategies may progress concurrently, so a call cannot assume it has received everything other strategies will eventually produce.
+
+**Saved history is not the same as model context.** SIGMA preserves the full original research records, but each agent call receives a **bounded selection** of relevant prior material, source identifiers, and explicit omissions when necessary to fit context limits. A finding that was saved but not supplied to a particular call cannot legitimately be claimed as reviewed by that call. The **Session Outcome** summarizes the session afterward; it is not an additional Investigator/Skeptic turn.
+
+## After the last round: Session Outcome and Current Understanding
+
+**Session Outcome** answers, as far as the saved evidence allows, *“What did this particular investigation establish?”* SIGMA evaluates the **latest saved reviewed finding from each participating strategy** instead of arbitrarily selecting the last agent to finish. It also checks recorded contradictions, negative findings, and retractions from earlier artifacts. The Outcome describes candidate conclusions, findings across strategies, limitations, and uncertainty. **All completed rounds remain in the saved history**, but there is **no extra final AI call that rereads and jointly reasons over every artifact from every round**. Earlier arguments are not all independently re-proved or given equal weight by the outcome evaluator.
+
+**Current Understanding** answers a different question: *“Across this project's saved sessions, where does the research stand now?”* It is a **read-only, evidence-linked overview** built from project history, not another agent or a new research session. It shows the latest recorded reviews **per strategy**, earlier findings and reported changes, unresolved or unreconciled obligations, failed/partial attempts, and possible next investigations. A later session can contribute to it without erasing earlier work.
+
+| | Session Outcome | Current Understanding |
+| --- | --- | --- |
+| Scope | One session, across its strategies and completed rounds | All available saved sessions in the project |
+| Purpose | Assess what this investigation established | Show the current state of research and what might be worth investigating next |
+| Evidence | Saved session artifacts; latest strategy findings plus relevant recorded conflicts and retractions | Saved findings and explicit evidence-linked changes/obligation dispositions across session history |
+| Limits | Not a new synthesis/proof pass over all rounds | Not an independently verified truth model; later wording alone does not erase, refute, or supersede earlier findings |
+
+Neither view declares a project solved merely because an Investigator and Skeptic agree. In Current Understanding, an earlier claim is marked refuted or superseded only when a suitably supported, explicit saved relationship says so; otherwise the earlier record remains inspectable.
+
+## Example: the default 54-call ceiling
+
+| Level | Default | What it means |
+| --- | --- | --- |
+| Session | 1 | One investigation of the project question |
+| Strategies | 3 | Three approaches can make progress concurrently |
+| Rounds | 3 | Three passes of research across the enabled strategies |
+| Turns | 3 per strategy per round | Each strategy has three chances to propose, critique, and refine during a round |
+| Agent calls | 2 per turn | One Investigator call followed by one Skeptic call |
+
+**3 rounds × 3 turns × 3 strategies × 2 calls = 54 maximum agent calls.** This is a ceiling, not a promise to execute all calls or produce 27 accepted findings.
