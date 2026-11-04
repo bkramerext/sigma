@@ -2603,6 +2603,296 @@ def test_terminal_protocol_completion_allows_known_invalid_response_replacement(
     assert plan["required_calls"] - (record["call_limit"] - record["calls_used"]) == 2
 
 
+async def test_provider_limit_unsafe_fallback_cannot_resume(path: Path) -> None:
+    """Both recovery planners can reject; neither failure authorizes dispatch."""
+    view, strategy, credential, config = await setup(path)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        record.update(
+            {
+                "status": "paused",
+                "stopped_at": datetime.now(UTC).isoformat(),
+                "provider_usage_limited": True,
+                "cycle_limit": 1,
+                "call_limit": 2,
+                "calls_used": 1,
+                "steps": [
+                    {
+                        "id": str(uuid4()),
+                        "strategy_id": strategy.id,
+                        "role": "investigator",
+                        "cycle": 1,
+                        "status": "running",
+                        "attempt_status": "unknown",
+                    }
+                ],
+            }
+        )
+        record["strategy_runs"][0].update(
+            {"status": "paused", "cycle": 1, "pending_investigation": None}
+        )
+        # Simulate historical ChatGPT-plan sessions with no hard budget ledger.
+        record.pop("hard_budget_ledger", None)
+        research_sessions._save(str(path), record)
+        original = research_sessions._read(str(path), started["id"])
+        assert research_sessions._provider_limit_safe_plan(record)[0] is None
+        assert research_sessions._protocol_completion_recovery_plan(record)[0] is None
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "inconsistent role attempt" in str(exc)
+        else:
+            raise AssertionError("Unsafe provider-limit fallback requeued incomplete research")
+        assert research_sessions._read(str(path), started["id"]) == original
+
+
+async def test_restart_missing_provider_reservation_is_durably_blocked(path: Path) -> None:
+    """An unknown dispatched request cannot disappear from paid accounting."""
+    view, strategy, credential, config = await setup(path)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        dispatched_id = str(uuid4())
+        record.update(
+            {
+                "status": "running",
+                "calls_used": 1,
+                "steps": [
+                    {
+                        "id": dispatched_id,
+                        "strategy_id": strategy.id,
+                        "role": "investigator",
+                        "cycle": 1,
+                        "status": "running",
+                        "attempt_status": "unknown",
+                        "cost_reserve": 0.2,
+                    }
+                ],
+                "hard_budget_ledger": new_ledger(
+                    call_limit=2,
+                    input_token_limit=400_000,
+                    output_tokens_per_call=4_000,
+                    cost_limit_usd=100.0,
+                    input_price_per_million=1.0,
+                    output_price_per_million=2.0,
+                ),
+            }
+        )
+        record["strategy_runs"][0].update(
+            {"status": "running", "cycle": 1, "calls_used": 1}
+        )
+        research_sessions._save(str(path), record)
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "no matching billing reservation" in str(exc)
+        else:
+            raise AssertionError("Unaccounted interrupted call admitted another provider request")
+        saved = research_sessions._read(str(path), started["id"])
+        assert saved["status"] == "paused"
+        assert saved["steps"][0]["status"] == "interrupted"
+        assert saved["steps"][0]["id"] == dispatched_id
+        assert "no matching reservation" in saved["hard_budget_ledger"]["blocked_reason"]
+        assert saved["hard_budget_ledger"]["calls"] == []
+        # The mismatch is durable and remains closed on subsequent resumes.
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "no matching billing reservation" in str(exc)
+        else:
+            raise AssertionError("A second Resume cleared missing billing liability")
+        assert research_sessions._read(str(path), started["id"]) == saved
+
+
+async def test_restart_matching_provider_reservation_is_recoverable(path: Path) -> None:
+    """A real saved reservation retains liability and permits explicit recovery."""
+    view, strategy, credential, config = await setup(path)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        dispatched_id = str(uuid4())
+        ledger = new_ledger(
+            call_limit=2,
+            input_token_limit=400_000,
+            output_tokens_per_call=4_000,
+            cost_limit_usd=100.0,
+            input_price_per_million=1.0,
+            output_price_per_million=2.0,
+        )
+        reserve_before_dispatch(
+            ledger, call_id=dispatched_id, request_body=b"preserved provider input"
+        )
+        record.update(
+            {
+                "status": "running",
+                "calls_used": 1,
+                "cycle_limit": 1,
+                "call_limit": 2,
+                "steps": [
+                    {
+                        "id": dispatched_id,
+                        "strategy_id": strategy.id,
+                        "role": "investigator",
+                        "cycle": 1,
+                        "status": "running",
+                        "attempt_status": "unknown",
+                        "cost_reserve": 0.2,
+                    }
+                ],
+                "hard_budget_ledger": ledger,
+            }
+        )
+        record["strategy_runs"][0].update(
+            {"status": "running", "cycle": 1, "calls_used": 1}
+        )
+        research_sessions._save(str(path), record)
+        interrupted = research_sessions._recover(
+            research_sessions._read(str(path), started["id"])
+        )
+        assert interrupted["status"] == "paused"
+        assert interrupted["steps"][0]["status"] == "interrupted"
+        assert interrupted["hard_budget_ledger"]["calls"][0]["status"] == "unknown"
+        assert (
+            interrupted["hard_budget_ledger"]["blocked_reason"]
+            == "Provider call outcome or usage is unknown"
+        )
+        resumed = await research_sessions.control_session(
+            str(path), started["id"], "repair", additional_calls=1
+        )
+        assert resumed["status"] == "queued"
+        saved = research_sessions._read(str(path), started["id"])
+        assert saved["hard_budget_ledger"]["calls"][0]["status"] == "unknown"
+        assert saved["hard_budget_ledger"]["blocked_reason"] is None
+        assert saved["steps"][0]["id"] == dispatched_id
+
+
+async def test_explicit_budget_and_duration_consent_preserves_saved_state(path: Path) -> None:
+    """Ordinary Resume cannot silently extend attempts or expired runtime."""
+    view, strategy, credential, config = await setup(path)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        record["cycle_limit"] = 1
+        record["call_limit"] = 2
+        record["calls_used"] = 2
+        record["status"] = "failed"
+        record["deadline_at"] = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+        record["steps"] = [
+            {
+                "id": str(uuid4()),
+                "strategy_id": strategy.id,
+                "role": "investigator",
+                "cycle": 1,
+                "status": "failed",
+                "failure_kind": "response_invalid",
+                "provider_input_audit": {"status": "provider_response_invalid"},
+            }
+        ]
+        record["strategy_runs"][0].update(
+            {"status": "failed", "cycle": 1, "pending_investigation": None}
+        )
+        research_sessions._save(str(path), record)
+        original = research_sessions._read(str(path), started["id"])
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "exactly 2 explicitly authorized additional attempts" in str(exc)
+        else:
+            raise AssertionError("Ordinary Resume increased its saved call ceiling")
+        assert research_sessions._read(str(path), started["id"]) == original
+        try:
+            await research_sessions.control_session(
+                str(path), started["id"], "resume", additional_calls=2
+            )
+        except ProjectError as exc:
+            assert "requires explicit approval to extend" in str(exc)
+        else:
+            raise AssertionError("Extra-call consent silently extended session duration")
+        assert research_sessions._read(str(path), started["id"]) == original
+        resumed = await research_sessions.control_session(
+            str(path), started["id"], "repair", additional_calls=2
+        )
+        assert resumed["status"] == "queued"
+        final = research_sessions._read(str(path), started["id"])
+        assert final["call_limit"] == 4
+        assert final["total_token_limit"] == original["total_token_limit"]
+        assert final["steps"] == original["steps"]
+        assert final["protocol_completion_time_extensions"][-1]["additional_minutes"] > 0
+
+
+async def test_terminal_time_expiry_requires_separate_confirmation(path: Path) -> None:
+    """An unfinished but time-expired session is resumable only after consent."""
+    view, strategy, credential, config = await setup(path)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        record.update(
+            {
+                "status": "ended",
+                "cycle_limit": 1,
+                "call_limit": 2,
+                "calls_used": 0,
+                "deadline_at": (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
+                "duration_limit_minutes": 60,
+            }
+        )
+        record["strategy_runs"][0].update(
+            {"status": "ended", "cycle": 0, "pending_investigation": None}
+        )
+        research_sessions._save(str(path), record)
+        original = research_sessions._read(str(path), started["id"])
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "requires explicit approval to extend" in str(exc)
+        else:
+            raise AssertionError("Ordinary Resume silently extended an expired deadline")
+        assert research_sessions._read(str(path), started["id"]) == original
+        resumed = await research_sessions.control_session(str(path), started["id"], "repair")
+        assert resumed["status"] == "queued"
+        final = research_sessions._read(str(path), started["id"])
+        assert final["call_limit"] == original["call_limit"]
+        assert final["duration_limit_minutes"] > original["duration_limit_minutes"]
+        assert final["steps"] == original["steps"]
+
+
 async def test_legacy_compiler_checkpoint_resumes_after_account_change(path: Path) -> None:
     """ONP-era sessions keep their checkpoint when the account or backend changes."""
     view, strategy, credential, config = await setup(path)
@@ -2709,7 +2999,15 @@ async def test_resume_repeated_unknown_provider_failures_retains_session(path: P
             record["stopped_at"] = datetime.now(UTC).isoformat()
             research_sessions._save(str(path), record)
 
-            resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+            try:
+                await research_sessions.control_session(str(path), started["id"], "resume")
+            except ProjectError as exc:
+                assert "exactly 1 explicitly authorized additional attempts" in str(exc)
+            else:
+                raise AssertionError("Resume increased the paid-attempt ceiling silently")
+            resumed = await research_sessions.control_session(
+                str(path), started["id"], "repair", additional_calls=1
+            )
             assert resumed["status"] == "queued"
             assert resumed["calls_used"] == index + 1
             assert resumed["call_limit"] == 3 + index
@@ -2790,9 +3088,17 @@ async def test_e009_stopped_unknown_investigator_explicit_repair(path: Path) -> 
         record["hard_budget_ledger"] = ledger
         research_sessions._save(str(path), record)
 
-        # The same user-facing Resume action now authorizes a separately
-        # accounted replacement; Repair is not a required second UI workflow.
-        repaired = await research_sessions.control_session(str(path), started["id"], "resume")
+        # The play button can request recovery, but extending the time ceiling
+        # needs a separate explicit confirmation before any new paid request.
+        original = research_sessions._read(str(path), started["id"])
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "requires explicit approval to extend" in str(exc)
+        else:
+            raise AssertionError("Ordinary Resume silently extended the duration")
+        assert research_sessions._read(str(path), started["id"]) == original
+        repaired = await research_sessions.control_session(str(path), started["id"], "repair")
         assert repaired["status"] == "queued"
         assert repaired["calls_used"] == 1
         assert repaired["call_limit"] == 7
@@ -2909,7 +3215,7 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(
         ):
             try:
                 await research_sessions.control_session(
-                    str(path), started["id"], "resume", additional_calls=4
+                    str(path), started["id"], "repair", additional_calls=4
                 )
             except ProjectError as exc:
                 assert "releasing resources" in str(exc)
@@ -2930,10 +3236,10 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(
         ):
             results = await asyncio.gather(
                 research_sessions.control_session(
-                    str(path), started["id"], "resume", additional_calls=4
+                    str(path), started["id"], "repair", additional_calls=4
                 ),
                 research_sessions.control_session(
-                    str(path), started["id"], "resume", additional_calls=4
+                    str(path), started["id"], "repair", additional_calls=4
                 ),
                 return_exceptions=True,
             )

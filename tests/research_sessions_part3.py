@@ -2162,9 +2162,16 @@ async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Pat
         rejected_attempt = paused["steps"][0]["attempt_id"]
         original_token_ceiling = paused["total_token_limit"]
 
-        # Provider entitlement still exhausted: one explicit Continue only
-        # attempts one new role, stops safely and preserves the same evidence.
-        repeated = await research_sessions.control_session(str(path), started["id"], "resume")
+        # No paid-attempt or time extension occurs without approval.
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "exactly 1 explicitly authorized additional attempts" in str(exc)
+        else:
+            raise AssertionError("Ordinary Resume silently added a provider attempt")
+        repeated = await research_sessions.control_session(
+            str(path), started["id"], "repair", additional_calls=1
+        )
         assert repeated["status"] == "queued"
         paused_again = await wait_for(path, started["id"])
         assert paused_again["status"] == "paused"
@@ -2173,7 +2180,9 @@ async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Pat
         assert sum(step["status"] == "completed" for step in paused_again["steps"]) == 0
 
         provider_limited = False
-        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        resumed = await research_sessions.control_session(
+            str(path), started["id"], "repair", additional_calls=1
+        )
         assert resumed["status"] == "queued"
         # A repeated Resume while already queued cannot add a second budget.
         duplicate = await research_sessions.control_session(str(path), started["id"], "resume")
@@ -2456,7 +2465,15 @@ async def test_provider_limit_recovery_completes_full_v2_protocol(path: Path) ->
         assert accepted == 36
 
         exhausted = True
-        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "exactly 4 explicitly authorized additional attempts" in str(exc)
+        else:
+            raise AssertionError("Ordinary Resume silently increased the attempt ceiling")
+        resumed = await research_sessions.control_session(
+            str(path), started["id"], "repair", additional_calls=4
+        )
         assert resumed["status"] == "queued"
         assert resumed["call_limit"] == 58
         assert resumed["total_token_limit"] == previous_token_limit
@@ -2476,7 +2493,8 @@ async def test_provider_limit_recovery_completes_full_v2_protocol(path: Path) ->
     ]
     assert finished["termination_reason_code"] == "protocol_complete"
     assert len(finished["call_limit_adjustments"]) == 1
-    assert finished["call_limit_adjustments"][0]["automatic_provider_limit_replacement"] is True
+    assert finished["call_limit_adjustments"][0]["automatic_provider_limit_replacement"] is False
+    assert finished["call_limit_adjustments"][0]["additional_calls"] == 4
 
 
 def test_provider_limit_recovery_requires_known_dispatch_and_enough_turns():

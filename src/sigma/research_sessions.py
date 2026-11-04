@@ -4762,12 +4762,42 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 if isinstance(audit, dict):
                     audit["status"] = "call_interrupted_dispatch_unknown"
                 ledger = record.get("hard_budget_ledger")
-                if isinstance(ledger, dict) and isinstance(step.get("id"), str):
-                    try:
-                        mark_unknown(ledger, call_id=step["id"])
-                    except BudgetExceeded:
-                        # A missing reservation cannot be invented or cleared.
-                        pass
+                if isinstance(ledger, dict):
+                    # A running request cannot be cleared or charged at zero
+                    # when its persisted reservation is missing or inconsistent.
+                    # Preserve this integrity blocker across backend restarts.
+                    calls = ledger.get("calls")
+                    matches = (
+                        [
+                            item
+                            for item in calls
+                            if isinstance(item, dict) and item.get("call_id") == step.get("id")
+                        ]
+                        if isinstance(calls, list)
+                        else []
+                    )
+                    if len(matches) != 1 or matches[0].get("status") not in {
+                        "reserved",
+                        "unknown",
+                    }:
+                        ledger["blocked_reason"] = (
+                            "Saved interrupted provider call has no matching reservation"
+                        )
+                    else:
+                        try:
+                            mark_unknown(ledger, call_id=step["id"])
+                        except BudgetExceeded:
+                            ledger["blocked_reason"] = (
+                                "Saved interrupted provider call has no matching reservation"
+                            )
+                        else:
+                            if ledger.get("blocked_reason") in {
+                                None,
+                                "Provider call outcome or usage is unknown",
+                            }:
+                                ledger["blocked_reason"] = (
+                                    "Provider call outcome or usage is unknown"
+                                )
                 _record_guidance_interruption(record, step, "interrupted")
         interrupted_on_restart = any(
             step.get("interruption_reason") == "backend_restart" for step in record.get("steps", [])
@@ -6444,6 +6474,60 @@ async def control_session(
     async with state_lock:
         with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
+            ledger = record.get("hard_budget_ledger")
+            if action == "resume" and isinstance(ledger, dict):
+                calls = ledger.get("calls")
+                # Check the persisted ledger even for already-paused legacy
+                # records. Every uncertain role dispatch must retain exactly
+                # one conservative reservation before a replacement is allowed.
+                uncertain_steps = [
+                    step
+                    for step in record.get("steps", [])
+                    if isinstance(step, dict)
+                    and step.get("role") in {"investigator", "skeptic"}
+                    and step.get("status") in {"interrupted", "failed", "incomplete"}
+                    and step.get("attempt_status") == "unknown"
+                ]
+                missing_reservation = not isinstance(calls, list) or any(
+                    len(
+                        [
+                            item
+                            for item in calls
+                            if isinstance(item, dict)
+                            and item.get("call_id") == step.get("id")
+                            and item.get("status") in {"reserved", "unknown"}
+                        ]
+                    )
+                    != 1
+                    for step in uncertain_steps
+                )
+                if missing_reservation:
+                    ledger["blocked_reason"] = (
+                        "Saved interrupted provider call has no matching reservation"
+                    )
+                    _save(path, record)
+                elif uncertain_steps:
+                    # A historical paused record may still call its reservation
+                    # 'reserved' even after the worker disappeared. Mark it
+                    # unknown before any call can pass portfolio admission.
+                    for step in uncertain_steps:
+                        item = next(
+                            row for row in calls if row.get("call_id") == step["id"]
+                        )
+                        if item["status"] == "reserved":
+                            mark_unknown(ledger, call_id=step["id"])
+                    if ledger.get("blocked_reason") is None:
+                        ledger["blocked_reason"] = "Provider call outcome or usage is unknown"
+                    _save(path, record)
+                if ledger.get("blocked_reason") not in {
+                    None,
+                    "Provider call outcome or usage is unknown",
+                }:
+                    raise ProjectError(
+                        "Cannot safely resume: a saved provider attempt has no matching "
+                        "billing reservation. Saved research remains intact; reconcile "
+                        "the missing reservation before another paid call."
+                    )
             if (
                 action == "resume"
                 and (
@@ -6496,19 +6580,10 @@ async def control_session(
                             "Saved legacy research is available for continuation.",
                         )
                         _save(path, record)
-                    elif automatic_provider_recovery:
-                        raise ProjectError(
-                            plan_error
-                            or "The saved provider-limit session contains an unsafe incomplete attempt."
-                        )
-                    # Keep the existing, stricter usage-limit recovery path for states
-                    # whose rejected attempts already fit their frozen call ceiling.
-                    elif (
-                        explicit_protocol_recovery
-                        or record.get("provider_usage_limited") is not True
-                        or additional_calls
-                        or record.get("status") in {"failed", "ended"}
-                    ):
+                    else:
+                        # Neither planner proved the next role safe. Never
+                        # requeue merely because a provider-limit fallback
+                        # changed the automatic-recovery classification.
                         raise ProjectError(
                             plan_error
                             or "The saved session's next role cannot yet be recovered safely."
@@ -6518,15 +6593,42 @@ async def control_session(
                         0, int(record.get("call_limit", 0)) - int(record.get("calls_used", 0))
                     )
                     required_extension = max(0, int(plan["required_calls"]) - available_calls)
-                    if additional_calls and additional_calls != required_extension:
+                    # Retain the existing 12-attempt per-authorization guard.
+                    # Large interrupted portfolios can advance in multiple
+                    # explicitly approved batches instead of becoming stuck.
+                    approved_extension = min(required_extension, 12)
+                    if additional_calls != approved_extension:
                         raise ProjectError(
                             f"Completing the saved protocol needs {plan['required_calls']} new valid role turns, "
                             f"but only {available_calls} attempts remain. Resume with exactly "
-                            f"{required_extension} explicitly authorized additional attempts; no counters were changed."
+                            f"{approved_extension} explicitly authorized additional attempts; "
+                            "additional batches may be required. No counters were changed."
                         )
-                    replacement_calls = (
-                        required_extension if not additional_calls else additional_calls
-                    )
+                    # The ordinary Resume button never approves an increase
+                    # in the paid-attempt ceiling. A distinct user decision
+                    # authorizes only the exact shortfall.
+                    replacement_calls = additional_calls
+                    deadline = record.get("deadline_at")
+                    if (
+                        not explicit_protocol_recovery
+                        and isinstance(deadline, str)
+                        and record.get("status") in {"paused", "stopped", "ended", "failed"}
+                    ):
+                        stopped_at = record.get("stopped_at")
+                        effective_deadline = datetime.fromisoformat(deadline)
+                        if isinstance(stopped_at, str):
+                            effective_deadline += datetime.now(UTC) - datetime.fromisoformat(
+                                stopped_at
+                            )
+                        minimum_time = timedelta(
+                            seconds=int(plan["required_calls"]) * CALL_TIMEOUT
+                        )
+                        if effective_deadline < datetime.now(UTC) + minimum_time:
+                            minutes = math.ceil(minimum_time.total_seconds() / 60)
+                            raise ProjectError(
+                                f"Resume requires explicit approval to extend the session duration "
+                                f"for up to {minutes} additional minutes; no limits were changed."
+                            )
                     ledger = record.get("hard_budget_ledger")
                     if isinstance(ledger, dict) and ledger.get("blocked_reason"):
                         unknown_ids: set[str] = {
@@ -6562,10 +6664,9 @@ async def control_session(
                             "An explicit independent role recovery was authorized. "
                             "Every unknown attempt retains its full token and cost reservations.",
                         )
-                    # Known rejected attempts do not complete protocol roles. Extend
-                    # only the attempt counter needed to fill those slots; frozen
-                    # monetary and token budgets remain in force. No user approval
-                    # or additional provider request is made by this bookkeeping.
+                    # Known rejected attempts do not complete protocol roles.
+                    # Extend the paid attempt ceiling only after explicit user
+                    # approval; all cost/token reservations remain authoritative.
                     if replacement_calls and isinstance(record.get("hard_budget_ledger"), dict):
                         try:
                             increase_call_limit(
@@ -6578,19 +6679,6 @@ async def control_session(
                     old_call_limit = int(record.get("call_limit", 0))
                     if replacement_calls:
                         record["call_limit"] = old_call_limit + replacement_calls
-                        if additional_calls:
-                            # Ordinary Resume may replace a failed *attempt*, but
-                            # does not silently expand the token or cost ceiling.
-                            record["total_token_limit"] = int(
-                                record.get("total_token_limit", 0)
-                            ) + (
-                                replacement_calls
-                                * (
-                                    MAX_AGENT_CONTEXT_BYTES
-                                    + 65_536
-                                    + int(record.get("output_token_limit", 0))
-                                )
-                            )
                         record.setdefault("call_limit_adjustments", []).append(
                             {
                                 "at": _now(),

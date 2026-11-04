@@ -1632,7 +1632,43 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
     if (!target) return;
     setBusy(true); setError('');
-    try { await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action }); await load(target.id); }
+    try {
+      let recoveryAction: 'pause' | 'resume' | 'stop' | 'repair' = action;
+      let authorizedCalls = 0;
+      for (;;) {
+        try {
+          await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls });
+          break;
+        } catch (cause) {
+          const message = errorMessage(cause);
+          const attemptShortfall = message.match(/Resume with exactly (\d+) explicitly authorized additional attempts/);
+          if (action === 'resume' && authorizedCalls === 0 && attemptShortfall) {
+            const count = Number(attemptShortfall[1]);
+            if (count >= 1 && count <= 12 && window.confirm(
+              `Continuing this saved session requires ${count} additional paid provider attempt${count === 1 ? '' : 's'} beyond its existing call limit. Further approvals may be needed if more research remains unfinished. This may consume more provider allowance. Keep all saved research and authorize exactly ${count} additional attempt${count === 1 ? '' : 's'}?`
+            )) {
+              authorizedCalls = count;
+              continue;
+            }
+            setAnnouncement('Resume cancelled. Saved research and spending limits were preserved.');
+            return;
+          }
+          const durationShortfall = message.match(/Resume requires explicit approval to extend the session duration for up to (\d+) additional minutes/);
+          if (action === 'resume' && recoveryAction === 'resume' && durationShortfall) {
+            if (window.confirm(
+              `This saved session needs up to ${durationShortfall[1]} additional minutes to complete its unfinished research. The existing evidence and provider spending limits remain preserved. Authorize extending this session's duration?`
+            )) {
+              recoveryAction = 'repair';
+              continue;
+            }
+            setAnnouncement('Resume cancelled. Saved research and duration limits were preserved.');
+            return;
+          }
+          throw cause;
+        }
+      }
+      await load(target.id);
+    }
     catch (cause) {
       await load(target.id).catch(() => {});
       const message = errorMessage(cause);
@@ -1648,8 +1684,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   }, [load]);
 
   function requestResume(target: ResearchSession) {
-    // Account-limit continuation is an ordinary Resume: no per-call approval
-    // or exposed attempt-limit arithmetic. The server enforces frozen budgets.
+    // Resume reuses the saved checkpoint. Paid-attempt or duration extensions
+    // require a separate explicit confirmation before any provider dispatch.
     void control('resume', target);
   }
 
