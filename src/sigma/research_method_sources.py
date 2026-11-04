@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 # Advisory only: do not truncate inherited or user-specified references.
 RECOMMENDED_SOURCE_COUNT = 3
+# Keep a long list of broken sites from extending pre-session preparation indefinitely.
+MAX_REFERENCE_SNAPSHOT_SECONDS = 15.0
 # IDs and notes have been individually source-checked against readable HTML.
 # "notes" are concise method implications written by the SIGMA coordinator.
 CATALOG: tuple[dict[str, str], ...] = (
@@ -336,16 +339,37 @@ def select_method_sources(
     if fetch_content:
         from sigma.research_reference_content import freeze_reference_content
 
+        started = time.monotonic()
         for row in sources:
             previous_retrieval = row.get("retrieval")
             if (
                 isinstance(previous_retrieval, dict)
                 and previous_retrieval.get("status") == "retrieved"
+                and previous_retrieval.get("requested_url", row["url"]) == row["url"]
                 and isinstance(previous_retrieval.get("excerpt"), str)
+                and previous_retrieval["excerpt"].strip()
                 and isinstance(previous_retrieval.get("excerpt_sha256"), str)
                 and hashlib.sha256(previous_retrieval["excerpt"].encode("utf-8")).hexdigest()
                 == previous_retrieval["excerpt_sha256"]
+                and isinstance(previous_retrieval.get("content_sha256"), str)
+                and len(previous_retrieval["content_sha256"]) == 64
+                and all(c in "0123456789abcdef" for c in previous_retrieval["content_sha256"].lower())
             ):
+                continue
+            if time.monotonic() - started >= MAX_REFERENCE_SNAPSHOT_SECONDS:
+                # The full configured source list is still frozen, but the
+                # unattempted tail is explicitly uninspected, not silently
+                # dropped or promoted to methodological evidence.
+                row["retrieval"] = {
+                    "status": "unavailable",
+                    "url": row["url"],
+                    "requested_url": row["url"],
+                    "retrieved_at": None,
+                    "content_sha256": None,
+                    "excerpt_sha256": None,
+                    "excerpt": None,
+                    "reason": "reference_snapshot_time_budget_exhausted",
+                }
                 continue
             row["retrieval"] = freeze_reference_content(row["url"])
     advisory = (
