@@ -132,6 +132,150 @@ def _compact_inflight_investigator(context: dict[str, Any]) -> bool:
     return True
 
 
+def _bound_v2_obligation_ledger(context: dict[str, Any], *, limit: int) -> None:
+    """Bound the *dispatch-only* ledger without resolving omitted obligations.
+
+    A count cap is insufficient: each current obligation may repeat its scope
+    assumptions and provenance. Intern shared sets first, then retain the most
+    recent unresolved/material obligations if the packet is still oversized.
+    Saved artifacts and the authoritative ledger are never modified.
+    """
+    if context.get("scheduler_version") != 2:
+        return
+    ledger = context.get("obligation_ledger")
+    manifest = context.get("context_manifest")
+    if not isinstance(ledger, list) or not isinstance(manifest, dict) or not ledger:
+        return
+    if "obligation_ledger_dictionary" in context:
+        return  # Already projected during an earlier dispatch assembly phase.
+
+    budget = min(64_000, max(2_048, limit // 4))
+    if _bytes(ledger) <= budget:
+        return
+
+    def project(indices: list[int]) -> tuple[list[Any], dict[str, Any] | None, int]:
+        selected = [
+            dict(ledger[index]) if isinstance(ledger[index], dict) else ledger[index]
+            for index in sorted(indices)
+        ]
+        dictionary: dict[str, Any] = {
+            "scope_assumptions": [],
+            "source_refs": [],
+            "index_base": 0,
+            "note": (
+                "Each *_set_index in an obligation selects the complete exact "
+                "list from the corresponding dictionary. These are shared "
+                "dispatch representations, not verified evidence."
+            ),
+        }
+        for field in ("scope_assumptions", "source_refs"):
+            indexes: dict[str, int] = {}
+            for item in selected:
+                if not isinstance(item, dict):
+                    continue
+                values = item.get(field)
+                if not isinstance(values, list) or not values:
+                    continue
+                identity = json.dumps(values, sort_keys=True, ensure_ascii=False)
+                position = indexes.get(identity)
+                if position is None:
+                    position = len(dictionary[field])
+                    dictionary[field].append(values)
+                    indexes[identity] = position
+                item.pop(field)
+                item[f"{field}_set_index"] = position
+        raw = [ledger[index] for index in sorted(indices)]
+        raw_size = _bytes({"obligation_ledger": raw})
+        pooled_size = _bytes(
+            {"obligation_ledger": selected, "obligation_ledger_dictionary": dictionary}
+        )
+        if pooled_size >= raw_size:
+            return raw, None, raw_size
+        return selected, dictionary, pooled_size
+
+    priority = sorted(
+        range(len(ledger)),
+        key=lambda index: (
+            0 if isinstance(ledger[index], dict)
+            and ledger[index].get("status") == "unresolved"
+            else 1 if isinstance(ledger[index], dict)
+            and ledger[index].get("status") == "retracted"
+            else 2,
+            -index,
+        ),
+    )
+    rows, dictionary, byte_count = project(priority)
+    kept = priority
+    if byte_count > budget:
+        # Monotonic prefix search limits repeated JSON serialization. Never
+        # substitute an arbitrary text slice for an intact obligation.
+        low, high = 0, len(priority)
+        while low < high:
+            mid = (low + high + 1) // 2
+            if project(priority[:mid])[2] <= budget:
+                low = mid
+            else:
+                high = mid - 1
+        if low == 0:
+            return  # A single mandatory item is genuinely oversized.
+        kept = priority[:low]
+        rows, dictionary, byte_count = project(kept)
+
+    omitted = [
+        item for index, item in enumerate(ledger)
+        if index not in set(kept) and isinstance(item, dict)
+    ]
+    context["obligation_ledger"] = rows
+    if dictionary is not None:
+        context["obligation_ledger_dictionary"] = dictionary
+    # The duplicate text list must never make an omitted obligation appear
+    # available for Skeptic review.
+    if isinstance(context.get("outstanding_obligations"), list):
+        context.pop("outstanding_obligations")
+        manifest["outstanding_obligations_location"] = "obligation_ledger"
+    if not omitted:
+        return
+
+    omitted_ids = [
+        item["obligation_id"]
+        for item in omitted
+        if isinstance(item.get("obligation_id"), str)
+    ]
+    previous = context.get("obligation_ledger_omitted_count", 0)
+    context["obligation_ledger_omitted_count"] = (
+        (previous if type(previous) is int else 0) + len(omitted)
+    )
+    prior_ids = context.get("obligation_ledger_omitted_ids", [])
+    if not isinstance(prior_ids, list):
+        prior_ids = []
+    context["obligation_ledger_omitted_ids"] = list(
+        dict.fromkeys([*prior_ids, *omitted_ids])
+    )[:32]
+    previous_manifest = manifest.get("omitted_obligations", {})
+    if not isinstance(previous_manifest, dict):
+        previous_manifest = {}
+    manifest["omitted_obligations"] = {
+        **previous_manifest,
+        "count": context["obligation_ledger_omitted_count"],
+        "obligation_ids": context["obligation_ledger_omitted_ids"],
+        "reason": (
+            "Dispatch byte budget: older obligations remain unresolved in "
+            "saved research but were not supplied for this review; their "
+            "absence is not a disposition or evidence of closure."
+        ),
+    }
+    manifest["dispatch_obligation_budget"] = {
+        "budget_bytes": budget,
+        "supplied_count": len(rows),
+        "newly_omitted_count": len(omitted),
+        "supplied_representation_bytes": byte_count,
+        "qualification": (
+            "No omitted obligation may be treated as reviewed or resolved; "
+            "original evidence and provenance remain saved."
+        ),
+    }
+
+
 def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
     """Compact repeated and older context before the hard dispatch byte guard.
 
@@ -140,6 +284,9 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
     original remains saved. A genuinely oversized active question, approved
     source packet or human intervention is never silently truncated.
     """
+    # v2 ledgers grow across rounds even when the total packet initially fits.
+    # Bound them proactively rather than waiting for the 256 KB failure edge.
+    _bound_v2_obligation_ledger(context, limit=limit)
     if _bytes(context) <= limit:
         return True
     manifest = context.get("context_manifest")
