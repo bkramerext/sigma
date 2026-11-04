@@ -15,6 +15,7 @@ from urllib.request import urlopen
 
 import httpx
 from cloud_auth_fixture import CLIENT_ID, JWK, token
+
 from sigma import local_gmail_cli_auth as auth
 
 
