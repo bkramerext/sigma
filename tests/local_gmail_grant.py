@@ -26,13 +26,21 @@ class LocalGmailGrantTests(unittest.TestCase):
             )
             self.assertEqual(path, grant_path(home))
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-            result = grant_for_account(home, email="sender@example.org", client_id="local-web-client")
+            result = grant_for_account(
+                home, email="sender@example.org", client_id="local-web-client"
+            )
             assert result is not None
             self.assertEqual(result[1]["subject"], "google-sub-123")
-            self.assertIsNone(grant_for_account(home, email="other@example.org", client_id="local-web-client"))
-            self.assertIsNone(grant_for_account(home, email="sender@example.org", client_id="other-client"))
+            self.assertIsNone(
+                grant_for_account(home, email="other@example.org", client_id="local-web-client")
+            )
+            self.assertIsNone(
+                grant_for_account(home, email="sender@example.org", client_id="other-client")
+            )
             os.chmod(path, 0o644)
-            self.assertIsNone(grant_for_account(home, email="sender@example.org", client_id="local-web-client"))
+            self.assertIsNone(
+                grant_for_account(home, email="sender@example.org", client_id="local-web-client")
+            )
 
     def test_grant_requires_mail_scope_and_real_google_identity(self):
         with TemporaryDirectory() as directory:
@@ -59,7 +67,7 @@ class LocalGmailGrantTests(unittest.TestCase):
                     scope="openid email profile",
                 )
             p = grant_path(home)
-            p.write_text(json.dumps({"sender":"sender@example.org","client_id":"id"}))
+            p.write_text(json.dumps({"sender": "sender@example.org", "client_id": "id"}))
             os.chmod(p, 0o600)
             self.assertIsNone(grant_for_account(home, email="sender@example.org", client_id="id"))
 
