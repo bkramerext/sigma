@@ -1721,7 +1721,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     void control('resume', target);
   }
 
-  function revealSession(id: string, collapsePrevious = false) {
+  function revealSession(id: string, collapsePrevious = false, focusOutcome = false) {
     setExpanded(true);
     window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
     setExpandedSessionIds(current => collapsePrevious ? new Set([id]) : new Set(current).add(id));
@@ -1729,18 +1729,21 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`);
       if (row) {
         const heading = row.querySelector<HTMLElement>('.session-row-disclosure');
+        // A Q/A session citation points into the saved Outcome, not the project
+        // description or merely the session's collapsed header.
+        const targetNode = (focusOutcome ? row.querySelector<HTMLElement>('.session-outcome') : null) ?? heading ?? row;
         // Scroll only the workspace reading pane; scrollIntoView can move the
         // outer viewport horizontally when the session content is wider.
         const viewport = row.closest<HTMLElement>('.workspace-content');
         if (viewport) {
-          const target = (heading ?? row).getBoundingClientRect();
+          const target = targetNode.getBoundingClientRect();
           const frame = viewport.getBoundingClientRect();
           viewport.scrollTo({
-            top: viewport.scrollTop + target.top - frame.top - (viewport.clientHeight - target.height) / 2,
+            top: viewport.scrollTop + target.top - frame.top - (focusOutcome ? 20 : (viewport.clientHeight - target.height) / 2),
             behavior: 'smooth',
           });
         } else {
-          (heading ?? row).scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+          targetNode.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
         }
         row.classList.add('citation-highlight');
         window.setTimeout(() => row.classList.remove('citation-highlight'), 2400);
@@ -1856,7 +1859,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     if (!revealId) return;
     initialRevealSessionId.current = null;
     if (activeSession?.id === revealId) onRevealNewSession();
-    revealSession(revealId, true);
+    revealSession(revealId, true, new URLSearchParams(window.location.search).get('reveal_session') === revealId);
   }, [activeSession?.id, onRevealNewSession, sessions.length]);
 
   const runningCount = activeSessionCount;
@@ -1939,9 +1942,9 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { name: string; copied: boolean; disabled?: boolean; onCopy: () => void }) {
   return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} title={copied ? 'Copied' : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={disabled} onClick={onCopy}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
 }
-function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, actions }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; actions?: ReactNode }) {
+function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, beforeCopy, actions }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode }) {
   const titleLabel = `${expanded ? 'Collapse' : 'Expand'} ${itemLabel}: ${title}`;
-  return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title"><span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><span className="saved-paper-title-tools"><CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>{actions}</span></h4></div>;
+  return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title"><span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><span className="saved-paper-title-tools">{beforeCopy}<CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>{actions}</span></h4></div>;
 }
 async function sha256Text(value: string): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
@@ -3485,7 +3488,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
 type Destination = { root: string; path: string | null; exists: boolean };
 
 type ResearchQASource = { source_id: string; session_number: number | null; kind: string; label?: string; navigation_available?: boolean; navigation_url?: string; navigation_unavailable_reason?: string };
-type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
+type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; markdown_answer?: string | null; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
 
 function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; projectId: string; guest: boolean; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -3502,9 +3505,10 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
   const [expanded, setExpanded] = useState('');
   const [removeId, setRemoveId] = useState('');
   const [copiedId, setCopiedId] = useState('');
-  const [copiedVersionId, setCopiedVersionId] = useState('');
+  const [renderedAnswerIds, setRenderedAnswerIds] = useState<Set<string>>(() => new Set());
+  const [formattingAnswerId, setFormattingAnswerId] = useState('');
+  const formattingRequest = useRef<AbortController | null>(null);
   const [recovery, setRecovery] = useState<{ question: string; id: string } | null>(null);
-  const [confirmRestart, setConfirmRestart] = useState(false);
   const requestKey = `sigma.researchQaRequest:${projectId}`;
   useEffect(() => {
     dialog.current?.showModal();
@@ -3513,7 +3517,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       if (saved?.question && saved.id) { setQuestion(saved.question); setRecovery({ question: saved.question, id: saved.id }); }
     } catch { window.localStorage.removeItem(requestKey); }
     void refresh();
-    return () => request.current?.abort();
+    return () => { request.current?.abort(); formattingRequest.current?.abort(); };
   }, []);
   async function refresh(): Promise<{ answers: ResearchQARecord[]; archiveAvailable: boolean } | null> {
     setLoading(true);
@@ -3535,7 +3539,22 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
   }
   async function ask(event: React.FormEvent) {
     event.preventDefault(); if (!question.trim() || busy || !binding) return;
-    if (recovery?.question === question) return;
+    if (recovery?.question === question) {
+      // A response might have completed after its browser request failed.
+      // Check for the durable result before an explicitly requested retry.
+      const saved = await refresh();
+      if (!saved) return;
+      // An empty or not-yet-created archive is normal for a project with no
+      // completed Q/A. A successful read is sufficient to proceed; keep the
+      // explicit retry available even if no previous answer was found.
+      const completed = saved.answers.find(record => record.request_id === recovery.id);
+      if (completed) {
+        window.localStorage.removeItem(requestKey);
+        setRecovery(null); setQuestion(''); setExpanded(completed.qa_id); setError('');
+        setSuccess('');
+        return;
+      }
+    }
     await submitQuestion(crypto.randomUUID().replaceAll('-', ''));
   }
   async function submitQuestion(requestId: string) {
@@ -3546,48 +3565,16 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       const response = await fetch('/api/projects/research-qa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ path, question, expected_project_id: projectId, expected_binding: binding, request_id: requestId }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Research Q/A failed.');
-      window.localStorage.removeItem(requestKey); setRecovery(null); setConfirmRestart(false); setQuestion(''); setExpanded(result.qa_id); setSuccess('Answer saved.'); await refresh();
+      window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(result.qa_id); setSuccess(''); await refresh();
     } catch (cause) {
+      // Cancel is silent, but retain the request ID because the provider
+      // might finish after the browser stops listening.
       setRecovery({ question, id: requestId });
-      setError(controller.signal.aborted ? 'Request stopped. Reopen Q/A and check Saved answers before trying again.' : errorMessage(cause));
-      await refresh();
+      if (!controller.signal.aborted) {
+        setError(errorMessage(cause));
+        await refresh();
+      }
     } finally { request.current = null; setBusy(false); }
-  }
-  async function checkRecovery() {
-    if (!recovery) return;
-    setError('');
-    setConfirmRestart(false);
-    const saved = await refresh();
-    if (saved === null) return;
-    if (!saved.archiveAvailable) {
-      setError('The saved Q/A archive is missing, so SIGMA cannot confirm whether the previous request completed. Restore the project archive before trying again.');
-      return;
-    }
-    const completed = saved.answers.find(record => record.request_id === recovery.id);
-    if (completed) {
-      window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(completed.qa_id);
-      setSuccess('The previous request completed and its saved answer is open.');
-      return;
-    }
-    setConfirmRestart(true);
-  }
-  async function startOver() {
-    if (!recovery || busy) return;
-    setError('');
-    setConfirmRestart(false);
-    const saved = await refresh();
-    if (saved === null) return;
-    if (!saved.archiveAvailable) {
-      setError('The saved Q/A archive is missing, so SIGMA cannot confirm whether the previous request completed. Restore the project archive before trying again.');
-      return;
-    }
-    const completed = saved.answers.find(record => record.request_id === recovery.id);
-    if (completed) {
-      window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(completed.qa_id);
-      setConfirmRestart(false); setSuccess('The previous request completed and its saved answer is open.');
-      return;
-    }
-    await submitQuestion(crypto.randomUUID().replaceAll('-', ''));
   }
   async function remove(id: string) {
     try {
@@ -3595,6 +3582,41 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Could not remove answer.');
       setRemoveId(''); setAnswers(current => current.filter(item => item.qa_id !== id)); setSuccess('Saved answer removed. Research sessions were unchanged.');
     } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function toggleAnswerMarkdown(record: ResearchQARecord) {
+    if (formattingAnswerId || busy) return;
+    if (renderedAnswerIds.has(record.qa_id)) {
+      setRenderedAnswerIds(current => { const next = new Set(current); next.delete(record.qa_id); return next; });
+      return;
+    }
+    if (record.markdown_answer) {
+      setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
+      return;
+    }
+    if (guest) { setError('Sign in to format a saved answer with AI.'); return; }
+    const controller = new AbortController();
+    formattingRequest.current = controller;
+    setFormattingAnswerId(record.qa_id); setError('');
+    const finishProviderRequest = beginProviderRequest('text-conversion');
+    try {
+      const expectedDigest = await sha256Text(record.answer);
+      const response = await fetch('/api/projects/text/convert', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+        body: JSON.stringify({ path, scope: 'research-qa', qa_id: record.qa_id, target: 'markdown',
+          expected_digest: expectedDigest, expected_binding: binding, expected_project_id: projectId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Markdown conversion failed; original answer was kept.');
+      const converted = data.markdown?.body;
+      if (typeof converted !== 'string' || !converted.trim()) throw new Error('Markdown conversion did not produce text.');
+      setAnswers(current => current.map(item => item.qa_id === record.qa_id ? { ...item, markdown_answer: converted } : item));
+      setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
+    } catch (cause) {
+      if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    } finally {
+      finishProviderRequest();
+      formattingRequest.current = null; setFormattingAnswerId('');
+    }
   }
   async function copy(record: ResearchQARecord) {
     try {
@@ -3606,24 +3628,19 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       setCopiedId(record.qa_id); window.setTimeout(() => setCopiedId(current => current === record.qa_id ? '' : current), 1600);
     } catch (cause) { setError(errorMessage(cause)); }
   }
-  async function copyVersion(record: ResearchQARecord) {
-    try { await navigator.clipboard.writeText(record.snapshot_sha256); setCopiedVersionId(record.qa_id); window.setTimeout(() => setCopiedVersionId(current => current === record.qa_id ? '' : current), 1600); }
-    catch { setError('Clipboard access failed. Check browser clipboard permissions and try again.'); }
-  }
+
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog research-qa-dialog" aria-labelledby="research-qa-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }} onKeyDownCapture={event => { if (event.key === 'Escape' && busy) { event.preventDefault(); event.stopPropagation(); } }}>
     <header className="settings-header"><h2 id="research-qa-heading">Research Q/A</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
         <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
-        <form onSubmit={event => void ask(event)} className="research-qa-form"><label htmlFor="research-qa-question">Question</label><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the saved research…"/><div className="ai-paper-controls">{busy ? <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim() || recovery?.question === question}>Ask</button>}</div></form>
-        {recovery && recovery.question === question && !busy && <div className="saved-paper-confirm research-qa-recovery" role="group" aria-label="Recover interrupted Q/A request"><p>The previous request may have completed. Check saved answers before retrying.</p><button type="button" className="text-view-link" onClick={() => void checkRecovery()}>Check saved answers</button><button type="button" className="text-view-link" onClick={() => setConfirmRestart(true)}>Start over / Ask again</button></div>}
-        {confirmRestart && recovery && <div className="saved-paper-confirm research-qa-recovery-confirm" role="group" aria-label="Confirm a fresh Q/A request"><p>No completed answer was found. The previous request may have reached the provider. Starting over sends a fresh request and may incur another charge.</p><button type="button" className="text-view-link" onClick={() => void startOver()}>Confirm Start over</button><button type="button" className="text-view-link" onClick={() => setConfirmRestart(false)}>Cancel</button></div>}
-        {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error}</p>}
+        <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
+        {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={() => setError('')}>Dismiss</button></p>}
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
-          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p><button type="button" className="text-view-link" onClick={() => setRemoveId(record.qa_id)}>Remove</button></div></div><div className="saved-paper-actions"><a className="text-view-link" href={`/api/projects/research-qa/${encodeURIComponent(record.qa_id)}/markdown?${new URLSearchParams({ path })}`} target="_blank" rel="noopener noreferrer">Markdown</a><a className="text-view-link" href={`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`} target="_blank" rel="noopener noreferrer">Open in browser</a></div></div>
+          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} title={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : 'Convert to Markdown'} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p><button type="button" className="text-view-link" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}>Open in browser</button><button type="button" className="text-view-link" onClick={() => setRemoveId(record.qa_id)}>Remove</button></div></div></div>
           {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this saved answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><button type="button" className="text-view-link" onClick={() => setRemoveId('')}>Cancel</button></div>}
-          <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><div className="research-qa-answer-heading"><h3>Answer</h3></div><div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.answer}/></Suspense></div><h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => <li key={`${source.source_id}-${index}`}>{source.navigation_available && source.navigation_url ? <a href={source.navigation_url}>{source.label || source.kind}</a> : <>{source.label || source.kind} · navigation unavailable{source.navigation_unavailable_reason ? `: ${source.navigation_unavailable_reason}` : ''}</>}</li>) : <li>No validated citations were returned.</li>}</ul><p className="research-qa-version"><span title="Identifies the research used to generate this answer. If the research changes, the answer still refers to the original version."><strong>Research version:</strong> <code>{record.snapshot_sha256.slice(0, 8)}…</code></span></p><details className="research-qa-technical"><summary>Technical details</summary><p>SHA-256: <code>{record.snapshot_sha256}</code></p><CopyToClipboardButton name="research version fingerprint" copied={copiedVersionId === record.qa_id} onCopy={() => void copyVersion(record)}/></details></article></div>
+          <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><div className="research-qa-answer-heading"><h3>Answer</h3></div>{renderedAnswerIds.has(record.qa_id) && record.markdown_answer ? <div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.markdown_answer}/></Suspense></div> : <div className="research-qa-answer-plain">{record.answer}</div>}<h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => <li key={`${source.source_id}-${index}`}>{source.navigation_available && source.navigation_url ? <a href={source.navigation_url}>{source.label || source.kind}</a> : <>{source.label || source.kind} · navigation unavailable{source.navigation_unavailable_reason ? `: ${source.navigation_unavailable_reason}` : ''}</>}</li>) : <li>No verified source links available.</li>}</ul></article></div>
         </article>)}</section>}
       </>}
     </div>

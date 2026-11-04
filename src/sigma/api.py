@@ -1943,6 +1943,7 @@ def text_source_view(body: TextSourceRequest):
 
 class TextConversionRequest(OpenRequest):
     scope: str
+    qa_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     strategy_id: str | None = None
     session_id: str | None = Field(default=None, max_length=36)
     field_path: str | None = Field(default=None, max_length=160)
@@ -1973,6 +1974,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             body.expected_project_id,
             body.session_id,
             body.field_path,
+            body.qa_id,
         )
     )
     connection = asyncio.create_task(disconnected())
