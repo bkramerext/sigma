@@ -1357,7 +1357,7 @@ def test_request_audit_truncation_tokens_and_reconciliation():
     failed_guidance = research_sessions._public(paused_fixture)["next_step_guidance"]
     assert "confirm provider usage or billing" in failed_guidance
     assert "Click Resume" in failed_guidance
-    assert "another attempt is free or safe" in failed_guidance
+    assert "another attempt may incur a charge" in failed_guidance
     paused_fixture["message"] = (
         "The conservative estimated cost reserve for another call exceeds the session limit; no additional call was made."
     )

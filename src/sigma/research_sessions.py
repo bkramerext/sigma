@@ -6458,19 +6458,9 @@ async def control_session(
                     )
                     or (
                         record.get("status") in {"paused", "stopped"}
-                        and (
-                            any(
-                                isinstance(branch, dict)
-                                and branch.get("status") in {"failed", "ended"}
-                                for branch in record.get("strategy_runs", [])
-                            )
-                            or any(
-                                isinstance(step, dict)
-                                and step.get("role") in {"investigator", "skeptic"}
-                                and step.get("status") in {"failed", "interrupted", "incomplete"}
-                                for step in record.get("steps", [])
-                            )
-                        )
+                        and isinstance(record.get("hard_budget_ledger"), dict)
+                        and record["hard_budget_ledger"].get("blocked_reason")
+                        == "Provider call outcome or usage is unknown"
                     )
                 )
                 and not _public(record).get("recoverable_clipped_response")
@@ -6491,13 +6481,20 @@ async def control_session(
                     plan, plan_error = _protocol_completion_recovery_plan(record)
                     automatic_provider_recovery = False
                 if plan is None:
-                    if not record.get("strategy_runs") and record.get("status") in {"ended", "failed"}:
+                    if not record.get("strategy_runs") and record.get("status") in {
+                        "ended",
+                        "failed",
+                    }:
                         # Earlier sessions use the legacy worker and have no
                         # branch protocol to reconcile.
                         record["status"] = "paused"
                         record["stopped_at"] = record.get("stopped_at") or _now()
                         record.pop("terminal_reason", None)
-                        _event(record, "session.legacy_resume_enabled", "Saved legacy research is available for continuation.")
+                        _event(
+                            record,
+                            "session.legacy_resume_enabled",
+                            "Saved legacy research is available for continuation.",
+                        )
                         _save(path, record)
                     elif automatic_provider_recovery:
                         raise ProjectError(
@@ -6513,7 +6510,8 @@ async def control_session(
                         or record.get("status") in {"failed", "ended"}
                     ):
                         raise ProjectError(
-                            plan_error or "The saved session's next role cannot yet be recovered safely."
+                            plan_error
+                            or "The saved session's next role cannot yet be recovered safely."
                         )
                 else:
                     available_calls = max(
@@ -6526,13 +6524,17 @@ async def control_session(
                             f"but only {available_calls} attempts remain. Resume with exactly "
                             f"{required_extension} explicitly authorized additional attempts; no counters were changed."
                         )
-                    replacement_calls = required_extension if not additional_calls else additional_calls
+                    replacement_calls = (
+                        required_extension if not additional_calls else additional_calls
+                    )
                     ledger = record.get("hard_budget_ledger")
                     if isinstance(ledger, dict) and ledger.get("blocked_reason"):
-                        unknown_ids = {
-                            item.get("call_id")
+                        unknown_ids: set[str] = {
+                            str(item["call_id"])
                             for item in ledger.get("calls", [])
-                            if isinstance(item, dict) and item.get("status") == "unknown"
+                            if isinstance(item, dict)
+                            and item.get("status") == "unknown"
+                            and isinstance(item.get("call_id"), str)
                         }
                         review_ids = {
                             step["id"]
@@ -6542,6 +6544,11 @@ async def control_session(
                             and step["id"] in unknown_ids
                             and step.get("role") in {"investigator", "skeptic"}
                             and step.get("status") in {"interrupted", "failed", "incomplete"}
+                            and any(
+                                step["id"] in item["recovery_context"]["prior_attempt_ids"]
+                                and step.get("role") == item["role"]
+                                for item in plan["branches"]
+                            )
                         }
                         try:
                             authorize_independent_review_after_unknown(
@@ -6829,7 +6836,9 @@ async def control_session(
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
     if credential["mode"] != record["mode"]:
-        record["message"] = "AI provider transport mode changed; connect the saved provider type and resume."
+        record["message"] = (
+            "AI provider transport mode changed; connect the saved provider type and resume."
+        )
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
     if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
@@ -12508,7 +12517,7 @@ def _protocol_completion_recovery_plan(
             continue
         return None, (
             "The saved session contains a running or inconsistent role attempt; "
-            "the original attempt will not be replayed. Saved work remains intact."
+            "recovery will not replay it. Saved work remains intact."
         )
 
     planned: list[dict[str, Any]] = []
@@ -14060,7 +14069,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 "status": "not_needed",
                 "reason": "This session predates reference compilation; saved research methods are retained.",
             }
-            _event(record, "references.compilation.legacy", record["reference_compilation"]["reason"])
+            _event(
+                record, "references.compilation.legacy", record["reference_compilation"]["reason"]
+            )
             _save(path, record)
             return True
         state = compilation.get("status")
@@ -14148,9 +14159,10 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             return True
         if not isinstance(credential, Mapping) or credential.get("mode") != record["mode"]:
             record["status"] = "paused"
-            record["current_action"] = "Paused · AI account changed"
+            record["current_action"] = "Paused · provider transport changed"
             record["message"] = (
-                "Account changed before reference compilation; no provider call was made."
+                "Provider transport mode changed before reference compilation; "
+                "connect the saved provider type to resume. No provider call was made."
             )
             _save(path, record)
             return False

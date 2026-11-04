@@ -416,7 +416,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                 "session was interrupted when its backend work stopped"
             )
             scroll_before_resume = page.evaluate("window.scrollY")
-            page.locator('button[title="Resume this session"]').evaluate("element => element.click()")
+            page.locator('button[title="Resume this session"]').evaluate(
+                "element => element.click()"
+            )
             expect(page.get_by_role("alert")).to_be_visible(timeout=10000)
             expect(page.get_by_role("alert")).to_contain_text("AI connection changed")
             expect(row.locator(".session-status")).to_have_text("stopped")

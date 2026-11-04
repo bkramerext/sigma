@@ -730,7 +730,9 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
     assert continued["status"] in {"completed", "ended"}, continued["message"]
     assert continued["calls_used"] >= 2
     assert len(provider_calls) >= 2
-    assert all(call.headers["Authorization"] == "Bearer new-account-token" for call in provider_calls)
+    assert all(
+        call.headers["Authorization"] == "Bearer new-account-token" for call in provider_calls
+    )
     assert research_sessions._read(str(account_path), started["id"])["identity_hash"] == (
         research_sessions._digest(account_credential["identity"])
     )
@@ -2681,7 +2683,9 @@ async def test_resume_repeated_unknown_provider_failures_retains_session(path: P
         )
         for index in range(2):
             unknown_id = str(uuid4())
-            reserve_before_dispatch(ledger, call_id=unknown_id, request_body=b"unknown provider request")
+            reserve_before_dispatch(
+                ledger, call_id=unknown_id, request_body=b"unknown provider request"
+            )
             mark_unknown(ledger, call_id=unknown_id)
             record["steps"].append(
                 {
