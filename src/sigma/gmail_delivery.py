@@ -42,10 +42,37 @@ def send_invitation(
 
 def send_admin_notification(subject: str, body: str, *, recipients: list[str]) -> None:
     """Send one privacy-preserving email to verified active administrators."""
+    sender = os.environ.get("SIGMA_INVITATION_GMAIL_SENDER", "").strip().lower()
+    if not sender or not recipients:
+        raise RuntimeError("Invitation delivery is not configured.")
+    message = EmailMessage()
+    if len(recipients) == 1:
+        message["To"] = recipients[0]
+    else:
+        message["To"] = sender
+        message["Bcc"] = ", ".join(recipients)
+    message["Subject"] = subject
+    message.set_content(body)
+    send_message(message, recipients=recipients)
+
+
+def send_message(message: EmailMessage, *, recipients: list[str], reply_to: str | None = None) -> None:
+    """Deliver a complete MIME message through SIGMA's configured Gmail OAuth account.
+
+    Gmail API accepts the MIME recipient headers rather than an SMTP envelope.
+    A failed API request can have an uncertain outcome; callers must not auto-retry.
+    """
     token_file = os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip()
     sender = os.environ.get("SIGMA_INVITATION_GMAIL_SENDER", "").strip().lower()
     if not token_file or not sender or not recipients:
-        raise RuntimeError("Invitation delivery is not configured.")
+        raise RuntimeError("Gmail delivery is not configured.")
+    if any(header in message for header in ("From", "To", "Cc", "Bcc")):
+        raise ValueError("Recipient and sender headers must be assigned by the transport.")
+    message["From"] = sender
+    message["To"] = sender
+    message["Bcc"] = ", ".join(recipients)
+    if reply_to:
+        message["Reply-To"] = reply_to
     try:
         path = Path(token_file)
         credentials = json.loads(path.read_text(encoding="utf-8"))
@@ -73,15 +100,6 @@ def send_admin_notification(subject: str, body: str, *, recipients: list[str]) -
         with urlopen(request, timeout=15) as response:
             token = json.load(response)["access_token"]
 
-        message = EmailMessage()
-        message["From"] = sender
-        if len(recipients) == 1:
-            message["To"] = recipients[0]
-        else:
-            message["To"] = sender
-            message["Bcc"] = ", ".join(recipients)
-        message["Subject"] = subject
-        message.set_content(body)
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
         request = Request(
             SEND_ENDPOINT,

@@ -308,7 +308,12 @@ def send_project_email(
     if prior_count is not None:
         return prior_count
     try:
-        cloud_auth.send_smtp_message(message, recipients, reply_to=reply_to or None)
+        if os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip():
+            from sigma.gmail_delivery import send_message
+
+            send_message(message, recipients=recipients, reply_to=reply_to or None)
+        else:
+            cloud_auth.send_smtp_message(message, recipients, reply_to=reply_to or None)
     except cloud_auth.SMTPDeliveryError as exc:
         _finish_delivery(sender, identity, exc.state, exc.accepted_count)
         refused = (
