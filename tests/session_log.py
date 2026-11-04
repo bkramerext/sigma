@@ -672,6 +672,17 @@ def main() -> None:
         test_session_log_filename_short_name_fallback_and_sanitization()
         test_saved_reference_diagnostics_and_markdown_export()
         test_session_log_download_route_content_and_name()
+        from test_project_diagnostics import (
+            test_client_report_and_copy_download_share_canonical_record,
+            test_logging_failure_is_reported_without_breaking_admission,
+            test_pre_session_rejection_persists_same_sanitized_error,
+            test_project_errors_survive_reload_without_creating_sessions,
+        )
+
+        test_project_errors_survive_reload_without_creating_sessions(root / "diagnostics-project")
+        test_client_report_and_copy_download_share_canonical_record(root / "diagnostics-client")
+        test_logging_failure_is_reported_without_breaking_admission(root / "diagnostics-cap")
+        test_pre_session_rejection_persists_same_sanitized_error(root / "diagnostics-admission")
     print(
         "Session log append, reference diagnostics, filenames, concurrency, redaction and recovery scenarios passed."
     )
