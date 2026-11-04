@@ -16,7 +16,7 @@ SIGMA does **not** establish that an answer is correct. Investigator and Skeptic
 
 Create a project or sample, then choose strategies to investigate. The overview below shows how SIGMA preserves findings for review and how you can optionally develop saved research into a paper. For session controls and limits, see [Connect AI and investigate](docs/GETTING_STARTED.md#connect-ai-and-investigate).
 
-### Workflow
+## Workflow
 
 <p align="center"><img src="assets/workflow.svg" alt="SIGMA workflow: Project → Strategies → Research → Refine → Optional paper → Review/export" width="75%" /></p>
 
@@ -29,7 +29,7 @@ Create a project or sample, then choose strategies to investigate. The overview 
 
 SIGMA supports ordinary local use without a Google account, local testing of Google-authenticated access, and a separately configured hosted deployment. Hosted access, membership, and provider funding depend on the deployment's configuration; a local launch does not automatically connect to the hosted service.
 
-### Example Outcome Papers
+## Example Outcome Papers
 
 These papers are **proofs of concept**, demonstrating what SIGMA can produce today rather than its intended final quality. Research and paper authoring remain works in progress; further improvements to SIGMA are expected to improve the clarity, rigor, and presentation of future papers. **These examples are experimental AI-generated work, not independently verified publications.** Eight papers are available now, including the six reference research papers, Maximum Regions by Lines, and Operation Narrow Passage; a ninth literature example is coming soon. Each available PDF is accompanied by its TeX source, with both archived under `papers/`.
 
@@ -51,7 +51,7 @@ These papers are **proofs of concept**, demonstrating what SIGMA can produce tod
 </tr>
 </table>
 
-### Screenshots
+## Screenshots
 
 **Home** — start an investigation or explore sample projects.
 
