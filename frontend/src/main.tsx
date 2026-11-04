@@ -290,8 +290,19 @@ function outcomeDisplayLabel(session: ResearchSession): string {
 
 function stoppedSessionGuidance(session: ResearchSession): { cause: string; next: string } {
   if (session.provider_usage_limited && ['paused', 'stopped', 'ended', 'failed'].includes(session.status)) {
+    const rejection = [...session.steps].reverse().find(step => step.failure_kind === 'provider_limited');
+    const lastLimitEvent = [...session.events].reverse().find(event => event.kind === 'provider.usage_limit');
+    const resumedBeforeRejection = lastLimitEvent != null && session.events.some(event =>
+      event.kind === 'resumed' && event.sequence < lastLimitEvent.sequence);
+    const evidence = rejection ? [
+      rejection.provider_error_code && `code: ${rejection.provider_error_code}`,
+      rejection.provider_http_status != null && `HTTP ${rejection.provider_http_status}`,
+      rejection.provider_stream_event && `stream event: ${rejection.provider_stream_event}`,
+    ].filter(Boolean).join('; ') : '';
     return {
-      cause: 'The AI provider reached its account usage limit. Saved findings are intact.',
+      cause: `${resumedBeforeRejection
+        ? 'Resume succeeded, but the provider rejected a subsequent research request at its account or app usage limit.'
+        : 'The AI provider rejected a research request at its account or app usage limit.'} ${evidence ? `Provider evidence: ${evidence}. ` : ''}Saved findings are intact. A successful HTTP transport does not override an in-stream provider rejection.`,
       next: 'Click Resume when the provider allowance is available.',
     };
   }
