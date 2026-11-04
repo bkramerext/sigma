@@ -723,9 +723,7 @@ def main() -> None:
                 read_file(created.path, "project.json")
             )
             assert json.loads(read_file(imported_path, "legacy-data/one.json")) == {"turn": 1}
-            assert _all(str(imported_path))[0]["project_path"] == str(
-                imported_path.resolve()
-            )
+            assert _all(str(imported_path))[0]["project_path"] == str(imported_path.resolve())
             assert read_file(imported_path, "artifacts/trace.bin") == bytes(range(256))
             assert read_file(imported_path, "evidence/source.txt") == b"source evidence"
             delete_file(created.path, "evidence/source.txt")
