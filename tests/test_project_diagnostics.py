@@ -232,7 +232,6 @@ def test_client_session_id_does_not_authorize_session_correlation(tmp_path: Path
         assert response["diagnostic"]["session_id"] is None
 
 
-
 def test_export_cannot_forge_diagnostic_heading(tmp_path: Path) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
     project_file = tmp_path / "project.json"
@@ -276,8 +275,11 @@ def test_dedup_read_never_follows_swapped_symlink(tmp_path: Path) -> None:
         patch.object(project_diagnostics.cloud_workspaces, "current", return_value=None),
     ):
         project_diagnostics.append(
-            str(project_file), stage="admission", code="blocked",
-            message="original", correlation_id="retry-1"
+            str(project_file),
+            stage="admission",
+            code="blocked",
+            message="original",
+            correlation_id="retry-1",
         )
         journal = tmp_path / ".sigma-session-logs" / project_id / "project-diagnostics.jsonl"
         outside = tmp_path / "outside-sensitive"
@@ -296,8 +298,11 @@ def test_dedup_read_never_follows_swapped_symlink(tmp_path: Path) -> None:
         with patch.object(project_diagnostics.os, "open", side_effect=swap_before_open):
             try:
                 project_diagnostics.append(
-                    str(project_file), stage="admission", code="blocked",
-                    message="original", correlation_id="retry-1"
+                    str(project_file),
+                    stage="admission",
+                    code="blocked",
+                    message="original",
+                    correlation_id="retry-1",
                 )
             except OSError:
                 pass
@@ -319,8 +324,8 @@ def test_actual_ui_error_sources_register_project_diagnostics() -> None:
         ("const reportReadFailure =", "session_read"),
         ("async function control(", "session_control"),
     ):
-        portion = source[source.index(trigger):]
-        assert f"recordClientError(" in portion[:1700], trigger
+        portion = source[source.index(trigger) :]
+        assert "recordClientError(" in portion[:1700], trigger
         assert f"'{stage}'" in portion[:1700], stage
 
 
