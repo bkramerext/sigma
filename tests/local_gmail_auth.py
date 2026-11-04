@@ -86,9 +86,7 @@ class LocalMailAuthorizationTests(CloudAuthFixture):
             self.assertEqual(matched[1]["subject"], "google-mail-admin")
             self.assertEqual(cloud_auth.email_env("GMAIL_TOKEN_FILE"), str(matched[0]))
             self.assertEqual(cloud_auth.email_env("GMAIL_SENDER"), "admin@example.org")
-            self.assertIsNotNone(
-                cloud_auth.resolve_session(self._mail_session_token)
-            )
+            self.assertIsNotNone(cloud_auth.resolve_session(self._mail_session_token))
 
     def test_refuses_a_different_google_identity_at_callback(self):
         with self.local_auth_environment():
