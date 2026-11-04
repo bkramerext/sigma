@@ -4486,6 +4486,33 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             }
             for branch in record.get("strategy_runs", [])
         ]
+    # Recovery is a property of saved accepted role slots, not the number of
+    # attempted provider calls. This preview never changes the ledger or sends
+    # a provider request.
+    if record.get("provider_usage_limited") is True and record.get("status") in {
+        "paused",
+        "ended",
+        "failed",
+    }:
+        plan, plan_error = _provider_limit_safe_plan(record)
+        result["provider_limit_continuation"] = {
+            "eligible": plan is not None,
+            "missing_calls": int(plan["required_calls"]) if plan else 0,
+            "reason": plan_error,
+        }
+    if record.get("scheduler_version") == 2:
+        # 54 is the successful Investigator/Skeptic role protocol, not
+        # an attempt budget. Provider rejections and retries are audit events,
+        # never accepted role completions.
+        result["protocol_completed_calls"] = sum(
+            isinstance(step, dict)
+            and step.get("status") == "completed"
+            and step.get("role") in {"investigator", "skeptic"}
+            for step in record.get("steps", [])
+        )
+        result["protocol_target_calls"] = (
+            len(record.get("strategy_runs", [])) * int(record.get("cycle_limit", 0)) * 2
+        )
     result["recoverable_clipped_response"] = (
         record.get("status") == "ended"
         and record.get("terminal_reason") == "Provider response clipped at max_output_tokens."
@@ -4503,7 +4530,22 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         and any(word in message for word in ("limit", "duration", "cost", "budget"))
     )
     if show_next_step:
-        if record.get("status") == "failed":
+        continuation = result.get("provider_limit_continuation")
+        if isinstance(continuation, dict) and continuation.get("eligible") is True:
+            result["next_step_guidance"] = (
+                "Continue Research after the provider account usage allowance becomes available. "
+                "SIGMA keeps the accepted findings and automatically accounts for known rejected "
+                "attempts within the session's existing spending and token limits. "
+                "No provider requests are retried automatically while usage remains exhausted."
+            )
+        elif isinstance(continuation, dict):
+            result["next_step_guidance"] = (
+                "The provider account usage limit stopped research and saved findings remain intact. "
+                "SIGMA cannot establish a safe same-session continuation: "
+                + str(continuation.get("reason") or "unknown reason")
+                + " Review the saved work before starting another provider request."
+            )
+        elif record.get("status") == "failed":
             result["next_step_guidance"] = (
                 "Review the saved activity and confirm provider usage or billing before continuing. "
                 "If more research is needed, start a new session with settings and spending limits "
@@ -6409,11 +6451,29 @@ async def control_session(
                         explicit_protocol_recovery and record.get("status") in {"stopped", "paused"}
                     )
                     or (additional_calls > 0 and record.get("status") == "paused")
+                    or (
+                        record.get("provider_usage_limited") is True
+                        and record.get("status") == "paused"
+                    )
                 )
                 and not _public(record).get("recoverable_clipped_response")
             ):
-                plan, plan_error = _protocol_completion_recovery_plan(record)
+                automatic_provider_recovery = (
+                    record.get("provider_usage_limited") is True
+                    and not explicit_protocol_recovery
+                    and additional_calls == 0
+                )
+                plan, plan_error = (
+                    _provider_limit_safe_plan(record)
+                    if automatic_provider_recovery
+                    else _protocol_completion_recovery_plan(record)
+                )
                 if plan is None:
+                    if automatic_provider_recovery:
+                        raise ProjectError(
+                            plan_error
+                            or "The saved provider-limit session contains an unsafe incomplete attempt."
+                        )
                     # Keep the existing, stricter usage-limit recovery path for states
                     # whose rejected attempts already fit their frozen call ceiling.
                     if (
@@ -6430,12 +6490,15 @@ async def control_session(
                         0, int(record.get("call_limit", 0)) - int(record.get("calls_used", 0))
                     )
                     required_extension = max(0, int(plan["required_calls"]) - available_calls)
-                    if additional_calls != required_extension:
+                    if not automatic_provider_recovery and additional_calls != required_extension:
                         raise ProjectError(
                             f"Completing the saved protocol needs {plan['required_calls']} new valid role turns, "
                             f"but only {available_calls} attempts remain. Resume with exactly "
                             f"{required_extension} explicitly authorized additional attempts; no counters were changed."
                         )
+                    replacement_calls = (
+                        required_extension if automatic_provider_recovery else additional_calls
+                    )
                     ledger = record.get("hard_budget_ledger")
                     if isinstance(ledger, dict) and ledger.get("blocked_reason"):
                         review_ids = {
@@ -6467,42 +6530,64 @@ async def control_session(
                             "An explicit independent role recovery was authorized. "
                             "Every unknown attempt retains its full token and cost reservations.",
                         )
-                    if additional_calls and isinstance(record.get("hard_budget_ledger"), dict):
+                    # Known rejected attempts do not complete protocol roles. Extend
+                    # only the attempt counter needed to fill those slots; frozen
+                    # monetary and token budgets remain in force. No user approval
+                    # or additional provider request is made by this bookkeeping.
+                    if replacement_calls and isinstance(record.get("hard_budget_ledger"), dict):
                         try:
                             increase_call_limit(
                                 record["hard_budget_ledger"],
                                 int(record["hard_budget_ledger"].get("call_limit", 0))
-                                + additional_calls,
+                                + replacement_calls,
                             )
                         except BudgetExceeded as exc:
                             raise ProjectError(str(exc)) from exc
                     old_call_limit = int(record.get("call_limit", 0))
-                    if additional_calls:
-                        record["call_limit"] = old_call_limit + additional_calls
-                        record["total_token_limit"] = int(record.get("total_token_limit", 0)) + (
-                            additional_calls
-                            * (
-                                MAX_AGENT_CONTEXT_BYTES
-                                + 65_536
-                                + int(record.get("output_token_limit", 0))
+                    if replacement_calls:
+                        record["call_limit"] = old_call_limit + replacement_calls
+                        if not automatic_provider_recovery:
+                            # Historical explicit protocol recovery still follows
+                            # its existing separately authorized token policy.
+                            record["total_token_limit"] = int(
+                                record.get("total_token_limit", 0)
+                            ) + (
+                                replacement_calls
+                                * (
+                                    MAX_AGENT_CONTEXT_BYTES
+                                    + 65_536
+                                    + int(record.get("output_token_limit", 0))
+                                )
                             )
-                        )
                         record.setdefault("call_limit_adjustments", []).append(
                             {
                                 "at": _now(),
                                 "from": old_call_limit,
                                 "to": record["call_limit"],
-                                "additional_calls": additional_calls,
-                                "purpose": "complete the original configured Investigator/Skeptic round protocol",
+                                "additional_calls": replacement_calls,
+                                "purpose": (
+                                    "replace definitively rejected provider attempts without changing "
+                                    "the configured successful role-call protocol"
+                                    if automatic_provider_recovery
+                                    else "complete the original configured Investigator/Skeptic round protocol"
+                                ),
                                 "accepted_turns_before_resume": plan["completed_turns"],
                                 "required_turns": plan["required_calls"],
+                                "automatic_provider_limit_replacement": automatic_provider_recovery,
                             }
                         )
                         _event(
                             record,
                             "session.protocol_call_limit_extended",
-                            f"The attempt ceiling increased from {old_call_limit} to {record['call_limit']} "
-                            "to complete the original configured research protocol. Existing attempt counters and limits on cost/input usage were preserved.",
+                            f"Internal attempt ceiling increased from {old_call_limit} to "
+                            f"{record['call_limit']} for {replacement_calls} missing protocol slots; "
+                            "accepted role-call target and original monetary/token limits "
+                            "remain unchanged."
+                            if automatic_provider_recovery
+                            else (
+                                f"The attempt ceiling increased from {old_call_limit} to "
+                                f"{record['call_limit']} to complete the configured protocol."
+                            ),
                         )
                     for item in plan["branches"]:
                         branch = next(
@@ -12035,8 +12120,19 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
         return (
             "provider_or_strategy_failure",
             (
-                f"Research stopped early after {calls} of {call_limit} available turns "
-                f"(round {cycle} of {cycle_limit}). {', '.join(reasons)}; "
+                (
+                    f"Research stopped early after {calls} of {call_limit} agent calls "
+                    f"(Round {_paired_round_position(record, cycle)[0]} of "
+                    f"{record.get('research_round_limit', 0)}, "
+                    f"Turn {_paired_round_position(record, cycle)[1]} of "
+                    f"{record.get('turns_per_round', 0)}). "
+                    if record.get("scheduler_version") == 2
+                    else (
+                        f"Research stopped early after {calls} of {call_limit} available turns "
+                        f"(round {cycle} of {cycle_limit}). "
+                    )
+                )
+                + f"{', '.join(reasons)}; "
                 f"{saved} finding{'s were' if saved != 1 else ' was'} preserved. Research is incomplete. "
                 "Review the saved attempts before resuming or starting new work." + recovery_reason
             ),
@@ -12106,6 +12202,88 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
             "but none established a completed research result. Saved findings remain available for review."
         ),
     )
+
+
+def _provider_limit_safe_plan(
+    record: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Resume only accepted role slots and definitively rejected provider calls.
+
+    Unknown dispatches, failed validation and unrelated failures require a
+    separate explicit recovery path; never automatically replay them.
+    """
+    if record.get("provider_usage_limited") is not True:
+        return None, "No confirmed provider account usage limit is recorded."
+    for step in record.get("steps", []):
+        if not isinstance(step, dict) or step.get("role") not in {"investigator", "skeptic"}:
+            continue
+        if step.get("status") == "completed":
+            continue
+        audit = step.get("provider_input_audit")
+        if (
+            step.get("status") != "failed"
+            or step.get("failure_kind") not in {"provider_limited", "provider_rate_limited"}
+            or not isinstance(audit, dict)
+            or audit.get("status") != "provider_response_rejected"
+        ):
+            return None, (
+                "An unrelated failure or uncertain provider dispatch remains in the saved session; "
+                "it cannot be automatically resumed or replayed."
+            )
+    return _protocol_completion_recovery_plan(record)
+
+
+def _pause_for_provider_usage_limit(record: dict[str, Any]) -> bool:
+    """Persist a recoverable pause without changing call/token/cost ceilings."""
+    if record.get("provider_usage_limited") is not True:
+        return False
+    paused_branches = [
+        {
+            **branch,
+            "status": (
+                "paused"
+                if branch.get("status") in {"queued", "running", "failed"}
+                else branch.get("status")
+            ),
+        }
+        for branch in record.get("strategy_runs", [])
+    ]
+    preview = {**record, "status": "paused", "strategy_runs": paused_branches}
+    plan, _reason = _provider_limit_safe_plan(preview)
+    if plan is None:
+        return False
+    message = (
+        "Provider usage limit reached. Accepted findings are preserved. "
+        "No further provider requests were made after the confirmed rejection. "
+        "Choose Continue Research after your account usage becomes available."
+    )
+    # The recovery plan identifies unfinished role slots, including branches
+    # previously marked ended when their turn was deferred after the limit.
+    # Pause those branches so ordinary Resume can pick them up; leave fully
+    # completed branches and their terminal states untouched.
+    pending_strategy_ids = {str(item["strategy_id"]) for item in plan["branches"]}
+    for source in record["strategy_runs"]:
+        if str(source.get("strategy_id") or "") in pending_strategy_ids:
+            source["status"] = "paused"
+            source["current_action"] = "Paused · provider usage limit"
+            source["reason"] = message
+    record["status"] = "paused"
+    record["current_action"] = "Provider usage limit reached"
+    record["termination_reason_code"] = "provider_usage_limit_recovery_available"
+    record["message"] = message
+    record["terminal_reason"] = message
+    record["provider_limit_recovery_ready"] = True
+    if not record.get("stopped_at"):
+        record["stopped_at"] = _now()
+    record["cycle"] = max(
+        (int(branch.get("cycle", 0)) for branch in record["strategy_runs"]), default=0
+    )
+    record["outcome"] = _outcome(record)
+    record["strategy_assessments"] = _strategy_assessments(record)
+    record["portfolio_decision"] = _portfolio_decision(record)
+    record["updated_at"] = _now()
+    _event(record, "provider.usage_limit_recovery_paused", message)
+    return True
 
 
 def _provider_limit_recovery_plan(
@@ -12474,6 +12652,9 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             active = [branch for branch in runs if branch["status"] in {"queued", "running"}]
             remaining = record["call_limit"] - record["calls_used"]
             if not active or remaining < 1:
+                if _pause_for_provider_usage_limit(record):
+                    _save(path, record)
+                    return
                 recovery_branches, _recovery_error = _provider_limit_recovery_plan(record)
                 if recovery_branches:
                     pause_message = (
@@ -12615,13 +12796,19 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                         "No further strategy calls were dispatched. SIGMA released the rejected call's "
                         "spend reservation; no automatic retry or billing fallback occurred."
                     )
+                    # The provider limit is the session-stopping cause. Never
+                    # append it to a domain-specific strategy failure narrative:
+                    # those remain independently inspectable in saved steps and
+                    # the Session Log, not part of the primary error message.
+                    record["message"] = usage_limit_message
+                    record["terminal_reason"] = usage_limit_message
                     if failed_branches:
-                        record["message"] += (
-                            " The provider account usage limit also prevented further recovery; "
-                            "no billing fallback occurred."
+                        _event(
+                            record,
+                            "portfolio.independent_failures_recorded",
+                            "Other strategy failures are preserved in their saved call records. "
+                            "They are separate from the provider usage-limit stop.",
                         )
-                    else:
-                        record["message"] = usage_limit_message
                 elif limit_message := _portfolio_limit_message(record, runs):
                     if failed_branches:
                         record["message"] += " Additional budget detail: " + limit_message
@@ -12701,6 +12888,9 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+                return
+            if _pause_for_provider_usage_limit(record):
+                _save(path, record)
                 return
             recovery_branches, _recovery_error = _provider_limit_recovery_plan(record)
             if recovery_branches:
