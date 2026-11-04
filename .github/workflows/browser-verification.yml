@@ -94,7 +94,7 @@ jobs:
           set -euo pipefail
           uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8012 >/tmp/research-qa-api.log 2>&1 &
           api_pid=$!
-          npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort >/tmp/research-qa-ui.log 2>&1 &
+          SIGMA_API_TARGET=http://127.0.0.1:8012 npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort >/tmp/research-qa-ui.log 2>&1 &
           ui_pid=$!
           trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 60); do

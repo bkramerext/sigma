@@ -587,6 +587,7 @@ print("portable Q/A concurrent save/list/remove passed")
             source["navigation_available"] and source["navigation_url"].startswith("/project?")
             for source in enriched["sources"]
         )
+        assert "reveal_understanding=1" in enriched["sources"][0]["navigation_url"]
         assert "reveal_strategy=strategy-fixture" in enriched["sources"][1]["navigation_url"]
         assert "reveal_artifact=artifact-fixture" in enriched["sources"][3]["navigation_url"]
         doc = research_qa.markdown_document(enriched)

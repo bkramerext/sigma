@@ -29,6 +29,11 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
+        # Presence is a long-lived SSE stream. Route.fetch buffers indefinitely,
+        # so let the browser use Vite's normal streaming API proxy instead.
+        if "/api/projects/research-presence?" in route.request.url:
+            route.continue_()
+            return
         if "/api/projects/research-qa?" in route.request.url and missing_archive_reads[0]:
             missing_archive_reads[0] -= 1
             route.fulfill(
@@ -343,7 +348,7 @@ with sync_playwright() as playwright:
     citation_links = browser_page.locator("main ul a")
     expect(citation_links).to_have_count(5)
     expect(citation_links.nth(0)).to_have_text(re.compile("Project ·"))
-    expect(citation_links.nth(0)).to_have_attribute("href", re.compile("reveal_project=1"))
+    expect(citation_links.nth(0)).to_have_attribute("href", re.compile("reveal_understanding=1"))
     expect(citation_links.nth(1)).to_have_text(re.compile("Strategy ·"))
     expect(citation_links.nth(1)).to_have_attribute("href", re.compile("reveal_strategy="))
     expect(citation_links.nth(2)).to_have_attribute("href", re.compile("reveal_session="))
@@ -356,11 +361,12 @@ with sync_playwright() as playwright:
     with browser_page.expect_navigation():
         citation_links.nth(0).click()
     browser_page.wait_for_function(
-        "new URL(location.href).searchParams.get('reveal_project') === '1'"
+        "new URL(location.href).searchParams.get('reveal_understanding') === '1'"
     )
-    expect(browser_page.locator(".project-overview-card")).to_have_class(
+    expect(browser_page.locator(".current-understanding")).to_have_class(
         re.compile("citation-highlight")
     )
+    expect(browser_page.locator(".current-understanding")).to_have_attribute("open", "")
     browser_page.go_back()
     browser_page.wait_for_function("new URL(location.href).searchParams.has('qa_browser')")
     browser_page.locator("main ul a").filter(has_text="Strategy ·").click()

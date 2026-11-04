@@ -438,7 +438,7 @@ def _with_navigation(record: dict[str, Any], context: dict[str, Any]) -> dict[st
         if available and "navigation_url" not in item:
             target_query = {**base_query}
             if ref_text.startswith("project:"):
-                target_query["reveal_project"] = "1"
+                target_query["reveal_understanding"] = "1"
             elif ref_text.startswith("strategy:"):
                 target_query["reveal_strategy"] = ref_text.split(":", 1)[1]
             item["navigation_url"] = f"/project?{urlencode(target_query)}"
