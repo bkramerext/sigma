@@ -151,6 +151,8 @@ def test_unique_scopes_have_bounded_explicit_omission_accounting() -> None:
     assert len(context["obligation_ledger_omitted_ids"]) <= 32
     assert source["obligation_ledger"][-1]["status"] == "unresolved"
     assert any(entry["obligation_id"] == "o127" for entry in selected)
+    # A recent retracted obligation is material negative evidence, not optional prose.
+    assert any(entry["obligation_id"] == "o126" for entry in selected)
     assert source["outstanding_obligations"]  # Saved original was not modified.
 
 
