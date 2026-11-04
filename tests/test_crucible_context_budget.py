@@ -248,7 +248,6 @@ def test_both_roles_reconstruct_pooled_ledger_and_reject_omitted_reviews() -> No
         dispatch = deepcopy(source)
         dispatch["role"] = role
         assert compact_dispatch_context(dispatch, limit=LIMIT)
-        restrict_obligation_citations_to_supplied_context(dispatch)
         dictionary = dispatch["obligation_ledger_dictionary"]
         assert dictionary["index_base"] == 0
         selected_ids = set()
@@ -266,6 +265,16 @@ def test_both_roles_reconstruct_pooled_ledger_and_reject_omitted_reviews() -> No
         omitted = set(original_by_id) - selected_ids
         assert omitted  # This fixture must actually test the omission barrier.
         assert dispatch["obligation_ledger_omitted_count"] == len(omitted)
+        # Evidence admission may narrow citable IDs, without altering pooled
+        # assumptions and provenance or the authoritative originals.
+        restrict_obligation_citations_to_supplied_context(dispatch)
+        for item in dispatch["obligation_ledger"]:
+            original = original_by_id[item["obligation_id"]]
+            for field in ("scope_assumptions", "source_refs"):
+                key = f"{field}_set_index"
+                assert (
+                    dictionary[field][item[key]] if key in item else item[field]
+                ) == original[field]
         if role == "skeptic":
             allowed_artifact = dispatch["context_artifact_ids"][0]
             common_review = {
