@@ -91,7 +91,7 @@ def main() -> None:
                     page.evaluate(
                         """async () => {
                           const React = (await import('/node_modules/.vite/deps/react.js')).default;
-                          const { createRoot } = await import('/node_modules/.vite/deps/react-dom_client.js');
+                          const { createRoot } = (await import('/node_modules/.vite/deps/react-dom_client.js')).default;
                           const { default: ProjectDiagnosticsPanel } = await import('/src/ProjectDiagnosticsPanel.tsx');
                           const host = document.createElement('main');
                           document.body.replaceChildren(host);
