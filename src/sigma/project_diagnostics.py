@@ -110,7 +110,8 @@ def append(
                     for key in ("correlation_id", "stage", "code", "message", "session_id")
                 ):
                     return previous
-        if target.exists() and target.stat().st_size + len(data) > MAX_BYTES:
+        existing_bytes = target.stat().st_size if target.exists() else 0
+        if existing_bytes + len(data) > MAX_BYTES:
             raise OSError("Project diagnostics capacity reached; event was not recorded")
         fd = os.open(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "ab") as stream:
