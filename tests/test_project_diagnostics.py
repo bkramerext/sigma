@@ -1,4 +1,5 @@
 """Provider-free project diagnostic persistence, pre-session failures, and export parity."""
+
 from __future__ import annotations
 
 import asyncio
@@ -63,7 +64,9 @@ def test_client_report_and_copy_download_share_canonical_record(tmp_path: Path) 
         patch.object(
             project_diagnostics,
             "inspect_project",
-            return_value=SimpleNamespace(project=SimpleNamespace(id="40a094e9-0cad-4b63-96c0-fd9c2b2c30de")),
+            return_value=SimpleNamespace(
+                project=SimpleNamespace(id="40a094e9-0cad-4b63-96c0-fd9c2b2c30de")
+            ),
         ),
         patch.object(project_diagnostics.cloud_workspaces, "current", return_value=None),
     ):
@@ -92,15 +95,19 @@ def test_logging_failure_is_reported_without_breaking_admission(tmp_path: Path) 
         patch.object(
             project_diagnostics,
             "inspect_project",
-            return_value=SimpleNamespace(project=SimpleNamespace(id="40a094e9-0cad-4b63-96c0-fd9c2b2c30de")),
+            return_value=SimpleNamespace(
+                project=SimpleNamespace(id="40a094e9-0cad-4b63-96c0-fd9c2b2c30de")
+            ),
         ),
         patch.object(project_diagnostics.cloud_workspaces, "current", return_value=None),
         patch.object(project_diagnostics, "MAX_BYTES", 120),
     ):
         result = api.record_project_diagnostic(
             api.ClientDiagnosticRequest(
-                path=str(project_file), stage="browser",
-                code="browser_request_failed", message="unavailable",
+                path=str(project_file),
+                stage="browser",
+                code="browser_request_failed",
+                message="unavailable",
             )
         )
         assert result.status_code == 503
@@ -113,9 +120,14 @@ def test_pre_session_rejection_persists_same_sanitized_error(tmp_path: Path) -> 
     project_file.touch()
     project_id = "40a094e9-0cad-4b63-96c0-fd9c2b2c30de"
     body = SimpleNamespace(
-        path=str(project_file), strategy_id="strategy", idempotency_key="request-1",
-        expected_project_id=project_id, expected_binding=None, expected_limits=None,
-        strategy_ids=[], continue_using_saved_type_settings=False,
+        path=str(project_file),
+        strategy_id="strategy",
+        idempotency_key="request-1",
+        expected_project_id=project_id,
+        expected_binding=None,
+        expected_limits=None,
+        strategy_ids=[],
+        continue_using_saved_type_settings=False,
     )
     with (
         patch.object(
@@ -125,7 +137,8 @@ def test_pre_session_rejection_persists_same_sanitized_error(tmp_path: Path) -> 
         ),
         patch.object(project_diagnostics.cloud_workspaces, "current", return_value=None),
         patch.object(
-            api.research_sessions, "start_session",
+            api.research_sessions,
+            "start_session",
             new=AsyncMock(side_effect=ProjectError("Retrieval HTTP 404 api_key=verysecret")),
         ),
     ):
