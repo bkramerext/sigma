@@ -737,9 +737,7 @@ async def verify_compiler_allows_account_change_before_dispatch(path: Path) -> N
                 side_effect=AssertionError("Unfunded optional compiler should not dispatch"),
             ),
         ):
-            assert await research_sessions._ensure_reference_compilation(
-                started["id"], str(path)
-            )
+            assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
         resumed = research_sessions._read(str(path), started["id"])
         assert resumed["status"] == "queued"
         assert resumed["reference_compilation"]["status"] == "skipped"
@@ -945,9 +943,7 @@ async def verify_precompiler_session_resumes(path: Path) -> None:
         assert resumed["status"] == "queued"
         still_saved = research_sessions._read(str(path), started["id"])
         assert still_saved["calls_used"] == 0
-        assert await research_sessions._ensure_reference_compilation(
-            started["id"], str(path)
-        )
+        assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
         compatible = research_sessions._read(str(path), started["id"])
         assert compatible["status"] == "queued"
         assert compatible["reference_compilation"]["status"] == "not_needed"
