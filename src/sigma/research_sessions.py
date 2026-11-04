@@ -5576,9 +5576,7 @@ async def _frozen_session_configuration(
     return await configuration(view=pinned, context=credential)
 
 
-def _validate_imported_transport_change(
-    record: dict[str, Any], *, next_model: str
-) -> None:
+def _validate_imported_transport_change(record: dict[str, Any], *, next_model: str) -> None:
     """Fail closed when a recipient rebinds an imported, stopped session.
 
     No previous request or reservation is replayed, released, or re-funded.
@@ -5619,8 +5617,7 @@ def _validate_imported_transport_change(
             or ledger.get("blocked_reason")
             or not isinstance(ledger.get("calls"), list)
             or any(
-                not isinstance(call, dict)
-                or call.get("status") not in {"settled", "rejected"}
+                not isinstance(call, dict) or call.get("status") not in {"settled", "rejected"}
                 for call in ledger["calls"]
             )
         ):
@@ -5628,9 +5625,7 @@ def _validate_imported_transport_change(
                 "Cannot change provider transport with unsettled provider billing reservations."
             )
         if ledger["calls"] and next_model != record.get("model"):
-            raise ProjectError(
-                "Cannot change the frozen model when prior hard-budget calls exist."
-            )
+            raise ProjectError("Cannot change the frozen model when prior hard-budget calls exist.")
 
 
 def _rebind_imported_transport(
@@ -5661,9 +5656,7 @@ def _rebind_imported_transport(
     record["cloud_sponsored"] = sponsored
     if paid:
         record["estimated_cost_usd"] = float(record.get("estimated_cost_usd") or 0.0)
-    record["cost_status"] = (
-        "available" if paid else "unavailable"
-    )
+    record["cost_status"] = "available" if paid else "unavailable"
     record["imported_via_bundle"] = False
     record.setdefault("transport_change_history", []).append(
         {
@@ -7063,7 +7056,9 @@ async def control_session(
         record["message"] = "Project identity changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
-    switch_transport = credential["mode"] != record["mode"] or record.get("imported_via_bundle") is True
+    switch_transport = (
+        credential["mode"] != record["mode"] or record.get("imported_via_bundle") is True
+    )
     config = await _frozen_session_configuration(view, credential, record)
     if switch_transport:
         # Imported research can use the recipient's explicitly configured
@@ -7071,14 +7066,11 @@ async def control_session(
         if not config["available"] or config["model"] != record["model"]:
             config = await configuration(view=view, context=credential)
         _validate_imported_transport_change(record, next_model=str(config.get("model", "")))
-    if (
-        not config["available"]
-        or (
-            not switch_transport
-            and (
-                config["model"] != record["model"]
-                or config["reasoning_effort"] != record["reasoning_effort"]
-            )
+    if not config["available"] or (
+        not switch_transport
+        and (
+            config["model"] != record["model"]
+            or config["reasoning_effort"] != record["reasoning_effort"]
         )
     ):
         record["message"] = config.get(
