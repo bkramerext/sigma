@@ -1,143 +1,79 @@
-"""Run disjoint groups from legacy explicit Python test drivers.
+"""Run disjoint research-session and paper test groups.
 
-Each group loads the same definitions into an isolated interpreter, but executes
-only its assigned test statements. No live provider calls are enabled here.
+Preserve the original explicit test drivers and original test definitions.
+The group selector only skips calls directly issued by the research-session
+driver; nested test-to-test calls still execute normally. Paper integration
+scenarios run in one intact group, without modifying their AST.
 """
+
 from __future__ import annotations
 
-import ast
-import sys
+import inspect
 from pathlib import Path
+from typing import Any, Callable
 
 
-def _contains_test_call(node: ast.AST) -> bool:
-    return any(
-        isinstance(item, ast.Call)
-        and isinstance(item.func, ast.Name)
-        and item.func.id.startswith("test_")
-        for item in ast.walk(node)
-    )
+def _skip_unselected(name: str, original: Callable[..., Any]) -> Callable[..., Any]:
+    """Skip only direct main() calls, retaining nested test helper behavior."""
+    async_function = inspect.iscoroutinefunction(original)
 
+    async def skipped_coroutine() -> None:
+        return None
 
-class _Partition:
-    def __init__(self, part: int, count: int) -> None:
-        self.part = part
-        self.count = count
-        self.total = 0
-        self.selected = 0
+    def dispatch(*args: Any, **kwargs: Any) -> Any:
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame is not None else None
+        if caller is not None and caller.f_code.co_name == "main":
+            return skipped_coroutine() if async_function else None
+        return original(*args, **kwargs)
 
-    def _choose(self) -> bool:
-        selected = self.total % self.count == self.part - 1
-        self.total += 1
-        if selected:
-            self.selected += 1
-        return selected
-
-    def body(self, body: list[ast.stmt]) -> list[ast.stmt]:
-        result: list[ast.stmt] = []
-        for stmt in body:
-            if isinstance(stmt, ast.Expr) and _contains_test_call(stmt):
-                if self._choose():
-                    result.append(stmt)
-            elif isinstance(stmt, (ast.With, ast.AsyncWith)):
-                if _contains_test_call(stmt):
-                    stmt.body = self.body(stmt.body)
-                    if stmt.body:
-                        result.append(stmt)
-                elif self._choose():
-                    result.append(stmt)
-            elif isinstance(stmt, (ast.If, ast.For, ast.AsyncFor, ast.While)):
-                if _contains_test_call(stmt):
-                    stmt.body = self.body(stmt.body)
-                    stmt.orelse = self.body(stmt.orelse)
-                    if stmt.body or stmt.orelse:
-                        stmt.body = stmt.body or [ast.Pass()]
-                        result.append(stmt)
-                elif self._choose():
-                    result.append(stmt)
-            elif isinstance(stmt, ast.Try):
-                if _contains_test_call(stmt):
-                    stmt.body = self.body(stmt.body)
-                    for handler in stmt.handlers:
-                        handler.body = self.body(handler.body) or [ast.Pass()]
-                    stmt.orelse = self.body(stmt.orelse)
-                    stmt.finalbody = self.body(stmt.finalbody)
-                    stmt.body = stmt.body or [ast.Pass()]
-                    result.append(stmt)
-                elif self._choose():
-                    result.append(stmt)
-            elif isinstance(stmt, ast.Assert):
-                if self._choose():
-                    result.append(stmt)
-            elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-                call = stmt.value.func
-                # Legacy driver printouts are informational, but other
-                # standalone calls are scenarios and must run exactly once.
-                if isinstance(call, ast.Name) and call.id == "print":
-                    result.append(stmt)
-                elif self._choose():
-                    result.append(stmt)
-            else:
-                # Imports and setup assignments are needed by each group.
-                result.append(stmt)
-        return result
+    dispatch.__name__ = name
+    return dispatch
 
 
 def run_split(name: str, count: int, part: int, *, paper: bool = False) -> None:
     if not 1 <= part <= count:
         raise ValueError(f"Invalid {name} part {part}/{count}")
     directory = Path(__file__).resolve().parent
-    globals_dict: dict[str, object] = {
-        "__name__": f"_{name}_definitions",
+    namespace: dict[str, Any] = {
+        "__name__": f"_{name}_test_definitions",
         "__file__": str(directory / f"{name}.py"),
         "__package__": None,
     }
+    assigned: dict[str, int] = {}
+    # All definitions need to see the same globals. The original monolithic
+    # files provided that property; each group still runs in its own process.
     for number in range(1, count + 1):
-        file = directory / f"{name}_part{number}.py"
-        exec(compile(file.read_text(encoding="utf-8"), str(file), "exec"), globals_dict)
+        path = directory / f"{name}_part{number}.py"
+        source = path.read_text(encoding="utf-8")
+        previous = {key: id(value) for key, value in namespace.items()}
+        exec(compile(source, str(path), "exec"), namespace)
+        for key, value in namespace.items():
+            if (
+                key.startswith("test_")
+                and inspect.isfunction(value)
+                and id(value) != previous.get(key)
+            ):
+                assigned[key] = number
+
     driver = directory / f"{name}_driver.py"
-    module = ast.parse(driver.read_text(encoding="utf-8"), filename=str(driver))
-    main = next(
-        node for node in module.body
-        if isinstance(node, ast.FunctionDef) and node.name == "main"
-    )
-    if paper:
-        # The old paper driver ends with one cohesive, stateful integration
-        # scenario. Keep that block intact; split only at its safe boundary.
-        # Part 1 runs all standalone scenarios, part 2 the integration block.
-        integration_start = next(
-            index for index, node in enumerate(main.body)
-            if isinstance(node, ast.With)
-            and any(
-                isinstance(item.context_expr, ast.Call)
-                and isinstance(item.context_expr.func, ast.Name)
-                and item.context_expr.func.id == "TemporaryDirectory"
-                for item in node.items
-            )
-        )
-        main.body = (
-            main.body[:integration_start]
-            if part == 1
-            else main.body[integration_start:]
-        )
-        selected = len(main.body)
-        total = selected
+    exec(compile(driver.read_text(encoding="utf-8"), str(driver), "exec"), namespace)
+    if not paper:
+        for key, group in assigned.items():
+            if group != part:
+                namespace[key] = _skip_unselected(key, namespace[key])
+        assert sum(group == part for group in assigned.values()) > 0
+        namespace["main"](part)
     else:
-        partition = _Partition(part, count)
-        main.body = partition.body(main.body)
-        selected = partition.selected
-        total = partition.total
-    ast.fix_missing_locations(module)
-    assert selected > 0, (name, part, total)
-    exec(compile(module, str(driver), "exec"), globals_dict)
-    if paper:
+        # Preserve the entire former main() integration scenario as one
+        # independent unit; the standalone cases run in the other unit.
         import httpx
         from unittest.mock import patch
 
-        papers = globals_dict["papers"]
+        papers = namespace["papers"]
         real_client = httpx.AsyncClient
 
-        def offline_async_client(*args, **kwargs):
+        def offline_async_client(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
             if "transport" not in kwargs:
                 kwargs["transport"] = httpx.MockTransport(
                     lambda _request: httpx.Response(
@@ -152,12 +88,10 @@ def run_split(name: str, count: int, part: int, *, paper: bool = False) -> None:
             with patch.object(
                 papers, "_publication_compiler_has_writing_headroom", return_value=False
             ):
-                globals_dict["main"]()
+                namespace[f"main_part{part}"]()
         finally:
             httpx.AsyncClient = real_client
-    else:
-        globals_dict["main"]()
-    print(f"PASS {name} part {part}/{count}: {selected}/{total} statements")
+    print(f"PASS {name}: part {part}/{count}")
 
 
 if __name__ == "__main__":
