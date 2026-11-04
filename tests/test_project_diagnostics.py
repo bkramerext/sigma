@@ -288,7 +288,10 @@ def test_dedup_read_never_follows_swapped_symlink(tmp_path: Path) -> None:
         attempted = []
 
         def swap_before_open(path, flags, *args, **kwargs):
-            if str(path) == str(journal) and flags & project_diagnostics.os.O_RDONLY == project_diagnostics.os.O_RDONLY:
+            if (
+                str(path) == str(journal)
+                and flags & project_diagnostics.os.O_RDONLY == project_diagnostics.os.O_RDONLY
+            ):
                 attempted.append(flags)
                 if not journal.is_symlink():
                     journal.unlink()
