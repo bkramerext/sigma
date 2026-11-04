@@ -3382,7 +3382,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{researchRunning
-        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`Scroll to running session in ${projectTitle}`} title="Scroll to running session" data-tooltip="Scroll to running session" onClick={() => window.dispatchEvent(new Event('sigma-reveal-running-session'))}><span className="project-header-title-text">{projectTitle}</span><span className="research-running-indicator-frame" aria-hidden="true"><span className="research-running-indicator"/></span></button>
+        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`Scroll to running session in ${projectTitle}`} title="Scroll to running session" data-tooltip="Scroll to running session" onClick={() => window.dispatchEvent(new Event('sigma-reveal-running-session'))}><span className="project-header-title-text">{projectTitle}</span></button>
         : <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
@@ -5122,6 +5122,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
   const projectActionBar = <div className="project-primary-actions">
+    <div className="project-running-status-slot">
+      {researchRunning && <button type="button" className="project-running-status-button" aria-label="Scroll to running session" title="Scroll to running session" data-tooltip="Scroll to running session" onClick={() => window.dispatchEvent(new Event('sigma-reveal-running-session'))}><span className="research-running-indicator-frame" aria-hidden="true"><span className="research-running-indicator"/></span></button>}
+    </div>
     <div className="project-pane-actions">
       <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" data-tooltip={`Generate a LaTeX research paper · ${paperCount(paperMetadata.count)} generated${paperMetadata.best === null ? '' : ` · Best score ${paperMetadata.best}/100`}`} disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
         <span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span>
