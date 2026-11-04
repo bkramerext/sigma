@@ -8003,7 +8003,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
             "No provider call was made; shorten the project question or critical evidence, "
             "or start a narrower session. Saved research records were preserved."
-            + _context_byte_breakdown(context)
+            + _context_byte_breakdown(
+                context, phase="agent_assembly", strategy_id=record.get("strategy_id"), role=role
+            )
         )
     return context
 
@@ -8028,14 +8030,35 @@ def _json_bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
 
 
-def _context_byte_breakdown(context: dict[str, Any]) -> str:
-    """Diagnose blocked dispatches using only byte counts, never raw evidence."""
+def _context_byte_breakdown(
+    context: dict[str, Any],
+    *,
+    phase: str = "context_assembly",
+    strategy_id: str | None = None,
+    role: str | None = None,
+    limit: int = MAX_AGENT_CONTEXT_BYTES,
+) -> str:
+    """Bounded diagnostics for a blocked call; include sizes but never prompt text."""
     sizes = sorted(
         ((field, _json_bytes(value)) for field, value in context.items()),
         key=lambda item: (-item[1], item[0]),
     )
-    largest = ", ".join(f"{field}={size}B" for field, size in sizes[:6])
-    return f" Context size: {_json_bytes(context)}B; largest fields: {largest}."
+    largest = ", ".join(f"{field[:48]}={size}B" for field, size in sizes[:6])
+    # Identifiers are internal, but fail closed if any arbitrary prose appears.
+    def safe_identifier(value: str | None) -> str:
+        if (
+            not isinstance(value, str)
+            or not 1 <= len(value) <= 64
+            or any(not (char.isascii() and (char.isalnum() or char in "_-")) for char in value)
+        ):
+            return "unknown"
+        return value
+
+    return (
+        f" Context size: {_json_bytes(context)}B / limit {limit}B;"
+        f" phase={phase}; strategy={safe_identifier(strategy_id)};"
+        f" role={safe_identifier(role)}; largest fields: {largest}."
+    )
 
 
 def _bound_context_manifest(manifest: dict[str, Any]) -> None:
@@ -9371,7 +9394,9 @@ def _portfolio_context(
         raise ResearchContextLimitError(
             "Mandatory peer and research context exceeds the 256 KB UTF-8 byte limit. "
             "No provider call was made; session remains recoverable and saved evidence is intact."
-            + _context_byte_breakdown(context)
+            + _context_byte_breakdown(
+                context, phase="peer_assembly", strategy_id=strategy_id, role=role
+            )
         )
     return context
 
@@ -10479,7 +10504,9 @@ async def _portfolio_role_call(
                     raise ResearchContextLimitError(
                         "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
                         "No provider call was made; saved research records were preserved."
-                        + _context_byte_breakdown(context)
+                        + _context_byte_breakdown(
+                            context, phase="portfolio_dispatch", strategy_id=strategy_id, role=role
+                        )
                     )
             except Exception as exc:  # noqa: BLE001 — fail this strategy branch without losing peers
                 context_blocked = isinstance(exc, ResearchContextLimitError)
@@ -14646,7 +14673,9 @@ async def _worker(session_id: str, path: str) -> None:
                 raise ResearchContextLimitError(
                     "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
                     "No provider call was made; saved research records were preserved."
-                    + _context_byte_breakdown(context)
+                    + _context_byte_breakdown(
+                        context, phase="legacy_dispatch", strategy_id=record.get("strategy_id"), role=role
+                    )
                 )
             record["status"] = "queued"
             record["cycle"] = cycle_num
