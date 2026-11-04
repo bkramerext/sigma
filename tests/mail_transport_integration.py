@@ -48,7 +48,9 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
                 return FakeResponse({"access_token": "fixture-access"})
             self.assertEqual(request.full_url, gmail_delivery.SEND_ENDPOINT)
             raw = json.loads(request.data)["raw"]
-            messages.append(message_from_bytes(base64.urlsafe_b64decode(raw), policy=policy.default))
+            messages.append(
+                message_from_bytes(base64.urlsafe_b64decode(raw), policy=policy.default)
+            )
             return FakeResponse({"id": "fixture-mail-id"})
 
         with (
@@ -165,6 +167,60 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
             if len(attachments) == 3:
                 self.assertEqual(attachments[2].get_content_type(), "application/x-tex")
                 self.assertIn(b"begin{document}", attachments[2].get_payload(decode=True))
+
+    def test_hosted_smtp_is_unchanged_by_local_gmail_grant(self):
+        _save_grant(
+            sender="admin@example.org",
+            subject="google-sub-1",
+            client_id=CLIENT_ID,
+            client_secret="fixture-secret",
+            refresh_token="fixture-refresh",
+            scope=GMAIL_SEND_SCOPE,
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_AUTH_LOCAL": "false",
+                    "SIGMA_INVITATION_SMTP_USERNAME": "sender@example.org",
+                    "SIGMA_INVITATION_SMTP_PASSWORD": "fixture-password",
+                },
+            ),
+            patch.object(cloud_auth.smtplib, "SMTP") as smtp,
+            patch.object(gmail_delivery, "urlopen") as gmail,
+            patch.object(
+                project_email,
+                "inspect_project",
+                return_value=SimpleNamespace(project=SimpleNamespace(title="Hosted Test")),
+            ),
+            patch.object(
+                project_email,
+                "email_project_bundle",
+                return_value=(b"{}", "hosted.json"),
+            ),
+        ):
+            self.assertEqual(cloud_auth.email_env("GMAIL_TOKEN_FILE"), "")
+            cloud_auth._deliver_feedback(
+                "fixture-id",
+                "Hosting path unchanged",
+                123,
+                account_email="admin@example.org",
+                contact_email="admin@example.org",
+                diagnostic_recipients=["admin@example.org"],
+            )
+            sent = project_email.send_project_email(
+                "/fixture.json", "reader@example.org", "", "project", None
+            )
+        self.assertEqual(sent, 1)
+        gmail.assert_not_called()
+        smtp_messages = smtp.return_value.__enter__.return_value.send_message.call_args_list
+        self.assertEqual(len(smtp_messages), 2)
+        self.assertEqual(smtp_messages[0].args[0]["Subject"], "New SIGMA feedback")
+        self.assertEqual(smtp_messages[1].args[0]["Subject"], "SIGMA project: Hosted Test")
+        self.assertEqual(
+            [item.get_filename() for item in smtp_messages[1].args[0].iter_attachments()],
+            ["hosted.json"],
+        )
 
     def test_hosted_email_does_not_see_local_gmail_grant(self):
         with patch.dict(
