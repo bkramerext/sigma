@@ -47,6 +47,13 @@
 .home-page .entry-dialog-actions .entry-cancel:hover { background: transparent; color: #f0c992; text-decoration: underline; }
 .home-page .about-dialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-anchor: none; }
 .home-page .about-dialog .entry-dialog-header { position: sticky; top: -28px; z-index: 1; background: #07111e; }
+/* About dialog: use SIGMA's yellow-gold accents instead of peach. */
+.home-page .about-dialog .entry-dialog-header h2 { color: #f2d27e; }
+.home-page .about-dialog .entry-dialog-header .entry-cancel,
+.home-page .about-dialog .about-feedback-form .about-feedback-send:not(:disabled) { color: #f2d27e; }
+.home-page .about-dialog .entry-dialog-header .entry-cancel:hover:not(:disabled),
+.home-page .about-dialog .about-feedback-form .about-feedback-send:hover:not(:disabled) { color: #ffe6a0; }
+
 .home-page .about-dialog-content { color: #c4ced8; font: 13px/1.6 Inter, ui-sans-serif, system-ui, sans-serif; overflow-anchor: none; }
 .home-page .about-dialog { display: flex; flex-direction: column; }
 .home-page .about-dialog-content { flex: 1 1 auto; }
