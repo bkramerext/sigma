@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 from pathlib import Path
+from fastapi.responses import JSONResponse
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sigma import api, project_diagnostics
+from sigma import api, project_diagnostics, session_log
 from sigma.projects import ProjectError
 
 
@@ -78,6 +80,7 @@ def test_client_report_and_copy_download_share_canonical_record(tmp_path: Path) 
             correlation_id="browser-123",
         )
         reply = api.record_project_diagnostic(request)
+        assert isinstance(reply, dict)
         assert reply["recorded"] is True
         persisted = api.project_diagnostics_view(str(project_file))["diagnostics"][0]
         assert reply["diagnostic"] == persisted
@@ -110,6 +113,7 @@ def test_logging_failure_is_reported_without_breaking_admission(tmp_path: Path) 
                 message="unavailable",
             )
         )
+        assert isinstance(result, JSONResponse)
         assert result.status_code == 503
         assert b'"recorded":false' in result.body
 
@@ -119,14 +123,14 @@ def test_pre_session_rejection_persists_same_sanitized_error(tmp_path: Path) -> 
     project_file = tmp_path / "project.json"
     project_file.touch()
     project_id = "40a094e9-0cad-4b63-96c0-fd9c2b2c30de"
-    body = SimpleNamespace(
+    body = api.ResearchStartRequest(
         path=str(project_file),
         strategy_id="strategy",
-        idempotency_key="request-1",
+        idempotency_key="f491f31f-5bb0-494d-9075-f77b0d93b837",
         expected_project_id=project_id,
-        expected_binding=None,
+        expected_binding="test-binding",
         expected_limits=None,
-        strategy_ids=[],
+        strategy_ids=["strategy"],
         continue_using_saved_type_settings=False,
     )
     with (
@@ -143,16 +147,15 @@ def test_pre_session_rejection_persists_same_sanitized_error(tmp_path: Path) -> 
         ),
     ):
         response = asyncio.run(api.research_start_view(body))
-        import json
-
-        data = json.loads(response.body)
+        assert isinstance(response, JSONResponse)
+        data = json.loads(bytes(response.body))
         saved = project_diagnostics.read(str(project_file))
         repeated = project_diagnostics.append(
             str(project_file),
             stage="admission",
             code="research_admission_failed",
             message="Retrieval HTTP 404 api_key=verysecret",
-            correlation_id="request-1",
+            correlation_id=body.idempotency_key,
             http_status=400,
         )
         assert repeated == saved[0]
