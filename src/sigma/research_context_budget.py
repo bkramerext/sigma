@@ -196,7 +196,9 @@ def _bound_v2_obligation_ledger(context: dict[str, Any], *, limit: int) -> None:
     def priority_for(index: int) -> tuple[int, int]:
         item = ledger[index]
         status = item.get("status") if isinstance(item, dict) else None
-        tier = 0 if status == "unresolved" else 1 if status == "retracted" else 2
+        # Keep material retractions alongside unresolved obligations; an
+        # old unresolved note must not displace a newer negative finding.
+        tier = 0 if status in {"unresolved", "retracted"} else 1
         return tier, -index
 
     priority = sorted(range(len(ledger)), key=priority_for)
