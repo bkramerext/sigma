@@ -6,9 +6,10 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from fastapi.responses import JSONResponse
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+
+from fastapi.responses import JSONResponse
 
 from sigma import api, project_diagnostics, session_log
 from sigma.projects import ProjectError
@@ -166,7 +167,6 @@ def test_pre_session_rejection_persists_same_sanitized_error(tmp_path: Path) -> 
         assert data["diagnostic"] == saved[0]
         assert data["error"] == saved[0]["message"]
         assert "verysecret" not in data["error"]
-
 
 
 def test_project_delete_removes_only_regular_diagnostic_log(tmp_path: Path) -> None:
