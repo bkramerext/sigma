@@ -196,6 +196,9 @@ def main(part: int = 1):
         asyncio.run(
             test_legacy_worker_aggregates_usage_and_audits_inputs(root / "legacy-worker.sigma")
         )
+        asyncio.run(
+            test_legacy_background_disconnect_after_gate_wait(root / "legacy-presence.sigma")
+        )
         asyncio.run(test_investigator_python_is_run_and_reviewed(root / "python-review.sigma"))
         asyncio.run(test_recovery_reuses_saved_python_execution(root / "python-recovery.sigma"))
         asyncio.run(test_restart_during_python_has_no_automatic_rerun(root / "python-crash.sigma"))

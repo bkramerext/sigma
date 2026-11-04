@@ -32,6 +32,8 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     reference_efficiency,
+    research_preferences,
+    research_presence,
     research_reference_compiler,
     session_log,
 )
@@ -5952,13 +5954,25 @@ async def start_session(
     expected_limits: dict[str, Any] | None = None,
     strategy_ids: list[str] | None = None,
     continue_using_saved_type_settings: bool = False,
+    browser_presence_required: bool = False,
 ) -> dict[str, Any]:
+    if type(browser_presence_required) is not bool:
+        raise ProjectError("Browser execution origin must be a boolean")
     try:
         UUID(idempotency_key)
     except ValueError as exc:
         raise ProjectError("A valid idempotency key is required") from exc
     _require_current_local_backend()
     view, guard = _snapshot(path)
+    if (
+        browser_presence_required
+        and not research_preferences.allow_unattended_background_execution()
+        and not research_presence.has_live_viewer(view.path)
+    ):
+        raise ProjectError(
+            "Browser presence could not be confirmed. Reopen the project and try again; "
+            "no research was started or billed."
+        )
     if view.project.id != expected_project_id:
         raise ProjectError("Project changed; reopen it before starting research")
     selected_ids = list(dict.fromkeys(strategy_ids or [strategy_id]))
@@ -5971,6 +5985,7 @@ async def start_session(
             existing.get("project_id") != expected_project_id
             or existing.get("strategy_id") != strategy_id
             or existing.get("strategy_ids", [existing.get("strategy_id")]) != selected_ids
+            or existing.get("browser_presence_required", False) != browser_presence_required
         ):
             raise ProjectError("Idempotency key is already bound to a different research request")
         return _public(_recover(existing))
@@ -6043,6 +6058,14 @@ async def start_session(
             locked_view, _locked_guard = _snapshot(view.path)
             if locked_view.project.id != expected_project_id:
                 raise ProjectError("Project identity changed during research preflight")
+            if (
+                browser_presence_required
+                and not research_preferences.allow_unattended_background_execution()
+                and not research_presence.has_live_viewer(view.path)
+            ):
+                raise ProjectError(
+                    "Browser disconnected before research admission; no call was dispatched"
+                )
             limits = _session_start_limits(get_limits(view.path), expected_limits)
             runtime_limits = _effective_limits(limits)
             records = _all(view.path)
@@ -6054,6 +6077,7 @@ async def start_session(
                     existing.get("project_id") != expected_project_id
                     or existing.get("strategy_id") != strategy_id
                     or existing.get("strategy_ids", [existing.get("strategy_id")]) != selected_ids
+                    or existing.get("browser_presence_required", False) != browser_presence_required
                 ):
                     raise ProjectError(
                         "Idempotency key is already bound to a different research request"
@@ -6131,6 +6155,9 @@ async def start_session(
                 "session_number": 0,
                 "project_path": view.path,
                 "project_id": view.project.id,
+                # Set by the start endpoint before the worker can be scheduled.
+                # API/CLI sessions omit it and run without browser-page history.
+                "browser_presence_required": browser_presence_required,
                 "strategy_id": strategy.id,
                 "strategy_title": strategy.title,
                 "strategy_text": strategy.approach,
@@ -6408,8 +6435,14 @@ async def start_session(
 
 
 async def control_session(
-    path: str, session_id: str, action: str, additional_calls: int = 0
+    path: str,
+    session_id: str,
+    action: str,
+    additional_calls: int = 0,
+    browser_presence_required: bool = False,
 ) -> dict[str, Any]:
+    if type(browser_presence_required) is not bool:
+        raise ProjectError("Browser execution origin must be a boolean")
     if action not in {"pause", "resume", "stop", "repair"}:
         raise ProjectError("Unknown research session action")
     # 'repair' is an explicit protocol-completion authorization, distinct from
@@ -6474,6 +6507,10 @@ async def control_session(
     async with state_lock:
         with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
+            # Browser Resumes remain browser-bound; API/CLI cannot silently
+            # remove a previous session requirement when reconnecting.
+            if browser_presence_required:
+                record["browser_presence_required"] = True
             ledger = record.get("hard_budget_ledger")
             if action == "resume" and isinstance(ledger, dict):
                 calls = ledger.get("calls")
@@ -6901,6 +6938,15 @@ async def control_session(
         _event(record, "portfolio.terminated", record["message"])
         _save(record["project_path"], record)
         return _public(record)
+    if (
+        record.get("browser_presence_required")
+        and not research_preferences.allow_unattended_background_execution()
+        and not research_presence.has_live_viewer(record["project_path"])
+    ):
+        raise ProjectError(
+            "Browser presence could not be confirmed. Reopen the project and retry Resume; "
+            "the saved session was not restarted."
+        )
     view, guard = _snapshot(record["project_path"])
     credential = await auth_context()
     guard_state_hash = _project_guard_state(view.project)
@@ -7079,6 +7125,7 @@ async def control_session(
                 )
                 _event(record, "references.compilation.recovered", compiler["reason"])
             record["status"] = "queued"
+            record.pop("stop_advisory", None)
             for branch in record.get("strategy_runs", []):
                 if branch.get("status") in {"paused", "stopped"}:
                     branch["status"] = "queued"
@@ -10650,6 +10697,11 @@ async def _portfolio_role_call(
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
                 return False
+            # A disconnected browser requests a graceful stop, never task
+            # cancellation. Other already-dispatched branches finish normally.
+            if _stop_advisory_requested(record, path):
+                _save(path, record)
+                return False
             branch = next(
                 item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
             )
@@ -12703,6 +12755,54 @@ def _protocol_completion_recovery_plan(
     )
 
 
+def _stop_advisory_requested(record: dict[str, Any], path: str) -> bool:
+    """Honor an explicit browser-bound session, never a historical page visit."""
+    if record.get("stop_advisory"):
+        return True
+    if not record.get("browser_presence_required", False):
+        return False
+    if research_preferences.allow_unattended_background_execution():
+        return False
+    if not research_presence.has_live_viewer(path):
+        record["stop_advisory"] = True
+        return True
+    return False
+
+
+def _pause_for_stop_advisory(record: dict[str, Any], path: str) -> bool:
+    """Only pause after current in-flight provider responses have been saved."""
+    if record.get("strategy_runs") and not any(
+        branch.get("status") in {"queued", "running"} for branch in record["strategy_runs"]
+    ):
+        # Completed portfolios should still finish normally after the last
+        # response, even if the browser disconnected during that response.
+        return False
+    if not _stop_advisory_requested(record, path):
+        return False
+    if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+        return False
+    record["status"] = "paused"
+    record["stopped_at"] = record.get("stopped_at") or _now()
+    record["current_action"] = "Paused · browser disconnected"
+    record["message"] = (
+        "Research paused after the final SIGMA browser page disconnected. "
+        "All completed results were saved, and no new provider call was dispatched. "
+        "Resume this session explicitly to continue."
+    )
+    for branch in record.get("strategy_runs", []):
+        if branch.get("status") in {"queued", "running"}:
+            branch["status"] = "paused"
+            branch["current_action"] = record["current_action"]
+            branch["reason"] = record["message"]
+    if record.get("strategy_runs"):
+        record["outcome"] = _outcome(record)
+        record["strategy_assessments"] = _strategy_assessments(record)
+        record["portfolio_decision"] = _portfolio_decision(record)
+    record["updated_at"] = _now()
+    _event(record, "stop.advisory", record["message"])
+    return True
+
+
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
     # One in-flight call per strategy; the backend-wide gate protects provider
@@ -12735,6 +12835,9 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+                return
+            if _pause_for_stop_advisory(record, path):
+                _save(path, record)
                 return
             runs = record["strategy_runs"]
             for branch in runs:
@@ -12993,6 +13096,9 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
                 return
+            # Finish free coordinator bookkeeping after the current response.
+            # The next loop/dispatch boundary obeys stop_advisory before
+            # sending anything else, even if an entire round just completed.
             if _pause_for_provider_usage_limit(record):
                 _save(path, record)
                 return
@@ -14143,6 +14249,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         record = _read(path, session_id)
         if record["status"] in {"stopped", "paused", "ended", "completed", "failed"}:
             return False
+        if _pause_for_stop_advisory(record, path):
+            _save(path, record)
+            return False
         compilation = record.get("reference_compilation")
         if not isinstance(compilation, dict):
             # Compiler policy cannot be applied retroactively to paid sessions
@@ -14395,6 +14504,11 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             compilation["reason"] = "Reference compilation reached its three-attempt safety limit."
             _save(path, record)
             return True
+        # Browser disconnects may occur during compiler preparation. Check
+        # again before creating any provider reservation, including retries.
+        if _pause_for_stop_advisory(record, path):
+            _save(path, record)
+            return False
         attempt_id = str(uuid4())
         reservation = None
         hard = record.get("hard_budget_ledger")
@@ -14928,6 +15042,11 @@ async def _worker(session_id: str, path: str) -> None:
         return
     try:
         initial = _read(path, session_id)
+        async with _session_state_lock(session_id):
+            initial = _read(path, session_id)
+            if _pause_for_stop_advisory(initial, path):
+                _save(path, initial)
+                return
         if not await _claim_cloud_job(session_id, path):
             return
         # All newly started sessions use the branch-aware path, including a
@@ -14968,6 +15087,9 @@ async def _worker(session_id: str, path: str) -> None:
         while True:
             record = _read(path, session_id)
             if record["status"] in {"stopped", "ended", "completed"}:
+                return
+            if _pause_for_stop_advisory(record, path):
+                _save(path, record)
                 return
             record["status"] = "running"
             record["updated_at"] = _now()
@@ -15069,72 +15191,79 @@ async def _worker(session_id: str, path: str) -> None:
                     )
                     _save(path, record)
                     return
-                request_audit = _role_input_audit(record, role, context, credential.get("token"))
-                maximum_cost = record.get("maximum_estimated_cost_usd")
-                if (
-                    record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
-                ) and maximum_cost is not None:
-                    reserve = _reserve_cost(record, context, role)
-                    current_estimate = record.get("estimated_cost_usd")
-                    if (
-                        reserve is None
-                        or record.get("cost_status") != "available"
-                        or not isinstance(current_estimate, (int, float))
-                    ):
-                        record["status"] = "paused"
-                        record["current_action"] = "Paused · cost unavailable"
-                        record["message"] = (
-                            "Estimated API cost cannot be bounded from the selected model and token usage; no additional call was made."
-                        )
-                        record["updated_at"] = _now()
-                        _event(record, "cost.unavailable", record["message"])
-                        _save(path, record)
-                        return
-                    if current_estimate + reserve > maximum_cost:
-                        record["status"] = "paused"
-                        record["current_action"] = "Paused · cost limit"
-                        record["message"] = (
-                            "The conservative estimated cost reserve for another call exceeds the session limit; no additional call was made."
-                        )
-                        record["updated_at"] = _now()
-                        _event(record, "cost.limit", record["message"])
-                        _save(path, record)
-                        return
-                record["calls_used"] += 1
-                record["current_step"] = str(uuid4())
-                record["status"] = "running"
-                record["current_action"] = role.title()
-                record["message"] = (
-                    f"Research round {cycle_num}: {role.title()} agent turn {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} in progress."
-                )
-                _event(record, "call.started", record["message"], role)
-                step = {
-                    "id": record["current_step"],
-                    "cycle": cycle_num,
-                    "role": role,
-                    "status": "running",
-                    "started_at": _now(),
-                    "call_number": record["calls_used"],
-                    "context_artifact_ids": context["context_artifact_ids"],
-                    "prior_session_artifact_ids": context.get("prior_session_artifact_ids", []),
-                    "context_manifest": context["context_manifest"],
-                    "context_obligation_count": _context_obligation_count(context),
-                    "protocol_completion_recovery": context.get("protocol_completion_recovery"),
-                    "human_intervention_ids": [item["intervention_id"] for item in guidance],
-                }
-                step["provider_input_audit"] = request_audit
-                record["steps"].append(step)
-                _record_guidance_delivery(
-                    record,
-                    strategy_id=record["strategy_id"],
-                    role=role,
-                    cycle=cycle_num,
-                    step_id=step["id"],
-                    guidance=guidance,
-                )
-                _save(path, record)
-                # Legacy sessions share the same backend-wide provider capacity.
                 async with _portfolio_global_gate(session_id):
+                    # Recheck *after* the awaited gates, credentials and model
+                    # preflight. Nothing is charged or reserved before this
+                    # confirmation, even when browser presence was lost mid-wait.
+                    if _pause_for_stop_advisory(record, path):
+                        _save(path, record)
+                        return
+                    request_audit = _role_input_audit(
+                        record, role, context, credential.get("token")
+                    )
+                    maximum_cost = record.get("maximum_estimated_cost_usd")
+                    if (
+                        record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
+                    ) and maximum_cost is not None:
+                        reserve = _reserve_cost(record, context, role)
+                        current_estimate = record.get("estimated_cost_usd")
+                        if (
+                            reserve is None
+                            or record.get("cost_status") != "available"
+                            or not isinstance(current_estimate, (int, float))
+                        ):
+                            record["status"] = "paused"
+                            record["current_action"] = "Paused · cost unavailable"
+                            record["message"] = (
+                                "Estimated API cost cannot be bounded from the selected model and token usage; no additional call was made."
+                            )
+                            record["updated_at"] = _now()
+                            _event(record, "cost.unavailable", record["message"])
+                            _save(path, record)
+                            return
+                        if current_estimate + reserve > maximum_cost:
+                            record["status"] = "paused"
+                            record["current_action"] = "Paused · cost limit"
+                            record["message"] = (
+                                "The conservative estimated cost reserve for another call exceeds the session limit; no additional call was made."
+                            )
+                            record["updated_at"] = _now()
+                            _event(record, "cost.limit", record["message"])
+                            _save(path, record)
+                            return
+                    record["calls_used"] += 1
+                    record["current_step"] = str(uuid4())
+                    record["status"] = "running"
+                    record["current_action"] = role.title()
+                    record["message"] = (
+                        f"Research round {cycle_num}: {role.title()} agent turn {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} in progress."
+                    )
+                    _event(record, "call.started", record["message"], role)
+                    step = {
+                        "id": record["current_step"],
+                        "cycle": cycle_num,
+                        "role": role,
+                        "status": "running",
+                        "started_at": _now(),
+                        "call_number": record["calls_used"],
+                        "context_artifact_ids": context["context_artifact_ids"],
+                        "prior_session_artifact_ids": context.get("prior_session_artifact_ids", []),
+                        "context_manifest": context["context_manifest"],
+                        "context_obligation_count": _context_obligation_count(context),
+                        "protocol_completion_recovery": context.get("protocol_completion_recovery"),
+                        "human_intervention_ids": [item["intervention_id"] for item in guidance],
+                    }
+                    step["provider_input_audit"] = request_audit
+                    record["steps"].append(step)
+                    _record_guidance_delivery(
+                        record,
+                        strategy_id=record["strategy_id"],
+                        role=role,
+                        cycle=cycle_num,
+                        step_id=step["id"],
+                        guidance=guidance,
+                    )
+                    _save(path, record)
                     output, usage = await _call(record, role, context, step_id=step["id"])
             finally:
                 for gate in reversed(gates):

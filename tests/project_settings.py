@@ -1,18 +1,23 @@
 """Atomic settings transactions, strict audit, identity and legacy safety."""
 
+import asyncio
 import json
 import subprocess
 import sys
+from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
 from unittest.mock import patch
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import research_sessions
-from sigma.api import app
+from sigma import research_preferences, research_presence, research_sessions
+from sigma.api import app, research_presence_view
+from sigma.project_bundle import import_bundle
 from sigma.projects import (
     ProjectError,
     change_stage,
@@ -39,6 +44,139 @@ def edit(path, values, prior):
     normalized = dict(values)
     normalized["research_mode"] = normalized.pop("investigation_type")
     return update_project(path, **normalized, expected=prior)
+
+
+def check_unattended_execution(root: Path, path: Path, sibling: Path) -> None:
+    """User scope, fail-closed admission, genuine stream cleanup, copied IDs."""
+    with patch("sigma.research_preferences.projects_root", return_value=root):
+        assert research_preferences.allow_unattended_background_execution() is False
+        assert "allow_unattended_background_execution" not in json.loads(
+            (path / "project.json").read_text()
+        )
+        assert "allow_unattended_background_execution" not in asdict(
+            project_settings(inspect_project(path).project)
+        )
+
+        async def streamed_browser() -> None:
+            response = await research_presence_view(str(path))
+            stream = cast(AsyncGenerator[str, None], response.body_iterator)
+            assert response.status_code == 200
+            assert "connected" in await anext(stream)
+            assert research_presence.has_live_viewer(str(path))
+            await stream.aclose()
+            assert not research_presence.has_live_viewer(str(path))
+
+        asyncio.run(streamed_browser())
+        first = research_presence.open_viewer(str(path))
+        second = research_presence.open_viewer(str(path))
+        assert research_presence.has_live_viewer(str(path))
+        research_presence.close_viewer(first)
+        assert research_presence.has_live_viewer(str(path))
+        with patch("sigma.research_presence.time.time", return_value=10**12):
+            assert not research_presence.has_live_viewer(str(path))
+        research_presence.close_viewer(second)
+        assert not research_presence.has_live_viewer(str(path))
+
+        # Portable imports preserve project IDs, not their canonical storage path.
+        clone = root / "unattended-clone.json"
+        payload = json.loads(export_complete_project(path))
+        import_bundle(payload, clone)
+        assert inspect_project(clone).project.id == inspect_project(path).project.id
+        clone_viewer = research_presence.open_viewer(str(clone))
+        assert research_presence.has_live_viewer(str(clone))
+        assert not research_presence.has_live_viewer(str(path))
+        research_presence.close_viewer(clone_viewer)
+
+        with TestClient(app) as client:
+            uri = "/api/user-preferences/unattended-execution"
+            assert client.get(uri).json() == {"allow_unattended_background_execution": False}
+            for invalid in ("true", 1, None):
+                assert (
+                    client.put(
+                        uri, json={"allow_unattended_background_execution": invalid}
+                    ).status_code
+                    == 422
+                )
+            assert (
+                client.put(uri, json={"allow_unattended_background_execution": True}).status_code
+                == 200
+            )
+            assert client.get(uri).json() == {"allow_unattended_background_execution": True}
+            # The same user setting is visible from different project contexts;
+            # neither project's stored settings or exported bytes were changed.
+            assert inspect_project(path).project.id == inspect_project(clone).project.id
+            assert inspect_project(sibling).project.id != inspect_project(path).project.id
+            assert "allow_unattended_background_execution" not in json.loads(
+                (path / "project.json").read_text()
+            )
+
+            with (
+                TemporaryDirectory() as unrelated,
+                patch("sigma.research_preferences.projects_root", return_value=Path(unrelated)),
+            ):
+                assert client.get(uri).json() == {"allow_unattended_background_execution": False}
+            assert client.get(uri).json() == {"allow_unattended_background_execution": True}
+            assert (
+                client.put(uri, json={"allow_unattended_background_execution": False}).status_code
+                == 200
+            )
+
+            # A missing/failed SSE connection must not create a browser-funded
+            # run that is later mistaken for an unobserved API/CLI session.
+            create_strategy(path, "Browser presence", "Investigate a bounded user-visible example.")
+            view = inspect_project(path)
+            strategy = next((item for item in view.project.strategies if not item.removed_at), None)
+            assert strategy is not None
+            before = len(research_sessions._all(str(path)))
+            response = client.post(
+                "/api/projects/research-sessions/start",
+                json={
+                    "path": str(path),
+                    "strategy_id": strategy.id,
+                    "expected_project_id": view.project.id,
+                    "idempotency_key": str(uuid4()),
+                    "expected_binding": "not-reached",
+                    "browser_presence_required": True,
+                },
+            )
+            assert response.status_code == 400, response.text
+            assert len(research_sessions._all(str(path))) == before
+            assert "Browser presence" in response.json().get("error", "")
+
+        # A prior browser visit cannot change an unrelated API/CLI session.
+        cli_record = {"browser_presence_required": False}
+        assert not research_sessions._stop_advisory_requested(cli_record, str(path))
+        browser_record = {"browser_presence_required": True}
+        assert research_sessions._stop_advisory_requested(browser_record, str(path))
+        assert browser_record["stop_advisory"] is True
+        with patch("sigma.research_preferences.projects_root", return_value=root):
+            research_preferences.update_unattended_background_execution(True)
+        assert not research_sessions._stop_advisory_requested(
+            {"browser_presence_required": True}, str(path)
+        )
+        research_preferences.update_unattended_background_execution(False)
+        # The advisory is applied at a safe boundary, with already-accepted
+        # provider responses and their evidence retained byte-for-byte.
+        completed_step = {"status": "completed", "output": {"claim": "saved evidence"}}
+        pending = {
+            "status": "running",
+            "browser_presence_required": True,
+            "steps": [completed_step],
+            "strategy_runs": [{"status": "queued", "current_action": "Investigator"}],
+        }
+        with (
+            patch.object(research_sessions, "_outcome", return_value={}),
+            patch.object(research_sessions, "_strategy_assessments", return_value=[]),
+            patch.object(research_sessions, "_portfolio_decision", return_value={}),
+            patch.object(research_sessions, "_event"),
+        ):
+            assert research_sessions._pause_for_stop_advisory(pending, str(path))
+        assert pending["status"] == "paused"
+        assert pending["stop_advisory"] is True
+        assert pending["steps"] == [completed_step]
+    print(
+        "PASS user-wide preference, stream lifecycle, absent SSE, distinct imported copies, CLI isolation"
+    )
 
 
 def main():
@@ -438,6 +576,7 @@ def main():
         print(
             "PASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior"
         )
+        check_unattended_execution(root, path, Path(sibling.path))
 
 
 if __name__ == "__main__":
