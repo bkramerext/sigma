@@ -226,6 +226,59 @@ def _verified_google_identity(
         ) from exc
 
 
+def _wait_for_existing_sigma(expected_state: str, authorize_url: str) -> str:
+    """Use SIGMA's running local callback with a private, one-time handoff."""
+    from sigma.local_gmail_cli_bridge import pending_flow, result
+
+    home = _private_home(create=True)
+    try:
+        with pending_flow(home, expected_state):
+            try:
+                with httpx.Client(timeout=3, trust_env=False, follow_redirects=False) as client:
+                    response = client.get(
+                        "http://127.0.0.1:5173/api/cloud-auth/mail/cli-bridge-ready",
+                        params={"state": expected_state},
+                    )
+                    response.raise_for_status()
+                    probe = response.json()
+            except (httpx.HTTPError, ValueError) as exc:
+                raise LocalGmailAuthError(
+                    "Port 5173 is in use, but no compatible local SIGMA Gmail callback "
+                    "was detected. Update/restart the local SIGMA server once, or "
+                    "run ./sigma shutdown to free the port, then retry. "
+                    "Production is unaffected."
+                ) from exc
+            if not isinstance(probe, dict) or probe.get("protocol") != 1 or probe.get("ready") is not True:
+                raise LocalGmailAuthError(
+                    "A listener owns port 5173, but it cannot receive this CLI's "
+                    "Google callback. Restart the local SIGMA UI with the updated "
+                    "checkout, or run ./sigma shutdown to free the port."
+                )
+            print("Using the running local SIGMA server for the Google callback.")
+            print("Opening Google authorization in your browser.")
+            if not webbrowser.open(authorize_url, new=2):
+                raise LocalGmailAuthError(
+                    "Could not open your browser automatically. Check your default browser setup."
+                )
+            deadline = time.monotonic() + 300
+            while time.monotonic() < deadline:
+                response = result(home, expected_state)
+                if response is not None:
+                    code, declined = response
+                    if declined:
+                        raise LocalGmailAuthError("Google permission was cancelled or declined.")
+                    if code:
+                        return code
+                time.sleep(0.25)
+            raise LocalGmailAuthError(
+                "Google permission was not completed before the local callback expired."
+            )
+    except (OSError, ValueError) as exc:
+        raise LocalGmailAuthError(
+            "Could not create or read the private local Gmail callback handoff."
+        ) from exc
+
+
 def _wait_for_google_callback(expected_state: str, authorize_url: str) -> str:
     """Serve only the registered localhost OAuth callback, without starting SIGMA."""
     result: dict[str, str] = {}
@@ -280,12 +333,8 @@ def _wait_for_google_callback(expected_state: str, authorize_url: str) -> str:
 
     try:
         server = Loopback(("127.0.0.1", 5173), Callback)
-    except OSError as exc:
-        raise LocalGmailAuthError(
-            "Local port 5173 is occupied or unavailable. The Gmail CLI needs that port "
-            "briefly because it is your existing registered Google redirect URI. "
-            "Close any running local SIGMA UI and retry; production is unaffected."
-        ) from exc
+    except OSError:
+        return _wait_for_existing_sigma(expected_state, authorize_url)
     with server:
         print("Opening Google authorization in your browser (no SIGMA UI server needed).")
         if not webbrowser.open(authorize_url, new=2):
