@@ -82,8 +82,10 @@ class ProjectEmailTests(unittest.TestCase):
             self.assertIn(f"research-sessions/{session_id}.json", payload["files"])
             import_bundle(payload, target)
             session_paths = [
-                name for name in list_files(target)
-                if name.startswith("research-sessions/") and name.endswith(".json")
+                name
+                for name in list_files(target)
+                if name.startswith("research-sessions/")
+                and name.endswith(".json")
                 and name not in {"research-sessions/sequence.json", "research-sessions/limits.json"}
             ]
             self.assertEqual(len(session_paths), 1)
@@ -185,9 +187,7 @@ class ProjectEmailTests(unittest.TestCase):
             project_email._finish_delivery("subject:a", request_id, "sent", 2)
         with self.assertRaises(project_email.MailRateLimit):
             project_email._reserve_delivery("subject:a", str(uuid4()), "more", 1)
-        self.assertIsNone(
-            project_email._reserve_delivery("subject:b", str(uuid4()), "other", 1)
-        )
+        self.assertIsNone(project_email._reserve_delivery("subject:b", str(uuid4()), "other", 1))
         with (
             patch.object(project_email, "DAILY_GLOBAL_LIMIT", 6),
             self.assertRaises(project_email.MailRateLimit),
@@ -237,7 +237,7 @@ class ProjectEmailTests(unittest.TestCase):
                             initial_error = str(caught.exception)
                     sending.assert_called_once()
                     if outcome == "partial":
-                        self.assertIn("second@example.com", initial_error)
+                        self.assertIn("second@example.com", initial_error or "")
                     with sqlite3.connect(project_email._delivery_database_path()) as db:
                         self.assertEqual(
                             db.execute(
@@ -251,9 +251,7 @@ class ProjectEmailTests(unittest.TestCase):
     @patch.object(project_email.cloud_auth, "send_smtp_message")
     @patch.object(project_email, "email_project_bundle", return_value=(b"{}", "project.json"))
     @patch.object(project_email, "inspect_project")
-    def test_repeated_send_returns_original_without_sending_twice(
-        self, inspect, _bundle, smtp
-    ):
+    def test_repeated_send_returns_original_without_sending_twice(self, inspect, _bundle, smtp):
         inspect.return_value.project.title = "Title"
         identity = str(uuid4())
         for _ in range(2):
@@ -316,7 +314,8 @@ class ProjectEmailTests(unittest.TestCase):
             )
             import_bundle(json.loads(sender.read_text()), receiver)
             imported_path = next(
-                name for name in list_files(receiver)
+                name
+                for name in list_files(receiver)
                 if name.startswith("research-sessions/")
                 and name.endswith(".json")
                 and name not in {"research-sessions/limits.json", "research-sessions/sequence.json"}
@@ -328,7 +327,9 @@ class ProjectEmailTests(unittest.TestCase):
             credential = {"mode": "api_key", "identity": "recipient-provider"}
             settings = {"model": model, "reasoning_effort": "high"}
             with (
-                patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False),
+                patch.object(
+                    research_sessions.cloud_research, "billing_enabled", return_value=False
+                ),
                 patch.object(research_sessions.session_log, "append"),
             ):
                 research_sessions._rebind_imported_transport(imported, credential, settings)
@@ -404,8 +405,7 @@ class ProjectEmailTests(unittest.TestCase):
                 sessions = [
                     json.loads(read_file(target, name))
                     for name in list_files(target)
-                    if name.startswith("research-sessions/")
-                    and name.endswith(".json")
+                    if name.startswith("research-sessions/") and name.endswith(".json")
                 ]
                 self.assertEqual(len(sessions), 2)
                 mapped = {item["source_session_id"]: item for item in sessions}
