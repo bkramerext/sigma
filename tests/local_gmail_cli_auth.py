@@ -64,6 +64,7 @@ class LocalGmailCliAuthTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             home = Path(directory) / "local-auth"
             callbacks = []
+            callback_done = threading.Event()
 
             def open_browser(url, new=2):
                 params = parse_qs(urlsplit(url).query)
@@ -80,8 +81,11 @@ class LocalGmailCliAuthTests(unittest.TestCase):
                 query = urlencode({"state": params["state"][0], "code": "fixture-code"})
 
                 def callback():
-                    with urlopen(auth.REDIRECT_URI + "?" + query, timeout=5) as response:
-                        callbacks.append(response.status)
+                    try:
+                        with urlopen(auth.REDIRECT_URI + "?" + query, timeout=5) as response:
+                            callbacks.append(response.status)
+                    finally:
+                        callback_done.set()
 
                 threading.Thread(target=callback, daemon=True).start()
                 return True
@@ -104,6 +108,7 @@ class LocalGmailCliAuthTests(unittest.TestCase):
                 self.assertEqual(sender, "selected-google@example.org")
                 self.assertEqual(stat.S_IMODE(home.stat().st_mode), 0o700)
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+                self.assertTrue(callback_done.wait(2))
                 self.assertEqual(callbacks, [200])
                 self.assertEqual(auth.existing_grant(), (path, sender))
                 saved = json.loads(path.read_text())

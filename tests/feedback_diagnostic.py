@@ -6,6 +6,7 @@ import smtplib
 import ssl
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 from sigma import cloud_auth, feedback_diagnostic
@@ -140,6 +141,35 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("SMTP TLS handshake/certificate failed", errors.getvalue())
         self.assertNotIn("private certificate info", errors.getvalue())
+
+    def test_gmail_cli_opens_google_auth_only_when_grant_missing(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org",
+                    "GOOGLE_OIDC_CLIENT_ID": "local-client-id",
+                },
+                clear=True,
+            ),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch("sigma.local_gmail_cli_auth.existing_grant", return_value=None) as existing,
+            patch(
+                "sigma.local_gmail_cli_auth.authorize",
+                return_value=(Path("/private/token.json"), "selected-google@example.org"),
+            ) as authorize,
+            patch.object(feedback_diagnostic, "_gmail_ready", return_value=True),
+            patch.object(cloud_auth, "_deliver_feedback") as send,
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            status = feedback_diagnostic.run("hello world", transport="gmail")
+        self.assertEqual(status, 0)
+        existing.assert_called_once_with()
+        authorize.assert_called_once_with()
+        self.assertEqual(send.call_args.kwargs["account_email"], "selected-google@example.org")
+        self.assertEqual(send.call_args.kwargs["contact_email"], "selected-google@example.org")
+        self.assertEqual(send.call_args.kwargs["diagnostic_recipients"], ["admin@example.org"])
+        self.assertIn("Contact source: Google OAuth verified account", output.getvalue())
 
     def test_missing_contact_fails_before_sending(self):
         with (
