@@ -438,9 +438,18 @@
 ):focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
+/* Explaining is a temporary full-width label that replaces the balloon.
+   It must not inherit the 28px icon-slot width or use absolute positioning. */
+.project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools button.ai-paper-eli5-balloon.is-explaining:disabled {
+  display: inline-flex; flex: 0 0 auto; width: auto; min-width: max-content;
+  height: 28px; padding: 0 4px; opacity: 1;
+  border-color: transparent; background: transparent; box-shadow: none;
+  cursor: progress;
+}
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining {
-  position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
-  font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+  position: static; transform: none;
+  display: inline-flex; align-items: center; gap: 4px;
+  color: #e5ba69; font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
   white-space: nowrap; text-decoration: none; pointer-events: none;
 }
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining > span[aria-hidden] {
@@ -556,3 +565,24 @@
 .project-settings-dialog.ai-paper-dialog .paper-remove-popover button:hover:not(:disabled) { background: transparent; color: #f3cd9e; }
 .project-settings-dialog.ai-paper-dialog .paper-remove-popover button.destructive-action:hover:not(:disabled) { color: #ffd5ca; }
 .project-settings-dialog.ai-paper-dialog .paper-remove-popover button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+
+/* The heading's copy control uses the same icon size and hover rectangle as
+   Copy in Saved versions. Only the ELI5 markdown view adds this action. */
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-output h2 {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body .ai-paper-eli5-output h2 button.text-copy-button {
+  box-sizing: border-box; display: inline-flex; flex: 0 0 28px;
+  align-items: center; justify-content: center;
+  width: 28px; min-width: 28px; height: 28px; min-height: 28px;
+  margin: 0; padding: 4px;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: #c7a16d; box-shadow: none;
+  text-decoration: none;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body .ai-paper-eli5-output h2 button.text-copy-button:is(:hover:not(:disabled), :focus-visible) {
+  border-color: #ac7054; background: #3b3029; box-shadow: none;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body .ai-paper-eli5-output h2 button.text-copy-button:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 2px;
+}
