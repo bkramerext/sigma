@@ -123,6 +123,45 @@ def main() -> None:
                     received = download.value
                     assert received.suggested_filename == "project-diagnostics.log"
                     assert Path(received.path()).read_text() == copied
+                    # Exercise the actual browser reporter on a transient
+                    # HTTP request error, then with its backend unreachable.
+                    requests: list[dict] = []
+
+                    def report_route(route):
+                        requests.append(route.request.post_data_json)
+                        route.fulfill(
+                            status=200,
+                            content_type="application/json",
+                            body='{"recorded":true,"diagnostic":{"message":"Session state unavailable.","correlation_id":"network-525"}}',
+                        )
+
+                    page.route("**/api/projects/diagnostics", report_route)
+                    accepted = page.evaluate(
+                        """async () => {
+                          const { reportProjectDiagnostic } = await import('/src/project-diagnostic-report.ts');
+                          return await reportProjectDiagnostic(
+                            '/fixture/project.json', 'Session state unavailable.',
+                            'session_read', 'network-525'
+                          );
+                        }"""
+                    )
+                    assert accepted["recorded"] is True
+                    assert requests[0]["message"] == "Session state unavailable."
+                    assert requests[0]["stage"] == "session_read"
+                    page.unroute("**/api/projects/diagnostics", report_route)
+                    page.route("**/api/projects/diagnostics", lambda route: route.abort("failed"))
+                    unreachable = page.evaluate(
+                        """async () => {
+                          const { reportProjectDiagnostic } = await import('/src/project-diagnostic-report.ts');
+                          return await reportProjectDiagnostic(
+                            '/fixture/project.json', 'Session control failed offline.',
+                            'session_control', 'offline-525'
+                          );
+                        }"""
+                    )
+                    assert unreachable["recorded"] is False
+                    assert "not recorded" in unreachable["status"]
+                    assert "offline-525" in unreachable["status"]
                     browser.close()
             finally:
                 process.terminate()
