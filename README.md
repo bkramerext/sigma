@@ -86,6 +86,8 @@ You can create projects and strategies without an AI connection. To use AI resea
 
 Local SIGMA can send **Send Feedback** notifications and **Email Project** messages (including JSON, PDF, and LaTeX attachments) through SMTP. **Google OAuth branding verification is not required for SMTP.** The sender needs an SMTP credential, such as a Gmail **app password**, not your normal Google-account password. Gmail accounts must meet Google's eligibility requirements for app passwords.
 
+*Needs a guinea pig to prove local setup works. Will pay with lettuce.*
+
 Keep the credential outside the repository. For an existing local setup, check whether the password file already exists:
 
 ```sh
