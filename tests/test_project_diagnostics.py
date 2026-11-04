@@ -12,6 +12,7 @@ from sigma.projects import ProjectError
 
 
 def test_project_errors_survive_reload_without_creating_sessions(tmp_path: Path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     project_file = tmp_path / "project.json"
     project_file.write_text('{"fixture": true}', encoding="utf-8")
     project_id = "c840b847-e508-4809-9663-c51d9ae2d6e5"
@@ -55,6 +56,7 @@ def test_project_errors_survive_reload_without_creating_sessions(tmp_path: Path)
 
 
 def test_client_report_and_copy_download_share_canonical_record(tmp_path: Path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     project_file = tmp_path / "project.json"
     project_file.touch()
     with (
@@ -83,6 +85,7 @@ def test_client_report_and_copy_download_share_canonical_record(tmp_path: Path) 
 
 
 def test_logging_failure_is_reported_without_breaking_admission(tmp_path: Path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     project_file = tmp_path / "project.json"
     project_file.touch()
     with (
@@ -105,6 +108,7 @@ def test_logging_failure_is_reported_without_breaking_admission(tmp_path: Path) 
 
 
 def test_pre_session_rejection_persists_same_sanitized_error(tmp_path: Path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     project_file = tmp_path / "project.json"
     project_file.touch()
     project_id = "40a094e9-0cad-4b63-96c0-fd9c2b2c30de"
