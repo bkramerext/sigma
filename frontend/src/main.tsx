@@ -2224,6 +2224,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [eli5ErrorId, setEli5ErrorId] = useState('');
   const explainingRef = useRef(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
+  const [confirmDeletePosition, setConfirmDeletePosition] = useState({ top: 70, left: 12 });
   useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
   useEffect(() => {
     if (!busy && paperProgress?.status !== 'active') return;
@@ -2387,7 +2388,22 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setScoringId('');
     }
   }
-    async function removePaper(id: string) {
+  function confirmPaperRemoval(id: string, button: HTMLButtonElement) {
+    // Render outside the scrolling settings-body so the session-style
+    // confirmation cannot be clipped at the bottom of Saved versions.
+    const frame = dialog.current?.getBoundingClientRect();
+    const trigger = button.getBoundingClientRect();
+    if (frame) {
+      const width = Math.min(310, Math.max(200, frame.width - 24));
+      setConfirmDeletePosition({
+        left: Math.max(12, Math.min(trigger.left - frame.left, frame.width - width - 12)),
+        top: Math.max(12, Math.min(trigger.bottom - frame.top + 6, frame.height - 170)),
+      });
+    }
+    setConfirmDeleteId(id);
+  }
+
+  async function removePaper(id: string) {
     setBusy(true); setError('');
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { method: 'DELETE' });
@@ -2558,7 +2574,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     onKeyDownCapture={event => { if (event.key === 'Escape' && generating) { event.preventDefault(); event.stopPropagation(); } }}
     onCancel={event => { event.preventDefault(); if (!generating) onCancel(); }}>
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={generating} onClick={onCancel}>Close</button></div></header>
-    <div className="settings-body ai-paper-body">
+    <div className="settings-body ai-paper-body" onScroll={() => { if (confirmDeleteId) setConfirmDeleteId(''); }}>
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
       <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
       <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
@@ -2617,7 +2633,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
                   ? <button type="button" className="text-view-link ai-paper-eli5-thanks" onClick={() => setEli5Id('')}>Thanks</button>
                   : <button type="button" className="ai-paper-eli5-balloon" disabled={!!explainingId} data-tooltip="Explain it to me like I'm 5" aria-label="Explain it to me like I'm 5" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
               </>}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button><button type="button" className="text-view-link" disabled={busy || !!scoringId} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}>Remove</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
@@ -2625,7 +2641,6 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           <div className="saved-paper-actions">{copyError && <p className="error" role="alert">{copyError}</p>}<a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/txt?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.txt`}>Download text file</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.tex`}>Download TeX file</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.pdf`}>Download PDF</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open PDF in browser</a></>}</div>
         </div>
         {eli5Error && eli5ErrorId === paper.paper_id && <p className="error" role="alert">{eli5Error}</p>}
-        {confirmDeleteId === paper.paper_id && <div className="saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}><p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p><span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}><button type="button" className="text-view-link" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button></span></div>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
           ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""}/></Suspense></div>
@@ -2662,6 +2677,13 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       </>}
       {scoreDialog && <PaperScoreDialog score={scoreDialog} onClose={() => setScoreDialog(null)}/>}
     </div>
+    {confirmDeleteId && <div className="paper-remove-popover research-stop-confirm" style={confirmDeletePosition} role="group" aria-label={`Confirm removal of ${papers.find(item => item.paper_id === confirmDeleteId)?.title ?? 'saved paper'}`}>
+      <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
+      <div className="session-remove-confirm-actions">
+        <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void removePaper(confirmDeleteId)}>Confirm</button>
+        <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
+      </div>
+    </div>}
   </dialog>;
 }
 
