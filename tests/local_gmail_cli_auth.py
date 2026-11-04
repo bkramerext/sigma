@@ -14,7 +14,6 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import urlopen
 
 import httpx
-
 from cloud_auth_fixture import CLIENT_ID, JWK, token
 from sigma import local_gmail_cli_auth as auth
 
@@ -57,9 +56,7 @@ class GoogleClient:
                 },
             )
         assert url == "https://www.googleapis.com/oauth2/v3/certs"
-        return httpx.Response(
-            200, request=httpx.Request("GET", url), json={"keys": [JWK]}
-        )
+        return httpx.Response(200, request=httpx.Request("GET", url), json={"keys": [JWK]})
 
 
 class LocalGmailCliAuthTests(unittest.TestCase):
@@ -125,11 +122,10 @@ class LocalGmailCliAuthTests(unittest.TestCase):
                 GoogleClient.id_token = token(
                     nonce="incorrect", email="admin@example.org", aud=CLIENT_ID
                 )
-                with GoogleClient() as client:
-                    with self.assertRaises(auth.LocalGmailAuthError):
-                        auth._verified_google_identity(
-                            client, GoogleClient.id_token, client_id=CLIENT_ID, nonce="expected"
-                        )
+                with GoogleClient() as client, self.assertRaises(auth.LocalGmailAuthError):
+                    auth._verified_google_identity(
+                        client, GoogleClient.id_token, client_id=CLIENT_ID, nonce="expected"
+                    )
                 self.assertFalse((home / auth.GRANT_FILENAME).exists())
 
     def test_cannot_read_grant_for_a_different_local_google_client(self):
