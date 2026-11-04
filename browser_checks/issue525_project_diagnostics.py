@@ -176,6 +176,7 @@ def main() -> None:
                         ),
                     )
                     page.unroute("**/api/projects/diagnostics")
+
                     def report_deletion(route):
                         captured_error.update(route.request.post_data_json)
                         route.fulfill(
@@ -205,11 +206,13 @@ def main() -> None:
                           });
                         }"""
                     )
-                    page.get_by_role("button", name="Remove saved session").click()
-                    expect(page.get_by_role("alert", name="")).to_have_text(deleted_message)
-                    page.wait_for_function(
-                        "() => document.querySelector('#delete-error')?.textContent?.includes('stale project revision')"
-                    )
+                    with page.expect_response(
+                        lambda response: "/api/projects/diagnostics" in response.url
+                        and response.request.method == "POST"
+                    ) as deletion_report:
+                        page.get_by_role("button", name="Remove saved session").click()
+                    assert deletion_report.value.ok
+                    expect(page.locator("#delete-error")).to_have_text(deleted_message)
                     assert captured_error["message"] == deleted_message
                     assert captured_error["stage"] == "session_delete"
                     page.unroute("**/api/projects/diagnostics/download?**")
