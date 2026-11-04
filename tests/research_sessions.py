@@ -13028,9 +13028,10 @@ def test_reference_compilation_is_bounded_and_source_attributed() -> None:
     assert oversized["guidance_original_chars"] > compiler.MAX_GUIDANCE_CHARS
     assert 0 < len(oversized["guidance"]) <= compiler.MAX_GUIDANCE_CHARS
     assert oversized["guidance"].endswith("…")
-    assert oversized["guidance_sha256"] == hashlib.sha256(
-        oversized["guidance"].encode("utf-8")
-    ).hexdigest()
+    assert (
+        oversized["guidance_sha256"]
+        == hashlib.sha256(oversized["guidance"].encode("utf-8")).hexdigest()
+    )
     assert compiler.validate_result(oversized, sources)["guidance"] == oversized["guidance"]
 
     context = {
