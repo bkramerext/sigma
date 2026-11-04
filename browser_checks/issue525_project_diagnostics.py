@@ -1,4 +1,5 @@
 """Actual Chromium copy/download acceptance for Issue #525 project diagnostics."""
+
 from __future__ import annotations
 
 import os
@@ -35,8 +36,17 @@ def main() -> None:
         with logfile.open("w") as output:
             process = subprocess.Popen(
                 [
-                    "npm", "--prefix", str(ROOT / "frontend"), "run", "dev",
-                    "--", "--host", "127.0.0.1", "--port", str(port), "--strictPort",
+                    "npm",
+                    "--prefix",
+                    str(ROOT / "frontend"),
+                    "run",
+                    "dev",
+                    "--",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    str(port),
+                    "--strictPort",
                 ],
                 cwd=ROOT,
                 stdout=output,
