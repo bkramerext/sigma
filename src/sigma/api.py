@@ -1148,7 +1148,8 @@ def research_session_log_download_view(session_id: str, path: str):
         # pre-session errors into unrelated historical session logs.
         try:
             related = [
-                item for item in project_diagnostics.read(path)
+                item
+                for item in project_diagnostics.read(path)
                 if item.get("session_id") == session_id
             ]
         except (ProjectError, OSError, ValueError):
@@ -1158,8 +1159,7 @@ def research_session_log_download_view(session_id: str, path: str):
             body += "\n## Exportable UI diagnostics\n\n"
             for item in related:
                 body += (
-                    f"- {item['timestamp']} · {item['code']} · {item['id']}: "
-                    f"{item['message']}\n"
+                    f"- {item['timestamp']} · {item['code']} · {item['id']}: {item['message']}\n"
                 )
         filename = session_log.export_filename(
             result["saved_short_name"], result["project_title"], result["session"]["number"]
@@ -1247,8 +1247,7 @@ async def research_start_view(body: ResearchStartRequest):
                 status_code=400,
             )
         return JSONResponse(
-            {"error": diagnostic["message"], "diagnostic_recorded": True,
-             "diagnostic": diagnostic},
+            {"error": diagnostic["message"], "diagnostic_recorded": True, "diagnostic": diagnostic},
             status_code=400,
         )
 
