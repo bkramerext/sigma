@@ -194,3 +194,19 @@ def test_omitted_obligations_cannot_be_closed_by_skeptic() -> None:
     research_sessions._validate_obligation_review_basis(
         context, {**review, "obligation_id": allowed_id}
     )
+
+
+def test_context_limit_byte_diagnostics_are_safe_and_actionable() -> None:
+    context = {
+        "scheduler_version": 2,
+        "problem": "private prose must never appear in the byte breakdown",
+        "obligation_ledger": [{"obligation_id": "o1", "text": "unverified evidence"}],
+        "context_manifest": {"sources": []},
+    }
+    message = research_sessions._context_byte_breakdown(context)
+    assert "Context size:" in message
+    assert "problem=" in message
+    assert "obligation_ledger=" in message
+    assert "context_manifest=" in message
+    assert "private prose" not in message
+    assert "unverified evidence" not in message
