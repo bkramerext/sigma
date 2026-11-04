@@ -44,6 +44,13 @@ jobs:
       - name: Install Chromium once
         id: chromium
         run: uv run --with playwright python -m playwright install --with-deps chromium
+      - name: Project diagnostics copy/download browser acceptance (#525)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/issue525_project_diagnostics.py
       - name: Public Samples guest star and PDF acceptance
         # Independent suites should all run, even after another suite fails.
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}

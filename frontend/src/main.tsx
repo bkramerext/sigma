@@ -2,6 +2,9 @@ import { Component, createContext, createElement, lazy, Suspense, useCallback, u
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
+import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
+import { reportProjectDiagnostic } from './project-diagnostic-report';
+import { removeResearchSession } from './session-removal-request';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -1389,6 +1392,28 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   };
   const readErrorReported = useRef(false);
   const lastAnnouncement = useRef('');
+  const [projectDiagnostics, setProjectDiagnostics] = useState<ProjectDiagnostic[]>([]);
+  const [diagnosticStatus, setDiagnosticStatus] = useState('');
+  const reloadDiagnostics = useCallback(async () => {
+    const response = await fetch(`/api/projects/diagnostics?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error('Project diagnostics could not be retrieved.');
+    const result = await response.json() as { diagnostics: ProjectDiagnostic[] };
+    setProjectDiagnostics(result.diagnostics);
+  }, [path]);
+  useEffect(() => { void reloadDiagnostics().catch(() => setDiagnosticStatus('Project diagnostics unavailable; previous errors may not be shown.')); }, [reloadDiagnostics]);
+  const recordClientError = async (message: string, stage: string) => {
+    const result = await reportProjectDiagnostic(path, message, stage, crypto.randomUUID());
+    setDiagnosticStatus(result.status);
+    if (result.recorded) {
+      // If the server redacted the message, render that same sanitized
+      // diagnostic in the UI instead of showing a different raw value.
+      if (result.message && result.message !== message) {
+        if (stage === 'session_read') setReadError(result.message);
+        else setError(result.message);
+      }
+      void reloadDiagnostics().catch(() => {});
+    }
+  };
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
   const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running');
@@ -1456,6 +1481,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       if (chosen.status === 'failed' && lastAnnouncement.current.startsWith(`${chosen.id}:`) && /:(queued|running):/.test(lastAnnouncement.current)) {
         setError(chosen.message);
         reportRequestFailure(chosen.message);
+        void recordClientError(chosen.message, 'session_failure');
       }
       if (lastAnnouncement.current && transition !== lastAnnouncement.current) {
         setAnnouncement(`Research session ${chosen.session_number}: ${chosen.status}. ${chosen.current_action}.`);
@@ -1468,9 +1494,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const reportReadFailure = useCallback((cause: unknown) => {
     const message = errorMessage(cause);
     setReadError(message);
-    if (!readErrorReported.current) reportRequestFailure(message);
+    if (!readErrorReported.current) {
+      reportRequestFailure(message);
+      void recordClientError(message, 'session_read');
+    }
     readErrorReported.current = true;
-  }, []);
+  }, [path]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1521,7 +1550,11 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       setPendingStrategyIds(chosenIds);
       setConfig(current); setLimits(currentLimits);
       setConfirmStart(true);
-    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    } catch (cause) {
+      const message = errorMessage(cause);
+      setError(message); reportRequestFailure(message);
+      void recordClientError(message, 'admission_preflight');
+    }
     finally { setBusy(false); }
   }
 
@@ -1544,7 +1577,18 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       }
       if (next.status === 'running' || next.status === 'queued') onRevealNewSession();
       revealSession(next.id, next.status === 'running' || next.status === 'queued');
-    } catch (cause) { setConfirmStart(false); await load().catch(() => {}); setError(errorMessage(cause)); }
+    } catch (cause) {
+      setConfirmStart(false);
+      await load().catch(() => {});
+      const message = errorMessage(cause);
+      setError(message);
+      if (cause instanceof Error && (cause as Error & { diagnostic_recorded?: boolean }).diagnostic_recorded === true) {
+        setDiagnosticStatus('Admission error recorded in Project diagnostics.');
+        void reloadDiagnostics().catch(() => {});
+      } else {
+        void recordClientError(message, 'admission');
+      }
+    }
     finally { submittingStart.current = false; setBusy(false); }
   }
 
@@ -1552,7 +1596,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     if (!target) return;
     setBusy(true); setError('');
     try { await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action }); await load(target.id); }
-    catch (cause) { await load(target.id).catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    catch (cause) {
+      await load(target.id).catch(() => {});
+      const message = errorMessage(cause);
+      setError(message); reportRequestFailure(message);
+      void recordClientError(message, 'session_control');
+    }
     finally { setBusy(false); }
   }
 
@@ -1648,18 +1697,17 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   async function removeSession(target: ResearchSession) {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(target.id)}`, {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, expected_updated_at: target.updated_at }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Session removal failed');
+      const result = await removeResearchSession(path, target.id, target.updated_at);
       setConfirmRemoveId('');
       setExpandedSessionIds(current => { const next = new Set(current); next.delete(target.id); return next; });
       if (selectedSessionId.current === target.id) selectedSessionId.current = '';
       await load();
       setAnnouncement(`Session #${result.session_number} removed. Strategy and other sessions were kept.`);
-    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    } catch (cause) {
+      const message = errorMessage(cause);
+      setError(message); reportRequestFailure(message);
+      void recordClientError(message, 'session_delete');
+    }
     finally { setBusy(false); }
   }
 
@@ -1723,6 +1771,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
+    <ProjectDiagnosticsPanel path={path} diagnostics={projectDiagnostics} status={diagnosticStatus}/>
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
@@ -1772,7 +1821,11 @@ async function post<T>(route: string, body: object = {}, signal?: AbortSignal): 
     body: JSON.stringify(body), signal,
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error ?? JSON.stringify(data.detail) ?? 'Request failed');
+  if (!response.ok) {
+    const error = new Error(data.error ?? JSON.stringify(data.detail) ?? 'Request failed') as Error & { diagnostic_recorded?: boolean };
+    error.diagnostic_recorded = data.diagnostic_recorded === true;
+    throw error;
+  }
   return data;
 }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);

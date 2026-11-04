@@ -27,6 +27,7 @@ from sigma import (
     cloud_workspaces,
     paper_scores,
     papers,
+    project_diagnostics,
     project_types,
     proposals,
     python_sandbox,
@@ -1083,6 +1084,52 @@ async def research_session_view(session_id: str, path: str):
     return research_sessions.get_session(path, session_id)
 
 
+class ClientDiagnosticRequest(OpenRequest):
+    stage: str = Field(min_length=1, max_length=40)
+    code: str = Field(min_length=1, max_length=64)
+    message: str = Field(min_length=1, max_length=1600)
+    correlation_id: str | None = Field(default=None, max_length=80)
+    # Browser-authored errors are project-scoped, never authoritative
+    # evidence of membership in a research session.
+    session_id: str | None = Field(default=None, max_length=80)
+
+
+@app.post("/api/projects/diagnostics")
+def record_project_diagnostic(body: ClientDiagnosticRequest):
+    try:
+        diagnostic = project_diagnostics.append(
+            body.path,
+            stage=body.stage,
+            code=body.code,
+            message=body.message,
+            session_id=None,  # Untrusted browser claims cannot enter session exports.
+            correlation_id=body.correlation_id,
+        )
+    except (ProjectError, OSError, ValueError):
+        return JSONResponse(
+            {
+                "recorded": False,
+                "error": "Diagnostic not recorded (storage unavailable or full). The displayed error remains available to copy.",
+            },
+            status_code=503,
+        )
+    return {"recorded": True, "diagnostic": diagnostic}
+
+
+@app.get("/api/projects/diagnostics")
+def project_diagnostics_view(path: str):
+    return {"diagnostics": project_diagnostics.read(path)}
+
+
+@app.get("/api/projects/diagnostics/download")
+def project_diagnostics_download(path: str):
+    return Response(
+        project_diagnostics.export(path),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=project-diagnostics.log"},
+    )
+
+
 @app.get("/api/projects/research-sessions/{session_id}/log")
 def research_session_log_view(session_id: str, path: str, after: int = 0):
     try:
@@ -1101,6 +1148,24 @@ def research_session_log_download_view(session_id: str, path: str):
             result["project_title"],
             result["reference_preparation"],
         )
+        # Same sanitized project diagnostic records appear in readable session
+        # exports when explicitly correlated to this session. Do not import
+        # pre-session errors into unrelated historical session logs.
+        try:
+            related = [
+                item
+                for item in project_diagnostics.read(path)
+                if item.get("session_id") == session_id
+            ]
+        except (ProjectError, OSError, ValueError):
+            # Diagnostic storage failure must never make the session log unavailable.
+            related = []
+        if related:
+            body += "\n## Exportable UI diagnostics\n\n"
+            for item in related:
+                body += (
+                    f"- {item['timestamp']} · {item['code']} · {item['id']}: {item['message']}\n"
+                )
         filename = session_log.export_filename(
             result["saved_short_name"], result["project_title"], result["session"]["number"]
         )
@@ -1157,16 +1222,39 @@ def mock_research_start_view(
 
 @app.post("/api/projects/research-sessions/start")
 async def research_start_view(body: ResearchStartRequest):
-    return await research_sessions.start_session(
-        body.path,
-        body.strategy_id,
-        body.idempotency_key,
-        body.expected_project_id,
-        body.expected_binding,
-        body.expected_limits,
-        body.strategy_ids,
-        body.continue_using_saved_type_settings,
-    )
+    try:
+        return await research_sessions.start_session(
+            body.path,
+            body.strategy_id,
+            body.idempotency_key,
+            body.expected_project_id,
+            body.expected_binding,
+            body.expected_limits,
+            body.strategy_ids,
+            body.continue_using_saved_type_settings,
+        )
+    except ProjectError as exc:
+        # Admission can fail before Session #1. Never manufacture a session.
+        # An unrecorded write must not obscure the original admission failure.
+        safe_message = project_diagnostics.sanitize(str(exc))
+        try:
+            diagnostic = project_diagnostics.append(
+                body.path,
+                stage="admission",
+                code="research_admission_failed",
+                message=safe_message,
+                correlation_id=str(body.idempotency_key),
+                http_status=400,
+            )
+        except (ProjectError, OSError, ValueError):
+            return JSONResponse(
+                {"error": safe_message, "diagnostic_recorded": False},
+                status_code=400,
+            )
+        return JSONResponse(
+            {"error": diagnostic["message"], "diagnostic_recorded": True, "diagnostic": diagnostic},
+            status_code=400,
+        )
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
