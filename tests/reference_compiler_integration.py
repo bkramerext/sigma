@@ -165,6 +165,13 @@ async def verify_compilation(
                 "omitted_source_ids": [source["id"] for source in sources[1:]],
                 "rationale": "Only the first methodological reference is relevant.",
             }
+            if compiler_retry_scenario == "oversized_guidance":
+                # The provider may ignore a character-count instruction despite
+                # returning a valid, metered JSON object. This should not stop
+                # research or trigger two identical paid retry attempts.
+                result["guidance"] = (
+                    "Check independent evidence before accepting a research claim. " * 42
+                )
             if (
                 compiler_retry_scenario in {"invalid_then_success", "missing_usage"}
                 and compiler_number == 1
@@ -340,6 +347,13 @@ async def verify_compilation(
         assert saved["outcome"]["source_material"]["compilation"]["attempts"] == attempts
     assert stage["source_sha256"] == saved["research_method_sources"]["sha256"]
     assert stage["status"] != "pending"
+    if compiler_retry_scenario == "oversized_guidance":
+        assert stage["status"] == "completed"
+        assert stage["guidance_compacted"] is True
+        assert stage["guidance_original_chars"] > research_reference_compiler.MAX_GUIDANCE_CHARS
+        assert len(stage["guidance"]) <= research_reference_compiler.MAX_GUIDANCE_CHARS
+        assert "bounded deterministically" in stage["reason"]
+        assert calls.count("research_reference_compilation") == 1
     if compiled_ok:
         assert stage["selected_source_ids"] == selection
         assert stage["omitted_source_ids"]
@@ -359,7 +373,13 @@ async def verify_compilation(
             assert "Mathematics proof methods" in request
             assert "Check induction, boundary cases" in request
         else:
-            assert stage["guidance"] in request
+            # Inspect the decoded request rather than JSON-escaped bytes:
+            # compaction can end in Unicode ellipsis (\\u2026 on the wire).
+            context = json.loads(json.loads(request)["input"])
+            assert any(
+                source.get("notes") == stage["guidance"]
+                for source in context["methodology_source_material"]
+            )
             assert all(url not in request for url in omitted_urls), omitted_urls
     if compiled_ok:
         assert saved["outcome"]["source_material"]["compilation"]["guidance"] == stage["guidance"]
@@ -993,6 +1013,9 @@ async def main() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
         await verify_compilation(root / "compiled.sigma")
+        await verify_compilation(
+            root / "oversized.sigma", compiler_retry_scenario="oversized_guidance"
+        )
         await verify_compilation(root / "multi.sigma", multiple_strategies=True)
         await verify_compilation(root / "fallback.sigma", compiler_rejection=True)
         await verify_compilation(root / "server.sigma", compiler_server_error=True)

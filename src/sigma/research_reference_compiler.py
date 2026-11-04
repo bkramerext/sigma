@@ -174,8 +174,28 @@ def validate_result(raw: Any, frozen_sources: list[dict[str, Any]]) -> dict[str,
     rationale = raw.get("rationale")
     selected = raw.get("selected_source_ids")
     omitted = raw.get("omitted_source_ids")
-    if not isinstance(guidance, str) or not guidance.strip() or len(guidance) > MAX_GUIDANCE_CHARS:
-        raise ProjectError("Reference compiler returned invalid or oversized guidance")
+    if not isinstance(guidance, str) or not guidance.strip():
+        raise ProjectError("Reference compiler returned invalid or empty guidance")
+    # A metered provider response may exceed the requested *presentation* limit.
+    # Preserve the saved raw wire, but deterministically bound the reusable
+    # guide instead of paying for three identical attempts and stopping all
+    # research. Truncation is reported in the durable compiler checkpoint.
+    original_guidance_chars = len(guidance.strip())
+    guidance_compacted = original_guidance_chars > MAX_GUIDANCE_CHARS
+    if guidance_compacted:
+        limit = MAX_GUIDANCE_CHARS - 1
+        prefix = guidance.strip()[:limit]
+        # Keep a complete sentence or list item when possible; otherwise
+        # use a complete word. Never lengthen or manufacture model guidance.
+        cut = max(prefix.rfind("\n"), prefix.rfind(". "), prefix.rfind("; "))
+        if cut >= limit // 2:
+            prefix = prefix[: cut + (1 if prefix[cut] == "." else 0)]
+        else:
+            word = prefix.rfind(" ")
+            if word >= limit // 2:
+                prefix = prefix[:word]
+        guidance = prefix.rstrip() + "…"
+
     if not isinstance(rationale, str) or len(rationale) > 500:
         raise ProjectError("Reference compiler returned invalid selection rationale")
     if not isinstance(selected, list) or not isinstance(omitted, list):
@@ -199,4 +219,6 @@ def validate_result(raw: Any, frozen_sources: list[dict[str, Any]]) -> dict[str,
         "omitted_source_ids": omitted,
         "rationale": rationale.strip(),
         "guidance_sha256": digest,
+        "guidance_compacted": guidance_compacted,
+        "guidance_original_chars": original_guidance_chars,
     }

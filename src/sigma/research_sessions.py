@@ -14444,7 +14444,10 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 stage.update(compiled)
                 stage["status"] = "completed"
                 stage["reason"] = (
-                    "AI selected relevant methodological notes; original source records remain durable."
+                    "Compiled guidance exceeded the display limit and was bounded deterministically; "
+                    "original provider response and frozen sources remain preserved."
+                    if compiled.get("guidance_compacted")
+                    else "AI selected relevant methodological notes; original source records remain durable."
                 )
                 _event(
                     latest,
