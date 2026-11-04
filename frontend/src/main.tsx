@@ -4,6 +4,7 @@ import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
+import { removeResearchSession } from './session-removal-request';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -1696,12 +1697,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   async function removeSession(target: ResearchSession) {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(target.id)}`, {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, expected_updated_at: target.updated_at }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Session removal failed');
+      const result = await removeResearchSession(path, target.id, target.updated_at);
       setConfirmRemoveId('');
       setExpandedSessionIds(current => { const next = new Set(current); next.delete(target.id); return next; });
       if (selectedSessionId.current === target.id) selectedSessionId.current = '';
