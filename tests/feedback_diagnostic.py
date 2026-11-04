@@ -2,6 +2,8 @@
 
 import io
 import os
+import smtplib
+import ssl
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
@@ -77,6 +79,67 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         self.assertIn("Transport: SMTP", output.getvalue())
         smtp.assert_called_once()
         gmail.assert_not_called()
+
+    def test_smtp_authentication_reports_code_without_server_response(self):
+        env = {
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "signed-in@example.org",
+            "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
+            "SIGMA_EMAIL_SMTP_PASSWORD": "test-only-password",
+        }
+        rejection = smtplib.SMTPAuthenticationError(535, b"server-secret-credential-echo")
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch("sigma.cloud_auth.smtplib.SMTP") as smtp,
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()) as errors,
+        ):
+            smtp.return_value.__enter__.return_value.login.side_effect = rejection
+            status = feedback_diagnostic.run("hello world", transport="smtp")
+        self.assertEqual(status, 1)
+        output = errors.getvalue()
+        self.assertIn("SMTP authentication rejected (SMTP code 535)", output)
+        self.assertNotIn("server-secret-credential-echo", output)
+        self.assertNotIn("test-only-password", output)
+
+    def test_smtp_connectivity_failure_is_not_mislabeled_authentication(self):
+        env = {
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "signed-in@example.org",
+            "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
+            "SIGMA_EMAIL_SMTP_PASSWORD": "test-only-password",
+        }
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch("sigma.cloud_auth.smtplib.SMTP", side_effect=TimeoutError("private")),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()) as errors,
+        ):
+            status = feedback_diagnostic.run("hello world", transport="smtp")
+        self.assertEqual(status, 1)
+        self.assertIn("SMTP connection closed, was refused, or timed out", errors.getvalue())
+        self.assertNotIn("private", errors.getvalue())
+
+    def test_smtp_tls_failure_is_classified_without_leaking_details(self):
+        env = {
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "signed-in@example.org",
+            "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
+            "SIGMA_EMAIL_SMTP_PASSWORD": "test-only-password",
+        }
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch("sigma.cloud_auth.smtplib.SMTP") as smtp,
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()) as errors,
+        ):
+            smtp.return_value.__enter__.return_value.starttls.side_effect = ssl.SSLError(
+                "private certificate info"
+            )
+            status = feedback_diagnostic.run("hello world", transport="smtp")
+        self.assertEqual(status, 1)
+        self.assertIn("SMTP TLS handshake/certificate failed", errors.getvalue())
+        self.assertNotIn("private certificate info", errors.getvalue())
 
     def test_missing_contact_fails_before_sending(self):
         with (

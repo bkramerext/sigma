@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import os
+import smtplib
+import socket
+import ssl
 import stat
 import sys
 import time
@@ -181,6 +184,37 @@ def _gmail_ready(cloud_auth: object) -> bool:
     return ready
 
 
+def _smtp_failure_hint(exc: Exception) -> str:
+    """Classify only safe exception types/codes; never print provider error text."""
+    cause = exc.__cause__
+    if isinstance(cause, smtplib.SMTPAuthenticationError):
+        code = cause.smtp_code if isinstance(cause.smtp_code, int) else None
+        detail = f" (SMTP code {code})" if code is not None else ""
+        return (
+            f"SMTP authentication rejected{detail}. Check that the Gmail app password "
+            "belongs to the SMTP sender, has not been revoked, and is not the account password."
+        )
+    if isinstance(cause, smtplib.SMTPNotSupportedError):
+        return "SMTP server does not support a requested feature (STARTTLS or authentication)."
+    if isinstance(cause, (smtplib.SMTPConnectError, socket.gaierror)):
+        return "SMTP connection or DNS failed. Check network access to smtp.gmail.com:587."
+    if isinstance(cause, (ssl.SSLError, ssl.SSLCertVerificationError)):
+        return "SMTP TLS handshake/certificate failed. Check system certificates and TLS access."
+    if isinstance(cause, (ConnectionError, TimeoutError, smtplib.SMTPServerDisconnected)):
+        return "SMTP connection closed, was refused, or timed out. Check network/firewall access."
+    if isinstance(cause, smtplib.SMTPRecipientsRefused) or getattr(
+        exc, "refused_recipients", ()
+    ):
+        return "SMTP rejected a recipient address. Verify the destination mailbox."
+    if isinstance(cause, smtplib.SMTPResponseException):
+        code = cause.smtp_code if isinstance(cause.smtp_code, int) else None
+        detail = f" (SMTP code {code})" if code is not None else ""
+        return f"SMTP server rejected a command{detail}. Review sending account permissions."
+    if isinstance(cause, OSError):
+        return "SMTP transport encountered an operating-system/network error."
+    return "SMTP failed at an unclassified stage. The provider's raw error is suppressed."
+
+
 def _execute(message: str) -> int:
     from sigma import cloud_auth
 
@@ -225,13 +259,9 @@ def _execute(message: str) -> int:
             f"RESULT: FAILED (SMTP state: {exc.state}; accepted recipients: {exc.accepted_count}).",
             file=sys.stderr,
         )
+        print(_smtp_failure_hint(exc), file=sys.stderr)
         if exc.state != "failed":
             print("Delivery may have occurred; inspect the inbox before retrying.", file=sys.stderr)
-        else:
-            print(
-                "Check the sending Gmail account/app password and SMTP connectivity.",
-                file=sys.stderr,
-            )
         return 1
     except (OSError, ValueError, RuntimeError) as exc:
         print("RESULT: FAILED (mail transport did not confirm delivery).", file=sys.stderr)
