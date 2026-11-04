@@ -121,6 +121,54 @@ class LocalGmailCliAuthTests(unittest.TestCase):
                 os.chmod(path, 0o644)
                 self.assertIsNone(auth.existing_grant())
 
+    def test_existing_local_sigma_bridge_avoids_requiring_free_port(self):
+        from sigma.local_gmail_cli_bridge import receive
+
+        with TemporaryDirectory() as directory:
+            home = Path(directory) / "local-auth"
+            home.mkdir(mode=0o700)
+            state = "bridge-cli-test-" + "x" * 32
+
+            class ProbeClient:
+                def __init__(self, *args, **kwargs):
+                    pass
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return None
+
+                def get(self, url, params):
+                    self_params = params
+                    assert self_params["state"] == state
+                    assert url.endswith("/api/cloud-auth/mail/cli-bridge-ready")
+                    return self
+
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"ready": True, "protocol": 1}
+
+            def authorize_browser(url, new):
+                self.assertIn("accounts.google.com", url)
+                self.assertTrue(receive(home, state, code="bridged-google-code", error=""))
+                return True
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {"SIGMA_CLOUD_AUTH_HOME": str(home)},
+                    clear=True,
+                ),
+                patch.object(auth.httpx, "Client", ProbeClient),
+                patch.object(auth.webbrowser, "open", side_effect=authorize_browser),
+            ):
+                code = auth._wait_for_existing_sigma(state, "https://accounts.google.com/")
+            self.assertEqual(code, "bridged-google-code")
+            self.assertEqual(list(home.glob(".gmail-cli-flow-*")), [])
+
     def test_identity_token_nonce_or_signature_mismatch_cannot_be_saved(self):
         with TemporaryDirectory() as directory:
             home = Path(directory) / "local-auth"
