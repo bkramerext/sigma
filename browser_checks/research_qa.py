@@ -104,6 +104,16 @@ with sync_playwright() as playwright:
     expect(dialog).to_contain_text("Ask a question about the research performed in this project")
     expect(dialog.locator("input[type=checkbox]")).to_have_count(0)
     expect(dialog.get_by_role("button", name="Ask", exact=True)).to_be_disabled(timeout=20000)
+    # Submit is inline with Question; textarea remains on the next line.
+    heading = dialog.locator(".research-qa-question-heading")
+    expect(heading.get_by_text("Question", exact=True)).to_be_visible()
+    expect(heading.get_by_role("button", name="Ask", exact=True)).to_be_visible()
+    heading_bounds = heading.bounding_box()
+    submit_bounds = heading.get_by_role("button", name="Ask", exact=True).bounding_box()
+    question_bounds = heading.get_by_text("Question", exact=True).bounding_box()
+    assert heading_bounds and submit_bounds and question_bounds
+    assert abs(submit_bounds["y"] - question_bounds["y"]) <= 6
+    assert submit_bounds["x"] > question_bounds["x"] + question_bounds["width"]
     state_before = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
     )
@@ -116,7 +126,8 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("button", name="Answering")).to_be_disabled()
     expect(dialog.get_by_role("button", name="Answering")).to_contain_text("⌛ Answering…")
     dialog.get_by_role("button", name="Cancel", exact=True).click()
-    expect(dialog.get_by_role("alert")).to_contain_text("Request stopped")
+    expect(dialog.get_by_role("alert")).to_have_count(0)
+    expect(dialog.get_by_role("button", name="Ask", exact=True)).to_be_enabled()
     dialog.get_by_role("button", name="Close", exact=True).click()
     expect(dialog).not_to_be_visible()
     page.get_by_role("button", name="Research Q/A", exact=True).click()
@@ -142,7 +153,7 @@ with sync_playwright() as playwright:
     # A cancelled browser fetch can still have finished at the provider.
     # Ask checks the durable request ID before making a second paid call.
     ask_button.click()
-    expect(dialog.get_by_text("Answer saved.", exact=True)).to_be_visible()
+    expect(dialog.get_by_text("Answer saved.", exact=True)).to_have_count(0)
     expect(dialog.locator(".saved-paper-card").first).to_contain_text(question)
     state_after_cancel = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"

@@ -3551,7 +3551,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       if (completed) {
         window.localStorage.removeItem(requestKey);
         setRecovery(null); setQuestion(''); setExpanded(completed.qa_id); setError('');
-        setSuccess('Answer saved.');
+        setSuccess('');
         return;
       }
     }
@@ -3565,11 +3565,15 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       const response = await fetch('/api/projects/research-qa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ path, question, expected_project_id: projectId, expected_binding: binding, request_id: requestId }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Research Q/A failed.');
-      window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(result.qa_id); setSuccess('Answer saved.'); await refresh();
+      window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(result.qa_id); setSuccess(''); await refresh();
     } catch (cause) {
+      // Cancel is silent, but retain the request ID because the provider
+      // might finish after the browser stops listening.
       setRecovery({ question, id: requestId });
-      setError(controller.signal.aborted ? 'Request stopped. Reopen Q/A and check Saved answers before trying again.' : errorMessage(cause));
-      await refresh();
+      if (!controller.signal.aborted) {
+        setError(errorMessage(cause));
+        await refresh();
+      }
     } finally { request.current = null; setBusy(false); }
   }
   async function remove(id: string) {
@@ -3631,7 +3635,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
         <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
-        <form onSubmit={event => void ask(event)} className="research-qa-form"><label htmlFor="research-qa-question">Question</label><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the saved research…"/><div className="ai-paper-controls">{busy ? <><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></form>
+        <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the saved research…"/></form>
         {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={() => setError('')}>Dismiss</button></p>}
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
           <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} title={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : 'Convert to Markdown'} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p><button type="button" className="text-view-link" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}>Open in browser</button><button type="button" className="text-view-link" onClick={() => setRemoveId(record.qa_id)}>Remove</button></div></div></div>
