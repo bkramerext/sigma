@@ -1151,11 +1151,11 @@ def research_session_log_download_view(session_id: str, path: str):
             if item.get("session_id") == session_id
         ]
         if related:
-            body += "\\n## Exportable UI diagnostics\\n\\n"
+            body += "\n## Exportable UI diagnostics\n\n"
             for item in related:
                 body += (
                     f"- {item['timestamp']} · {item['code']} · {item['id']}: "
-                    f"{item['message']}\\n"
+                    f"{item['message']}\n"
                 )
         filename = session_log.export_filename(
             result["saved_short_name"], result["project_title"], result["session"]["number"]
