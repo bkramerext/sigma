@@ -326,12 +326,9 @@ def _execute(
                 contact_email=verified_gmail_sender or contact_email,
                 attachment=attachment,
             )
-            if gmail:
-                from sigma.gmail_delivery import send_message
+            from sigma.mail_transport import send_message
 
-                send_message(outgoing, recipients=[contact_email])
-            else:
-                cloud_auth.send_smtp_message(outgoing, [contact_email])
+            send_message(outgoing, recipients=[contact_email])
     except cloud_auth.SMTPDeliveryError as exc:
         print(
             f"RESULT: FAILED (SMTP state: {exc.state}; accepted recipients: {exc.accepted_count}).",

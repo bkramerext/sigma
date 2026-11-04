@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 from email.message import EmailMessage
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -17,13 +16,10 @@ from urllib.request import Request, urlopen
 
 
 def _email_env(suffix: str) -> str:
-    direct = os.environ.get(f"SIGMA_{suffix}")
-    if direct is not None:
-        return direct.strip()
-    modern = os.environ.get(f"SIGMA_EMAIL_{suffix}")
-    if modern is not None:
-        return modern.strip()
-    return os.environ.get(f"SIGMA_INVITATION_{suffix}", "").strip()
+    """Read the same resolved transport settings as browser Feedback and Email Project."""
+    from sigma.cloud_auth import email_env
+
+    return email_env(suffix)
 
 
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"

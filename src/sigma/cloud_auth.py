@@ -2028,7 +2028,11 @@ def denied_identity(request: Request):
 
 
 def email_env(suffix: str, default: str = "") -> str:
-    """Shared mail setting; prefer SIGMA_EMAIL_* while honoring legacy names."""
+    """Resolve shared mail settings; only the local UI may reuse a CLI Gmail grant.
+
+    Explicit settings, including empty values, take priority. Hosted SIGMA
+    does not discover any operator-local OAuth credential files.
+    """
     if suffix.startswith("GMAIL_"):
         direct = os.environ.get(f"SIGMA_{suffix}")
         if direct is not None:
@@ -2036,7 +2040,17 @@ def email_env(suffix: str, default: str = "") -> str:
     modern = os.environ.get(f"SIGMA_EMAIL_{suffix}")
     if modern is not None:
         return modern.strip()
-    return os.environ.get(f"SIGMA_INVITATION_{suffix}", default).strip()
+    legacy = os.environ.get(f"SIGMA_INVITATION_{suffix}")
+    if legacy is not None:
+        return legacy.strip()
+    if suffix in {"GMAIL_TOKEN_FILE", "GMAIL_SENDER"} and config().local:
+        from sigma.local_gmail_cli_auth import existing_grant
+
+        grant = existing_grant()
+        if grant is not None:
+            path, sender = grant
+            return str(path) if suffix == "GMAIL_TOKEN_FILE" else sender
+    return default
 
 
 def email_secret(suffix: str) -> str | None:
@@ -2085,17 +2099,13 @@ def _deliver_admin_notice(
     )
     if not recipients:
         raise RuntimeError("No verified SIGMA administrator notification recipient is available.")
-    if email_env("GMAIL_TOKEN_FILE"):
-        from sigma.gmail_delivery import send_admin_notification
-
-        send_admin_notification(subject, body, recipients=recipients)
-        return
+    from sigma.mail_transport import send_message
 
     message = EmailMessage()
     message["Subject"] = subject
     message.set_content(body)
     try:
-        send_smtp_message(message, recipients)
+        send_message(message, recipients=recipients)
     except RuntimeError as exc:
         if diagnostic_recipients is not None:
             # Preserve SMTPDeliveryError.state for operator-only CLI diagnostics.
