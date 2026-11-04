@@ -82,7 +82,9 @@ def save_grant(
     }
     temporary: Path | None = None
     try:
-        with NamedTemporaryFile("w", encoding="utf-8", dir=home, prefix=".gmail-send-", delete=False) as stream:
+        with NamedTemporaryFile(
+            "w", encoding="utf-8", dir=home, prefix=".gmail-send-", delete=False
+        ) as stream:
             temporary = Path(stream.name)
             os.fchmod(stream.fileno(), 0o600)
             json.dump(payload, stream)
