@@ -193,17 +193,13 @@ def _bound_v2_obligation_ledger(context: dict[str, Any], *, limit: int) -> None:
             return raw, None, raw_size
         return selected, dictionary, pooled_size
 
-    priority = sorted(
-        range(len(ledger)),
-        key=lambda index: (
-            0 if isinstance(ledger[index], dict)
-            and ledger[index].get("status") == "unresolved"
-            else 1 if isinstance(ledger[index], dict)
-            and ledger[index].get("status") == "retracted"
-            else 2,
-            -index,
-        ),
-    )
+    def priority_for(index: int) -> tuple[int, int]:
+        item = ledger[index]
+        status = item.get("status") if isinstance(item, dict) else None
+        tier = 0 if status == "unresolved" else 1 if status == "retracted" else 2
+        return tier, -index
+
+    priority = sorted(range(len(ledger)), key=priority_for)
     rows, dictionary, byte_count = project(priority)
     kept = priority
     if byte_count > budget:
@@ -221,9 +217,11 @@ def _bound_v2_obligation_ledger(context: dict[str, Any], *, limit: int) -> None:
         kept = priority[:low]
         rows, dictionary, byte_count = project(kept)
 
+    kept_indices = set(kept)
     omitted = [
-        item for index, item in enumerate(ledger)
-        if index not in set(kept) and isinstance(item, dict)
+        item
+        for index, item in enumerate(ledger)
+        if index not in kept_indices and isinstance(item, dict)
     ]
     context["obligation_ledger"] = rows
     if dictionary is not None:
