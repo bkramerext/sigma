@@ -2032,10 +2032,15 @@ def _notification_admin_recipients(cfg: Config) -> list[str]:
         return sorted(recipients)
 
 
-def _deliver_admin_notice(subject: str, body: str) -> None:
-    """One privacy-preserving multi-recipient notice through existing Gmail/SMTP."""
-    cfg = config()
-    recipients = _notification_admin_recipients(cfg)
+def _deliver_admin_notice(
+    subject: str, body: str, *, diagnostic_recipients: list[str] | None = None
+) -> None:
+    """Deliver administrator mail; CLI may supply a local diagnostic recipient."""
+    recipients = (
+        diagnostic_recipients
+        if diagnostic_recipients is not None
+        else _notification_admin_recipients(config())
+    )
     if not recipients:
         raise RuntimeError("No verified SIGMA administrator notification recipient is available.")
     if email_env("GMAIL_TOKEN_FILE"):
@@ -2050,6 +2055,9 @@ def _deliver_admin_notice(subject: str, body: str) -> None:
     try:
         send_smtp_message(message, recipients)
     except RuntimeError as exc:
+        if diagnostic_recipients is not None:
+            # Preserve SMTPDeliveryError.state for operator-only CLI diagnostics.
+            raise
         raise RuntimeError("Administrator notification could not be delivered.") from exc
 
 
@@ -2166,6 +2174,7 @@ def _deliver_feedback(
     *,
     account_email: str | None,
     contact_email: str | None,
+    diagnostic_recipients: list[str] | None = None,
 ) -> None:
     """Notification content distinguishes signed-in identity from guest contact."""
     _deliver_admin_notice(
@@ -2177,6 +2186,7 @@ def _deliver_feedback(
             f"Contact email ({'signed-in Google account' if account_email and contact_email == account_email else 'unverified'}): {contact_email or 'None'}\n\n"
             f"Message:\n{message}\n"
         ),
+        diagnostic_recipients=diagnostic_recipients,
     )
 
 

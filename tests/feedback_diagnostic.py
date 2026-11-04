@@ -1,0 +1,102 @@
+"""Offline tests for the local feedback delivery diagnostic."""
+
+import io
+import os
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import patch
+
+from sigma import cloud_auth, feedback_diagnostic
+
+
+class FeedbackDiagnosticTests(unittest.TestCase):
+    def test_uses_same_feedback_mail_path_and_configured_contact(self):
+        with (
+            patch.dict(
+                os.environ,
+                {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": " signer@example.org "},
+                clear=True,
+            ),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch.object(cloud_auth, "_deliver_feedback") as send,
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            status = feedback_diagnostic.run("hello world")
+        self.assertEqual(status, 0)
+        self.assertIn("Contact: signer@example.org", output.getvalue())
+        self.assertIn("ACCEPTED", output.getvalue())
+        self.assertEqual(send.call_args.args[1], "hello world")
+        self.assertEqual(send.call_args.kwargs["account_email"], "signer@example.org")
+        self.assertEqual(send.call_args.kwargs["contact_email"], "signer@example.org")
+        self.assertEqual(send.call_args.kwargs["diagnostic_recipients"], ["signer@example.org"])
+
+    def test_smtp_transport_preserves_feedback_content(self):
+        env = {
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "signed-in@example.org",
+            "SIGMA_INVITATION_SMTP_USERNAME": "sender@example.org",
+            "SIGMA_INVITATION_SMTP_PASSWORD": "fake-app-password",
+        }
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch("sigma.cloud_auth.smtplib.SMTP") as smtp,
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            status = feedback_diagnostic.run("hello world")
+            client = smtp.return_value.__enter__.return_value
+            sent = client.send_message.call_args
+        self.assertEqual(status, 0)
+        self.assertEqual(sent.kwargs["from_addr"], "sender@example.org")
+        self.assertEqual(sent.kwargs["to_addrs"], ["signed-in@example.org"])
+        body = sent.args[0].get_content()
+        self.assertIn("hello world", body)
+        self.assertIn("Verified account: signed-in@example.org", body)
+        self.assertIn("Contact email (signed-in Google account): signed-in@example.org", body)
+        self.assertNotIn("fake-app-password", output.getvalue())
+
+    def test_forced_smtp_ignores_expired_gmail_token_setting(self):
+        env = {
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "signed-in@example.org",
+            "SIGMA_INVITATION_SMTP_USERNAME": "sender@example.org",
+            "SIGMA_INVITATION_SMTP_PASSWORD": "fake-app-password",
+            "SIGMA_INVITATION_GMAIL_TOKEN_FILE": "/missing/expired-token.json",
+        }
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch("sigma.cloud_auth.smtplib.SMTP") as smtp,
+            patch("sigma.gmail_delivery.send_admin_notification") as gmail,
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            status = feedback_diagnostic.run("hello world", transport="smtp")
+        self.assertEqual(status, 0)
+        self.assertIn("Transport: SMTP", output.getvalue())
+        smtp.assert_called_once()
+        gmail.assert_not_called()
+
+    def test_missing_contact_fails_before_sending(self):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch.object(cloud_auth, "_deliver_feedback") as send,
+            redirect_stderr(io.StringIO()) as errors,
+        ):
+            status = feedback_diagnostic.run("hello world")
+        self.assertEqual(status, 2)
+        self.assertIn("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", errors.getvalue())
+        send.assert_not_called()
+
+    def test_rejects_invalid_feedback_before_sending(self):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch.object(cloud_auth, "_deliver_feedback") as send,
+            redirect_stderr(io.StringIO()),
+        ):
+            status = feedback_diagnostic.run("short")
+        self.assertEqual(status, 2)
+        send.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()
