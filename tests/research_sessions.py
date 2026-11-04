@@ -3128,7 +3128,14 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
     try:
         research_sessions._agent_context(over_budget, "investigator", 1)
     except research_sessions.ResearchContextLimitError as exc:
-        assert "No provider call was made" in str(exc)
+        message = str(exc)
+        assert "No provider call was made" in message
+        assert "phase=agent_assembly" in message
+        assert "role=investigator" in message
+        assert f"limit {research_sessions.MAX_AGENT_CONTEXT_BYTES}B" in message
+        assert "problem=" in message
+        assert "😀" not in message  # Never dump an oversized private prompt.
+        assert len(message) < 1000
     else:
         raise AssertionError("UTF-8 over-budget mandatory question was accepted")
 
@@ -13210,6 +13217,12 @@ def main():
         )
     test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
     test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
+    # Explicit driver; this repository does not discover tests with pytest.
+    import test_crucible_context_budget
+
+    for name, check in vars(test_crucible_context_budget).items():
+        if name.startswith("test_") and callable(check):
+            check()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_parallel_funding_uses_estimates_without_changing_provider_request()
     test_portfolio_capacity_tracks_strategies_not_billing_mode()

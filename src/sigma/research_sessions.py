@@ -3647,7 +3647,18 @@ def _supplied_peer_artifact_ids(context: dict[str, Any]) -> set[str]:
 
 
 def _validate_obligation_review_basis(context: dict[str, Any], review: dict[str, Any]) -> None:
-    """Reject exact unsupported artifact/step IDs; peer provenance stays explicit."""
+    """Reject review of unsupplied obligations and unsupported evidence IDs."""
+    if context.get("scheduler_version") == 2:
+        supplied_obligations = {
+            item.get("obligation_id")
+            for item in context.get("obligation_ledger", [])
+            if isinstance(item, dict)
+        }
+        if review["obligation_id"] not in supplied_obligations:
+            raise ProjectError(
+                "Skeptic obligation_reviews referenced an obligation not supplied "
+                f"for review: obligation_id={review['obligation_id']}"
+            )
     supplied_artifacts = set(context.get("context_artifact_ids", []))
     supplied_artifacts.update(context.get("prior_session_artifact_ids", []))
     if context.get("scheduler_version") == 2:
@@ -3748,7 +3759,7 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + " Keep responses compact: do not duplicate open obligations or lengthy source text; "
         "retain the essential derivation and uncertainty, and fill every required JSON field. "
         + (
-            " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, basis_artifact_ids may cite context_artifact_ids, prior_session_artifact_ids, or non-pointer other_strategy_evidence actually included in this request; identify peer evidence as unverified peer work, never as verified local proof. basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
+            " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, review only obligation_ids actually present in obligation_ledger; omitted obligation IDs are audit pointers, not reviewable obligations. basis_artifact_ids may cite context_artifact_ids, prior_session_artifact_ids, or non-pointer other_strategy_evidence actually included in this request; identify peer evidence as unverified peer work, never as verified local proof. basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
             if context.get("scheduler_version") == 2
             else " In reasoning_steps and reasoning_assessments, basis_artifact_ids may contain only IDs supplied in context_artifact_ids, prior_session_artifact_ids or fully included other_strategy_evidence; omit absent or pointer-only IDs. For computational_citations, use only exact execution IDs, evidence types and artifact filenames present in supplied execution records; if a file or inspection is missing, do not cite it or assert it validated a result. For obligation_reviews, basis_artifact_ids must be drawn only from context_artifact_ids or prior_session_artifact_ids, and basis_step_ids may cite only the provided current investigator_step_id. Do not invent missing evidence links. Use empty arrays and explicit uncertainty when no eligible basis exists. "
         )
@@ -7989,6 +8000,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
             "No provider call was made; shorten the project question or critical evidence, "
             "or start a narrower session. Saved research records were preserved."
+            + _context_byte_breakdown(
+                context, phase="agent_assembly", strategy_id=record.get("strategy_id"), role=role
+            )
         )
     return context
 
@@ -8011,6 +8025,38 @@ def _context_obligation_count(context: dict[str, Any]) -> int:
 
 def _json_bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+def _context_byte_breakdown(
+    context: dict[str, Any],
+    *,
+    phase: str = "context_assembly",
+    strategy_id: str | None = None,
+    role: str | None = None,
+    limit: int = MAX_AGENT_CONTEXT_BYTES,
+) -> str:
+    """Bounded diagnostics for a blocked call; include sizes but never prompt text."""
+    sizes = sorted(
+        ((field, _json_bytes(value)) for field, value in context.items()),
+        key=lambda item: (-item[1], item[0]),
+    )
+    largest = ", ".join(f"{field[:48]}={size}B" for field, size in sizes[:6])
+
+    # Identifiers are internal, but fail closed if any arbitrary prose appears.
+    def safe_identifier(value: str | None) -> str:
+        if (
+            not isinstance(value, str)
+            or not 1 <= len(value) <= 64
+            or any(not (char.isascii() and (char.isalnum() or char in "_-")) for char in value)
+        ):
+            return "unknown"
+        return value
+
+    return (
+        f" Context size: {_json_bytes(context)}B / limit {limit}B;"
+        f" phase={phase}; strategy={safe_identifier(strategy_id)};"
+        f" role={safe_identifier(role)}; largest fields: {largest}."
+    )
 
 
 def _bound_context_manifest(manifest: dict[str, Any]) -> None:
@@ -9346,6 +9392,9 @@ def _portfolio_context(
         raise ResearchContextLimitError(
             "Mandatory peer and research context exceeds the 256 KB UTF-8 byte limit. "
             "No provider call was made; session remains recoverable and saved evidence is intact."
+            + _context_byte_breakdown(
+                context, phase="peer_assembly", strategy_id=strategy_id, role=role
+            )
         )
     return context
 
@@ -10453,6 +10502,9 @@ async def _portfolio_role_call(
                     raise ResearchContextLimitError(
                         "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
                         "No provider call was made; saved research records were preserved."
+                        + _context_byte_breakdown(
+                            context, phase="portfolio_dispatch", strategy_id=strategy_id, role=role
+                        )
                     )
             except Exception as exc:  # noqa: BLE001 — fail this strategy branch without losing peers
                 context_blocked = isinstance(exc, ResearchContextLimitError)
@@ -14619,6 +14671,12 @@ async def _worker(session_id: str, path: str) -> None:
                 raise ResearchContextLimitError(
                     "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
                     "No provider call was made; saved research records were preserved."
+                    + _context_byte_breakdown(
+                        context,
+                        phase="legacy_dispatch",
+                        strategy_id=record.get("strategy_id"),
+                        role=role,
+                    )
                 )
             record["status"] = "queued"
             record["cycle"] = cycle_num
