@@ -126,6 +126,8 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .brand img { width: 100%; height: auto; display: block; }
 .home-page { max-width: none; min-height: 100dvh; margin: 0; padding: 0; background: #030915; color: #e5f2ff; overflow: hidden; position: relative; isolation: isolate; }
 .home-shell { position: relative; min-height: 100dvh; }
+.home-signout-copy-notice { position: relative; z-index: 2; margin: 14px 0 16px; padding: 12px 16px; max-width: 680px; border: 1px solid #ad875a; border-radius: 9px; background: #101a28; color: #e8d8c1; line-height: 1.5; }
+
 .home-atmosphere { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; background: radial-gradient(ellipse 75% 55% at 82% 4%, #13315275, transparent 70%), radial-gradient(ellipse 65% 55% at 90% 100%, #0d32576e, transparent 74%), linear-gradient(130deg, #030915, #061225 70%, #030915); }
 .home-atmosphere::before { content: ""; position: absolute; inset: 0; background: url('/sigma-atmosphere.svg') right center / auto 100% no-repeat; opacity: .94; animation: atmosphere-reveal 2.6s ease-out both; }
 .home-atmosphere::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #030915 0%, #030915ee 19%, #0309157d 46%, transparent 78%); }
