@@ -1,3 +1,4 @@
+# ruff: noqa: F401, F821, F811
 # pyright: reportUndefinedVariable=false
 """Persistent A17 sessions use deterministic provider fixtures only."""
 
