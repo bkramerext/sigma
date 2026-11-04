@@ -671,12 +671,9 @@ def test_unavailable_publication_links_have_a_total_time_budget() -> None:
 
     async def unavailable(url: str) -> None:
         attempted.append(url)
-        return None
 
     async def exercise() -> None:
-        with patch.object(
-            paper_writing_sources, "monotonic", side_effect=[0.0, 1.0, 12.1]
-        ):
+        with patch.object(paper_writing_sources, "monotonic", side_effect=[0.0, 1.0, 12.1]):
             selected, status = await paper_writing_sources.select(
                 {"publication_references": urls, "investigation_type": "engineering"},
                 fetch=unavailable,
