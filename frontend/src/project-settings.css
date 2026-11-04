@@ -489,3 +489,11 @@
 .project-settings-dialog.ai-paper-dialog.research-qa-dialog .saved-paper-meta .text-view-link {
   font: inherit; padding: 0;
 }
+
+/* Plain saved Q/A is authoritative; the AI-formatted Markdown is a separate view. */
+.project-settings-dialog.research-qa-dialog .research-qa-answer-plain {
+  white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65;
+}
+.project-settings-dialog.research-qa-dialog .qa-markdown-action.sigma-render-active {
+  color: #f1c58d;
+}

@@ -216,6 +216,17 @@ def _validate_record(record: Any, project_id: str) -> None:
         or not isinstance(record.get("created_at"), str)
     ):
         raise ProjectError("Q/A archive contains a malformed answer")
+    rendered = record.get("markdown_answer")
+    if rendered is not None and (
+        not isinstance(rendered, str) or not 1 <= len(rendered) <= 20000
+    ):
+        raise ProjectError("Q/A archive contains invalid derived Markdown")
+    if rendered is not None and (
+        not isinstance(record.get("markdown_provenance"), dict)
+        or not isinstance(record.get("markdown_warnings"), list)
+        or len(record["markdown_warnings"]) > 5
+    ):
+        raise ProjectError("Q/A archive contains invalid Markdown provenance")
     try:
         datetime.fromisoformat(record["created_at"])
     except ValueError as exc:
@@ -689,6 +700,66 @@ def get_answer(path: str, qa_id: str) -> dict[str, Any]:
     if record is None or record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Saved Q/A answer was not found")
     return _with_navigation(record, _navigation_context(path))
+
+
+
+def saved_answer_text(path: str, qa_id: str) -> dict[str, Any]:
+    """Read the immutable answer and any durable AI-derived Markdown formatting."""
+    if not re.fullmatch(r"[0-9a-f]{32}", qa_id):
+        raise ProjectError("Invalid Q/A identifier")
+    project_id = inspect_project(path).project.id
+    record = next((row for row in _load(path) if row.get("qa_id") == qa_id), None)
+    if record is None or record.get("project_id") != project_id:
+        raise ProjectError("Saved Q/A answer was not found")
+    return {
+        "answer": record["answer"],
+        "markdown_answer": record.get("markdown_answer"),
+    }
+
+
+def store_markdown_answer(
+    path: str, qa_id: str, expected_digest: str, markdown: str,
+    provenance: dict[str, Any], warnings: list[str],
+) -> dict[str, Any]:
+    """Publish one derived representation without changing the original answer."""
+    if not re.fullmatch(r"[0-9a-f]{32}", qa_id):
+        raise ProjectError("Invalid Q/A identifier")
+    from sigma.text_views import digest
+
+    project_id = inspect_project(path).project.id
+
+    def save(
+        records: list[dict[str, Any]], pending: list[dict[str, str]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], dict[str, Any], bool]:
+        record = next((row for row in records if row.get("qa_id") == qa_id), None)
+        if record is None or record.get("project_id") != project_id:
+            raise ProjectError("Saved Q/A answer was not found")
+        source = record["answer"]
+        if digest(source) != expected_digest:
+            raise ProjectError("Saved answer changed during conversion; reopen before retrying")
+        existing = record.get("markdown_answer")
+        if isinstance(existing, str) and existing.strip():
+            selected_markdown = existing
+            changed = False
+        else:
+            selected_markdown = markdown
+            record = {
+                **record,
+                "markdown_answer": selected_markdown,
+                "markdown_provenance": provenance,
+                "markdown_warnings": warnings,
+            }
+            records = [record if row.get("qa_id") == qa_id else row for row in records]
+            changed = True
+        representation = {
+            "source_format": "plain",
+            "source_digest": expected_digest,
+            "plain": {"body": source, "current": True},
+            "markdown": {"body": selected_markdown, "current": True},
+        }
+        return records, pending, representation, changed
+
+    return _archive_update(path, save)
 
 
 def delete_answer(path: str, qa_id: str) -> None:

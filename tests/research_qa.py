@@ -218,6 +218,27 @@ def main() -> None:
             assert first["qa_id"] == repeated["qa_id"] and calls == 1
             assert [row["session_number"] for row in first["sources"]] == [1, 2]
             assert len(research_qa.list_answers(str(path))) == 1
+            from sigma.text_views import digest
+
+            original = research_qa.saved_answer_text(str(path), first["qa_id"])
+            assert original["markdown_answer"] is None
+            derived = research_qa.store_markdown_answer(
+                str(path), first["qa_id"], digest(original["answer"]),
+                "## Formatted answer\n\nMath: $R(n)$",
+                {"provider": "openai", "model": "test-model", "reasoning_effort": "low"},
+                [],
+            )
+            assert derived["plain"]["body"] == original["answer"]
+            assert derived["markdown"]["body"].startswith("## Formatted answer")
+            assert research_qa.saved_answer_text(str(path), first["qa_id"])["markdown_answer"] == derived["markdown"]["body"]
+            cached = research_qa.store_markdown_answer(
+                str(path), first["qa_id"], digest(original["answer"]),
+                "Unexpected duplicate conversion",
+                {"provider": "openai", "model": "test-model", "reasoning_effort": "low"},
+                [],
+            )
+            assert cached["markdown"]["body"] == derived["markdown"]["body"]
+            assert research_qa.get_answer(str(path), first["qa_id"])["answer"] == original["answer"]
             markdown = research_qa.markdown_document(
                 research_qa.get_answer(str(path), first["qa_id"])
             )

@@ -77,7 +77,7 @@ with sync_playwright() as playwright:
     page.wait_for_url("**/project?*")
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
     page.get_by_role("button", name="Start a new research session", exact=True).click()
-    page.get_by_role("button", name="Start new session #1", exact=True).click()
+    page.get_by_role("button", name="Start Session #1", exact=True).click()
     expect(page.locator("li[data-session-id]").first.locator(".session-status")).to_have_text(
         "ended", timeout=30000
     )
@@ -213,9 +213,9 @@ with sync_playwright() as playwright:
     title_toggle.evaluate("el => el.blur()")
     page.mouse.move(1, 1)
     title_line.screenshot(path=str(OUT / "research-qa-title-normal.png"))
-    markdown_icon = title_line.get_by_role("link", name="Open Markdown answer")
+    markdown_icon = title_line.get_by_role("button", name="Render answer as Markdown")
     expect(markdown_icon).to_be_visible()
-    expect(markdown_icon).to_have_attribute("data-tooltip", "Open Markdown answer")
+    expect(markdown_icon).to_have_attribute("data-tooltip", "Convert to Markdown")
     markdown_box = markdown_icon.bounding_box()
     assert markdown_box and markdown_icon.locator("svg.markdown-logo").count() == 1
     normal_copy_button = title_line.get_by_role("button", name="Copy Markdown answer")
@@ -324,14 +324,32 @@ with sync_playwright() as playwright:
     title_line.get_by_role("button", name="Copied Markdown answer to clipboard").click()
     expect(dialog.get_by_role("alert")).to_contain_text("Clipboard access failed")
 
-    with page.expect_popup() as markdown_popup:
-        markdown_icon.click()
-    markdown_page = markdown_popup.value
-    expect(markdown_page.locator("body")).to_contain_text("## Question")
-    expect(markdown_page.locator("body")).to_contain_text("## Sources")
-    expect(markdown_page.locator("body")).to_contain_text("[Session #1]")
-    markdown_page.screenshot(path=str(OUT / "research-qa-markdown-source.png"), full_page=True)
-    markdown_page.close()
+    # The Markdown control formats this saved answer with the same AI text
+    # conversion path as Project and Strategy, then toggles the cached view.
+    expect(card.locator(".research-qa-answer-plain")).to_contain_text("The saved research answers")
+    conversion_requests = []
+    page.on(
+        "request",
+        lambda request: conversion_requests.append(request.url)
+        if "/api/projects/text/convert" in request.url
+        else None,
+    )
+    markdown_icon.click()
+    expect(title_line.get_by_role("button", name="Show plain answer")).to_be_visible(timeout=30000)
+    expect(card.locator(".outcome-markdown")).to_contain_text("The saved research answers")
+    rendered = card.locator(".outcome-markdown").inner_text()
+    title_line.get_by_role("button", name="Show plain answer").click()
+    expect(card.locator(".research-qa-answer-plain")).to_contain_text("The saved research answers")
+    title_line.get_by_role("button", name="Render answer as Markdown").click()
+    expect(card.locator(".outcome-markdown")).to_have_text(rendered)
+    # The conversion is saved on the answer, not recomputed on a second toggle.
+    stored = page.evaluate(
+        "async path => (await (await fetch('/api/projects/research-qa?' + new URLSearchParams({path}))).json()).answers",
+        path,
+    )
+    assert stored[0]["markdown_answer"]
+    assert len(conversion_requests) == 1, conversion_requests
+
     with page.expect_popup() as popup:
         card.get_by_role("button", name="Open in browser").click()
     browser_page = popup.value
@@ -447,7 +465,7 @@ with sync_playwright() as playwright:
     mobile_copy_box = mobile_title.get_by_role(
         "button", name="Copied Markdown answer to clipboard"
     ).bounding_box()
-    mobile_markdown = mobile_title.get_by_role("link", name="Open Markdown answer")
+    mobile_markdown = mobile_title.get_by_role("button", name="Render answer as Markdown")
     mobile_markdown_box = mobile_markdown.bounding_box()
     assert mobile_markdown_box and mobile_copy_box
     assert mobile_markdown_box["x"] >= mobile_last_line["right"] - 1
