@@ -18,11 +18,7 @@ Create a project or sample, then choose strategies to investigate. The overview 
 
 ### Workflow
 
-```mermaid
-%%{init: {"flowchart": {"useMaxWidth": false, "nodeSpacing": 12, "rankSpacing": 32}, "themeVariables": {"fontSize": "13px"}}}%%
-flowchart LR
-    A[Project] --> B[Strategies] --> C[Research] --> D[Refine] --> E[Optional paper] --> F[Review/export]
-```
+![SIGMA workflow: Project → Strategies → Research → Refine → Optional paper → Review/export](assets/workflow.svg)
 
 - **Create a project:** Choose a subject or sample and frame the question.
 - **Explore strategies:** Develop approaches to the question and select which to investigate.
