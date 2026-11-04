@@ -75,9 +75,10 @@ def check_failures() -> None:
         assert any("pyright" in command for command in commands)
         assert any("tests/lifecycle.py" in command for command in commands)
 
-    # Both CI shards must be exhaustive together, disjoint, and independent.
+    # All four CI shards must be exhaustive together, disjoint, and independent.
     plans: dict[str, list[list[str]]] = {}
-    for shard in ("", "1", "2"):
+    shard_names = ("1", "2", "3", "4")
+    for shard in ("", *shard_names):
         with (
             patch.dict(
                 os.environ,
@@ -94,16 +95,19 @@ def check_failures() -> None:
             assert all(
                 "SIGMA_CI_TEST_SHARD" not in item.kwargs["env"] for item in run.call_args_list
             )
-    whole, first, second = plans[""], plans["1"], plans["2"]
-    assert len(first) > 25 and len(second) > 25
-    assert len(first) + len(second) == len(whole)
-    assert len({tuple(step) for step in first + second}) == len(whole)
-    assert {tuple(step) for step in first + second} == {tuple(step) for step in whole}
-    assert not any("ruff" in step for step in first + second)
-    assert any("tests/papers.py" in step for step in first + second)
-    assert any("tests/cloud_auth.py" in step for step in first + second)
-    assert any("scripts/increment15_offline_pairs.py" in step for step in first + second)
-    assert any(step[-2:] == ["run", "build"] for step in first + second)
+    whole = plans[""]
+    combined = [step for shard in shard_names for step in plans[shard]]
+    assert all(len(plans[shard]) > 10 for shard in shard_names)
+    assert sum(len(plans[shard]) for shard in shard_names) == len(whole)
+    assert len({tuple(step) for step in combined}) == len(whole)
+    assert {tuple(step) for step in combined} == {tuple(step) for step in whole}
+    for index, step in enumerate(whole):
+        assert step == plans[shard_names[index % 4]][index // 4]
+    assert not any("ruff" in step for step in combined)
+    assert any("tests/papers.py" in step for step in combined)
+    assert any("tests/cloud_auth.py" in step for step in combined)
+    assert any("scripts/increment15_offline_pairs.py" in step for step in combined)
+    assert any(step[-2:] == ["run", "build"] for step in combined)
     with (
         patch.dict(os.environ, {"SIGMA_CI_TEST_SHARD": "invalid"}),
         patch("sigma.tooling.shutil.which", return_value="tool"),
