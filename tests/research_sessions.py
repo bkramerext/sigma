@@ -3,6 +3,17 @@
 The SIGMA CI test plan invokes each part separately for parallel sharding.
 """
 
+# The scheduler parity workflow imports these historical fixture helpers from
+# this module. Preserve that import contract after splitting the test suite.
+from research_sessions_part1 import (  # noqa: F401
+    REAL_CLIENT,
+    investigation,
+    provider_response,
+    setup,
+    skeptic,
+    wait_for,
+)
+
 import subprocess
 import sys
 from pathlib import Path
