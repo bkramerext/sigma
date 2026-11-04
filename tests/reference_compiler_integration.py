@@ -690,8 +690,8 @@ def verify_compiled_methods_survive_context_compaction() -> None:
     assert "methodology_source_material" not in raw
 
 
-async def verify_compiler_rejects_real_account_change_before_dispatch(path: Path) -> None:
-    """A changed account really does fail closed, without any billable call."""
+async def verify_compiler_allows_account_change_before_dispatch(path: Path) -> None:
+    """Switching ChatGPT accounts never invalidates a saved reference compilation."""
     view, strategy, original, config = await fixture.setup(path)
     original_context = AuthContext(
         token=original["token"],
@@ -700,7 +700,7 @@ async def verify_compiler_rejects_real_account_change_before_dispatch(path: Path
         identity=original["identity"],
     )
     changed_context = AuthContext(
-        token=original["token"],
+        token="switched-account-token",
         mode=original["mode"],
         status=original["status"],
         identity="other-account",
@@ -727,21 +727,25 @@ async def verify_compiler_rejects_real_account_change_before_dispatch(path: Path
             patch.object(
                 research_sessions, "auth_context", new=AsyncMock(return_value=changed_context)
             ),
+            patch.object(
+                research_sessions,
+                "_optional_reference_compilation_headroom",
+                return_value=False,
+            ),
             patch(
                 "sigma.research_sessions.httpx.AsyncClient",
-                side_effect=AssertionError("Account guard incorrectly dispatched compiler"),
+                side_effect=AssertionError("Unfunded optional compiler should not dispatch"),
             ),
         ):
-            assert not await research_sessions._ensure_reference_compilation(
-                started["id"], str(path)
-            )
-        paused = research_sessions._read(str(path), started["id"])
-        assert paused["status"] == "paused"
-        assert paused["reference_compilation"]["status"] == "pending"
-        assert "Account changed before reference compilation" in paused["message"]
-        assert "attempt_id" not in paused["reference_compilation"]
-        assert paused["calls_used"] == 0
-        assert paused["steps"] == []
+            assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
+        resumed = research_sessions._read(str(path), started["id"])
+        assert resumed["status"] == "queued"
+        assert resumed["reference_compilation"]["status"] == "skipped"
+        assert "Account changed" not in str(resumed.get("message"))
+        assert "attempt_id" not in resumed["reference_compilation"]
+        assert resumed["identity_hash"] == research_sessions._digest(original_context["identity"])
+        assert resumed["calls_used"] == 0
+        assert resumed["steps"] == []
 
 
 async def verify_compiler_preflight_auth_failure(path: Path) -> None:
@@ -911,9 +915,8 @@ async def verify_compiler_billing_settlement_failure(path: Path) -> None:
             assert hard["blocked_reason"]
 
 
-async def verify_precompiler_session_resume_rejected(path: Path) -> None:
-    """Pre-compiler sessions remain readable but cannot run legacy prompts."""
-    from sigma.projects import ProjectError
+async def verify_precompiler_session_resumes(path: Path) -> None:
+    """ONP-era sessions resume with their original notes without a compiler call."""
 
     view, strategy, credential, config = await fixture.setup(path)
     with (
@@ -936,28 +939,17 @@ async def verify_precompiler_session_resume_rejected(path: Path) -> None:
         old["status"] = "stopped"
         research_sessions._save(str(path), old)
         assert research_sessions.get_session(str(path), started["id"])["status"] == "stopped"
-        try:
-            await research_sessions.control_session(str(path), started["id"], "resume")
-        except ProjectError as exc:
-            assert "predates the reference compiler" in str(exc)
-        else:
-            raise AssertionError("Legacy research resumed without a compiler checkpoint")
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
         still_saved = research_sessions._read(str(path), started["id"])
-        assert still_saved["status"] == "stopped"
         assert still_saved["calls_used"] == 0
-
-        # Even a queued legacy checkpoint cannot bypass the compiler barrier.
-        old["status"] = "queued"
-        with (
-            patch.object(research_sessions, "_read", return_value=old),
-            patch.object(research_sessions, "_save") as persisted,
-        ):
-            assert not await research_sessions._ensure_reference_compilation(
-                started["id"], str(path)
-            )
-        assert old["status"] == "paused"
-        assert "Start a new session" in old["message"]
-        persisted.assert_called_once()
+        assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
+        compatible = research_sessions._read(str(path), started["id"])
+        assert compatible["status"] == "queued"
+        assert compatible["reference_compilation"]["status"] == "not_needed"
+        assert compatible["reference_compilation"]["required_for_acceptance"] is False
+        assert compatible["calls_used"] == 0
+        assert compatible["steps"] == []
 
 
 async def verify_explicitly_disabled_compiler_checkpoint(path: Path) -> None:
@@ -1070,11 +1062,11 @@ async def main() -> None:
         await verify_compilation(root / "paused.sigma", pause_during_compilation=True)
         await verify_compilation(root / "unfunded.sigma", skip_compiler=True)
         await verify_compiler_preflight_auth_failure(root / "credential-unavailable.sigma")
-        await verify_compiler_rejects_real_account_change_before_dispatch(
+        await verify_compiler_allows_account_change_before_dispatch(
             root / "credential-changed.sigma"
         )
         await verify_compiler_billing_settlement_failure(root / "settlement-unavailable.sigma")
-        await verify_precompiler_session_resume_rejected(root / "precompiler.sigma")
+        await verify_precompiler_session_resumes(root / "precompiler.sigma")
         await verify_explicitly_disabled_compiler_checkpoint(root / "explicit-disabled.sigma")
     print(
         "PASS: pre-fanout barrier, two-round reuse, frozen reload, "

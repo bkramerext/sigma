@@ -275,7 +275,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                 "previously dispatched provider request may already have used allowance"
             )
             expect(clarity).to_contain_text("Resume when you are ready")
-            expect(row.locator('button[title="Resume session #1"]')).to_be_visible()
+            expect(row.locator('button[title="Resume this session"]')).to_be_visible()
             expect(row.locator('button[title^="Stop Session"]')).to_have_count(0)
             expected_guidance = {
                 2: "stopped by user",
@@ -299,7 +299,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             expect(completed_summary).to_contain_text("completed early after 7 of 30")
             expect(completed_summary).to_contain_text("bounded derivation was complete")
             expect(completed_summary).to_contain_text("turn count was an upper limit, not a target")
-            expect(completed_row.locator('button[title^="Resume session"]')).to_have_count(0)
+            expect(completed_row.locator('button[title="Resume this session"]')).to_have_count(0)
             interrupted_row.locator(".session-row-disclosure").click()
             interrupted_summary = interrupted_row.get_by_role(
                 "complementary", name="Session status and next steps"
@@ -378,12 +378,12 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                 row.get_by_role("complementary", name="Session status and next steps")
             ).to_have_count(0)
             expect(row.locator(".session-status")).to_have_text("stopped")
-            expect(row.locator('button[title="Resume session #1"]')).to_be_visible()
+            expect(row.locator('button[title="Resume this session"]')).to_be_visible()
             page.reload()
             row = page.locator(f'li[data-session-id="{session["id"]}"]')
             expect(row.locator(".stopped-session-guidance")).to_have_count(0)
             expect(row.locator(".session-status")).to_have_text("stopped")
-            expect(row.locator('button[title="Resume session #1"]')).to_be_visible()
+            expect(row.locator('button[title="Resume this session"]')).to_be_visible()
             # Another historical session retains its own independent notices.
             other_row = page.locator(".session-row").filter(has_text="Session #2")
             expect(other_row.locator(".stopped-session-guidance")).to_be_visible()
@@ -416,7 +416,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                 "session was interrupted when its backend work stopped"
             )
             scroll_before_resume = page.evaluate("window.scrollY")
-            page.locator('button[title="Resume session #1"]').evaluate("element => element.click()")
+            page.locator('button[title="Resume this session"]').evaluate(
+                "element => element.click()"
+            )
             expect(page.get_by_role("alert")).to_be_visible(timeout=10000)
             expect(page.get_by_role("alert")).to_contain_text("AI connection changed")
             expect(row.locator(".session-status")).to_have_text("stopped")

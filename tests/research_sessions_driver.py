@@ -88,8 +88,43 @@ def main(part: int = 1):
     test_protocol_recovery_context_is_a_new_final_provider_input()
     with TemporaryDirectory() as temporary:
         asyncio.run(
+            test_provider_limit_unsafe_fallback_cannot_resume(
+                Path(temporary) / "unsafe-provider-fallback.sigma"
+            )
+        )
+        asyncio.run(
+            test_restart_missing_provider_reservation_is_durably_blocked(
+                Path(temporary) / "missing-provider-reservation.sigma"
+            )
+        )
+        asyncio.run(
+            test_restart_matching_provider_reservation_is_recoverable(
+                Path(temporary) / "matching-provider-reservation.sigma"
+            )
+        )
+        asyncio.run(
+            test_explicit_budget_and_duration_consent_preserves_saved_state(
+                Path(temporary) / "explicit-recovery-consent.sigma"
+            )
+        )
+        asyncio.run(
+            test_terminal_time_expiry_requires_separate_confirmation(
+                Path(temporary) / "expired-session-consent.sigma"
+            )
+        )
+        asyncio.run(
             test_terminal_protocol_resume_extends_only_exact_shortfall(
                 Path(temporary) / "protocol-resume.sigma"
+            )
+        )
+        asyncio.run(
+            test_legacy_compiler_checkpoint_resumes_after_account_change(
+                Path(temporary) / "legacy-compiler-resume.sigma"
+            )
+        )
+        asyncio.run(
+            test_resume_repeated_unknown_provider_failures_retains_session(
+                Path(temporary) / "repeated-provider-resume.sigma"
             )
         )
         asyncio.run(

@@ -157,10 +157,10 @@ async def snapshot():
             if title == first.title and cycle == 1 and role == "research_investigator":
                 first_investigator_active = True
                 try:
-                    if MODE == "parallel":
-                        # Deterministic concurrency proof: hold the first
-                        # Investigator until the independent Skeptic is in its
-                        # provider request. A serialized scheduler times out.
+                    if MODE in {"parallel", "paired-v2", "paired-v2-resume"}:
+                        # Wait for the independent Skeptic rather than relying on
+                        # a short wall-clock sleep under variable CI load.
+                        # A genuinely serialized scheduler still times out.
                         await asyncio.wait_for(parallel_skeptic_entered.wait(), timeout=8)
                     else:
                         await asyncio.sleep(0.08)

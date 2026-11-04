@@ -4525,15 +4525,12 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         and int(record.get("calls_used", 0)) < int(record.get("call_limit", 0))
     )
     message = str(record.get("message", "")).lower()
-    show_next_step = record.get("status") in {"paused", "stopped", "failed"} or (
-        record.get("status") == "ended"
-        and any(word in message for word in ("limit", "duration", "cost", "budget"))
-    )
+    show_next_step = record.get("status") in {"paused", "stopped", "failed", "ended"}
     if show_next_step:
         continuation = result.get("provider_limit_continuation")
         if isinstance(continuation, dict) and continuation.get("eligible") is True:
             result["next_step_guidance"] = (
-                "Continue Research after the provider account usage allowance becomes available. "
+                "Click Resume when the provider account usage allowance becomes available. "
                 "SIGMA keeps the accepted findings and automatically accounts for known rejected "
                 "attempts within the session's existing spending and token limits. "
                 "No provider requests are retried automatically while usage remains exhausted."
@@ -4541,15 +4538,15 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(continuation, dict):
             result["next_step_guidance"] = (
                 "The provider account usage limit stopped research and saved findings remain intact. "
-                "SIGMA cannot establish a safe same-session continuation: "
+                "Resume remains available; a new call is blocked until saved attempts can be reconciled safely: "
                 + str(continuation.get("reason") or "unknown reason")
                 + " Review the saved work before starting another provider request."
             )
         elif record.get("status") == "failed":
             result["next_step_guidance"] = (
                 "Review the saved activity and confirm provider usage or billing before continuing. "
-                "If more research is needed, start a new session with settings and spending limits "
-                "you approve; do not assume another attempt is free or safe."
+                "Click Resume to continue this saved session when provider access and spending limits allow. "
+                "No previous dispatched request is replayed; another attempt may incur a charge."
             )
         elif any(
             step.get("status") == "interrupted"
@@ -4577,8 +4574,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 if record.get("status") in {"paused", "stopped"}
                 or result["recoverable_clipped_response"]
                 else "The provider response was clipped and no further calls were available. "
-                "The ended session cannot resume; start a new session after reviewing "
-                "provider output and spending allowance. Saved work is preserved."
+                "Review provider output and spending allowance, then click Resume to "
+                "continue the saved research when the limits allow."
             )
         elif "backend restarted" in message:
             result["next_step_guidance"] = (
@@ -4597,13 +4594,13 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             )
         elif "account or billing identity changed" in message:
             result["next_step_guidance"] = (
-                "Restore the intended AI account and billing identity, then resume. No new call "
-                "was made after this check detected the change."
+                "Research is independent of the ChatGPT account. Connect an available "
+                "account and click Resume; saved findings remain intact."
             )
         elif "model" in message and ("available" in message or "selected" in message):
             result["next_step_guidance"] = (
-                "Check the selected model and provider configuration. If they cannot be restored, "
-                "start a new session with reviewed settings; saved notes remain available."
+                "Check that the current connection supports the saved model. "
+                "Once available, click Resume to continue the original session."
             )
         elif "context" in message or "storage" in message:
             result["next_step_guidance"] = (
@@ -4612,13 +4609,13 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             )
         elif "duration" in message or "time limit" in message:
             result["next_step_guidance"] = (
-                "Review the saved notes. If more research is needed, start a new session with a "
-                "duration limit you have reviewed; existing notes remain available."
+                "Review the saved notes and duration limit, then click Resume to "
+                "continue the same session with its preserved research."
             )
         elif "call limit" in message or "budget exhausted" in message or "call budget" in message:
             result["next_step_guidance"] = (
-                "Review recorded calls and findings. For more research, start a new session with "
-                "a call limit and provider spend you have reviewed and approved."
+                "Review recorded calls and findings. Click Resume to continue the "
+                "saved protocol without replaying any prior provider request."
             )
         elif "cost" in message or "limit" in message or "budget" in message:
             result["next_step_guidance"] = (
@@ -4761,6 +4758,46 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 step["interruption_reason"] = "backend_restart"
                 step["attempt_status"] = "unknown"
                 step["finished_at"] = _now()
+                audit = step.get("provider_input_audit")
+                if isinstance(audit, dict):
+                    audit["status"] = "call_interrupted_dispatch_unknown"
+                ledger = record.get("hard_budget_ledger")
+                if isinstance(ledger, dict):
+                    # A running request cannot be cleared or charged at zero
+                    # when its persisted reservation is missing or inconsistent.
+                    # Preserve this integrity blocker across backend restarts.
+                    calls = ledger.get("calls")
+                    matches = (
+                        [
+                            item
+                            for item in calls
+                            if isinstance(item, dict) and item.get("call_id") == step.get("id")
+                        ]
+                        if isinstance(calls, list)
+                        else []
+                    )
+                    if len(matches) != 1 or matches[0].get("status") not in {
+                        "reserved",
+                        "unknown",
+                    }:
+                        ledger["blocked_reason"] = (
+                            "Saved interrupted provider call has no matching reservation"
+                        )
+                    else:
+                        try:
+                            mark_unknown(ledger, call_id=step["id"])
+                        except BudgetExceeded:
+                            ledger["blocked_reason"] = (
+                                "Saved interrupted provider call has no matching reservation"
+                            )
+                        else:
+                            if ledger.get("blocked_reason") in {
+                                None,
+                                "Provider call outcome or usage is unknown",
+                            }:
+                                ledger["blocked_reason"] = (
+                                    "Provider call outcome or usage is unknown"
+                                )
                 _record_guidance_interruption(record, step, "interrupted")
         interrupted_on_restart = any(
             step.get("interruption_reason") == "backend_restart" for step in record.get("steps", [])
@@ -6437,12 +6474,58 @@ async def control_session(
     async with state_lock:
         with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
-            if not isinstance(record.get("reference_compilation"), dict):
-                raise ProjectError(
-                    "This saved session predates the reference compiler. "
-                    "Its findings remain viewable, but resuming it is unsupported. "
-                    "Start a new research session."
+            ledger = record.get("hard_budget_ledger")
+            if action == "resume" and isinstance(ledger, dict):
+                calls = ledger.get("calls")
+                # Check the persisted ledger even for already-paused legacy
+                # records. Every uncertain role dispatch must retain exactly
+                # one conservative reservation before a replacement is allowed.
+                uncertain_steps = [
+                    step
+                    for step in record.get("steps", [])
+                    if isinstance(step, dict)
+                    and step.get("role") in {"investigator", "skeptic"}
+                    and step.get("status") in {"interrupted", "failed", "incomplete"}
+                    and step.get("attempt_status") == "unknown"
+                ]
+                missing_reservation = not isinstance(calls, list) or any(
+                    len(
+                        [
+                            item
+                            for item in calls
+                            if isinstance(item, dict)
+                            and item.get("call_id") == step.get("id")
+                            and item.get("status") in {"reserved", "unknown"}
+                        ]
+                    )
+                    != 1
+                    for step in uncertain_steps
                 )
+                if missing_reservation:
+                    ledger["blocked_reason"] = (
+                        "Saved interrupted provider call has no matching reservation"
+                    )
+                    _save(path, record)
+                elif uncertain_steps and isinstance(calls, list):
+                    # A historical paused record may still call its reservation
+                    # 'reserved' even after the worker disappeared. Mark it
+                    # unknown before any call can pass portfolio admission.
+                    for step in uncertain_steps:
+                        item = next(row for row in calls if row.get("call_id") == step["id"])
+                        if item["status"] == "reserved":
+                            mark_unknown(ledger, call_id=step["id"])
+                    if ledger.get("blocked_reason") is None:
+                        ledger["blocked_reason"] = "Provider call outcome or usage is unknown"
+                    _save(path, record)
+                if ledger.get("blocked_reason") not in {
+                    None,
+                    "Provider call outcome or usage is unknown",
+                }:
+                    raise ProjectError(
+                        "Cannot safely resume: a saved provider attempt has no matching "
+                        "billing reservation. Saved research remains intact; reconcile "
+                        "the missing reservation before another paid call."
+                    )
             if (
                 action == "resume"
                 and (
@@ -6454,6 +6537,12 @@ async def control_session(
                     or (
                         record.get("provider_usage_limited") is True
                         and record.get("status") == "paused"
+                    )
+                    or (
+                        record.get("status") in {"paused", "stopped"}
+                        and isinstance(record.get("hard_budget_ledger"), dict)
+                        and record["hard_budget_ledger"].get("blocked_reason")
+                        == "Provider call outcome or usage is unknown"
                     )
                 )
                 and not _public(record).get("recoverable_clipped_response")
@@ -6468,50 +6557,91 @@ async def control_session(
                     if automatic_provider_recovery
                     else _protocol_completion_recovery_plan(record)
                 )
+                if plan is None and automatic_provider_recovery:
+                    # An explicit Resume can replace a failed or uncertain role
+                    # through a NEW request; never replay the old attempt.
+                    plan, plan_error = _protocol_completion_recovery_plan(record)
+                    automatic_provider_recovery = False
                 if plan is None:
-                    if automatic_provider_recovery:
-                        raise ProjectError(
-                            plan_error
-                            or "The saved provider-limit session contains an unsafe incomplete attempt."
+                    if not record.get("strategy_runs") and record.get("status") in {
+                        "ended",
+                        "failed",
+                    }:
+                        # Earlier sessions use the legacy worker and have no
+                        # branch protocol to reconcile.
+                        record["status"] = "paused"
+                        record["stopped_at"] = record.get("stopped_at") or _now()
+                        record.pop("terminal_reason", None)
+                        _event(
+                            record,
+                            "session.legacy_resume_enabled",
+                            "Saved legacy research is available for continuation.",
                         )
-                    # Keep the existing, stricter usage-limit recovery path for states
-                    # whose rejected attempts already fit their frozen call ceiling.
-                    if (
-                        explicit_protocol_recovery
-                        or record.get("provider_usage_limited") is not True
-                        or additional_calls
-                    ):
+                        _save(path, record)
+                    else:
+                        # Neither planner proved the next role safe. Never
+                        # requeue merely because a provider-limit fallback
+                        # changed the automatic-recovery classification.
                         raise ProjectError(
                             plan_error
-                            or "This terminal session has no safe missing-role continuation."
+                            or "The saved session's next role cannot yet be recovered safely."
                         )
                 else:
                     available_calls = max(
                         0, int(record.get("call_limit", 0)) - int(record.get("calls_used", 0))
                     )
                     required_extension = max(0, int(plan["required_calls"]) - available_calls)
-                    if not automatic_provider_recovery and additional_calls != required_extension:
+                    # Retain the existing 12-attempt per-authorization guard.
+                    # Large interrupted portfolios can advance in multiple
+                    # explicitly approved batches instead of becoming stuck.
+                    approved_extension = min(required_extension, 12)
+                    if additional_calls != approved_extension:
                         raise ProjectError(
                             f"Completing the saved protocol needs {plan['required_calls']} new valid role turns, "
                             f"but only {available_calls} attempts remain. Resume with exactly "
-                            f"{required_extension} explicitly authorized additional attempts; no counters were changed."
+                            f"{approved_extension} explicitly authorized additional attempts; "
+                            "additional batches may be required. No counters were changed."
                         )
-                    replacement_calls = (
-                        required_extension if automatic_provider_recovery else additional_calls
-                    )
+                    # The ordinary Resume button never approves an increase
+                    # in the paid-attempt ceiling. A distinct user decision
+                    # authorizes only the exact shortfall.
+                    replacement_calls = additional_calls
+                    deadline = record.get("deadline_at")
+                    if (
+                        not explicit_protocol_recovery
+                        and isinstance(deadline, str)
+                        and record.get("status") in {"paused", "stopped", "ended", "failed"}
+                    ):
+                        stopped_at = record.get("stopped_at")
+                        effective_deadline = datetime.fromisoformat(deadline)
+                        if isinstance(stopped_at, str):
+                            effective_deadline += datetime.now(UTC) - datetime.fromisoformat(
+                                stopped_at
+                            )
+                        minimum_time = timedelta(seconds=int(plan["required_calls"]) * CALL_TIMEOUT)
+                        if effective_deadline < datetime.now(UTC) + minimum_time:
+                            minutes = math.ceil(minimum_time.total_seconds() / 60)
+                            raise ProjectError(
+                                f"Resume requires explicit approval to extend the session duration "
+                                f"for up to {minutes} additional minutes; no limits were changed."
+                            )
                     ledger = record.get("hard_budget_ledger")
                     if isinstance(ledger, dict) and ledger.get("blocked_reason"):
+                        unknown_ids: set[str] = {
+                            str(item["call_id"])
+                            for item in ledger.get("calls", [])
+                            if isinstance(item, dict)
+                            and item.get("status") == "unknown"
+                            and isinstance(item.get("call_id"), str)
+                        }
                         review_ids = {
                             step["id"]
                             for step in record.get("steps", [])
                             if isinstance(step, dict)
                             and isinstance(step.get("id"), str)
-                            and step.get("status") == "interrupted"
+                            and step["id"] in unknown_ids
                             and step.get("role") in {"investigator", "skeptic"}
-                            and step.get("failure_kind") == "interrupted"
-                            and isinstance(step.get("provider_input_audit"), dict)
-                            and step["provider_input_audit"].get("status")
-                            == "call_interrupted_dispatch_unknown"
+                            and step.get("status") in {"interrupted", "failed", "incomplete"}
                             and any(
                                 step["id"] in item["recovery_context"]["prior_attempt_ids"]
                                 and step.get("role") == item["role"]
@@ -6530,10 +6660,9 @@ async def control_session(
                             "An explicit independent role recovery was authorized. "
                             "Every unknown attempt retains its full token and cost reservations.",
                         )
-                    # Known rejected attempts do not complete protocol roles. Extend
-                    # only the attempt counter needed to fill those slots; frozen
-                    # monetary and token budgets remain in force. No user approval
-                    # or additional provider request is made by this bookkeeping.
+                    # Known rejected attempts do not complete protocol roles.
+                    # Extend the paid attempt ceiling only after explicit user
+                    # approval; all cost/token reservations remain authoritative.
                     if replacement_calls and isinstance(record.get("hard_budget_ledger"), dict):
                         try:
                             increase_call_limit(
@@ -6546,19 +6675,6 @@ async def control_session(
                     old_call_limit = int(record.get("call_limit", 0))
                     if replacement_calls:
                         record["call_limit"] = old_call_limit + replacement_calls
-                        if not automatic_provider_recovery:
-                            # Historical explicit protocol recovery still follows
-                            # its existing separately authorized token policy.
-                            record["total_token_limit"] = int(
-                                record.get("total_token_limit", 0)
-                            ) + (
-                                replacement_calls
-                                * (
-                                    MAX_AGENT_CONTEXT_BYTES
-                                    + 65_536
-                                    + int(record.get("output_token_limit", 0))
-                                )
-                            )
                         record.setdefault("call_limit_adjustments", []).append(
                             {
                                 "at": _now(),
@@ -6569,7 +6685,7 @@ async def control_session(
                                     "replace definitively rejected provider attempts without changing "
                                     "the configured successful role-call protocol"
                                     if automatic_provider_recovery
-                                    else "complete the original configured Investigator/Skeptic round protocol"
+                                    else "resume missing protocol roles without replaying failed or uncertain attempts"
                                 ),
                                 "accepted_turns_before_resume": plan["completed_turns"],
                                 "required_turns": plan["required_calls"],
@@ -6803,11 +6919,10 @@ async def control_session(
         )
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
-    if (
-        credential["mode"] != record["mode"]
-        or _digest(credential["identity"]) != record["identity_hash"]
-    ):
-        record["message"] = "AI account or billing identity changed; research remains paused."
+    if credential["mode"] != record["mode"]:
+        record["message"] = (
+            "AI provider transport mode changed; connect the saved provider type and resume."
+        )
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
     if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
@@ -7119,13 +7234,8 @@ async def _call_provider(
     request_id = str(uuid4())
     started = time.monotonic()
     credential = await auth_context()
-    if (
-        credential["mode"] != record["mode"]
-        or _digest(credential["identity"]) != record["identity_hash"]
-    ):
-        raise ProjectError(
-            "AI account or billing identity changed; session paused before another call"
-        )
+    if credential["mode"] != record["mode"]:
+        raise ProjectError("AI provider transport mode changed before dispatch.")
     schema_model = Investigator if role == "investigator" else Skeptic
     payload = _role_request_payload(record, role, context)
     context["_session_log_request_id"] = request_id
@@ -10654,13 +10764,8 @@ async def _portfolio_role_call(
                 return False
             if not _same_session_project(record, view):
                 raise ProjectError("Project identity changed; session paused before a new call.")
-            if (
-                credential["mode"] != record["mode"]
-                or _digest(credential["identity"]) != record["identity_hash"]
-            ):
-                raise ProjectError(
-                    "AI account or billing identity changed; session paused before another call."
-                )
+            if credential["mode"] != record["mode"]:
+                raise ProjectError("AI provider transport mode changed before dispatch.")
             if (
                 not config["available"]
                 or config["model"] != record["model"]
@@ -12255,7 +12360,7 @@ def _pause_for_provider_usage_limit(record: dict[str, Any]) -> bool:
     message = (
         "Provider usage limit reached. Accepted findings are preserved. "
         "No further provider requests were made after the confirmed rejection. "
-        "Choose Continue Research after your account usage becomes available."
+        "Click Resume when your account usage becomes available."
     )
     # The recovery plan identifies unfinished role slots, including branches
     # previously marked ended when their turn was deferred after the limit.
@@ -12472,11 +12577,10 @@ def _protocol_completion_recovery_plan(
             }
             continue
         if (
-            status == "interrupted"
+            status in {"interrupted", "failed", "incomplete"}
             and role in {"investigator", "skeptic"}
-            and step.get("failure_kind") == "interrupted"
-            and step.get("attempt_status") in {None, "unknown"}
-            and audit_status == "call_interrupted_dispatch_unknown"
+            and step.get("attempt_status") != "not_dispatched"
+            and audit_status != "prepared_before_dispatch"
             and strategy_id in strategy_by_id
             and strategy_by_id[strategy_id].get("cycle") == cycle
             and (
@@ -12496,8 +12600,8 @@ def _protocol_completion_recovery_plan(
             unknown_roles.setdefault(key, []).append(step)
             continue
         return None, (
-            "The saved session contains a running, incomplete, unknown-dispatch, or otherwise unsafe attempt; "
-            "this recovery plan will not replay it."
+            "The saved session contains a running or inconsistent role attempt; "
+            "recovery will not replay it. Saved work remains intact."
         )
 
     planned: list[dict[str, Any]] = []
@@ -14041,16 +14145,19 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             return False
         compilation = record.get("reference_compilation")
         if not isinstance(compilation, dict):
-            record["status"] = "paused"
-            record["current_action"] = "Paused · incompatible research session"
-            record["message"] = (
-                "This session predates the required reference compiler checkpoint. "
-                "Its saved findings remain available, but its research cannot resume. "
-                "Start a new session."
+            # Compiler policy cannot be applied retroactively to paid sessions
+            # created before it existed. Their original method notes survive.
+            record["reference_compilation"] = {
+                "version": "legacy",
+                "required_for_acceptance": False,
+                "status": "not_needed",
+                "reason": "This session predates reference compilation; saved research methods are retained.",
+            }
+            _event(
+                record, "references.compilation.legacy", record["reference_compilation"]["reason"]
             )
-            _event(record, "references.compilation.incompatible", record["message"])
             _save(path, record)
-            return False
+            return True
         state = compilation.get("status")
         if state in {"not_needed", "fallback", "skipped", "disabled"}:
             return True
@@ -14134,15 +14241,12 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             _event(record, "references.compilation.skipped", compilation["reason"])
             _save(path, record)
             return True
-        if not isinstance(credential, Mapping) or (
-            credential.get("mode") != record["mode"]
-            or not isinstance(credential.get("identity"), str)
-            or _digest(credential["identity"]) != record["identity_hash"]
-        ):
+        if not isinstance(credential, Mapping) or credential.get("mode") != record["mode"]:
             record["status"] = "paused"
-            record["current_action"] = "Paused · AI account changed"
+            record["current_action"] = "Paused · provider transport changed"
             record["message"] = (
-                "Account changed before reference compilation; no provider call was made."
+                "Provider transport mode changed before reference compilation; "
+                "connect the saved provider type to resume. No provider call was made."
             )
             _save(path, record)
             return False
@@ -14804,9 +14908,9 @@ def _strict_compilation_block_reason(compilation: Any) -> str | None:
         :400
     ]
     return (
-        f"Research was not started: required reference compilation is {status}. "
-        f"{reason} Review Outcome → Research References, correct the cause, "
-        "and start a new session. No Investigator or Skeptic call was dispatched."
+        f"Research is paused: required reference compilation is {status}. "
+        f"{reason} Review Outcome → Research References and resolve the cause "
+        "before clicking Resume. No Investigator or Skeptic call was dispatched."
     )
 
 
@@ -14947,14 +15051,9 @@ async def _worker(session_id: str, path: str) -> None:
                     )
                     _save(path, record)
                     return
-                if (
-                    credential["mode"] != record["mode"]
-                    or _digest(credential["identity"]) != record["identity_hash"]
-                ):
+                if credential["mode"] != record["mode"]:
                     record["status"] = "paused"
-                    record["message"] = (
-                        "AI account or billing identity changed; session paused before a new call."
-                    )
+                    record["message"] = "AI provider transport mode changed before a new call."
                     _save(path, record)
                     return
                 config = await _frozen_session_configuration(view, credential, record)

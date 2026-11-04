@@ -290,9 +290,20 @@ function outcomeDisplayLabel(session: ResearchSession): string {
 
 function stoppedSessionGuidance(session: ResearchSession): { cause: string; next: string } {
   if (session.provider_usage_limited && ['paused', 'stopped', 'ended', 'failed'].includes(session.status)) {
+    const rejection = [...session.steps].reverse().find(step => step.failure_kind === 'provider_limited');
+    const lastLimitEvent = [...session.events].reverse().find(event => event.kind === 'provider.usage_limit');
+    const resumedBeforeRejection = lastLimitEvent != null && session.events.some(event =>
+      event.kind === 'resumed' && event.sequence < lastLimitEvent.sequence);
+    const evidence = rejection ? [
+      rejection.provider_error_code && `code: ${rejection.provider_error_code}`,
+      rejection.provider_http_status != null && `HTTP ${rejection.provider_http_status}`,
+      rejection.provider_stream_event && `stream event: ${rejection.provider_stream_event}`,
+    ].filter(Boolean).join('; ') : '';
     return {
-      cause: 'The AI provider reached its account usage limit. Saved findings are intact.',
-      next: 'Choose Continue Research when the provider allowance is available.',
+      cause: `${resumedBeforeRejection
+        ? 'Resume succeeded, but the provider rejected a subsequent research request at its account or app usage limit.'
+        : 'The AI provider rejected a research request at its account or app usage limit.'} ${evidence ? `Provider evidence: ${evidence}. ` : ''}Saved findings are intact. A successful HTTP transport does not override an in-stream provider rejection.`,
+      next: 'Click Resume when the provider allowance is available.',
     };
   }
   const action = session.current_action.toLowerCase();
@@ -1621,7 +1632,43 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
     if (!target) return;
     setBusy(true); setError('');
-    try { await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action }); await load(target.id); }
+    try {
+      let recoveryAction: 'pause' | 'resume' | 'stop' | 'repair' = action;
+      let authorizedCalls = 0;
+      for (;;) {
+        try {
+          await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls });
+          break;
+        } catch (cause) {
+          const message = errorMessage(cause);
+          const attemptShortfall = message.match(/Resume with exactly (\d+) explicitly authorized additional attempts/);
+          if (action === 'resume' && authorizedCalls === 0 && attemptShortfall) {
+            const count = Number(attemptShortfall[1]);
+            if (count >= 1 && count <= 12 && window.confirm(
+              `Continuing this saved session requires ${count} additional paid provider attempt${count === 1 ? '' : 's'} beyond its existing call limit. Further approvals may be needed if more research remains unfinished. This may consume more provider allowance. Keep all saved research and authorize exactly ${count} additional attempt${count === 1 ? '' : 's'}?`
+            )) {
+              authorizedCalls = count;
+              continue;
+            }
+            setAnnouncement('Resume cancelled. Saved research and spending limits were preserved.');
+            return;
+          }
+          const durationShortfall = message.match(/Resume requires explicit approval to extend the session duration for up to (\d+) additional minutes/);
+          if (action === 'resume' && recoveryAction === 'resume' && durationShortfall) {
+            if (window.confirm(
+              `This saved session needs up to ${durationShortfall[1]} additional minutes to complete its unfinished research. The existing evidence and provider spending limits remain preserved. Authorize extending this session's duration?`
+            )) {
+              recoveryAction = 'repair';
+              continue;
+            }
+            setAnnouncement('Resume cancelled. Saved research and duration limits were preserved.');
+            return;
+          }
+          throw cause;
+        }
+      }
+      await load(target.id);
+    }
     catch (cause) {
       await load(target.id).catch(() => {});
       const message = errorMessage(cause);
@@ -1637,8 +1684,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   }, [load]);
 
   function requestResume(target: ResearchSession) {
-    // Account-limit continuation is an ordinary Resume: no per-call approval
-    // or exposed attempt-limit arithmetic. The server enforces frozen budgets.
+    // Resume reuses the saved checkpoint. Paid-attempt or duration extensions
+    // require a separate explicit confirmation before any provider dispatch.
     void control('resume', target);
   }
 
@@ -1813,8 +1860,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {(item.status === 'stopped' || (item.status === 'paused' && !item.provider_limit_continuation?.eligible) || item.recoverable_clipped_response) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} title={`Resume session #${item.session_number}`} data-tooltip={`Resume session #${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
-                  {item.provider_limit_continuation?.eligible && ['failed', 'ended', 'paused'].includes(item.status) && <button type="button" className="text-view-link" disabled={busy || !!readError || projectAtCapacity} title="Continue Research when provider usage is available; saved findings and original budget limits are preserved" onClick={() => requestResume(item)}>Continue Research</button>}
+                  {(['stopped', 'paused', 'failed'].includes(item.status) || (item.status === 'ended' && !['protocol_complete', 'research_completed_early'].includes(item.termination_reason_code ?? ''))) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} title="Resume this session" data-tooltip="Resume this session" disabled={busy || !!readError || projectAtCapacity} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} title={`Stop Session ${item.session_number}; it can be resumed later`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
                   {!['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
@@ -3969,6 +4015,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></>}</div></header>
+      {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their saved research configuration; some limits can be adjusted when resuming.</p>}
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => changeSettingsTab('limits')}>Limits</button>
@@ -4000,7 +4047,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset></div>
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
-      <p>Research limits apply to future sessions. Existing sessions keep their original settings.</p>
+      <p>Research rounds, turns, and duration are set when a session starts. Some limits are rechecked on Resume; saved findings and accepted calls are preserved.</p>
       {cloud?.target === 'hosted' && <p className="settings-hint">Hosted sponsorship is governed by account allowance; the saved project duration applies.</p>}
       {cloud?.target === 'local' && <p className="settings-hint">Sponsored research uses the saved project duration and is governed by the account allowance.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
@@ -4290,6 +4337,11 @@ function Home({ initialPath, onOpen }: {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
+  const [signOutCopyUnavailable] = useState(() => {
+    const unavailable = window.sessionStorage.getItem('sigma.signOutCopyUnavailable') === 'true';
+    window.sessionStorage.removeItem('sigma.signOutCopyUnavailable');
+    return unavailable;
+  });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
@@ -4392,6 +4444,7 @@ function Home({ initialPath, onOpen }: {
           <HomeInvitationAction/>
         </div></div>
       </div>
+      {signOutCopyUnavailable && <p className="home-signout-copy-notice" role="status">Signed out of Google. The original project remains saved in your Google account, but SIGMA could not make a guest copy. Sign back in to open that project.</p>}
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -5488,16 +5541,25 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         ? new URLSearchParams(window.location.search).get('path')
         : null;
       let destination = '/';
+      let signOutCopyUnavailable = false;
       if (currentProjectPath && !authenticatedGuest) {
-        const copied = await fetch('/api/projects/guest-copy', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: currentProjectPath }),
-        });
-        if (!copied.ok) throw await cloudFailure(copied, 'The project could not be kept open after sign-out.');
-        const result = await copied.json() as { path: string };
-        destination = projectUrl(result.path);
-        currentProjectPath = result.path;
+        try {
+          const copied = await fetch('/api/projects/guest-copy', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+            body: JSON.stringify({ path: currentProjectPath }),
+          });
+          if (!copied.ok) throw new Error('Guest copy unavailable.');
+          const result = await copied.json() as { path: string };
+          if (!result.path) throw new Error('Guest copy path unavailable.');
+          destination = projectUrl(result.path);
+          currentProjectPath = result.path;
+        } catch {
+          // Export/import validation or an active session may prevent a guest copy.
+          // Never make logout depend on the optional copy succeeding.
+          signOutCopyUnavailable = true;
+          currentProjectPath = null;
+        }
       } else if (currentProjectPath) {
         destination = projectUrl(currentProjectPath);
       }
@@ -5508,6 +5570,8 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true');
       window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed');
       if (currentProjectPath) window.localStorage.setItem('sigma.currentProject', currentProjectPath);
+      else window.localStorage.removeItem('sigma.currentProject');
+      if (signOutCopyUnavailable) window.sessionStorage.setItem('sigma.signOutCopyUnavailable', 'true');
       window.location.assign(destination);
     } catch (cause) {
       const message = errorMessage(cause);

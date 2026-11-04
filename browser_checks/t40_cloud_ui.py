@@ -715,6 +715,44 @@ def main() -> None:
             )
             expect(member.get_by_role("link", name="Administrator Settings")).to_have_count(0)
             expect(member.get_by_text("member@example.org", exact=True)).to_have_count(0)
+
+            # A guest-copy export/import failure must not block Google
+            # sign-out or discard the private original.
+            copies: list[str] = []
+            logouts: list[str] = []
+
+            def rejected_guest_copy(route):
+                copies.append(route.request.post_data or "")
+                route.fulfill(
+                    status=400,
+                    content_type="application/json",
+                    body='{"detail":"Project could not be safely copied to this account."}',
+                )
+
+            def successful_logout(route):
+                logouts.append(route.request.method)
+                status.update(authenticated=False, user=None)
+                route.fulfill(status=200, content_type="application/json", body="{}")
+
+            member.route("**/api/projects/guest-copy", rejected_guest_copy)
+            member.route("**/api/cloud-auth/logout", successful_logout)
+            member.evaluate(
+                "() => { localStorage.setItem('sigma.currentProject', '/private/old.json'); "
+                "history.pushState(null, '', '/project?path=%2Fprivate%2Fpaused.json'); }"
+            )
+            member.get_by_role("button", name="Sign out of Google").click()
+            expect(member).to_have_url(URL + "/", timeout=10000)
+            expect(member.locator(".home-signout-copy-notice")).to_contain_text(
+                "original project remains saved in your Google account"
+            )
+            assert copies and logouts == ["POST"], (copies, logouts)
+            assert member.evaluate("localStorage.getItem('sigma.currentProject')") is None
+            expect(member.locator(".request-toast").filter(has_text="safely copied")).to_have_count(
+                0
+            )
+            member.reload()
+            expect(member.locator(".home-signout-copy-notice")).to_have_count(0)
+
             assert not errors, errors
             assert admin_requests and all("127.0.0.1" in request for request in admin_requests)
             print(
