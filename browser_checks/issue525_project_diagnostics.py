@@ -207,8 +207,10 @@ def main() -> None:
                         }"""
                     )
                     with page.expect_response(
-                        lambda response: "/api/projects/diagnostics" in response.url
-                        and response.request.method == "POST"
+                        lambda response: (
+                            "/api/projects/diagnostics" in response.url
+                            and response.request.method == "POST"
+                        )
                     ) as deletion_report:
                         page.get_by_role("button", name="Remove saved session").click()
                     assert deletion_report.value.ok
