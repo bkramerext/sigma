@@ -15,6 +15,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+def _email_env(suffix: str) -> str:
+    modern = os.environ.get(f"SIGMA_EMAIL_{suffix}")
+    if modern is not None:
+        return modern.strip()
+    return os.environ.get(f"SIGMA_INVITATION_{suffix}", "").strip()
+
+
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 SEND_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 
@@ -42,7 +49,7 @@ def send_invitation(
 
 def send_admin_notification(subject: str, body: str, *, recipients: list[str]) -> None:
     """Send one privacy-preserving email to verified active administrators."""
-    sender = os.environ.get("SIGMA_INVITATION_GMAIL_SENDER", "").strip().lower()
+    sender = _email_env("GMAIL_SENDER").lower()
     if not sender or not recipients:
         raise RuntimeError("Invitation delivery is not configured.")
     message = EmailMessage()
@@ -62,8 +69,8 @@ def send_message(message: EmailMessage, *, recipients: list[str], reply_to: str 
     Gmail API accepts the MIME recipient headers rather than an SMTP envelope.
     A failed API request can have an uncertain outcome; callers must not auto-retry.
     """
-    token_file = os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip()
-    sender = os.environ.get("SIGMA_INVITATION_GMAIL_SENDER", "").strip().lower()
+    token_file = _email_env("GMAIL_TOKEN_FILE")
+    sender = _email_env("GMAIL_SENDER").lower()
     if not token_file or not sender or not recipients:
         raise RuntimeError("Gmail delivery is not configured.")
     if any(header in message for header in ("From", "To", "Cc", "Bcc")):

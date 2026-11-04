@@ -1985,6 +1985,23 @@ def denied_identity(request: Request):
     return response
 
 
+def email_env(suffix: str, default: str = "") -> str:
+    """Shared mail setting; prefer SIGMA_EMAIL_* while honoring legacy names."""
+    modern = os.environ.get(f"SIGMA_EMAIL_{suffix}")
+    if modern is not None:
+        return modern.strip()
+    return os.environ.get(f"SIGMA_INVITATION_{suffix}", default).strip()
+
+
+def email_secret(suffix: str) -> str | None:
+    """Read a shared mail secret, including _FILE, without unsafe fallback."""
+    modern = f"SIGMA_EMAIL_{suffix}"
+    legacy = f"SIGMA_INVITATION_{suffix}"
+    if modern in os.environ or f"{modern}_FILE" in os.environ:
+        return secret_value(modern)
+    return secret_value(legacy)
+
+
 def _notification_admin_recipients(cfg: Config) -> list[str]:
     """Derive active administrators from verified identities and admin grants.
 
@@ -2017,7 +2034,7 @@ def _deliver_admin_notice(subject: str, body: str) -> None:
     recipients = _notification_admin_recipients(cfg)
     if not recipients:
         raise RuntimeError("No verified SIGMA administrator notification recipient is available.")
-    if os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip():
+    if email_env("GMAIL_TOKEN_FILE"):
         from sigma.gmail_delivery import send_admin_notification
 
         send_admin_notification(subject, body, recipients=recipients)
@@ -2059,21 +2076,21 @@ def send_smtp_message(
     """
     if not recipients:
         raise SMTPDeliveryError("Email requires a recipient.", state="failed")
-    raw_username = os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
+    raw_username = email_env("SMTP_USERNAME")
     try:
         username = _normalize_email(raw_username)
         recipients = [_normalize_email(address) for address in recipients]
     except ValueError as exc:
         raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed") from exc
     try:
-        password = secret_value("SIGMA_INVITATION_SMTP_PASSWORD")
+        password = email_secret("SMTP_PASSWORD")
     except SecretConfigurationError as exc:
         raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed") from exc
     if not password:
         raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed")
-    host = os.environ.get("SIGMA_INVITATION_SMTP_HOST", "smtp.gmail.com").strip()
+    host = email_env("SMTP_HOST", "smtp.gmail.com")
     try:
-        port = int(os.environ.get("SIGMA_INVITATION_SMTP_PORT", "587"))
+        port = int(email_env("SMTP_PORT", "587"))
         if not host or not 1 <= port <= 65535:
             raise ValueError("Invalid SMTP configuration")
         message["From"] = username

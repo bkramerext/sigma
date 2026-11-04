@@ -290,7 +290,7 @@ def send_project_email(
         if principal is not None
         else (
             os.environ.get("SIGMA_PROJECT_EMAIL_REPLY_TO", "").strip()
-            or os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
+            or cloud_auth.email_env("SMTP_USERNAME")
         )
     )
     if reply_to:
@@ -308,7 +308,7 @@ def send_project_email(
     if prior_count is not None:
         return prior_count
     try:
-        if os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip():
+        if cloud_auth.email_env("GMAIL_TOKEN_FILE"):
             from sigma.gmail_delivery import send_message
 
             send_message(message, recipients=recipients, reply_to=reply_to or None)
