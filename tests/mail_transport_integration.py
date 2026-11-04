@@ -257,18 +257,39 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
             ),
         ):
             self.assertEqual(cloud_auth.email_env("GMAIL_TOKEN_FILE"), "")
-            cloud_auth._deliver_feedback(
-                "fixture-id",
-                "Hosting path unchanged",
-                123,
-                account_email="admin@example.org",
-                contact_email="admin@example.org",
-                diagnostic_recipients=["admin@example.org"],
+            from cloud_auth_fixture import ORIGIN
+
+            signed = self.finish(email="admin@example.org", subject="google-sub-1")
+            self.client.cookies.set(
+                cloud_auth.SESSION_COOKIE, signed.cookies[cloud_auth.SESSION_COOKIE]
             )
-            sent = project_email.send_project_email(
-                "/fixture.json", "reader@example.org", "", "project", None
+            feedback = self.client.post(
+                "/api/cloud-auth/feedback",
+                json={"message": "Hosting SMTP path must remain unchanged."},
+                headers={"Origin": ORIGIN},
             )
-        self.assertEqual(sent, 1)
+            self.assertEqual(feedback.status_code, 200, feedback.text)
+            self.assertEqual(feedback.json()["status"], "received")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                row = db.execute(
+                    "SELECT notification_error FROM feedback_requests WHERE id=?",
+                    (feedback.json()["id"],),
+                ).fetchone()
+            self.assertIsNone(row["notification_error"])
+            emailed = self.client.post(
+                "/api/projects/email",
+                json={
+                    "request_id": str(uuid4()),
+                    "path": "/fixture.json",
+                    "recipients": "reader@example.org",
+                    "body": "",
+                    "mode": "project",
+                    "paper_id": None,
+                },
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(emailed.status_code, 200, emailed.text)
+        self.assertEqual(emailed.json(), {"sent": 1})
         gmail.assert_not_called()
         smtp_messages = smtp.return_value.__enter__.return_value.send_message.call_args_list
         self.assertEqual(len(smtp_messages), 2)
