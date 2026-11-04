@@ -1403,7 +1403,15 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const recordClientError = async (message: string, stage: string) => {
     const result = await reportProjectDiagnostic(path, message, stage, crypto.randomUUID());
     setDiagnosticStatus(result.status);
-    if (result.recorded) void reloadDiagnostics().catch(() => {});
+    if (result.recorded) {
+      // If the server redacted the message, render that same sanitized
+      // diagnostic in the UI instead of showing a different raw value.
+      if (result.message && result.message !== message) {
+        if (stage === 'session_read') setReadError(result.message);
+        else setError(result.message);
+      }
+      void reloadDiagnostics().catch(() => {});
+    }
   };
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
