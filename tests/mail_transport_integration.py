@@ -9,7 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import os
-from email import message_from_bytes
+from email import message_from_bytes, policy
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -48,7 +48,7 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
                 return FakeResponse({"access_token": "fixture-access"})
             self.assertEqual(request.full_url, gmail_delivery.SEND_ENDPOINT)
             raw = json.loads(request.data)["raw"]
-            messages.append(message_from_bytes(base64.urlsafe_b64decode(raw)))
+            messages.append(message_from_bytes(base64.urlsafe_b64decode(raw), policy=policy.default))
             return FakeResponse({"id": "fixture-mail-id"})
 
         with (
