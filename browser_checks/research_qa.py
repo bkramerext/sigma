@@ -214,7 +214,9 @@ with sync_playwright() as playwright:
     markdown_box = markdown_icon.bounding_box()
     assert markdown_box and markdown_icon.locator("svg.markdown-logo").count() == 1
     normal_copy_button = title_line.get_by_role("button", name="Copy Markdown answer")
-    assert normal_copy_button.bounding_box()["x"] - (markdown_box["x"] + markdown_box["width"]) == 12
+    assert (
+        normal_copy_button.bounding_box()["x"] - (markdown_box["x"] + markdown_box["width"]) == 12
+    )
     normal_copy_box = normal_copy_button.bounding_box()
     normal_icon_box = normal_copy_button.locator("svg").bounding_box()
     normal_icon_bounds = normal_copy_button.locator("svg").evaluate(
@@ -259,13 +261,16 @@ with sync_playwright() as playwright:
     preview = card.locator(".ai-paper-preview")
     expect(preview).to_contain_text("The saved research answers")
     assert preview.evaluate("el => getComputedStyle(el).paddingBottom") == "40px"
-    assert dialog.locator(".settings-body.ai-paper-body").evaluate(
-        "el => getComputedStyle(el).paddingBottom"
-    ) == "40px"
+    assert (
+        dialog.locator(".settings-body.ai-paper-body").evaluate(
+            "el => getComputedStyle(el).paddingBottom"
+        )
+        == "40px"
+    )
     preview.evaluate("el => { el.scrollTop = el.scrollHeight; }")
-    assert preview.evaluate(
-        "el => el.scrollHeight - el.clientHeight - el.scrollTop < 2"
-    ), "The last answer content must be reachable through its scrollport"
+    assert preview.evaluate("el => el.scrollHeight - el.clientHeight - el.scrollTop < 2"), (
+        "The last answer content must be reachable through its scrollport"
+    )
     citation = card.locator(".ai-paper-preview a").filter(has_text="Session #1").first
     expect(citation).to_be_visible()
     citation_url = citation.get_attribute("href")
