@@ -8044,6 +8044,7 @@ def _context_byte_breakdown(
         key=lambda item: (-item[1], item[0]),
     )
     largest = ", ".join(f"{field[:48]}={size}B" for field, size in sizes[:6])
+
     # Identifiers are internal, but fail closed if any arbitrary prose appears.
     def safe_identifier(value: str | None) -> str:
         if (
@@ -14674,7 +14675,10 @@ async def _worker(session_id: str, path: str) -> None:
                     "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
                     "No provider call was made; saved research records were preserved."
                     + _context_byte_breakdown(
-                        context, phase="legacy_dispatch", strategy_id=record.get("strategy_id"), role=role
+                        context,
+                        phase="legacy_dispatch",
+                        strategy_id=record.get("strategy_id"),
+                        role=role,
                     )
                 )
             record["status"] = "queued"
