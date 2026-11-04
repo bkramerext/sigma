@@ -187,7 +187,7 @@ def validate_result(raw: Any, frozen_sources: list[dict[str, Any]]) -> dict[str,
         prefix = guidance.strip()[:limit]
         # Keep a complete sentence or list item when possible; otherwise
         # use a complete word. Never lengthen or manufacture model guidance.
-        cut = max(prefix.rfind("\\n"), prefix.rfind(". "), prefix.rfind("; "))
+        cut = max(prefix.rfind("\n"), prefix.rfind(". "), prefix.rfind("; "))
         if cut >= limit // 2:
             prefix = prefix[: cut + (1 if prefix[cut] == "." else 0)]
         else:
