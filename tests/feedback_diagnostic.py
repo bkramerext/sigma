@@ -14,7 +14,9 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         with (
             patch.dict(
                 os.environ,
-                {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": " signer@example.org "},
+                {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": " signer@example.org ",
+                 "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
+                 "SIGMA_EMAIL_SMTP_PASSWORD": "test-only-password"},
                 clear=True,
             ),
             patch.object(feedback_diagnostic, "load_local_config"),
