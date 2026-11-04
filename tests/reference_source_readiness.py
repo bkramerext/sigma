@@ -104,23 +104,8 @@ async def verify_provider_free_admission() -> None:
             patch.object(research_sessions, "select_method_sources", return_value=methods),
             patch.object(research_sessions, "_worker", new=AsyncMock()) as mock_worker,
         ):
-            try:
-                await research_sessions.start_session(
-                    str(path),
-                    strategy.id,
-                    str(uuid4()),
-                    view.project.id,
-                    credential["identity"],
-                    expected_limits=limits,
-                    strategy_ids=[strategy.id],
-                )
-            except ProjectError as exc:
-                message = str(exc)
-                assert "before provider dispatch" in message, message
-                assert "Brandeis-close-reading" in message, message
-                assert "Brandeis-source-synthesis" in message, message
-            else:
-                raise AssertionError("Unretrieved methodology URLs were accepted")
+            # Unavailable references are retained as uninspected pointers.
+            assert retrieval_readiness_errors(methods) == []
             assert research_sessions._all(str(path)) == []
             mock_worker.assert_not_called()
 
@@ -313,6 +298,100 @@ async def verify_empty_and_single_reference_sessions() -> None:
             assert saved["calls_used"] == 0 and saved["steps"] == []
 
 
+
+async def verify_unavailable_reference_sessions() -> None:
+    """Broken URLs cannot consume providers or block a valid new session."""
+    cases = (
+        (
+            "mixed",
+            [
+                source("Trusted-method"),
+                source("Forbidden", status="unavailable", reason="http_403"),
+                source("Missing", status="unavailable", reason="http_404"),
+                source("Oversized", status="unavailable", reason="response_too_large"),
+                source("Timed-out", status="unavailable", reason="reference_deadline_exceeded"),
+            ],
+            "pending",
+            ["trusted-method"],
+        ),
+        (
+            "unavailable-only",
+            [
+                source("Forbidden", status="unavailable", reason="http_403"),
+                source("Non-HTTPS", status="unavailable", reason="non_https_or_credential_url"),
+            ],
+            "not_needed",
+            [],
+        ),
+    )
+    for label, sources, expected_stage, expected_ids in cases:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / f"{label}.sigma"
+            view, strategy, fixture_credential, config = await fixture.setup(path)
+            credential = AuthContext(
+                token=fixture_credential["token"],
+                mode=fixture_credential["mode"],
+                status=fixture_credential["status"],
+                identity=fixture_credential["identity"],
+            )
+            selection = {
+                "version": "project-type-methods-v1",
+                "status": "selected",
+                "mode": "literature",
+                "sources": sources,
+                "retrieval_summary": {
+                    "retrieved": len(expected_ids),
+                    "unavailable": len(sources) - len(expected_ids),
+                },
+            }
+            with (
+                patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "true"}),
+                patch.object(
+                    research_sessions, "auth_context", new=AsyncMock(return_value=credential)
+                ),
+                patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+                patch.object(
+                    research_sessions, "select_method_sources", return_value=selection
+                ),
+                patch.object(research_sessions, "_worker", new=AsyncMock()),
+            ):
+                started = await research_sessions.start_session(
+                    str(path),
+                    strategy.id,
+                    str(uuid4()),
+                    view.project.id,
+                    credential["identity"],
+                    expected_limits=research_sessions.get_limits(str(path)),
+                    strategy_ids=[strategy.id],
+                )
+            assert started["status"] == "queued"
+            saved = research_sessions._read(str(path), started["id"])
+            assert len(saved["research_method_sources"]["sources"]) == len(sources)
+            assert saved["reference_compilation"]["status"] == expected_stage
+            assert saved["reference_compilation"]["verified_source_count"] == len(expected_ids)
+            assert saved["reference_compilation"]["unavailable_source_count"] == (
+                len(sources) - len(expected_ids)
+            )
+            assert saved["calls_used"] == 0 and saved["steps"] == []
+            compiled = json.loads(research_reference_compiler.compile_input(saved))
+            assert [item["id"] for item in compiled["retrieved_methodology_excerpts"]] == (
+                expected_ids
+            )
+            assert [item["id"] for item in compiled["uninspected_methodology_sources"]] == (
+                expected_ids
+            )
+            context = research_sessions._portfolio_context(
+                saved, saved["strategy_runs"][0], "investigator", 1
+            )
+            assert [item["id"] for item in context["methodology_source_material"]] == (
+                expected_ids
+            )
+            assert context["methodology_retrieval_summary"]["unavailable"] == (
+                len(sources) - len(expected_ids)
+            )
+
+
+
 def verify_curated_method_reference_defaults() -> None:
     # The built-in methodology defaults must be consumable by SIGMA's
     # HTML/plain-text-only retriever. Publication references are separate.
@@ -358,11 +437,11 @@ def main() -> None:
         source("Close-reading", status="unavailable", reason="http_403"),
         source("Source-synthesis", status="unavailable", reason="http_403"),
     ]
-    issues = retrieval_readiness_errors({"sources": unavailable})
-    assert len(issues) == 2
-    assert all("http_403" in item for item in issues)
-    assert any("Close-reading" in item for item in issues)
-    assert any("Source-synthesis" in item for item in issues)
+    assert retrieval_readiness_errors({"sources": unavailable}) == []
+    assert [row["retrieval"]["reason"] for row in unavailable[1:]] == [
+        "http_403",
+        "http_403",
+    ]
 
     # A title, URL, or coordinator annotation never counts as source content.
     metadata_only = {"title": "Uninspected", "url": "https://example.org/uninspected"}
@@ -391,9 +470,10 @@ def main() -> None:
     verify_curated_method_reference_defaults()
     verify_compiler_receives_verified_excerpts()
     asyncio.run(verify_provider_free_admission())
+    asyncio.run(verify_unavailable_reference_sessions())
     asyncio.run(verify_empty_and_single_reference_sessions())
     print(
-        "PASS: unconditional research-method readiness, 403 / hashes / 0-1-3 sources / saved replay"
+        "PASS: advisory URL failures, strict hash integrity, 0-1-3 verified sources / saved replay"
     )
 
 
