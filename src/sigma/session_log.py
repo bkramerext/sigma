@@ -1214,6 +1214,7 @@ def _delete_project_sync(project_id: str, project_file: str | Path, root_hint: P
         for child in root.iterdir():
             if child.is_symlink() or not (
                 child.suffix in {".md", ".lock"}
+                or child.name == "project-diagnostics.jsonl" and child.is_file()
                 or child.name == ".short-name"
                 or child.name.startswith(".short-name-")
                 and child.suffix == ".tmp"
