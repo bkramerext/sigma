@@ -235,20 +235,16 @@ def _bound_v2_obligation_ledger(context: dict[str, Any], *, limit: int) -> None:
         return
 
     omitted_ids = [
-        item["obligation_id"]
-        for item in omitted
-        if isinstance(item.get("obligation_id"), str)
+        item["obligation_id"] for item in omitted if isinstance(item.get("obligation_id"), str)
     ]
     previous = context.get("obligation_ledger_omitted_count", 0)
-    context["obligation_ledger_omitted_count"] = (
-        (previous if type(previous) is int else 0) + len(omitted)
+    context["obligation_ledger_omitted_count"] = (previous if type(previous) is int else 0) + len(
+        omitted
     )
     prior_ids = context.get("obligation_ledger_omitted_ids", [])
     if not isinstance(prior_ids, list):
         prior_ids = []
-    context["obligation_ledger_omitted_ids"] = list(
-        dict.fromkeys([*prior_ids, *omitted_ids])
-    )[:32]
+    context["obligation_ledger_omitted_ids"] = list(dict.fromkeys([*prior_ids, *omitted_ids]))[:32]
     previous_manifest = manifest.get("omitted_obligations", {})
     if not isinstance(previous_manifest, dict):
         previous_manifest = {}
