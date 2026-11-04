@@ -80,7 +80,7 @@ def _archive_update(
 class AnswerDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     answer: str = Field(min_length=1, max_length=16000)
-    source_refs: list[str] = Field(min_length=1, max_length=40)
+    source_refs: list[str] = Field(default_factory=list, max_length=40)
 
 
 def _json(value: Any) -> bytes:
@@ -645,8 +645,10 @@ async def _answer_locked(
     )
     if not isinstance(structured, AnswerDraft):
         raise ProjectError("Provider returned an invalid Q/A response")
-    if any(ref not in source_ids for ref in structured.source_refs):
-        raise ProjectError("Provider returned a citation that does not match saved research")
+    # A model may return a useful answer with stale or invented citation IDs.
+    # Never save or display those IDs as evidence, but do not discard the answer.
+    # Keep only references in the frozen evidence set, in first-seen order.
+    cited_refs = list(dict.fromkeys(ref for ref in structured.source_refs if ref in source_ids))
     numbers_by_session = {
         str(source.get("id"))[8:]: source.get("data", {}).get("session_number")
         for source in selected
@@ -668,7 +670,7 @@ async def _answer_locked(
                 (row.get("kind") for row in selected if row.get("id") == ref), "saved evidence"
             ),
         }
-        for ref in structured.source_refs
+        for ref in cited_refs
     ]
     created_at = datetime.now(UTC).isoformat()
     record = {

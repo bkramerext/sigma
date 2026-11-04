@@ -113,6 +113,8 @@ with sync_playwright() as playwright:
     question = "Can this saved research be used to explain the relationship between the investigators’ evidence, the skeptic’s objections, and the unresolved conclusions in this project?"
     dialog.get_by_label("Question").fill(question)
     dialog.get_by_role("button", name="Ask", exact=True).click()
+    expect(dialog.get_by_role("button", name="Answering")).to_be_disabled()
+    expect(dialog.get_by_role("button", name="Answering")).to_contain_text("⌛ Answering…")
     dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(dialog.get_by_role("alert")).to_contain_text("Request stopped")
     dialog.get_by_role("button", name="Close", exact=True).click()
@@ -120,15 +122,13 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Research Q/A", exact=True).click()
     dialog = page.get_by_role("dialog", name="Research Q/A")
     expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(question)
-    recovery = dialog.get_by_role("group", name="Recover interrupted Q/A request")
-    missing_archive_reads[0] = 1
-    recovery.get_by_role("button", name="Check saved answers").click()
-    expect(dialog.get_by_role("alert")).to_contain_text("archive is missing")
-    expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
+    expect(dialog.get_by_role("group", name="Recover interrupted Q/A request")).to_have_count(0)
+    ask_button = dialog.get_by_role("button", name="Ask", exact=True)
+    expect(ask_button).to_be_enabled()
     fail_archive_reads[0] = 1
-    recovery.get_by_role("button", name="Check saved answers").click()
+    ask_button.click()
     expect(dialog.get_by_role("alert")).to_contain_text("fixture archive unavailable")
-    expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
+    expect(ask_button).to_be_enabled()
     saved_answers = []
     for _ in range(120):
         saved_answers = page.evaluate(
@@ -139,10 +139,11 @@ with sync_playwright() as playwright:
             break
         page.wait_for_timeout(250)
     assert any(answer["question"] == question for answer in saved_answers), saved_answers
-    recovery.get_by_role("button", name="Check saved answers").click()
-    expect(
-        dialog.get_by_text("The previous request completed and its saved answer is open.")
-    ).to_be_visible()
+    # A cancelled browser fetch can still have finished at the provider.
+    # Ask checks the durable request ID before making a second paid call.
+    ask_button.click()
+    expect(dialog.get_by_text("Answer saved.", exact=True)).to_be_visible()
+    expect(dialog.locator(".saved-paper-card").first).to_contain_text(question)
     state_after_cancel = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
     )
@@ -155,24 +156,27 @@ with sync_playwright() as playwright:
     dialog.get_by_role("textbox", name="Question", exact=True).fill(failed_question)
     dialog.get_by_role("button", name="Ask", exact=True).click()
     expect(dialog.get_by_role("alert")).to_be_visible(timeout=30000)
-    recovery = dialog.get_by_role("group", name="Recover interrupted Q/A request")
-    recovery.get_by_role("button", name="Start over / Ask again").click()
-    confirmation = dialog.get_by_role("group", name="Confirm a fresh Q/A request")
-    expect(confirmation).to_contain_text("may incur another charge")
+    expect(dialog.get_by_role("group", name="Recover interrupted Q/A request")).to_have_count(0)
+    expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
+    ask_button = dialog.get_by_role("button", name="Ask", exact=True)
+    expect(ask_button).to_be_enabled()
     failed_state_before_retry = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
     )
+    # Failure display is a single dismissible toast; dismissal is not a retry.
+    dialog.get_by_role("button", name="Dismiss").click()
+    expect(dialog.get_by_role("alert")).to_have_count(0)
+    expect(ask_button).to_be_enabled()
     fail_archive_reads[0] = 1
-    confirmation.get_by_role("button", name="Confirm Start over").click()
+    ask_button.click()
     expect(dialog.get_by_role("alert")).to_contain_text("fixture archive unavailable")
-    expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
+    expect(ask_button).to_be_enabled()
     failed_state_after_archive_error = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
     )
     assert failed_state_after_archive_error["started"] == failed_state_before_retry["started"]
-    recovery.get_by_role("button", name="Start over / Ask again").click()
-    confirmation = dialog.get_by_role("group", name="Confirm a fresh Q/A request")
-    confirmation.get_by_role("button", name="Confirm Start over").click()
+    ask_button.click()
+    expect(dialog.get_by_role("button", name="Answering")).to_be_disabled()
     expect(dialog.locator(".saved-paper-card").first).to_contain_text(
         failed_question, timeout=30000
     )
@@ -348,75 +352,49 @@ with sync_playwright() as playwright:
     assert browser_page.evaluate("window.__sigmaInjected !== true")
     expect(browser_page.get_by_text(question, exact=True)).to_be_visible()
     citation_links = browser_page.locator("main ul a")
-    assert citation_links.count() >= 5
-    expect(citation_links.nth(0)).to_have_text(re.compile("Project ·"))
-    expect(citation_links.nth(0)).to_have_attribute("href", re.compile("reveal_understanding=1"))
-    expect(citation_links.nth(1)).to_have_text(re.compile("Strategy ·"))
-    expect(citation_links.nth(1)).to_have_attribute("href", re.compile("reveal_strategy="))
-    expect(citation_links.nth(2)).to_have_attribute("href", re.compile("reveal_session="))
-    expect(citation_links.nth(3)).to_have_attribute("href", re.compile("reveal_artifact="))
-    # Aggregated Current Understanding citations reveal contributing sessions
-    # when the immutable source contains exact session provenance.
-    extra_source = citation_links.nth(4)
-    assert (
-        "Session #" in extra_source.inner_text()
-        or extra_source.inner_text() == "Current Understanding"
+    # Different questions select different subsets of frozen research. Test
+    # the links actually returned, never demand five fixed citation categories.
+    link_specs = citation_links.evaluate_all(
+        "nodes => nodes.map(a => ({href:a.getAttribute('href'),label:a.textContent.trim()}))"
     )
+    assert link_specs, "The fixture answer should include a verified session citation"
+    assert all(
+        isinstance(link["href"], str) and link["href"].startswith("/project?")
+        for link in link_specs
+    ), link_specs
+    assert any("reveal_session=" in link["href"] for link in link_specs), link_specs
     browser_page.screenshot(path=str(OUT / "research-qa-browser-desktop.png"), full_page=True)
     browser_page.set_viewport_size({"width": 390, "height": 844})
     browser_page.screenshot(path=str(OUT / "research-qa-browser-mobile.png"), full_page=True)
     assert browser_page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-    with browser_page.expect_navigation():
-        citation_links.nth(0).click()
-    browser_page.wait_for_function(
-        "new URL(location.href).searchParams.get('reveal_understanding') === '1'"
-    )
-    expect(browser_page.locator(".current-understanding")).to_have_class(
-        re.compile("citation-highlight")
-    )
-    expect(browser_page.locator(".current-understanding")).to_have_attribute("open", "")
-    browser_page.go_back()
-    browser_page.wait_for_function("new URL(location.href).searchParams.has('qa_browser')")
-    browser_page.locator("main ul a").filter(has_text="Strategy ·").click()
-    browser_page.wait_for_function("new URL(location.href).searchParams.has('reveal_strategy')")
-    strategy_target = browser_page.locator(
-        "#strategy-"
-        + browser_page.evaluate("new URL(location.href).searchParams.get('reveal_strategy')")
-    )
-    expect(strategy_target).to_be_visible()
-    browser_page.go_back()
-    browser_page.wait_for_function("new URL(location.href).searchParams.has('qa_browser')")
-    citation_links = browser_page.locator("main ul a")
-    artifact_link = citation_links.nth(3)
-    with browser_page.expect_navigation():
-        artifact_link.click()
-    browser_page.wait_for_function("new URL(location.href).searchParams.has('reveal_artifact')")
-    artifact = browser_page.locator("[id^='research-artifact-']")
-    expect(artifact).to_be_visible()
-    expect(artifact).to_have_class(re.compile("citation-highlight"))
+    # Navigate every kind of citation that was actually returned. In particular,
+    # session-level links must open a highlighted session and its Outcome.
+    for param in ("reveal_understanding", "reveal_strategy", "reveal_artifact", "reveal_session"):
+        available = [link for link in link_specs if param + "=" in link["href"]]
+        if not available:
+            continue
+        with browser_page.expect_navigation():
+            browser_page.locator("main ul a").filter(
+                has_text=available[0]["label"]
+            ).first.click()
+        browser_page.wait_for_function(
+            "key => new URL(location.href).searchParams.has(key)", arg=param
+        )
+        if param == "reveal_understanding":
+            expect(browser_page.locator(".current-understanding")).to_have_class(
+                re.compile("citation-highlight")
+            )
+        elif param == "reveal_strategy":
+            expect(browser_page.locator("[id^='strategy-']")).to_be_visible()
+        elif param == "reveal_artifact":
+            expect(
+                browser_page.locator("[id^='research-artifact-'].citation-highlight")
+            ).to_be_visible()
+        else:
+            expect(browser_page.locator("li[data-session-id].citation-highlight")).to_be_visible()
+        browser_page.go_back()
+        browser_page.wait_for_function("new URL(location.href).searchParams.has('qa_browser')")
     browser_page.close()
-
-    with page.expect_popup() as understanding_popup:
-        card.get_by_role("button", name="Open in browser").click()
-    understanding_page = understanding_popup.value
-    supporting = understanding_page.locator("main ul a").nth(4)
-    expected = supporting.get_attribute("href")
-    with understanding_page.expect_navigation():
-        supporting.click()
-    if "reveal_session=" in expected:
-        understanding_page.wait_for_function(
-            "new URL(location.href).searchParams.has('reveal_session')"
-        )
-        expect(understanding_page.locator("li[data-session-id].citation-highlight")).to_be_visible()
-    else:
-        understanding_page.wait_for_function(
-            "new URL(location.href).searchParams.get('reveal_understanding') === '1'"
-        )
-        understanding = understanding_page.locator(".current-understanding")
-        expect(understanding).to_be_visible()
-        expect(understanding).to_have_attribute("open", "")
-        expect(understanding).to_have_class(re.compile("citation-highlight"))
-    understanding_page.close()
 
     citation.click()
     page.wait_for_function("new URL(location.href).searchParams.has('reveal_session')")
