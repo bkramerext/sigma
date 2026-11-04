@@ -523,6 +523,10 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
         ):
             raise BundleError("Cannot import malformed research session")
         session["project_path"] = str(path.resolve())
+        # The destination owns the session after Import. A paused/stopped
+        # session may be rebound once to its recipient's provider connection
+        # after the normal model, usage, and billing checks.
+        session["imported_via_bundle"] = True
         members[member] = (
             json.dumps(session, ensure_ascii=False, separators=(",", ":")) + "\n"
         ).encode()

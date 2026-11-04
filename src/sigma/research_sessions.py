@@ -5576,6 +5576,115 @@ async def _frozen_session_configuration(
     return await configuration(view=pinned, context=credential)
 
 
+def _validate_imported_transport_change(
+    record: dict[str, Any], *, next_model: str
+) -> None:
+    """Fail closed when a recipient rebinds an imported, stopped session.
+
+    No previous request or reservation is replayed, released, or re-funded.
+    Existing paid usage must be fully settled before a new transport is used.
+    """
+    if record.get("imported_via_bundle") is not True or record.get("status") not in {
+        "paused",
+        "stopped",
+    }:
+        raise ProjectError(
+            "AI provider transport changed. Only imported, stopped sessions "
+            "may switch to a new provider type."
+        )
+    if any(
+        item.get("status") in {"running", "interrupted"}
+        or item.get("attempt_status") in {"unknown", "preparing"}
+        for item in record.get("steps", [])
+        if isinstance(item, dict)
+    ):
+        raise ProjectError(
+            "Cannot change provider transport while a prior provider attempt is "
+            "interrupted or its usage is unknown. Saved research is unchanged."
+        )
+    compiler = record.get("reference_compilation")
+    if isinstance(compiler, dict) and compiler.get("status") in {"running", "interrupted"}:
+        raise ProjectError(
+            "Cannot change provider transport with unresolved reference compiler usage."
+        )
+    reserved = record.get("estimated_cost_reserved_usd") or 0.0
+    if type(reserved) not in (int, float) or not math.isfinite(reserved) or reserved < 0:
+        raise ProjectError("Cannot change provider transport with invalid cost accounting.")
+    if reserved > 0:
+        raise ProjectError("Cannot change provider transport with outstanding cost reservations.")
+    ledger = record.get("hard_budget_ledger")
+    if ledger is not None:
+        if (
+            not isinstance(ledger, dict)
+            or ledger.get("blocked_reason")
+            or not isinstance(ledger.get("calls"), list)
+            or any(
+                not isinstance(call, dict)
+                or call.get("status") not in {"settled", "rejected"}
+                for call in ledger["calls"]
+            )
+        ):
+            raise ProjectError(
+                "Cannot change provider transport with unsettled provider billing reservations."
+            )
+        if ledger["calls"] and next_model != record.get("model"):
+            raise ProjectError(
+                "Cannot change the frozen model when prior hard-budget calls exist."
+            )
+
+
+def _rebind_imported_transport(
+    record: dict[str, Any], credential: Mapping[str, Any], config: Mapping[str, Any]
+) -> None:
+    """Audit a recipient-owned transport switch before any new request starts."""
+    _validate_imported_transport_change(record, next_model=str(config["model"]))
+    prior_mode = record["mode"]
+    prior_model = record["model"]
+    prior_identity = record.get("identity_hash")
+    from sigma import cloud_research
+
+    sponsored = cloud_research.billing_enabled()
+    paid = credential["mode"] == "api_key" or sponsored
+    if paid and str(config["model"]) not in TOKEN_PRICES_PER_MILLION:
+        raise ProjectError("No reviewed price is available for the recipient's provider model.")
+    ledger = record.get("hard_budget_ledger")
+    if isinstance(ledger, dict) and not ledger["calls"] and config["model"] != prior_model:
+        prices = TOKEN_PRICES_PER_MILLION.get(str(config["model"]))
+        if prices is None:
+            raise ProjectError("Cannot reprice the frozen hard budget for the recipient's model.")
+        ledger["input_price_per_million"] = max(prices["input"], prices["cache_write"])
+        ledger["output_price_per_million"] = prices["output"]
+    record["mode"] = credential["mode"]
+    record["model"] = config["model"]
+    record["reasoning_effort"] = config["reasoning_effort"]
+    record["identity_hash"] = _digest(credential["identity"])
+    record["cloud_sponsored"] = sponsored
+    if paid:
+        record["estimated_cost_usd"] = float(record.get("estimated_cost_usd") or 0.0)
+    record["cost_status"] = (
+        "available" if paid else "unavailable"
+    )
+    record["imported_via_bundle"] = False
+    record.setdefault("transport_change_history", []).append(
+        {
+            "at": _now(),
+            "from_mode": prior_mode,
+            "to_mode": credential["mode"],
+            "from_model": prior_model,
+            "to_model": config["model"],
+            "previous_identity_hash": prior_identity,
+            "new_identity_hash": record["identity_hash"],
+            "reason": "recipient_import_resume",
+        }
+    )
+    _event(
+        record,
+        "session.imported_transport_rebound",
+        "An imported stopped session changed to the recipient's provider "
+        "connection. Past calls and billing reservations were preserved.",
+    )
+
+
 def _project_guard_state(project: Any) -> str:
     """Hash persisted project semantics without its append-only audit history."""
     state = {
@@ -6954,20 +7063,26 @@ async def control_session(
         record["message"] = "Project identity changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
+    switch_transport = credential["mode"] != record["mode"]
     config = await _frozen_session_configuration(view, credential, record)
+    if switch_transport:
+        # Imported research can use the recipient's explicitly configured
+        # provider/model, without fabricating a response from the old account.
+        if not config["available"] or config["model"] != record["model"]:
+            config = await configuration(view=view, context=credential)
+        _validate_imported_transport_change(record, next_model=str(config.get("model", "")))
     if (
         not config["available"]
-        or config["model"] != record["model"]
-        or config["reasoning_effort"] != record["reasoning_effort"]
+        or (
+            not switch_transport
+            and (
+                config["model"] != record["model"]
+                or config["reasoning_effort"] != record["reasoning_effort"]
+            )
+        )
     ):
         record["message"] = config.get(
             "message", "Selected model is no longer available; session remains paused."
-        )
-        _save(record["project_path"], record)
-        raise ProjectError(record["message"])
-    if credential["mode"] != record["mode"]:
-        record["message"] = (
-            "AI provider transport mode changed; connect the saved provider type and resume."
         )
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
@@ -6997,6 +7112,10 @@ async def control_session(
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
+            if switch_transport:
+                if record["mode"] != credential["mode"]:
+                    _rebind_imported_transport(record, credential, config)
+                    _save(path, record)
             if record.get("stopped_at"):
                 stopped_for = datetime.now(UTC) - datetime.fromisoformat(record["stopped_at"])
                 record["stopped_duration_seconds"] = (

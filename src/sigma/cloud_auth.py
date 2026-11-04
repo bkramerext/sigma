@@ -2032,7 +2032,18 @@ def _deliver_admin_notice(subject: str, body: str) -> None:
         raise RuntimeError("Administrator notification could not be delivered.") from exc
 
 
-def send_smtp_message(message: EmailMessage, recipients: list[str]) -> None:
+class SMTPDeliveryError(RuntimeError):
+    """Known no-delivery, partial acceptance, or ambiguous SMTP outcome."""
+
+    def __init__(self, message: str, *, state: str, accepted_count: int = 0):
+        super().__init__(message)
+        self.state = state
+        self.accepted_count = accepted_count
+
+
+def send_smtp_message(
+    message: EmailMessage, recipients: list[str], *, reply_to: str | None = None
+) -> None:
     """Deliver an already-constructed message with the server's existing SMTP account.
 
     Explicit envelope recipients are Bcc, so the addresses are not disclosed
@@ -2060,16 +2071,30 @@ def send_smtp_message(message: EmailMessage, recipients: list[str]) -> None:
         message["From"] = username
         message["To"] = username
         message["Bcc"] = ", ".join(recipients)
+        if reply_to is not None:
+            message["Reply-To"] = _normalize_email(reply_to)
+        began_delivery = False
         with smtplib.SMTP(host, port, timeout=10) as client:
             client.ehlo()
             client.starttls(context=ssl.create_default_context())
             client.ehlo()
             client.login(username, password)
+            began_delivery = True
             refused = client.send_message(message, from_addr=username, to_addrs=recipients)
             if isinstance(refused, dict) and refused:
-                raise RuntimeError("Some recipients were refused by the SMTP server.")
+                accepted = max(0, len(recipients) - len(refused))
+                raise SMTPDeliveryError(
+                    "Some recipients were refused by the SMTP server.",
+                    state="partial" if accepted else "failed",
+                    accepted_count=accepted,
+                )
+    except SMTPDeliveryError:
+        raise
     except (OSError, ValueError, smtplib.SMTPException) as exc:
-        raise RuntimeError("SMTP delivery could not be completed.") from exc
+        raise SMTPDeliveryError(
+            "SMTP delivery could not be completed.",
+            state="unknown" if locals().get("began_delivery", False) else "failed",
+        ) from exc
 
 
 def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "invitation") -> None:

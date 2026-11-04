@@ -2099,13 +2099,18 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const addressInput = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
+  // An ambiguous SMTP outcome must not be retried with a new request ID.
+  // Reopening the dialog is an explicit new send.
+  const requestId = useRef<string | null>(null);
   const initial = useRef(projectEmailPreferences(projectId)).current;
   const [recipients, setRecipients] = useState(initial.recipients);
   const [body, setBody] = useState(initial.body);
   const [mode, setMode] = useState<ProjectEmailMode>(initial.mode);
   const [paperId, setPaperId] = useState(initial.paperId);
   const [availablePapers, setAvailablePapers] = useState<PaperSummary[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [paperLoad, setPaperLoad] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [paperRetry, setPaperRetry] = useState(0);
+  const loaded = paperLoad === 'ready';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const papersByDate = [...availablePapers].sort((a, b) =>
@@ -2121,6 +2126,7 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
   }, []);
   useEffect(() => {
     const controller = new AbortController();
+    setPaperLoad('loading');
     void (async () => {
       try {
         const response = await fetch('/api/projects/papers?' + new URLSearchParams({ path }), { cache: 'no-store', signal: controller.signal });
@@ -2128,14 +2134,18 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
         if (!response.ok) throw new Error(detail.error ?? detail.detail ?? 'Could not list papers');
         if (!controller.signal.aborted) {
           setAvailablePapers((detail.papers as PaperSummary[] ?? []).filter(paper => paper.pdf_available));
-          setLoaded(true);
+          setPaperLoad('ready');
+          setError('');
         }
       } catch (cause) {
-        if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoaded(true); }
+        if (!controller.signal.aborted) {
+          setPaperLoad('error');
+          setError('Could not load generated papers: ' + errorMessage(cause));
+        }
       }
     })();
     return () => controller.abort();
-  }, [path]);
+  }, [path, paperRetry]);
   useEffect(() => {
     if (!loaded) return;
     if (selectedPaperId !== paperId) setPaperId(selectedPaperId);
@@ -2153,9 +2163,10 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
     if (!addresses) { setError('Enter at least one recipient email address.'); addressInput.current?.focus(); return; }
     submitting.current = true; setBusy(true); setError('');
     try {
+      if (requestId.current === null) requestId.current = crypto.randomUUID();
       const response = await fetch('/api/projects/email', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, recipients: addresses, body, mode: effectiveMode, paper_id: effectiveMode === 'project' ? null : selectedPaperId }),
+        body: JSON.stringify({ request_id: requestId.current, path, recipients: addresses, body, mode: effectiveMode, paper_id: effectiveMode === 'project' ? null : selectedPaperId }),
       });
       const detail = await response.json().catch(() => null);
       if (!response.ok) throw new Error(detail?.error ?? detail?.detail ?? 'Project email could not be delivered.');
@@ -2184,7 +2195,7 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
           <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf'} disabled={!loaded || papersByDate.length === 0} onChange={() => setMode('pdf')}/>Also attach paper as PDF</label>
           <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf_tex'} disabled={!loaded || papersByDate.length === 0} onChange={() => setMode('pdf_tex')}/>Also attach paper as PDF and its source LaTeX</label>
         </fieldset>
-        {loaded && !papersByDate.length ? <p className="email-no-papers">No papers generated.</p> : papersByDate.length > 0 ? <>
+        {paperLoad === 'error' ? <p className="settings-hint" role="status">Paper list unavailable. Your saved attachment choice is unchanged. <button type="button" className="text-view-link" disabled={busy} onClick={() => setPaperRetry(value => value + 1)}>Retry</button></p> : loaded && !papersByDate.length ? <p className="email-no-papers">No papers generated.</p> : loaded && papersByDate.length > 0 ? <>
           <label htmlFor="email-project-paper">Generated paper</label>
           <select id="email-project-paper" value={selectedPaperId} disabled={busy || effectiveMode === 'project'} onChange={event => setPaperId(event.target.value)}>
             {papersByDate.map(paper => <option key={paper.paper_id} value={paper.paper_id}>{paper.title} (v{paper.paper_version}){(paper.score?.total ?? 0) >= 50 ? ' ★' : ''}</option>)}
@@ -2192,7 +2203,7 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
         </> : <p className="settings-hint" role="status">Loading generated papers…</p>}
         {error && <p className="error" role="alert">{error}</p>}
       </div>
-      <footer className="export-footer"><button type="submit" className="settings-submit" disabled={busy || !loaded || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button></footer>
+      <footer className="export-footer"><button type="submit" className="settings-submit" disabled={busy || (!loaded && effectiveMode !== 'project') || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button></footer>
     </form>
   </dialog>;
 }
