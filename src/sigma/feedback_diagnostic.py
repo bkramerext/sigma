@@ -39,7 +39,7 @@ def _password_setting() -> tuple[str, str | None]:
 
 def _config_help() -> None:
     example = Path.home() / ".config" / "sigma" / "smtp-password"
-    print("")
+    print()
     print("Expected local SMTP settings (place in checkout .env or export them):")
     print(f"  Checkout .env: {ROOT / '.env'}")
     print("  SIGMA_EMAIL_SMTP_USERNAME=<Gmail account used to send mail>")
@@ -64,12 +64,8 @@ def _smtp_ready(cloud_auth: object) -> bool:
     from sigma.config_secrets import SecretConfigurationError
 
     ready = True
-    host_key, host = _active_setting(
-        "SIGMA_EMAIL_SMTP_HOST", "SIGMA_INVITATION_SMTP_HOST"
-    )
-    port_key, port_value = _active_setting(
-        "SIGMA_EMAIL_SMTP_PORT", "SIGMA_INVITATION_SMTP_PORT"
-    )
+    host_key, host = _active_setting("SIGMA_EMAIL_SMTP_HOST", "SIGMA_INVITATION_SMTP_HOST")
+    port_key, port_value = _active_setting("SIGMA_EMAIL_SMTP_PORT", "SIGMA_INVITATION_SMTP_PORT")
     host = host if host_key in os.environ else "smtp.gmail.com"
     port_value = port_value if port_key in os.environ else "587"
     print(f"[{'OK' if host else 'MISSING'}] {host_key}: {host or '(empty)'} (SMTP server)")
@@ -120,8 +116,7 @@ def _smtp_ready(cloud_auth: object) -> bool:
                     print(f"[WARNING] Password file permissions {mode:03o}; use chmod 600 {path}")
     elif not os.environ.get(secret_key, "").strip():
         print(
-            f"[MISSING] SIGMA_EMAIL_SMTP_PASSWORD_FILE: absolute path to a "
-            "Gmail app-password file"
+            "[MISSING] SIGMA_EMAIL_SMTP_PASSWORD_FILE: absolute path to a Gmail app-password file"
         )
         print("          (legacy SIGMA_INVITATION_SMTP_PASSWORD[_FILE] is also supported)")
         ready = False
@@ -195,7 +190,9 @@ def _execute(message: str) -> int:
     contact_raw = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     contact_email: str | None = None
     if not contact_raw:
-        print("[MISSING] SIGMA_CLOUD_ADMIN_CONTACT_EMAIL: local Google sign-in email and test recipient")
+        print(
+            "[MISSING] SIGMA_CLOUD_ADMIN_CONTACT_EMAIL: local Google sign-in email and test recipient"
+        )
     else:
         try:
             contact_email = cloud_auth._normalize_email(contact_raw)
@@ -231,7 +228,10 @@ def _execute(message: str) -> int:
         if exc.state != "failed":
             print("Delivery may have occurred; inspect the inbox before retrying.", file=sys.stderr)
         else:
-            print("Check the sending Gmail account/app password and SMTP connectivity.", file=sys.stderr)
+            print(
+                "Check the sending Gmail account/app password and SMTP connectivity.",
+                file=sys.stderr,
+            )
         return 1
     except (OSError, ValueError, RuntimeError) as exc:
         print("RESULT: FAILED (mail transport did not confirm delivery).", file=sys.stderr)

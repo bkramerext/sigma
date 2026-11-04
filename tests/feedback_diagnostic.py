@@ -14,9 +14,11 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         with (
             patch.dict(
                 os.environ,
-                {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": " signer@example.org ",
-                 "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
-                 "SIGMA_EMAIL_SMTP_PASSWORD": "test-only-password"},
+                {
+                    "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": " signer@example.org ",
+                    "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
+                    "SIGMA_EMAIL_SMTP_PASSWORD": "test-only-password",
+                },
                 clear=True,
             ),
             patch.object(feedback_diagnostic, "load_local_config"),
@@ -100,10 +102,11 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         self.assertEqual(status, 2)
         send.assert_not_called()
 
-
     def test_missing_smtp_settings_explain_exact_environment_variables(self):
         with (
-            patch.dict(os.environ, {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "you@example.org"}, clear=True),
+            patch.dict(
+                os.environ, {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "you@example.org"}, clear=True
+            ),
             patch.object(feedback_diagnostic, "load_local_config"),
             patch.object(cloud_auth, "_deliver_feedback") as send,
             redirect_stdout(io.StringIO()) as output,
@@ -119,11 +122,15 @@ class FeedbackDiagnosticTests(unittest.TestCase):
 
     def test_smtp_file_missing_is_diagnosed_without_attempting_send(self):
         with (
-            patch.dict(os.environ, {
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "you@example.org",
-                "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
-                "SIGMA_EMAIL_SMTP_PASSWORD_FILE": "/nonexistent/test-sigma-app-password",
-            }, clear=True),
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "you@example.org",
+                    "SIGMA_EMAIL_SMTP_USERNAME": "sender@example.org",
+                    "SIGMA_EMAIL_SMTP_PASSWORD_FILE": "/nonexistent/test-sigma-app-password",
+                },
+                clear=True,
+            ),
             patch.object(feedback_diagnostic, "load_local_config"),
             patch.object(cloud_auth, "_deliver_feedback") as send,
             redirect_stdout(io.StringIO()) as output,
@@ -133,7 +140,6 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         self.assertIn("file not found", output.getvalue())
         self.assertNotIn("BEGIN PRIVATE KEY", output.getvalue())
         send.assert_not_called()
-
 
 
 if __name__ == "__main__":
