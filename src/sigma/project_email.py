@@ -14,10 +14,10 @@ import re
 import sqlite3
 import time
 from contextlib import contextmanager
-from pathlib import Path
-from uuid import UUID, uuid4
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Literal
+from uuid import UUID, uuid4
 
 from sigma import cloud_auth, papers
 from sigma.project_bundle import download_bytes, encode

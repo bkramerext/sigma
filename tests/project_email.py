@@ -306,7 +306,10 @@ class ProjectEmailTests(unittest.TestCase):
             model = next(iter(research_sessions.TOKEN_PRICES_PER_MILLION))
             credential = {"mode": "api_key", "identity": "recipient-provider"}
             settings = {"model": model, "reasoning_effort": "high"}
-            with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False):
+            with (
+                patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False),
+                patch.object(research_sessions.session_log, "append"),
+            ):
                 research_sessions._rebind_imported_transport(imported, credential, settings)
             self.assertEqual(imported["mode"], "api_key")
             self.assertEqual(imported["model"], model)
@@ -353,7 +356,10 @@ class ProjectEmailTests(unittest.TestCase):
             patch.object(cloud_auth.smtplib, "SMTP") as smtp,
         ):
             smtp.return_value.__enter__.return_value.send_message.return_value = {}
-            cloud_auth.send_smtp_message(message, ["a@example.com", "b@example.com"])
+            cloud_auth.send_smtp_message(
+                message, ["a@example.com", "b@example.com"], reply_to="author@example.org"
+            )
+        self.assertEqual(message["Reply-To"], "author@example.org")
         self.assertEqual(message["To"], "sender@example.com")
         self.assertEqual(message["Bcc"], "a@example.com, b@example.com")
         smtp.return_value.__enter__.return_value.send_message.assert_called_once_with(
