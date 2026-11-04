@@ -43,7 +43,6 @@ from sigma.research_budget import (
     totals,
 )
 
-
 if __package__:
     from .research_sessions_part1 import (
         investigation,

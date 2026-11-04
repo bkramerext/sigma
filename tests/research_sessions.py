@@ -1,3 +1,5 @@
+# ruff: noqa: I001, PLC0414
+# Compatibility imports explicitly re-export historical test fixtures.
 """Research-session test suite and compatibility fixtures.
 
 SIGMA CI schedules each part independently; this entrypoint runs all parts.
