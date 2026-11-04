@@ -170,8 +170,7 @@ async def verify_compilation(
                 # returning a valid, metered JSON object. This should not stop
                 # research or trigger two identical paid retry attempts.
                 result["guidance"] = (
-                    "Check independent evidence before accepting a research claim. "
-                    * 42
+                    "Check independent evidence before accepting a research claim. " * 42
                 )
             if (
                 compiler_retry_scenario in {"invalid_then_success", "missing_usage"}
