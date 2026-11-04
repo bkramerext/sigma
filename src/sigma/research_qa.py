@@ -862,19 +862,19 @@ def markdown_document(record: dict[str, Any]) -> str:
     if not record.get("sources"):
         lines.append("- No validated citations were returned.")
     generation = record.get("generation", {})
+    created = datetime.fromisoformat(record["created_at"]).astimezone(UTC)
+    created_label = (
+        f"{created.strftime('%B')} {created.day}, {created.year} "
+        f"at {created.strftime('%I:%M %p').lstrip('0')} UTC"
+    )
     lines += [
         "",
         "## Metadata",
         "",
-        f"Created: {record['created_at']}",
+        f"Created: {created_label}",
         "",
-        f"Model: {generation.get('model', 'Unavailable')}",
-        "",
-        f"Thinking level: {generation.get('reasoning_effort', 'Unavailable')}",
-        "",
-        f"Generation duration: {generation.get('generation_elapsed_seconds', 'Unavailable')} seconds",
-        "",
-        f"Research version: `{record.get('snapshot_sha256', '')}`",
+        f"Model: {generation.get('model', 'Unavailable')} · "
+        f"{generation.get('reasoning_effort', 'Unavailable')} thinking",
         "",
     ]
     return "\n".join(lines)

@@ -255,6 +255,11 @@ def main() -> None:
                 "<script>alert(1)</script>" in markdown
             )  # Rendered by the safe React Markdown renderer.
             assert f"reveal_session={s1}" in markdown
+            assert "Created: " in markdown and " UTC" in markdown
+            assert "Model: " in markdown and " · " in markdown and " thinking" in markdown
+            assert "Generation duration:" not in markdown
+            assert "Research version:" not in markdown
+            assert "Thinking level:" not in markdown
             assert (
                 "## Question" in markdown and "## Answer" in markdown and "## Sources" in markdown
             )

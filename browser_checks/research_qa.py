@@ -246,9 +246,17 @@ with sync_playwright() as playwright:
     last_title_rect = title_rects[-1]
     assert copied_icon_box and copied_icon_box["x"] > markdown_box["x"]
     assert markdown_box["x"] >= last_title_rect["right"] - 1, (markdown_box, last_title_rect)
-    assert abs(markdown_box["x"] - last_title_rect["right"] - 12) <= 2, (
+    assert abs(markdown_box["x"] - last_title_rect["right"] - 14) <= 2, (
         markdown_box,
         last_title_rect,
+    )
+    markdown_glyph = markdown_icon.locator("svg.markdown-logo").bounding_box()
+    assert markdown_glyph and normal_icon_box
+    left_glyph_gap = markdown_glyph["x"] - last_title_rect["right"]
+    right_glyph_gap = normal_icon_box["x"] - (markdown_glyph["x"] + markdown_glyph["width"])
+    assert abs(left_glyph_gap - right_glyph_gap) <= 3, (
+        left_glyph_gap,
+        right_glyph_gap,
     )
     assert normal_copy_box and normal_icon_box
     assert copied_icon_box == normal_copy_box
@@ -355,7 +363,12 @@ with sync_playwright() as playwright:
     expect(browser_page.get_by_role("heading", name="Research Q/A")).to_be_visible()
     expect(browser_page.get_by_role("heading", name="Evidence-based answer")).to_be_visible()
     expect(browser_page.locator(".katex")).to_be_visible()
-    expect(browser_page.locator("main")).to_contain_text("Generation duration:")
+    expect(browser_page.locator("main")).to_contain_text("Created:")
+    expect(browser_page.locator("main")).to_contain_text("Model:")
+    expect(browser_page.locator("main")).to_contain_text("thinking")
+    expect(browser_page.locator("main")).not_to_contain_text("Generation duration:")
+    expect(browser_page.locator("main")).not_to_contain_text("Research version:")
+    expect(browser_page.locator("main")).not_to_contain_text("Thinking level:")
     forged_link = browser_page.locator("main a").filter(has_text="forged citation")
     assert forged_link.count() <= 1 and (
         not forged_link.count() or forged_link.first.get_attribute("href") in {None, ""}

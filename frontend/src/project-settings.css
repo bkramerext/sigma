@@ -323,11 +323,13 @@
   display: inline-flex; align-items: center; gap: 12px;
   margin-left: 12px; vertical-align: middle;
 }
-/* A Q/A title uses one balanced control gap on either side of Markdown.
-   Keep the temporary formatting label adjacent to that icon, as in TextViews. */
+/* Keep visible glyph spacing balanced between the last title character,
+   Markdown, and Copy. The icons occupy 28px slots but have different SVG
+   insets, so compensate at the title edge while retaining the standard 12px
+   button-to-button spacing used elsewhere in SIGMA. */
 .project-settings-dialog.research-qa-dialog .saved-paper-title-tools {
   gap: 12px;
-  margin-left: 12px;
+  margin-left: 14px;
 }
 .project-settings-dialog.research-qa-dialog .qa-markdown-control {
   display: inline-flex;
