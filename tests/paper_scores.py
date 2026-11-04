@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -254,12 +255,48 @@ def test_rubric_omits_stale_scores() -> None:
     assert paper_scores.cached_score({"pdf_sha256": sha, "score": score}) == score
 
 
+
+def test_score_write_preserves_archived_paper_snapshot() -> None:
+    with TemporaryDirectory() as temp:
+        path = Path(temp) / "score-archive.sigma"
+        view = initialize_project(path, "Score archive", "Evaluate an archived paper.")
+        paper_id = "f" * 32
+        snapshot = {
+            "schema": "sigma-paper-evidence-v2",
+            "project_id": view.project.id,
+            "sources": [{"id": "project:" + view.project.id, "kind": "project", "data": {"title": "Test"}}],
+        }
+        digest = hashlib.sha256(papers._json(snapshot)).hexdigest()
+        papers._save(
+            str(path),
+            {
+                "schema_version": 1,
+                "paper_id": paper_id,
+                "project_id": view.project.id,
+                "created_at": "2026-11-04T00:00:00+00:00",
+                "snapshot_sha256": digest,
+                "snapshot": snapshot,
+                "draft": {"title": "Score archive"},
+                "generation": {},
+                "validation_warnings": [],
+            },
+            b"%PDF-score-archive",
+        )
+        original = papers.get_paper(str(path), paper_id)
+        score = paper_scores._make_score(judgment(), original["pdf_sha256"])
+        paper_scores._save_score(str(path), paper_id, score)
+        saved = json.loads((papers._paper_dir(str(path), create=False) / f"{paper_id}.json").read_text())
+        assert saved["snapshot_ref"] == digest and "snapshot" not in saved
+        assert papers.get_paper(str(path), paper_id)["score"] == score
+        assert papers.get_pdf(str(path), paper_id) == b"%PDF-score-archive"
+
 def main() -> None:
     test_scoring_weights_and_normalized_total()
     test_score_bounds_and_best_known_only()
     test_score_persists_per_version_and_deleted_highest_falls_back()
     test_scoring_is_single_flight_and_cache_hit_avoids_provider()
     test_rubric_omits_stale_scores()
+    test_score_write_preserves_archived_paper_snapshot()
     print("PASS paper scoring weights, cache, persistence, concurrent evaluation, and invalidation")
 
 
