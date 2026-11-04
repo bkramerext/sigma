@@ -51,14 +51,15 @@ REAL_CLIENT = httpx.AsyncClient
 
 
 
-def main():
+def main(part: int = 1):
     # The project test driver invokes provider-free scientific Outcome
     # regressions directly; this repository does not use pytest discovery.
     import test_outcome_policy
 
-    for name, check in vars(test_outcome_policy).items():
-        if name.startswith("test_") and callable(check):
-            check()
+    if part == 1:
+        for name, check in vars(test_outcome_policy).items():
+            if name.startswith("test_") and callable(check):
+                check()
     test_paired_round_defaults_and_enabled_call_ceiling()
     test_paired_round_positions_are_explicit_and_legacy_is_unchanged()
     test_paired_round_protocol_requires_every_accepted_role()
@@ -106,9 +107,10 @@ def main():
     # Explicit driver; this repository does not discover tests with pytest.
     import test_crucible_context_budget
 
-    for name, check in vars(test_crucible_context_budget).items():
-        if name.startswith("test_") and callable(check):
-            check()
+    if part == 1:
+        for name, check in vars(test_crucible_context_budget).items():
+            if name.startswith("test_") and callable(check):
+                check()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_parallel_funding_uses_estimates_without_changing_provider_request()
     test_portfolio_capacity_tracks_strategies_not_billing_mode()
