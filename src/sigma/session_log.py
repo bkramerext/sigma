@@ -1025,6 +1025,20 @@ def markdown_export(
         "Provider requests, responses, and metadata are paired below. The persistent append-only log keeps complete structured events and raw response wire for retained events; this download summarizes duplicate raw-wire strings to keep Markdown previews readable.",
         "",
     ]
+    # Projected from the same saved lifecycle state shown in the research UI.
+    # This is a sanitized human-readable summary, not a substitute for raw wire.
+    if session.get("status") in {"paused", "stopped", "failed", "ended", "completed"}:
+        output.extend(
+            [
+                "## Final saved session status",
+                "",
+                f"Status: {_redact(str(session.get('status') or 'unknown'))}",
+                f"Stage: {_redact(str(session.get('current_action') or 'not recorded'))}",
+                f"Reason code: {_redact(str(session.get('termination_reason_code') or 'not recorded'))}",
+                f"Reason: {_redact(str(session.get('reason') or session.get('message') or 'not recorded'))}",
+                "",
+            ]
+        )
     if reference_preparation is not None:
         output.extend(_reference_markdown(reference_preparation))
     completed: set[str] = set()
@@ -1141,6 +1155,10 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
             "id": session_id,
             "number": session.get("session_number"),
             "status": session.get("status"),
+            "current_action": str(session.get("current_action") or "")[:300],
+            "termination_reason_code": str(session.get("termination_reason_code") or "")[:120],
+            "reason": str(session.get("reason") or "")[:1200],
+            "message": str(session.get("message") or "")[:1200],
         },
     }
 
