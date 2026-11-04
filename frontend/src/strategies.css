@@ -1000,8 +1000,6 @@
   background: transparent;
   box-shadow: none;
 }
-.workspace-page .strategy-title-line .strategy-inline-commands > .strategy-remove-anchor > .text-view-link,
-.workspace-page .strategy-title-line .strategy-inline-commands > .strategy-remove-anchor > .text-view-link:hover:not(:disabled) { color: #e0c4a0; }
 .workspace-page .strategy-remove-anchor { position: relative; display: inline-flex; }
 .workspace-page .strategy-remove-popover { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; width: min(280px, calc(100vw - 32px)); }
 .workspace-page .strategy-remove-popover .research-stop-confirm { margin: 0; padding: 12px 14px; box-shadow: 0 14px 35px #0009; }
