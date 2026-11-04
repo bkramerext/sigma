@@ -1096,12 +1096,23 @@ def research_session_log_download_view(session_id: str, path: str):
     try:
         result = session_log.read(path, session_id, 0)  # Reuse project/session ownership checks.
         body = session_log.markdown_export(
-            result["events"], result["session"], result["project_title"]
+            result["events"],
+            result["session"],
+            result["project_title"],
+            result["reference_preparation"],
         )
+        filename = session_log.export_filename(
+            result["saved_short_name"], result["project_title"], result["session"]["number"]
+        )
+        # RFC 5987 preserves readable Unicode while the ASCII fallback keeps
+        # Content-Disposition safe for Latin-1 HTTP headers and older browsers.
+        ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "project.log"
         return Response(
             body,
             media_type="text/markdown; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="session-{session_id}.md"'},
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+            },
         )
     except (ProjectError, ValueError, OSError) as exc:
         raise HTTPException(404, "Session log not found or access denied.") from exc

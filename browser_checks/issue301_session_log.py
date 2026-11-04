@@ -12,7 +12,12 @@ PROJECT_PATH = "/fixture/project.json"
 
 
 def main() -> None:
-    state = {"polls": 0}
+    state = {"polls": 0, "degraded": False}
+    export_body = (
+        "# Xenopus Tadpoles, Session 1\n\n## Research-reference preparation\n"
+        + ("Complete historical log entry with all retained metadata.\n" * 4000)
+        + "FINAL COMPLETE LOG RECORD\n"
+    )
     request = {
         "model": "fixture-model",
         "input": "Investigator prompt\n```\nmultiline request\n```",
@@ -27,6 +32,7 @@ def main() -> None:
             headless=True,
         )
         context = browser.new_context(viewport={"width": 1200, "height": 900})
+        context.grant_permissions(["clipboard-read", "clipboard-write"])
         opener = context.new_page()
         opener.goto(BASE_URL, wait_until="domcontentloaded")
 
@@ -114,12 +120,62 @@ def main() -> None:
             else:
                 new_events = []
                 cursor = max(after, 31)
+            degraded = state["degraded"]
             route.fulfill(
                 json={
                     "events": new_events,
                     "cursor": cursor,
                     "short_name": "Xenopus Tadpoles",
-                    "session": {"number": 1, "status": "running"},
+                    "project_title": "Long Research Project Title",
+                    "session": {
+                        "number": 1,
+                        "status": "completed" if state["polls"] >= 5 else "running",
+                    },
+                    "reference_preparation": {
+                        "selected_count": 2,
+                        "verified_count": 1 if degraded else 2,
+                        "references": [
+                            {
+                                "title": "Method A",
+                                "url": "https://example.org/a",
+                                "retrieval_status": "retrieved",
+                                "reason": None,
+                                "http_status": 200,
+                                "excerpt_present": True,
+                                "excerpt_integrity": True,
+                            },
+                            {
+                                "title": "Method B",
+                                "url": "https://example.org/b",
+                                "retrieval_status": "unavailable" if degraded else "retrieved",
+                                "reason": "http_403" if degraded else None,
+                                "http_status": 403 if degraded else 200,
+                                "excerpt_present": not degraded,
+                                "excerpt_integrity": None if degraded else True,
+                            },
+                        ],
+                        "compiler": {
+                            "status": "fallback" if degraded else "completed",
+                            "attempt_count": 2 if degraded else 1,
+                            "reason": "Compilation was not possible." if degraded else None,
+                            "retrieved_excerpts_used": "unknown/not recorded",
+                            "attempts": [
+                                {
+                                    "number": 1,
+                                    "status": "rejected" if degraded else "completed",
+                                    "http_status": 429 if degraded else 200,
+                                    "error_code": "rate_limit_exceeded" if degraded else None,
+                                    "retry_decision": "retry" if degraded else "completed",
+                                    "usage_status": "rejected" if degraded else "known",
+                                }
+                            ],
+                        },
+                        "guidance_disposition": (
+                            "Original-reference fallback (degraded)"
+                            if degraded
+                            else "Compiled guidance available; agent delivery unknown/not recorded"
+                        ),
+                    },
                 }
             )
 
@@ -129,8 +185,10 @@ def main() -> None:
             lambda route: route.fulfill(
                 status=200,
                 content_type="text/markdown",
-                body="# Xenopus Tadpoles, Session 1\n",
-                headers={"Content-Disposition": 'attachment; filename="session-fixture.md"'},
+                body=export_body,
+                headers={
+                    "Content-Disposition": 'attachment; filename="Xenopus_Tadpoles.session_1.log"'
+                },
             ),
         )
         opener.evaluate(
@@ -150,6 +208,18 @@ def main() -> None:
         page.wait_for_load_state("domcontentloaded")
         expect(page.locator("h1")).to_have_text("Xenopus Tadpoles, Session 1")
         expect(page).to_have_title("Xenopus Tadpoles, Session 1")
+        expect(page.locator("header")).to_contain_text("running")
+        toolbar = page.locator("header .session-log-toolbar-icon")
+        assert toolbar.evaluate_all(
+            "(items) => items.map(node => node.getAttribute('aria-label'))"
+        ) == ["Copy log to clipboard", "Download session log"]
+        copy_button = page.get_by_role("button", name="Copy log to clipboard")
+        copy_button.focus()
+        page.keyboard.press("Enter")
+        expect(page.get_by_role("status")).to_have_text("Copied log to clipboard.")
+        copied = page.evaluate("navigator.clipboard.readText()")
+        assert copied == export_body
+        assert len(copied) > 100_000 and copied.endswith("FINAL COMPLETE LOG RECORD\n")
         details = page.locator(".session-log-events details").first
         expect(details.locator("summary")).to_contain_text("in flight")
         expect(details.locator("summary")).to_contain_text("1.25s", timeout=8000)
@@ -179,9 +249,31 @@ def main() -> None:
             path="docs/evaluations/issue301/session-log-ui-following-review.png",
             full_page=True,
         )
+        expect(page.get_by_role("region", name="Research reference preparation")).to_contain_text(
+            "2 selected"
+        )
+        expect(page.get_by_role("region", name="Research reference preparation")).to_contain_text(
+            "Compilation succeeded"
+        )
+        page.get_by_text("Reference sources and compilation diagnostics").click()
+        expect(page.get_by_text("Method A")).to_be_visible()
+        expect(page.get_by_text("Method B")).to_be_visible()
+        expect(page.get_by_text("unknown/not recorded", exact=False).first).to_be_visible()
+        state["degraded"] = True
+        expect(page.locator(".session-log-reference-degraded")).to_contain_text(
+            "Compilation failed/degraded", timeout=6000
+        )
+        expect(
+            page.locator(".session-log-reference-warning").filter(
+                has_text="Compilation was not possible."
+            )
+        ).to_be_visible()
+        expect(page.locator(".session-log-reference-summary")).to_contain_text("HTTP 403")
         with page.expect_download() as download_info:
-            page.get_by_role("link", name="Download", exact=True).click()
-        assert download_info.value.suggested_filename == "session-fixture.md"
+            download = page.get_by_role("link", name="Download session log")
+            download.focus()
+            page.keyboard.press("Enter")
+        assert download_info.value.suggested_filename == "Xenopus_Tadpoles.session_1.log"
         page.reload(wait_until="domcontentloaded")
         expect(page.locator("h1")).to_have_text("Xenopus Tadpoles, Session 1")
         expect(page.locator(".session-log-events details summary")).to_contain_text("1.25s")
@@ -191,7 +283,7 @@ def main() -> None:
         browser.close()
 
     print(
-        "PASS real Chromium: normal tab, stable title, paired live update, independent polling while scrolled, Jump to end, Download, and refresh"
+        "PASS real Chromium: live log, copy full export, keyboard/icon order, reference diagnostics, .log filename, download, refresh"
     )
 
 

@@ -480,6 +480,22 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .session-log-page .session-log-secondary-action:hover { min-height: 0; padding: 1px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #f1c58d; font: 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
 .session-log-page .session-log-secondary-action:hover { color: #ffe1ad; }
 
+/* Icon pair matches workspace copy/export actions while preserving tab focus. */
+.session-log-page .session-log-toolbar-icon { width: 30px; height: 30px; min-height: 30px; padding: 4px; border: 1px solid transparent; border-radius: 4px; color: #f1c58d; background: transparent; text-decoration: none; }
+.session-log-page .session-log-toolbar-icon svg { display: block; width: 19px; height: 19px; }
+.session-log-page .session-log-toolbar-icon:hover { border-color: #82694b; background: #302418; }
+.session-log-page .session-log-toolbar-icon:disabled { opacity: .55; cursor: wait; }
+.session-log-page .session-log-reference-summary { margin: 12px 0 8px; padding: 10px 12px; border: 1px solid #534331; border-radius: 4px; background: #171918; overflow-wrap: anywhere; }
+.session-log-page .session-log-reference-summary p { margin: 4px 0 8px; }
+.session-log-page .session-log-reference-summary details { margin-top: 6px; }
+.session-log-page .session-log-reference-summary summary { cursor: pointer; color: #e4c08f; }
+.session-log-page .session-log-reference-summary li { margin: 7px 0; }
+.session-log-page .session-log-reference-summary li div { font-size: 12px; color: #b9afa2; }
+.session-log-page .session-log-reference-summary a { box-sizing: unset; display: inline; border: 0; border-radius: 0; min-height: 0; background: transparent; padding: 0; overflow-wrap: anywhere; text-decoration: underline; }
+.session-log-page .session-log-reference-degraded { border-left: 3px solid #d19a64; }
+.session-log-page .session-log-reference-warning, .session-log-page .session-log-copy-error { color: #ffc795; }
+.session-log-page .session-log-copy-status { color: #a8d9bb; }
+
 /* Welcome's 16px copy is scaled 1.25x in its dialog. Match the visible
    20px typography here without scaling the entire Terms card. */
 .terms-of-service-shell { width: 100%; max-width: none; }
