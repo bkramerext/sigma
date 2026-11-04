@@ -1480,6 +1480,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       if (chosen.status === 'failed' && lastAnnouncement.current.startsWith(`${chosen.id}:`) && /:(queued|running):/.test(lastAnnouncement.current)) {
         setError(chosen.message);
         reportRequestFailure(chosen.message);
+        void recordClientError(chosen.message, 'session_failure');
       }
       if (lastAnnouncement.current && transition !== lastAnnouncement.current) {
         setAnnouncement(`Research session ${chosen.session_number}: ${chosen.status}. ${chosen.current_action}.`);
@@ -1706,7 +1707,11 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       if (selectedSessionId.current === target.id) selectedSessionId.current = '';
       await load();
       setAnnouncement(`Session #${result.session_number} removed. Strategy and other sessions were kept.`);
-    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    } catch (cause) {
+      const message = errorMessage(cause);
+      setError(message); reportRequestFailure(message);
+      void recordClientError(message, 'session_delete');
+    }
     finally { setBusy(false); }
   }
 
