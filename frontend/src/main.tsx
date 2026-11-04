@@ -1389,6 +1389,41 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   };
   const readErrorReported = useRef(false);
   const lastAnnouncement = useRef('');
+  type ProjectDiagnostic = { id: string; timestamp: string; stage: string; code: string; message: string; correlation_id: string | null; session_id: string | null };
+  const [projectDiagnostics, setProjectDiagnostics] = useState<ProjectDiagnostic[]>([]);
+  const [diagnosticStatus, setDiagnosticStatus] = useState('');
+  const diagnosticsUrl = `/api/projects/diagnostics/download?${new URLSearchParams({ path })}`;
+  const reloadDiagnostics = useCallback(async () => {
+    const response = await fetch(`/api/projects/diagnostics?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error('Project diagnostics could not be retrieved.');
+    const result = await response.json() as { diagnostics: ProjectDiagnostic[] };
+    setProjectDiagnostics(result.diagnostics);
+  }, [path]);
+  useEffect(() => { void reloadDiagnostics().catch(() => setDiagnosticStatus('Project diagnostics unavailable; previous errors may not be shown.')); }, [reloadDiagnostics]);
+  const recordClientError = async (message: string, stage: string) => {
+    const correlation_id = crypto.randomUUID();
+    try {
+      const response = await fetch('/api/projects/diagnostics', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, stage, code: 'browser_request_failed', message, correlation_id }),
+      });
+      if (!response.ok) throw new Error('diagnostic write failed');
+      const result = await response.json() as { recorded?: boolean };
+      if (!result.recorded) throw new Error('diagnostic not recorded');
+      setDiagnosticStatus(`Error recorded in Project diagnostics (${correlation_id}).`);
+      void reloadDiagnostics().catch(() => {});
+    } catch {
+      setDiagnosticStatus(`Error not recorded (offline or logging unavailable). Correlation ID: ${correlation_id}.`);
+    }
+  };
+  const copyProjectDiagnostics = async () => {
+    try {
+      const response = await fetch(diagnosticsUrl, { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error('Could not fetch the complete export');
+      await navigator.clipboard.writeText(await response.text());
+      setDiagnosticStatus('Project diagnostic export copied.');
+    } catch { setDiagnosticStatus('Project diagnostic export could not be copied.'); }
+  };
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
   const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running');
@@ -1544,7 +1579,18 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       }
       if (next.status === 'running' || next.status === 'queued') onRevealNewSession();
       revealSession(next.id, next.status === 'running' || next.status === 'queued');
-    } catch (cause) { setConfirmStart(false); await load().catch(() => {}); setError(errorMessage(cause)); }
+    } catch (cause) {
+      setConfirmStart(false);
+      await load().catch(() => {});
+      const message = errorMessage(cause);
+      setError(message);
+      if (cause instanceof Error && (cause as Error & { diagnostic_recorded?: boolean }).diagnostic_recorded === true) {
+        setDiagnosticStatus('Admission error recorded in Project diagnostics.');
+        void reloadDiagnostics().catch(() => {});
+      } else {
+        void recordClientError(message, 'admission');
+      }
+    }
     finally { submittingStart.current = false; setBusy(false); }
   }
 
@@ -1723,6 +1769,19 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
+    <section aria-label="Project diagnostics" className="project-diagnostics-panel">
+      <details>
+        <summary>Project diagnostics ({projectDiagnostics.length})</summary>
+        <p>Includes errors before Session #1 exists. Sanitized readable export; not the full raw provider-wire audit log.</p>
+        <button type="button" aria-label="Copy project diagnostics" onClick={() => void copyProjectDiagnostics()}>Copy diagnostics</button>
+        <a href={diagnosticsUrl} aria-label="Download project diagnostics">Download diagnostics</a>
+        <ol>{projectDiagnostics.map(item => <li key={item.id}>
+          <time>{item.timestamp}</time> · {item.stage} · {item.code}: {item.message}
+          <small> Event {item.id}{item.session_id ? ` · Session ${item.session_id}` : ' · pre-session'}</small>
+        </li>)}</ol>
+      </details>
+      {diagnosticStatus && <p role="status">{diagnosticStatus}</p>}
+    </section>
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
@@ -1772,7 +1831,11 @@ async function post<T>(route: string, body: object = {}, signal?: AbortSignal): 
     body: JSON.stringify(body), signal,
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error ?? JSON.stringify(data.detail) ?? 'Request failed');
+  if (!response.ok) {
+    const error = new Error(data.error ?? JSON.stringify(data.detail) ?? 'Request failed') as Error & { diagnostic_recorded?: boolean };
+    error.diagnostic_recorded = data.diagnostic_recorded === true;
+    throw error;
+  }
   return data;
 }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
