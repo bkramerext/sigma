@@ -2053,6 +2053,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       <header className="settings-header">
         <h2 id="export-project-heading">{demo ? 'Export Demo Project' : 'Export Project'}</h2>
         <div className="settings-actions">
+          <button type="submit" className="settings-submit" disabled={busy || !filename.trim()}>{busy ? 'Downloading…' : 'Download'}</button>
           <button type="button" className="settings-cancel" title="Close without downloading" disabled={busy} onClick={() => cancel()}>Cancel</button>
         </div>
       </header>
@@ -2070,9 +2071,6 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
         {exportType !== 'bundle' && <label className="export-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>}
         {error && <p className="error" role="alert">{error}</p>}
       </div>
-      <footer className="export-footer">
-        <button type="submit" className="settings-submit" title="Download the selected project export" disabled={busy}>{busy ? 'Downloading…' : 'Download'}</button>
-      </footer>
     </form>
   </dialog>;
 }
