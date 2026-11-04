@@ -311,7 +311,7 @@ def _save_score(path: str, paper_id: str, score: dict[str, Any]) -> dict[str, An
                 "Paper PDF changed while scoring. Retry against the current version."
             )
         record["score"] = score
-        payload = papers._json(record)
+        payload = papers._stored_paper_record_json(record)
         if len(payload) > papers.MAX_PAPER_BYTES:
             raise ProjectError("Paper score exceeds the record storage limit")
         target = project_path(path)
