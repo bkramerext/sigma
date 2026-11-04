@@ -389,10 +389,11 @@ def select_method_sources(
 
 
 def retrieval_readiness_errors(selection: Mapping[str, Any]) -> list[str]:
-    """Audit selected method sources before new-session provider dispatch.
+    """Reject malformed or forged retrieval snapshots, not unreachable URLs.
 
-    URLs and notes are not content. An empty selection is valid; malformed
-    selections are not.
+    An unavailable link is a documented methodological limitation, never
+    inspected evidence and never a reason to cancel a research session.
+    Retrieved content must still pass exact frozen excerpt integrity checks.
     """
     rows = selection.get("sources")
     if not isinstance(rows, list):
@@ -409,9 +410,14 @@ def retrieval_readiness_errors(selection: Mapping[str, Any]) -> list[str]:
         if not isinstance(retrieval, Mapping):
             errors.append(f"{title}: no frozen retrieval result.")
             continue
-        if retrieval.get("status") != "retrieved":
-            reason = str(retrieval.get("reason") or "not retrieved")[:120]
-            errors.append(f"{title}: {reason}.")
+        status = retrieval.get("status")
+        if status == "unavailable":
+            # HTTP 403/404, too-large payloads, timeouts, unsupported media,
+            # invalid/private URLs and other fetch failures remain frozen as
+            # uninspected pointers. Never promote them to source evidence.
+            continue
+        if status != "retrieved":
+            errors.append(f"{title}: invalid frozen retrieval status.")
             continue
         excerpt = retrieval.get("excerpt")
         digest = retrieval.get("excerpt_sha256")
