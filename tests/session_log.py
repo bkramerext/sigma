@@ -649,11 +649,68 @@ def test_session_log_download_route_content_and_name() -> None:
     with patch.object(api.session_log, "read", return_value=record):
         completed = api.research_session_log_download_view("test-session-id", "/fixture")
     assert active.headers["content-disposition"] == completed.headers["content-disposition"]
-    assert active.body == completed.body
+    assert active.body != completed.body
+    assert b"## Final saved session status" not in active.body
+    assert b"## Final saved session status" in completed.body
+    assert b"Status: completed" in completed.body
+    assert b"still recording" in active.body and b"still recording" in completed.body
     record["saved_short_name"] = None
     with patch.object(api.session_log, "read", return_value=record):
         fallback = api.research_session_log_download_view("test-session-id", "/fixture")
     assert 'filename="A_Long_Project_Name.session_7.log"' in fallback.headers["content-disposition"]
+
+
+
+def test_session_status_and_correlated_errors_match_export() -> None:
+    from sigma import api
+
+    session_id = "a12ca401-2210-4c88-8fe6-84a33b1e5eea"
+    stop_reason = "Context limit: 256000 bytes; no provider call was made."
+    record = {
+        "events": [{"seq": 1, "type": "session_event", "message": stop_reason}],
+        "session": {
+            "id": session_id,
+            "number": 3,
+            "status": "stopped",
+            "current_action": "Context assembly blocked",
+            "termination_reason_code": "mandatory_context_exceeded",
+            "reason": stop_reason,
+        },
+        "project_title": "Crucible",
+        "saved_short_name": "Crucible",
+        "reference_preparation": session_log.reference_preparation_summary({}),
+    }
+    diagnostics = [
+        {
+            "id": "a",
+            "timestamp": "2026-11-03T00:00:00Z",
+            "code": "context_limit",
+            "message": stop_reason,
+            "session_id": session_id,
+        },
+        {
+            "id": "b",
+            "timestamp": "2026-11-03T00:00:01Z",
+            "code": "admission",
+            "message": "Unrelated pre-session failure",
+            "session_id": None,
+        },
+    ]
+    with (
+        patch.object(api.session_log, "read", return_value=record),
+        patch.object(api.project_diagnostics, "read", return_value=diagnostics),
+    ):
+        exported = api.research_session_log_download_view(session_id, "/fixture").body.decode()
+    for piece in (
+        "Status: stopped",
+        "Context assembly blocked",
+        "mandatory_context_exceeded",
+        stop_reason,
+        "## Exportable UI diagnostics",
+        "context_limit",
+    ):
+        assert piece in exported, piece
+    assert "Unrelated pre-session failure" not in exported
 
 
 def main() -> None:
@@ -672,6 +729,7 @@ def main() -> None:
         test_session_log_filename_short_name_fallback_and_sanitization()
         test_saved_reference_diagnostics_and_markdown_export()
         test_session_log_download_route_content_and_name()
+        test_session_status_and_correlated_errors_match_export()
         from test_project_diagnostics import (
             test_client_report_and_copy_download_share_canonical_record,
             test_logging_failure_is_reported_without_breaking_admission,
