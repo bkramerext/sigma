@@ -4,6 +4,8 @@ export type DiagnosticReport = {
   recorded: boolean;
   correlationId: string;
   status: string;
+  message?: string;
+  code?: string;
 };
 
 export async function reportProjectDiagnostic(
@@ -21,7 +23,7 @@ export async function reportProjectDiagnostic(
       }),
     });
     if (!response.ok) throw new Error('diagnostic storage unavailable');
-    const result = await response.json() as { recorded?: boolean; diagnostic?: { message?: string; correlation_id?: string } };
+    const result = await response.json() as { recorded?: boolean; diagnostic?: { message?: string; code?: string; correlation_id?: string } };
     if (!result.recorded || !result.diagnostic) throw new Error('diagnostic not recorded');
     // Redaction can change the message: the report is still the canonical
     // sanitized record, but do not falsely claim that raw UI text was stored.
@@ -29,6 +31,8 @@ export async function reportProjectDiagnostic(
       recorded: true,
       correlationId,
       status: 'Error recorded in Project diagnostics.',
+      message: result.diagnostic.message,
+      code: result.diagnostic.code,
     };
   } catch {
     return {
