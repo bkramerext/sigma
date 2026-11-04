@@ -455,14 +455,14 @@
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining > span[aria-hidden] {
   display: inline-flex; width: 20px; justify-content: center;
 }
-/* Once ELI5 is open, show a solid gold thumbs-up, centered in the
-   same 28px hover rectangle as Copy, Star, and the explanation balloon. */
+/* Hooray! is a monochrome gold party popper centered in the same
+   28px hover rectangle as Copy, Star, and the explanation balloon. */
 .project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools button.ai-paper-eli5-thanks {
   display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center;
   box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px;
   padding: 0; color: #e5ba69;
 }
-.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-thumbs-up {
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-hooray {
   display: block; flex: 0 0 20px;
   width: 20px; height: 20px; color: #f4cc69;
 }
