@@ -2193,11 +2193,11 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
     <form onSubmit={send}>
       <header className="settings-header">
         <h2 id="email-project-heading">Email Project</h2>
-        <div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
+        <div className="settings-actions"><button type="submit" className="settings-submit" disabled={busy || (!loaded && effectiveMode !== 'project') || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
       </header>
       <div className="settings-body">
         <p className="settings-hint">The current project, <strong>{title}</strong>, will be sent as an importable attachment to the email addresses you provide.</p>
-        <label htmlFor="email-project-recipients">Email addresses (comma or space separated)</label>
+        <label htmlFor="email-project-recipients">Email addresses</label>
         <input ref={addressInput} id="email-project-recipients" type="text" value={recipients} disabled={busy} required spellCheck={false}
           onChange={event => { payloadChanged(); setRecipients(event.target.value); setError(''); }} placeholder="name@example.com, other@example.com" />
         <label htmlFor="email-project-body">Message (optional)</label>
@@ -2217,7 +2217,6 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
         </> : <p className="settings-hint" role="status">Loading generated papers…</p>}
         {error && <p className="error" role="alert">{error}</p>}
       </div>
-      <footer className="export-footer"><button type="submit" className="settings-submit" disabled={busy || (!loaded && effectiveMode !== 'project') || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button></footer>
     </form>
   </dialog>;
 }
@@ -5375,10 +5374,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Generate Lean proof (coming soon)" title="Generate Lean proof (coming soon)" data-tooltip="Generate Lean proof (coming soon)" disabled>
         <img src="/lean-logo.svg" alt="" aria-hidden="true"/>
       </button>
-      <button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
-      <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" title="Email project" data-tooltip="Email project" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" title="Email project with attachments" data-tooltip="Email project with attachments" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 5.5h13v11H3zM3.4 6l6.1 5 6.1-5"/>
           <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
