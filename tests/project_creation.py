@@ -475,8 +475,7 @@ def main() -> None:
                     for member in list_files(third["path"])
                     if member.startswith("research-sessions/")
                     and member.endswith(".json")
-                    and Path(member).stem
-                    not in {"limits", "sequence", "obligation-ids"}
+                    and Path(member).stem not in {"limits", "sequence", "obligation-ids"}
                 ]
                 assert len(twice_sessions) == 1
                 twice_session = json.loads(read_file(third["path"], twice_sessions[0]))
@@ -487,12 +486,15 @@ def main() -> None:
                 )
                 assert twice_log.is_file()
                 assert session_log._frames(twice_log)[0][0]["session_id"] == twice_session["id"]
-                assert project_diagnostics.read(third["path"])[0]["session_id"] == twice_session["id"]
+                assert (
+                    project_diagnostics.read(third["path"])[0]["session_id"] == twice_session["id"]
+                )
                 twice_answers = json.loads(
                     read_file(third["path"], "artifacts/research-qa/records.json")
                 )
-                assert twice_answers["records"][0]["source_snapshot_sha256"] == (
-                    qa_record["snapshot_sha256"]
+                assert (
+                    twice_answers["records"][0]["source_snapshot_sha256"]
+                    == (qa_record["snapshot_sha256"])
                 )
                 assert copied_session["artifacts"][0]["session_id"] == copied_session["id"]
                 assert copied_session["artifacts"][0]["project_id"] == clone["project"]["id"]

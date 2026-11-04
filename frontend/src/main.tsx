@@ -4207,9 +4207,9 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
     onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header">
-        <h2 id="save-as-project-heading">Save Project As</h2>
+        <h2 id="save-as-project-heading">Save Copy</h2>
         <div className="settings-actions">
-          <button type="submit" disabled={busy || !title.trim()}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="submit" className="settings-cancel" disabled={busy || !title.trim()}>{busy ? 'Saving…' : 'Save'}</button>
           <button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button>
         </div>
       </header>
@@ -4218,10 +4218,6 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
         <input ref={nameInput} id="save-as-project-title" type="text" value={title}
           required maxLength={200} disabled={busy} spellCheck={false}
           onChange={event => { setTitle(event.target.value); setError(''); }}/>
-        {entry.pinned && recentProjectFamilyKey({
-          ...entry, title,
-        }) === recentProjectFamilyKey(entry) &&
-          <p className="settings-hint">This version is pinned. The new copy will open immediately, but other versions stay hidden under Saved until you unpin this one.</p>}
         {error && <p role="alert" className="error">{error}</p>}
       </div>
     </form>

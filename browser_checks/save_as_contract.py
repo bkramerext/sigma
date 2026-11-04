@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import expect, sync_playwright
 
 UI_URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173")
+API_URL = os.environ.get("SIGMA_BROWSER_API_URL", "http://127.0.0.1:8001")
 save_requests: list[dict] = []
 saved = [
     {
@@ -82,7 +83,9 @@ def fixture(route):
         route.fulfill(status=201, content_type="application/json", body=json.dumps(result))
         return
     else:
-        result = {}
+        response = route.fetch(url=route.request.url.replace(UI_URL, API_URL))
+        route.fulfill(response=response)
+        return
     route.fulfill(status=200, content_type="application/json", body=json.dumps(result))
 
 
@@ -96,11 +99,9 @@ with sync_playwright() as playwright:
 
     def row_for_v4():
         page.goto(UI_URL)
-        # Initial catalog bootstrapping replaces its tab button while data loads.
-        # Dispatch through the current mounted element instead of clicking a
-        # stale DOM node across the first render transition.
-        page.locator("#recent-tab").wait_for(state="attached")
-        page.locator("#recent-tab").evaluate("(element) => element.click()")
+        saved_tab = page.get_by_role("tab", name="Saved")
+        expect(saved_tab).to_be_visible(timeout=15000)
+        saved_tab.click()
         group = page.locator(".recent-type-group").first
         expect(group).to_be_visible()
         if group.get_attribute("open") is None:
@@ -123,7 +124,21 @@ with sync_playwright() as playwright:
     copy = row.get_by_role("button", name="Save project with a new name")
     expect(copy).to_have_attribute("title", "Save project with a new name")
     copy.click()
-    dialog = page.get_by_role("dialog", name="Save Project As")
+    dialog = page.get_by_role("dialog", name="Save Copy")
+    save_button = dialog.get_by_role("button", name="Save", exact=True)
+    cancel_button = dialog.get_by_role("button", name="Cancel")
+    for state in (False, True):
+        save_button.evaluate(
+            "(button, disabled) => { button.disabled = disabled; button.textContent = disabled ? 'Saving…' : 'Save'; }",
+            state,
+        )
+        save_css = save_button.evaluate(
+            "(button) => { const style = getComputedStyle(button); return [style.backgroundColor, style.backgroundImage, style.borderTopWidth, style.boxShadow, style.textShadow]; }"
+        )
+        cancel_css = cancel_button.evaluate(
+            "(button) => { const style = getComputedStyle(button); return [style.backgroundColor, style.backgroundImage, style.borderTopWidth, style.boxShadow, style.textShadow]; }"
+        )
+        assert save_css == cancel_css, (state, save_css, cancel_css)
     expect(dialog).to_be_visible()
     expect(dialog.get_by_label("New project name")).to_have_value("The Crucible v5")
     dialog.get_by_role("button", name="Cancel").click()
@@ -133,15 +148,15 @@ with sync_playwright() as playwright:
     saved[1]["pinned"] = True
     row = row_for_v4()
     row.get_by_role("button", name="Save project with a new name").click()
-    dialog = page.get_by_role("dialog", name="Save Project As")
-    expect(dialog.get_by_text("The new copy will open immediately", exact=False)).to_be_visible()
+    dialog = page.get_by_role("dialog", name="Save Copy")
+    expect(dialog.get_by_text("This version is pinned")).to_have_count(0)
     dialog.get_by_role("button", name="Cancel").click()
     assert save_requests == []
 
     saved[1]["pinned"] = False
     row = row_for_v4()
     row.get_by_role("button", name="Save project with a new name").click()
-    dialog = page.get_by_role("dialog", name="Save Project As")
+    dialog = page.get_by_role("dialog", name="Save Copy")
     dialog.get_by_label("New project name").fill("Crucible alternative research")
     dialog.get_by_role("button", name="Save", exact=True).click()
     page.wait_for_function("window.location.pathname === '/project'")

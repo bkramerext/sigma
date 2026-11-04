@@ -416,3 +416,58 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   flex: 0 0 auto; margin-right: 0; padding: 0; border: 0; background: transparent;
   color: #f4cc69; font-size: 16px; cursor: pointer; text-decoration: none;
 }
+
+/* Save Copy is a compact one-field dialog, not a full Project Settings form. */
+.home-page .project-settings-dialog.save-as-project-dialog {
+  width: min(470px, calc(100vw - 32px));
+  height: fit-content; min-height: 0; max-height: calc(100dvh - 32px);
+}
+.home-page .project-settings-dialog.save-as-project-dialog > form {
+  height: auto; min-height: 0; max-height: calc(100dvh - 32px);
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header {
+  padding: 16px 22px 12px; gap: 16px; flex-wrap: nowrap; align-items: baseline;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header h2 {
+  width: auto; flex: 0 0 auto; margin: 0; font-size: 24px;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header .settings-actions {
+  flex: 0 0 auto; width: auto; gap: 14px; justify-content: flex-start; flex-wrap: nowrap;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-body {
+  flex: 0 0 auto; min-height: 0; overflow: auto; padding: 12px 22px 18px;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-body label {
+  margin: 0 0 6px;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-body input {
+  box-sizing: border-box; padding: 8px 11px;
+}
+/* The global Home submit styling must not fill Save or Saving… with copper.
+   Match Cancel at rest, on hover, and while disabled/busy. */
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header .settings-actions button {
+  width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
+  background: transparent; background-image: none; border: 0; border-radius: 0;
+  color: #d9b17e; box-shadow: none; text-shadow: none; filter: none;
+  font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header .settings-actions button:hover:not(:disabled) {
+  color: #f3cd9e; background: transparent; background-image: none;
+  border: 0; box-shadow: none; text-shadow: none; filter: none;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header .settings-actions button:disabled {
+  color: #d9b17e; background: transparent; background-image: none;
+  border: 0; box-shadow: none; text-shadow: none; filter: none; opacity: .5;
+}
+@media (max-width: 560px) {
+  .home-page .project-settings-dialog.save-as-project-dialog .settings-header {
+    padding: 15px 18px 11px; gap: 12px;
+  }
+  .home-page .project-settings-dialog.save-as-project-dialog .settings-header h2 {
+    font-size: 22px;
+  }
+  .home-page .project-settings-dialog.save-as-project-dialog .settings-body {
+    padding: 11px 18px 16px;
+  }
+}
