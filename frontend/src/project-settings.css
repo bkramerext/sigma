@@ -444,6 +444,8 @@
 }
 .project-settings-dialog.ai-paper-dialog .saved-paper-title-tools .saved-paper-score-star {
   color: #e5ba69; font-size: 20px; line-height: 1;
+  /* Balance the visible title/star and star/balloon gaps without moving the balloon. */
+  transform: translateX(4px);
 }
 .project-settings-dialog.ai-paper-dialog .saved-paper-title-tools button.ai-paper-eli5-balloon {
   color: #e5ba69; line-height: 1;
