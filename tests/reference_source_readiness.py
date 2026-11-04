@@ -343,8 +343,8 @@ def verify_curated_method_reference_defaults() -> None:
     urls.update(item["url"] for item in literature.research_standards_references)
     assert urls == {
         "https://guides.lib.uconn.edu/c.php?g=1067492&p=7986329",
-        "https://writingcenter.tamu.edu/guides/resources/lit-reviews.html",
-        "https://writing.wisc.edu/handbook/academicwriting/closereading/",
+        "https://owl.purdue.edu/owl/research_and_citation/conducting_research/writing_a_literature_review.html",
+        "https://owl.purdue.edu/owl/subject_specific_writing/writing_in_literature/writing_about_fiction/index.html",
     }, urls
 
 
