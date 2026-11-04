@@ -125,7 +125,14 @@ def _write_record(target: Path, record: dict[str, Any], data: bytes) -> dict[str
                     for key in ("correlation_id", "stage", "code", "message", "session_id")
                 ):
                     return previous
-    existing_bytes = target.stat().st_size if target.exists() else 0
+    if target.exists():
+        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            existing_bytes = os.fstat(fd).st_size
+        finally:
+            os.close(fd)
+    else:
+        existing_bytes = 0
     if existing_bytes + len(data) > MAX_BYTES:
         raise OSError("Project diagnostics capacity reached; event was not recorded")
     fd = os.open(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
@@ -189,7 +196,11 @@ def export(path: str) -> str:
                 f"Correlation ID: {item.get('correlation_id') or 'not recorded'}",
                 f"HTTP status: {item.get('http_status') or 'not recorded'}",
                 f"Message (escaped newlines): {_markdown_literal(str(item['message']))}",
-                *([f"Reference: {item['reference_url']}"] if item.get("reference_url") else []),
+                *(
+                    [f"Reference: {_markdown_literal(str(item['reference_url']))}"]
+                    if item.get("reference_url")
+                    else []
+                ),
                 "",
             ]
         )
