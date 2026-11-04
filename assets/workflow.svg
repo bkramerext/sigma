@@ -1,93 +1,76 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 478" role="img" aria-labelledby="workflowTitle workflowDescription">
-<title id="workflowTitle">SIGMA research workflow</title>
-<desc id="workflowDescription">Six stages in two rows. Follow the copper arrows from Project to Strategies to Research, curve down to Refine, then go left through Optional paper to Review/export.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="413" viewBox="0 0 1024 413" role="img" aria-labelledby="title desc">
+<title id="title">SIGMA workflow</title>
+<desc id="desc">Project, Strategies, Research, then a long curved arrow to Refine, Optional paper, Review/export. Both rows flow left to right.</desc>
 <defs>
-<linearGradient id="backdrop" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#070d16"/><stop offset=".52" stop-color="#0a1729"/><stop offset="1" stop-color="#080e19"/></linearGradient>
-<radialGradient id="amberHalo" cx=".85" cy=".26" r=".75"><stop stop-color="#b36528" stop-opacity=".22"/><stop offset=".45" stop-color="#5c371c" stop-opacity=".08"/><stop offset="1" stop-color="#040c16" stop-opacity="0"/></radialGradient>
-<radialGradient id="blueHalo" cx=".16" cy=".88" r=".72"><stop stop-color="#236089" stop-opacity=".15"/><stop offset="1" stop-color="#060d18" stop-opacity="0"/></radialGradient>
-<linearGradient id="copperStroke" x1="0" y1="0" x2="1" y2=".35"><stop stop-color="#81451e"/><stop offset=".22" stop-color="#e9aa63"/><stop offset=".42" stop-color="#f2c58b"/><stop offset=".68" stop-color="#aa592a"/><stop offset="1" stop-color="#e6a762"/></linearGradient>
-<linearGradient id="cardFill" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#18304a"/><stop offset=".27" stop-color="#111b2a"/><stop offset=".78" stop-color="#090f1c"/><stop offset="1" stop-color="#1b1820"/></linearGradient>
-<linearGradient id="metalShine" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff1cf" stop-opacity=".37"/><stop offset=".3" stop-color="#eaaa60" stop-opacity=".06"/><stop offset="1" stop-color="#d98540" stop-opacity="0"/></linearGradient>
-<linearGradient id="arrowCopper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e5a568"/><stop offset=".50" stop-color="#ffcd90"/><stop offset="1" stop-color="#b36e3f"/></linearGradient>
-<pattern id="grid" width="47" height="47" patternUnits="userSpaceOnUse"><path d="M47 0H0V47" fill="none" stroke="#5384ad" stroke-width=".45" opacity=".15"/></pattern>
-<filter id="cardShadow" x="-.12" y="-.26" width="1.25" height="1.65"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#01040a" flood-opacity=".64"/></filter>
-<filter id="routeGlow" x="-.2" y="-.3" width="1.4" height="1.6"><feGaussianBlur stdDeviation="3"/></filter>
-<marker id="arrowRight" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9Z" fill="#efb377"/></marker>
+<linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#06111e"/><stop offset=".5" stop-color="#050c16"/><stop offset="1" stop-color="#080e18"/></linearGradient>
+<linearGradient id="burnished" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#34241f"/><stop offset=".45" stop-color="#180f12"/><stop offset=".9" stop-color="#23151a"/><stop offset="1" stop-color="#3b231c"/></linearGradient>
+<linearGradient id="copper" x1="0" y1="0" x2="1" y2=".35"><stop stop-color="#b65d27"/><stop offset=".17" stop-color="#ffb768"/><stop offset=".4" stop-color="#e48d42"/><stop offset=".71" stop-color="#ffce86"/><stop offset="1" stop-color="#b45c2c"/></linearGradient>
+<linearGradient id="arrow" x1="0" y1="0" x2=".95" y2=".6"><stop stop-color="#cf7339"/><stop offset=".49" stop-color="#ffb86c"/><stop offset="1" stop-color="#ffcc85"/></linearGradient>
+<linearGradient id="brush" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#29506d" stop-opacity="0"/><stop offset=".35" stop-color="#30628e" stop-opacity=".33"/><stop offset=".7" stop-color="#dd7a37" stop-opacity=".8"/><stop offset="1" stop-color="#ffc47a" stop-opacity=".8"/></linearGradient>
+<radialGradient id="brilliance"><stop stop-color="#fff7c7" stop-opacity=".85"/><stop offset=".2" stop-color="#ffb85e" stop-opacity=".6"/><stop offset="1" stop-color="#ff8c32" stop-opacity="0"/></radialGradient>
+<filter id="copperGlow" x="-.1" y="-.25" width="1.2" height="1.5"><feGaussianBlur stdDeviation="2.8"/></filter>
+<marker id="tip" markerWidth="8" markerHeight="8" refX="7.3" refY="4" orient="auto" viewBox="0 0 8 8"><path d="M0 0L8 4 0 8z" fill="#ffb76d"/></marker>
 </defs>
-<rect x=".5" y=".5" width="1023" height="477" rx="17" fill="url(#backdrop)" stroke="#75523a" stroke-opacity=".65"/>
-<rect x="1" y="1" width="1022" height="476" rx="17" fill="url(#amberHalo)"/>
-<rect x="1" y="1" width="1022" height="476" rx="17" fill="url(#blueHalo)"/>
-<rect x="1" y="1" width="1022" height="476" rx="17" fill="url(#grid)"/>
-<g fill="none" stroke="#5a8cb5" stroke-opacity=".13" stroke-width="1"><path d="M-90 440C190 380 215 60 560 -80"/><path d="M155 520C320 182 640 200 1030 40"/><path d="M580 560C670 288 840 90 1090 92"/></g>
-<g fill="#d6a66e" opacity=".46"><circle cx="154" cy="48" r="1.2"/><circle cx="336" cy="73" r="1.3"/><circle cx="520" cy="48" r="1"/><circle cx="770" cy="56" r="1.5"/><circle cx="958" cy="91" r="1.1"/><circle cx="93" cy="284" r="1.3"/><circle cx="222" cy="250" r=".8"/><circle cx="512" cy="274" r="1.6"/><circle cx="821" cy="274" r=".9"/><circle cx="951" cy="440" r="1"/></g>
-<g font-family="Arial,Helvetica,sans-serif" fill="#c3a58c" font-size="11.5" letter-spacing="2.5"><text x="60" y="57">THE RESEARCH LOOP</text><text x="961" y="57" text-anchor="end" fill="#6888a2" letter-spacing="1.5">HUMAN-GUIDED  /  RESOURCE-AWARE</text></g>
-<g fill="none" stroke="#c9834c" stroke-opacity=".30" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#routeGlow)">
-<path d="M311 161 H350"/><path d="M609 161 H648"/><path d="M907 161 H931 Q961 161 961 191 V339 Q961 365 935 365 H910"/><path d="M653 365 H615"/><path d="M355 365 H317"/></g>
-<g fill="none" stroke="url(#arrowCopper)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-<path d="M311 161 H350" marker-end="url(#arrowRight)"/><path d="M609 161 H648" marker-end="url(#arrowRight)"/>
-<path d="M907 161 H931 Q961 161 961 191 V339 Q961 365 935 365 H910" marker-end="url(#arrowRight)"/>
-<path d="M653 365 H615" marker-end="url(#arrowRight)"/><path d="M355 365 H317" marker-end="url(#arrowRight)"/>
+<rect width="1024" height="413" rx="11" fill="url(#background)"/>
+<g fill="none" stroke-linecap="round">
+<path d="M665 -16 Q788 3 849 8 T1050 87" stroke="url(#brush)" stroke-width="2" opacity=".55"/>
+<path d="M772 -26 Q875 26 930 11 T1032 54" stroke="url(#brush)" stroke-width="1.8" opacity=".70"/>
+<path d="M830 -27 Q955 38 1041 45" stroke="#e58b42" stroke-width="1.4" opacity=".62"/>
+<path d="M784 -25 Q898 50 1051 36" stroke="#19446b" stroke-width="1.3" opacity=".6"/>
+<path d="M-42 325 Q51 382 167 434" stroke="url(#brush)" stroke-width="2.2" opacity=".8"/>
+<path d="M-30 343 Q76 411 199 433" stroke="#e69d56" stroke-width="1.6" opacity=".7"/>
+<path d="M-16 373 Q49 401 157 434" stroke="#1f5884" stroke-width="1.5" opacity=".65"/>
+<path d="M-30 386 Q83 421 211 443" stroke="#ffb063" stroke-width="1.1" opacity=".55"/>
 </g>
-<g aria-label="Stage 1: Define the research question and scope.">
-<title>Project — Define the research question and scope.</title>
-<rect x="60" y="108" width="248" height="106" rx="11" fill="#b76a2e" opacity=".26" filter="url(#cardShadow)"/>
-<rect x="60" y="108" width="248" height="106" rx="11" fill="url(#cardFill)" stroke="url(#copperStroke)" stroke-width="2.25"/>
-<rect x="65" y="113" width="238" height="96" rx="7" fill="none" stroke="#f2c590" stroke-width=".7" opacity=".28"/>
-<path d="M73 115 H296" stroke="url(#metalShine)" stroke-width="2"/>
-<rect x="72" y="130" width="2" height="61" rx="1" fill="#ecad6e" opacity=".74"/>
-<text x="88" y="139" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="2.1" fill="#dba879">01</text>
-<text x="88" y="183" font-family="Georgia,'Times New Roman',serif" font-size="26" fill="#f2e2d4">Project</text>
+<circle cx="957" cy="20" r="31" fill="url(#brilliance)" opacity=".5"/>
+<circle cx="75" cy="395" r="29" fill="url(#brilliance)" opacity=".42"/>
+<g fill="none" stroke="url(#arrow)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#tip)">
+<path d="M291 94H344"/>
+<path d="M600 94H653"/>
+<path d="M909 94H936 Q968 94 968 126V163 Q968 205 927 205H82 Q20 205 20 267V313 Q20 315 35 315"/>
+<path d="M291 316H344"/>
+<path d="M600 316H653"/>
 </g>
-<g aria-label="Stage 2: Develop and compare approaches.">
-<title>Strategies — Develop and compare approaches.</title>
-<rect x="358" y="108" width="248" height="106" rx="11" fill="#b76a2e" opacity=".26" filter="url(#cardShadow)"/>
-<rect x="358" y="108" width="248" height="106" rx="11" fill="url(#cardFill)" stroke="url(#copperStroke)" stroke-width="2.25"/>
-<rect x="363" y="113" width="238" height="96" rx="7" fill="none" stroke="#f2c590" stroke-width=".7" opacity=".28"/>
-<path d="M371 115 H594" stroke="url(#metalShine)" stroke-width="2"/>
-<rect x="370" y="130" width="2" height="61" rx="1" fill="#ecad6e" opacity=".74"/>
-<text x="386" y="139" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="2.1" fill="#dba879">02</text>
-<text x="386" y="183" font-family="Georgia,'Times New Roman',serif" font-size="26" fill="#f2e2d4">Strategies</text>
+<g><title>Project — Define the research question and scope.</title>
+<rect x="46" y="48" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="46" y="48" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M60 50 H278" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M62 138 H276" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="168.5" y="104" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Project</text>
 </g>
-<g aria-label="Stage 3: Investigator and Skeptic examine each strategy.">
-<title>Research — Investigator and Skeptic examine each strategy.</title>
-<rect x="656" y="108" width="248" height="106" rx="11" fill="#b76a2e" opacity=".26" filter="url(#cardShadow)"/>
-<rect x="656" y="108" width="248" height="106" rx="11" fill="url(#cardFill)" stroke="url(#copperStroke)" stroke-width="2.25"/>
-<rect x="661" y="113" width="238" height="96" rx="7" fill="none" stroke="#f2c590" stroke-width=".7" opacity=".28"/>
-<path d="M669 115 H892" stroke="url(#metalShine)" stroke-width="2"/>
-<rect x="668" y="130" width="2" height="61" rx="1" fill="#ecad6e" opacity=".74"/>
-<text x="684" y="139" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="2.1" fill="#dba879">03</text>
-<text x="684" y="183" font-family="Georgia,'Times New Roman',serif" font-size="26" fill="#f2e2d4">Research</text>
+<g><title>Strategies — Develop and compare approaches.</title>
+<rect x="355" y="48" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="355" y="48" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M369 50 H587" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M371 138 H585" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="477.5" y="104" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Strategies</text>
 </g>
-<g aria-label="Stage 4: Inspect findings; revise or continue the inquiry.">
-<title>Refine — Inspect findings; revise or continue the inquiry.</title>
-<rect x="656" y="312" width="248" height="106" rx="11" fill="#b76a2e" opacity=".26" filter="url(#cardShadow)"/>
-<rect x="656" y="312" width="248" height="106" rx="11" fill="url(#cardFill)" stroke="url(#copperStroke)" stroke-width="2.25"/>
-<rect x="661" y="317" width="238" height="96" rx="7" fill="none" stroke="#f2c590" stroke-width=".7" opacity=".28"/>
-<path d="M669 319 H892" stroke="url(#metalShine)" stroke-width="2"/>
-<rect x="668" y="334" width="2" height="61" rx="1" fill="#ecad6e" opacity=".74"/>
-<text x="684" y="343" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="2.1" fill="#dba879">04</text>
-<text x="684" y="387" font-family="Georgia,'Times New Roman',serif" font-size="26" fill="#f2e2d4">Refine</text>
+<g><title>Research — Investigator and Skeptic examine each strategy.</title>
+<rect x="664" y="48" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="664" y="48" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M678 50 H896" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M680 138 H894" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="786.5" y="104" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Research</text>
 </g>
-<g aria-label="Stage 5: Turn saved research into a draft for critical review.">
-<title>Optional paper — Turn saved research into a draft for critical review.</title>
-<rect x="358" y="312" width="248" height="106" rx="11" fill="#b76a2e" opacity=".26" filter="url(#cardShadow)"/>
-<rect x="358" y="312" width="248" height="106" rx="11" fill="url(#cardFill)" stroke="url(#copperStroke)" stroke-width="2.25"/>
-<rect x="363" y="317" width="238" height="96" rx="7" fill="none" stroke="#f2c590" stroke-width=".7" opacity=".28"/>
-<path d="M371 319 H594" stroke="url(#metalShine)" stroke-width="2"/>
-<rect x="370" y="334" width="2" height="61" rx="1" fill="#ecad6e" opacity=".74"/>
-<text x="386" y="343" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="2.1" fill="#dba879">05</text>
-<text x="386" y="387" font-family="Georgia,'Times New Roman',serif" font-size="26" fill="#f2e2d4">Optional paper</text>
+<g><title>Refine — Review findings and revise the approach.</title>
+<rect x="46" y="270" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="46" y="270" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M60 272 H278" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M62 360 H276" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="168.5" y="326" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Refine</text>
 </g>
-<g aria-label="Stage 6: Inspect and share results, evidence, and limitations.">
-<title>Review/export — Inspect and share results, evidence, and limitations.</title>
-<rect x="60" y="312" width="248" height="106" rx="11" fill="#b76a2e" opacity=".26" filter="url(#cardShadow)"/>
-<rect x="60" y="312" width="248" height="106" rx="11" fill="url(#cardFill)" stroke="url(#copperStroke)" stroke-width="2.25"/>
-<rect x="65" y="317" width="238" height="96" rx="7" fill="none" stroke="#f2c590" stroke-width=".7" opacity=".28"/>
-<path d="M73 319 H296" stroke="url(#metalShine)" stroke-width="2"/>
-<rect x="72" y="334" width="2" height="61" rx="1" fill="#ecad6e" opacity=".74"/>
-<text x="88" y="343" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="2.1" fill="#dba879">06</text>
-<text x="88" y="387" font-family="Georgia,'Times New Roman',serif" font-size="26" fill="#f2e2d4">Review/export</text>
+<g><title>Optional paper — Draft a paper from saved research.</title>
+<rect x="355" y="270" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="355" y="270" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M369 272 H587" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M371 360 H585" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="477.5" y="326" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Optional paper</text>
 </g>
-<path d="M60 448H964" stroke="#9b623e" stroke-width=".75" opacity=".32"/>
-<g fill="#a47c61" font-family="Arial,Helvetica,sans-serif" font-size="10.5" letter-spacing="2.2"><text x="61" y="463">INVESTIGATE</text><text x="962" y="463" text-anchor="end">INSPECT  •  CONTINUE  •  SHARE</text></g>
+<g><title>Review/export — Inspect results and export for review.</title>
+<rect x="664" y="270" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="664" y="270" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M678 272 H896" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M680 360 H894" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="786.5" y="326" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Review/export</text>
+</g>
 </svg>
