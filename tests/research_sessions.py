@@ -13185,6 +13185,12 @@ def main():
         )
     test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
     test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
+    # Explicit driver; this repository does not discover tests with pytest.
+    import test_crucible_context_budget
+
+    for name, check in vars(test_crucible_context_budget).items():
+        if name.startswith("test_") and callable(check):
+            check()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_parallel_funding_uses_estimates_without_changing_provider_request()
     test_portfolio_capacity_tracks_strategies_not_billing_mode()
