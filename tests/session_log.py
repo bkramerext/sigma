@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -504,6 +505,152 @@ def test_project_deletion_waits_for_read_and_cleans_logs(tmp_path: Path):
     assert not (root / project_id).exists()
 
 
+def test_session_log_filename_short_name_fallback_and_sanitization() -> None:
+    assert (
+        session_log.export_filename("Xenopus Tadpoles", "Very Long Project Title", 12)
+        == "Xenopus_Tadpoles.session_12.log"
+    )
+    assert (
+        session_log.export_filename(None, "Warp Drive Design", 3)
+        == "Warp_Drive_Design.session_3.log"
+    )
+    assert (
+        session_log.export_filename("", "Nonconsecutive Subset Sums", 54)
+        == "Nonconsecutive_Subset_Sums.session_54.log"
+    )
+    assert session_log.export_filename(r"../COM1:\\bad?/..", "Ignored", 2) == "COM1_bad.session_2.log"
+    assert session_log.export_filename("CON", "Ignored", 1) == "CON_project.session_1.log"
+    assert session_log.export_filename("Étude / 数学", "Ignored", 9) == "Étude_数学.session_9.log"
+    assert session_log.export_filename("..//", "??", 7) == "project.session_7.log"
+
+
+def test_saved_reference_diagnostics_and_markdown_export() -> None:
+    excerpt = "A frozen exact methodology excerpt for scientific inquiry."
+    digest = hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
+    snapshot = {
+        "sha256": "frozen-source-checksum",
+        "sources": [
+            {
+                "id": "one",
+                "title": "Methodology One",
+                "url": "https://example.org/one",
+                "retrieval": {
+                    "status": "retrieved",
+                    "excerpt": excerpt,
+                    "excerpt_sha256": digest,
+                    "content_sha256": "original-document-hash",
+                },
+            },
+            {
+                "id": "two",
+                "title": "Methodology Two",
+                "url": "https://example.org/two",
+                "retrieval": {"status": "unavailable", "reason": "http_403", "excerpt": None},
+            },
+            {
+                "id": "three",
+                "title": "Methodology Three",
+                "url": "https://example.org/three",
+                "retrieval": {
+                    "status": "retrieved", "excerpt": excerpt,
+                    "excerpt_sha256": "tampered-hash", "content_sha256": "saved-document-hash",
+                },
+            },
+        ],
+    }
+    record = {
+        "research_method_sources": snapshot,
+        "reference_compilation": {
+            "status": "fallback",
+            "source_sha256": "frozen-source-checksum",
+            "reason": "Compiler rejected after bounded attempts.",
+            "attempts": [
+                {
+                    "number": 1, "status": "rejected", "provider_http_status": 429,
+                    "provider_error_code": "rate_limit_exceeded",
+                    "retry_decision": "retry", "usage_status": "rejected",
+                },
+                {
+                    "number": 2, "status": "not_dispatched",
+                    "retry_decision": "budget_exhausted", "usage_status": "not_dispatched",
+                },
+            ],
+        },
+        "calls_used": 1,
+        "strategy_ids": ["one"],
+    }
+    summary = session_log.reference_preparation_summary(record)
+    assert summary["selected_count"] == 3
+    assert summary["verified_count"] == 1
+    assert summary["references"][0]["excerpt_integrity"] is True
+    assert summary["references"][1]["http_status"] == 403
+    assert summary["references"][1]["retrieval_status"] == "unavailable"
+    assert summary["references"][2]["excerpt_integrity"] is False
+    assert summary["compiler"]["status"] == "fallback"
+    assert summary["compiler"]["attempt_count"] == 1
+    assert summary["compiler"]["attempts"][1]["status"] == "not_dispatched"
+    assert summary["compiler"]["retrieved_excerpts_used"] == "unknown/not recorded"
+    assert "fallback" in summary["guidance_disposition"]
+    exported = session_log.markdown_export(
+        [{"seq": 1, "type": "session_event", "message": "call ongoing"}],
+        {"number": 12},
+        "Project",
+        summary,
+    )
+    assert "## Research-reference preparation" in exported
+    assert "Methodology Two — https://example.org/two" in exported
+    assert "HTTP: 403" in exported
+    assert "Compilation degraded" in exported
+    assert "unknown/not recorded" in exported
+    assert "## Canonical event records" in exported
+    assert session_log.reference_preparation_summary({})["selected_count"] is None
+    assert excerpt not in exported  # No full frozen excerpts duplicated in downloads.
+    record["reference_compilation"] = {
+        "status": "completed", "source_sha256": "frozen-source-checksum",
+        "attempts": [{"number": 1, "status": "completed", "retry_decision": "completed"}],
+    }
+    completed = session_log.reference_preparation_summary(record)
+    assert completed["compiler"]["attempt_count"] == 1
+    assert "Compiled guidance available" in completed["guidance_disposition"]
+    assert "unknown/not recorded" in completed["guidance_disposition"]
+    record["reference_compilation"]["status"] = "pending"
+    pending = session_log.reference_preparation_summary(record)
+    assert pending["compiler"]["status"] == "pending"
+    assert "pending" in pending["guidance_disposition"]
+
+
+def test_session_log_download_route_content_and_name() -> None:
+    from sigma import api
+
+    record = {
+        "events": [{"seq": 1, "type": "session_event", "message": "still recording"}],
+        "session": {"number": 7, "status": "running"},
+        "project_title": "A Long Project / Name",
+        "saved_short_name": "Tadpole Research",
+        "reference_preparation": session_log.reference_preparation_summary({}),
+    }
+    with patch.object(api.session_log, "read", return_value=record):
+        active = api.research_session_log_download_view("test-session-id", "/fixture")
+    assert (
+        'filename="Tadpole_Research.session_7.log"'
+        in active.headers["content-disposition"]
+    )
+    assert active.media_type is not None and active.media_type.startswith("text/markdown")
+    assert b"## Research-reference preparation" in active.body
+    assert b"still recording" in active.body
+    record["session"]["status"] = "completed"
+    with patch.object(api.session_log, "read", return_value=record):
+        completed = api.research_session_log_download_view("test-session-id", "/fixture")
+    assert active.headers["content-disposition"] == completed.headers["content-disposition"]
+    assert active.body == completed.body
+    record["saved_short_name"] = None
+    with patch.object(api.session_log, "read", return_value=record):
+        fallback = api.research_session_log_download_view("test-session-id", "/fixture")
+    assert 'filename="A_Long_Project_Name.session_7.log"' in fallback.headers[
+        "content-disposition"
+    ]
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-session-log-") as directory:
         root = Path(directory)
@@ -517,7 +664,10 @@ def main() -> None:
         test_slow_storage_does_not_block_research_caller_and_keeps_order(root / "slow")
         test_delayed_session_a_write_does_not_block_session_b_read(root / "isolated-read")
         test_project_deletion_waits_for_read_and_cleans_logs(root / "delete-race")
-    print("Session log append, concurrency, redaction and recovery scenarios passed.")
+        test_session_log_filename_short_name_fallback_and_sanitization()
+        test_saved_reference_diagnostics_and_markdown_export()
+        test_session_log_download_route_content_and_name()
+    print("Session log append, reference diagnostics, filenames, concurrency, redaction and recovery scenarios passed.")
 
 
 if __name__ == "__main__":

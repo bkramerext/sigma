@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import atexit
 import fcntl
+import hashlib
 import json
 import os
 import queue
 import re
 import threading
+import unicodedata
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -820,7 +822,176 @@ def _event_markdown(event: dict[str, Any], prior_events: list[dict[str, Any]]) -
     return f"### {event_type.replace('_', ' ').capitalize()} · Round {round_label} · {role}\n\n`{stamp}` · {detail}"
 
 
-def markdown_export(events: list[dict[str, Any]], session: dict[str, Any], short_name: str) -> str:
+def export_filename(saved_short_name: str | None, project_title: str, session_number: int) -> str:
+    """Portable, readable filename; the exported body deliberately remains Markdown."""
+    label = unicodedata.normalize("NFKC", (saved_short_name or "").strip() or project_title)
+    stem = "".join(char if char.isalnum() or char in "-_." else "_" for char in label)
+    stem = re.sub(r"_+", "_", stem).strip("._-")[:80].rstrip("._-") or "project"
+    if stem.upper() in {"CON", "PRN", "AUX", "NUL", *{f"COM{i}" for i in range(1, 10)}, *{f"LPT{i}" for i in range(1, 10)}}:
+        stem += "_project"
+    return f"{stem}.session_{session_number}.log"
+
+
+def reference_preparation_summary(session: dict[str, Any]) -> dict[str, Any]:
+    """Only saved, read-only reference diagnostics; no retrieval or model requests."""
+    frozen = session.get("research_method_sources")
+    selection = frozen if isinstance(frozen, dict) else {}
+    raw_sources = selection.get("sources")
+    sources = raw_sources if isinstance(raw_sources, list) else []
+    selected_count = len(sources) if isinstance(raw_sources, list) else None
+    references = []
+    verified = 0
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        retrieval = source.get("retrieval")
+        info = retrieval if isinstance(retrieval, dict) else {}
+        status = str(info.get("status") or "unknown/not recorded")
+        excerpt = info.get("excerpt")
+        digest = info.get("excerpt_sha256")
+        excerpt_present = isinstance(excerpt, str) and bool(excerpt)
+        integrity = (
+            hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == digest
+            if excerpt_present and isinstance(digest, str)
+            else None if not excerpt_present and not isinstance(digest, str) else False
+        )
+        if status == "retrieved" and integrity is True:
+            verified += 1
+        reason = str(info.get("reason") or "")
+        match = re.fullmatch(r"http_(\d{3})", reason.lower())
+        references.append(
+            {
+                "title": str(source.get("title") or "Untitled reference"),
+                "url": str(source.get("url") or ""),
+                "retrieval_status": status,
+                "reason": reason or None,
+                "http_status": (
+                    info["http_status"]
+                    if type(info.get("http_status")) is int
+                    else int(match.group(1)) if match else None
+                ),
+                "excerpt_present": excerpt_present,
+                "excerpt_integrity": integrity,
+                "content_hash_recorded": isinstance(info.get("content_sha256"), str),
+            }
+        )
+    raw_compilation = session.get("reference_compilation")
+    compiler = raw_compilation if isinstance(raw_compilation, dict) else {}
+    raw_attempts = compiler.get("attempts")
+    attempts = [
+        {
+            "number": entry.get("number"),
+            "status": entry.get("status"),
+            "failure_type": entry.get("failure_type"),
+            "http_status": entry.get("provider_http_status"),
+            "error_code": entry.get("provider_error_code"),
+            "validation_failure": entry.get("validation_failure"),
+            "usage_status": entry.get("usage_status"),
+            "token_usage": entry.get("token_usage"),
+            "retry_decision": entry.get("retry_decision"),
+            "reason": str(entry.get("reason") or "")[:320] or None,
+        }
+        for entry in raw_attempts
+        if isinstance(entry, dict)
+    ] if isinstance(raw_attempts, list) else []
+    status = str(compiler.get("status") or "unknown/not recorded")
+    source_hash_match = (
+        compiler["source_sha256"] == selection["sha256"]
+        if isinstance(compiler.get("source_sha256"), str)
+        and isinstance(selection.get("sha256"), str)
+        else None
+    )
+    dispatched_attempts = sum(
+        entry["status"] not in {"not_dispatched"} for entry in attempts
+    )
+    calls_used = session.get("calls_used")
+    if status == "completed" and source_hash_match is not False:
+        disposition = "Compiled guidance available; agent delivery unknown/not recorded"
+    elif status in {"fallback", "skipped", "disabled"}:
+        disposition = (
+            "Original-reference fallback (degraded)"
+            if type(calls_used) is int and calls_used > 0
+            else "Original references retained; agent delivery unknown/not recorded"
+        )
+    elif status in {"interrupted", "failed"}:
+        disposition = "Compilation failed/interrupted; agent guidance delivery unknown/not recorded"
+    else:
+        disposition = "Guidance delivery pending or unknown/not recorded"
+    return {
+        "selected_count": selected_count,
+        "references": references,
+        "verified_count": verified,
+        "compiler": {
+            "status": status,
+            "attempt_count": dispatched_attempts,
+            "attempts": attempts,
+            "reason": str(compiler.get("reason") or "")[:400] or None,
+            "source_hash_match": source_hash_match,
+            # The v2 template uses verified snippets, but the actual supplied
+            # excerpt identities/hashes are not separately audited per attempt.
+            "retrieved_excerpts_used": "unknown/not recorded",
+        },
+        "guidance_disposition": disposition,
+        "strategy_count": len(session.get("strategy_ids", []))
+        if isinstance(session.get("strategy_ids"), list) else None,
+    }
+
+
+def _reference_markdown(summary: dict[str, Any]) -> list[str]:
+    """Readable audit summary derived from saved records, not URL accessibility."""
+    compiler = summary["compiler"]
+    rows = [
+        "## Research-reference preparation",
+        "",
+        f"{summary['selected_count'] if summary['selected_count'] is not None else 'unknown/not recorded'} selected · "
+        f"{summary['verified_count']} retrieved with verified excerpts · "
+        f"Compilation {compiler['status']} "
+        f"({compiler['attempt_count']}/3 dispatched attempts).",
+        "",
+        f"**Guidance disposition:** {summary['guidance_disposition']}",
+        "",
+        f"**Compiler received retrieved excerpts:** {compiler['retrieved_excerpts_used']}",
+        "",
+    ]
+    if compiler.get("source_hash_match") is False:
+        rows.extend(["**WARNING: compiled source snapshot hash mismatch.**", ""])
+    if compiler.get("reason") and compiler["status"] != "completed":
+        rows.extend([f"**Compilation degraded:** {compiler['reason']}", ""])
+    for index, ref in enumerate(summary["references"], start=1):
+        verified = (
+            "verified"
+            if ref["excerpt_integrity"] is True
+            else "invalid/missing hash"
+            if ref["excerpt_integrity"] is False
+            else "unknown/not recorded"
+        )
+        rows.extend([
+            f"{index}. {ref['title']} — {ref['url']}",
+            f"   Retrieval: {ref['retrieval_status']}; "
+            f"HTTP: {ref['http_status'] if ref['http_status'] is not None else 'unknown/not recorded'}; "
+            f"reason: {ref['reason'] or 'none recorded'}; "
+            f"excerpt: {'present' if ref['excerpt_present'] else 'absent'}; "
+            f"excerpt integrity: {verified}.",
+        ])
+    rows.append("")
+    for attempt in compiler["attempts"]:
+        rows.extend([
+            f"- Compiler attempt {attempt['number']}: {attempt['status']} · "
+            f"HTTP {attempt['http_status'] if attempt['http_status'] is not None else 'unknown/not recorded'} · "
+            f"code {attempt['error_code'] or 'unknown/not recorded'} · "
+            f"failure {attempt['failure_type'] or 'none'} · "
+            f"validation {attempt['validation_failure'] or 'none'} · "
+            f"usage {attempt['usage_status'] or 'unknown/not recorded'} · "
+            f"retry {attempt['retry_decision'] or 'unknown/not recorded'}."
+        ])
+    rows.extend(["", "---", ""])
+    return rows
+
+
+def markdown_export(
+    events: list[dict[str, Any]], session: dict[str, Any], short_name: str,
+    reference_preparation: dict[str, Any] | None = None,
+) -> str:
     """Render old or new canonical frames as a readable, disposable Markdown download."""
     output = [
         f"# {short_name}, Session {session.get('number', '—')}",
@@ -828,6 +999,8 @@ def markdown_export(events: list[dict[str, Any]], session: dict[str, Any], short
         "Provider requests, responses, and metadata are paired below. The persistent append-only log keeps complete structured events and raw response wire for retained events; this download summarizes duplicate raw-wire strings to keep Markdown previews readable.",
         "",
     ]
+    if reference_preparation is not None:
+        output.extend(_reference_markdown(reference_preparation))
     completed: set[str] = set()
     by_request: dict[str, dict[str, Any]] = {
         str(event["request_id"]): event
@@ -912,6 +1085,12 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
         short_name = _short_name(
             project_file, view.project.id, title=view.project.title, problem=view.project.problem
         )
+        saved_name_file = target.parent / ".short-name"
+        has_saved_short_name = (
+            saved_name_file.is_file()
+            and not saved_name_file.is_symlink()
+            and bool(saved_name_file.read_text(encoding="utf-8").strip())
+        )
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with _lock(target):
             lockfile_fd = os.open(target.with_suffix(".lock"), os.O_CREAT | os.O_RDWR, 0o600)
@@ -929,6 +1108,8 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
         "events": events,
         "cursor": cursor,
         "short_name": short_name,
+        "saved_short_name": short_name if has_saved_short_name else None,
+        "reference_preparation": reference_preparation_summary(session),
         "project_title": view.project.title,
         "session": {
             "id": session_id,
