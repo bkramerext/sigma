@@ -1356,7 +1356,7 @@ def test_request_audit_truncation_tokens_and_reconciliation():
     paused_fixture["message"] = "Provider returned an ambiguous failure after dispatch."
     failed_guidance = research_sessions._public(paused_fixture)["next_step_guidance"]
     assert "confirm provider usage or billing" in failed_guidance
-    assert "start a new session" in failed_guidance
+    assert "Click Resume" in failed_guidance
     assert "another attempt is free or safe" in failed_guidance
     paused_fixture["message"] = (
         "The conservative estimated cost reserve for another call exceeds the session limit; no additional call was made."
@@ -1367,7 +1367,7 @@ def test_request_audit_truncation_tokens_and_reconciliation():
     paused_fixture["message"] = (
         "Configured model-call limit reached. Findings are unverified research notes."
     )
-    assert "start a new session" in research_sessions._public(paused_fixture)["next_step_guidance"]
+    assert "Click Resume" in research_sessions._public(paused_fixture)["next_step_guidance"]
     paused_fixture["status"] = "paused"
     for message, expected in (
         (
@@ -1376,15 +1376,15 @@ def test_request_audit_truncation_tokens_and_reconciliation():
         ),
         (
             "AI account or billing identity changed; session paused before a new call.",
-            "Restore the intended AI account",
+            "Research is independent of the ChatGPT account",
         ),
         (
             "Selected model is no longer available; session paused before a new call.",
-            "Check the selected model",
+            "Check that the current connection supports the saved model",
         ),
         (
             "Configured session duration reached while waiting for provider access. No new call was made.",
-            "start a new session",
+            "click Resume",
         ),
         (
             "Research storage limit reached. Existing artifacts were retained.",

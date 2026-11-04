@@ -693,14 +693,19 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
     entered.clear()
     release.clear()
     provider_calls.clear()
+    account_check_count = 0
+
+    async def switched_account():
+        nonlocal account_check_count
+        account_check_count += 1
+        return (
+            account_credential
+            if account_check_count == 1
+            else {**account_credential, "identity": "other", "token": "new-account-token"}
+        )
+
     with (
-        patch.object(
-            research_sessions,
-            "auth_context",
-            new=AsyncMock(
-                side_effect=[account_credential, {**account_credential, "identity": "other"}]
-            ),
-        ),
+        patch.object(research_sessions, "auth_context", new=switched_account),
         patch.object(
             research_sessions, "configuration", new=AsyncMock(return_value=account_config)
         ),
@@ -721,10 +726,14 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
         )
         await asyncio.wait_for(entered.wait(), 2)
         release.set()
-        paused = await wait_for(account_path, started["id"])
-    assert paused["status"] == "paused" and paused["calls_used"] == 0
-    assert "AI account or billing identity changed" in paused["message"]
-    assert provider_calls == []
+        continued = await wait_for(account_path, started["id"])
+    assert continued["status"] in {"completed", "ended"}, continued["message"]
+    assert continued["calls_used"] >= 2
+    assert len(provider_calls) >= 2
+    assert all(call.headers["Authorization"] == "Bearer new-account-token" for call in provider_calls)
+    assert research_sessions._read(str(account_path), started["id"])["identity_hash"] == (
+        research_sessions._digest(account_credential["identity"])
+    )
 
 
 async def test_legacy_resume_accepts_reverted_eligibility_events(path: Path):
@@ -2592,8 +2601,127 @@ def test_terminal_protocol_completion_allows_known_invalid_response_replacement(
     assert plan["required_calls"] - (record["call_limit"] - record["calls_used"]) == 2
 
 
+async def test_legacy_compiler_checkpoint_resumes_after_account_change(path: Path) -> None:
+    """ONP-era sessions keep their checkpoint when the account or backend changes."""
+    view, strategy, credential, config = await setup(path)
+    current_account = {"value": credential}
+
+    async def connected_account():
+        return current_account["value"]
+
+    async def idle_worker(*_args):
+        return None
+
+    with (
+        patch.object(research_sessions, "auth_context", new=connected_account),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(
+            research_sessions, "_frozen_session_configuration", new=AsyncMock(return_value=config)
+        ),
+        patch.object(research_sessions, "_worker", new=idle_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        saved = research_sessions._read(str(path), started["id"])
+        saved.pop("reference_compilation", None)
+        saved["status"] = "paused"
+        saved["stopped_at"] = datetime.now(UTC).isoformat()
+        saved["preserved_legacy_note"] = "Earlier paid research remains unchanged."
+        for branch in saved["strategy_runs"]:
+            branch["status"] = "paused"
+        research_sessions._save(str(path), saved)
+        current_account["value"] = {
+            **credential,
+            "identity": "a-new-chatgpt-account",
+            "token": "a-new-chatgpt-token",
+        }
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        assert resumed["preserved_legacy_note"] == "Earlier paid research remains unchanged."
+        assert await research_sessions._ensure_reference_compilation(started["id"], str(path))
+        persisted = research_sessions._read(str(path), started["id"])
+        assert persisted["reference_compilation"]["status"] == "not_needed"
+        assert persisted["reference_compilation"]["required_for_acceptance"] is False
+        assert persisted["identity_hash"] == research_sessions._digest(credential["identity"])
+        assert persisted["preserved_legacy_note"] == saved["preserved_legacy_note"]
+
+
+async def test_resume_repeated_unknown_provider_failures_retains_session(path: Path) -> None:
+    """Each Resume is new paid work, never a replay or loss of saved research."""
+    view, strategy, credential, config = await setup(path)
+
+    async def idle_worker(*_args):
+        return None
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(
+            research_sessions, "_frozen_session_configuration", new=AsyncMock(return_value=config)
+        ),
+        patch.object(research_sessions, "_worker", new=idle_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        record["cycle_limit"] = 1
+        record["call_limit"] = 2
+        record["calls_used"] = 0
+        ledger = new_ledger(
+            call_limit=2,
+            input_token_limit=400_000,
+            output_tokens_per_call=4_000,
+            cost_limit_usd=100.0,
+            input_price_per_million=1.0,
+            output_price_per_million=2.0,
+        )
+        for index in range(2):
+            unknown_id = str(uuid4())
+            reserve_before_dispatch(ledger, call_id=unknown_id, request_body=b"unknown provider request")
+            mark_unknown(ledger, call_id=unknown_id)
+            record["steps"].append(
+                {
+                    "id": unknown_id,
+                    "strategy_id": strategy.id,
+                    "role": "investigator",
+                    "cycle": 1,
+                    "status": "failed",
+                    "failure_kind": "provider_error",
+                    "attempt_status": "unknown",
+                    "provider_input_audit": {"status": "call_failed_dispatch_unknown"},
+                }
+            )
+            record["status"] = "failed"
+            record["strategy_runs"][0].update(
+                {"status": "failed", "cycle": 1, "pending_investigation": None}
+            )
+            record["calls_used"] += 1
+            record["strategy_runs"][0]["calls_used"] = record["calls_used"]
+            record["hard_budget_ledger"] = ledger
+            record["stopped_at"] = datetime.now(UTC).isoformat()
+            research_sessions._save(str(path), record)
+
+            resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+            assert resumed["status"] == "queued"
+            assert resumed["calls_used"] == index + 1
+            assert resumed["call_limit"] == 3 + index
+            persisted = research_sessions._read(str(path), started["id"])
+            assert len(persisted["steps"]) == index + 1
+            assert persisted["hard_budget_ledger"]["blocked_reason"] is None
+            assert all(
+                item["status"] == "unknown" for item in persisted["hard_budget_ledger"]["calls"]
+            )
+            # The next synthetic provider failure begins from the saved checkpoint.
+            record = persisted
+            ledger = persisted["hard_budget_ledger"]
+
+
 async def test_e009_stopped_unknown_investigator_explicit_repair(path: Path) -> None:
-    """Normal Resume is not a protocol repair; explicit Repair keeps unknown usage held."""
+    """Ordinary Resume authorizes new work and retains unknown provider liability."""
     view, strategy, credential, config = await setup(path)
 
     async def idle_worker(*_args):
@@ -2658,7 +2786,9 @@ async def test_e009_stopped_unknown_investigator_explicit_repair(path: Path) -> 
         record["hard_budget_ledger"] = ledger
         research_sessions._save(str(path), record)
 
-        repaired = await research_sessions.control_session(str(path), started["id"], "repair")
+        # The same user-facing Resume action now authorizes a separately
+        # accounted replacement; Repair is not a required second UI workflow.
+        repaired = await research_sessions.control_session(str(path), started["id"], "resume")
         assert repaired["status"] == "queued"
         assert repaired["calls_used"] == 1
         assert repaired["call_limit"] == 7
@@ -2757,7 +2887,9 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(
         research_sessions._save(str(path), record)
         original = research_sessions._read(str(path), started["id"])
         try:
-            await research_sessions.control_session(str(path), started["id"], "resume")
+            await research_sessions.control_session(
+                str(path), started["id"], "resume", additional_calls=3
+            )
         except ProjectError as exc:
             assert "exactly 4" in str(exc)
         else:

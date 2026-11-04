@@ -2065,7 +2065,7 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
     branches = {branch["strategy_id"]: branch for branch in finished["strategy_runs"]}
     assert branches[first.id]["status"] == "paused"
     assert branches[second.id]["status"] == "paused"
-    assert "Continue Research" in branches[second.id]["reason"]
+    assert "Click Resume" in branches[second.id]["reason"]
     limited = next(step for step in finished["steps"] if step["status"] == "failed")
     assert limited["failure_kind"] == "provider_limited"
     assert limited["provider_http_status"] == (200 if streamed else 429)
@@ -2322,7 +2322,7 @@ def test_provider_limit_v2_40_of_54_offers_ordinary_resume_and_correct_progress(
     }
     assert preview["protocol_completed_calls"] == 36
     assert preview["protocol_target_calls"] == 54
-    assert "Continue Research" in preview["next_step_guidance"]
+    assert "Click Resume" in preview["next_step_guidance"]
     assert "authorize" not in preview["next_step_guidance"].lower()
     assert record["call_limit"] == 54  # A read must not authorize extra calls.
     reason_code, message = research_sessions._portfolio_termination(record, runs)

@@ -93,6 +93,16 @@ def main(part: int = 1):
             )
         )
         asyncio.run(
+            test_legacy_compiler_checkpoint_resumes_after_account_change(
+                Path(temporary) / "legacy-compiler-resume.sigma"
+            )
+        )
+        asyncio.run(
+            test_resume_repeated_unknown_provider_failures_retains_session(
+                Path(temporary) / "repeated-provider-resume.sigma"
+            )
+        )
+        asyncio.run(
             test_e009_stopped_unknown_investigator_explicit_repair(
                 Path(temporary) / "unknown-investigator-repair.sigma"
             )
