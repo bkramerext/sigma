@@ -208,15 +208,15 @@ def run_tooling(command: str) -> int:
                 and step[4] == "ruff"
             )
         ]
-    # Two independent CI jobs cover the entire SIGMA test plan exactly once.
-    # Alternate checks rather than splitting contiguously so expensive checks
+    # Four independent CI jobs cover the entire SIGMA test plan exactly once.
+    # Round-robin checks rather than splitting contiguously so expensive checks
     # are distributed across the runners. Local './sigma test' remains whole.
     shard = os.environ.get("SIGMA_CI_TEST_SHARD") if command == "test" else None
     if shard:
-        if shard not in {"1", "2"}:
-            print("SIGMA_CI_TEST_SHARD must be 1 or 2.", file=sys.stderr)
+        if shard not in {"1", "2", "3", "4"}:
+            print("SIGMA_CI_TEST_SHARD must be 1, 2, 3, or 4.", file=sys.stderr)
             return 2
-        steps = [step for index, step in enumerate(steps) if index % 2 == int(shard) - 1]
+        steps = [step for index, step in enumerate(steps) if index % 4 == int(shard) - 1]
     unsupported_steps = [step for step in steps if not _test_step_allowed(step)]
     if command == "test" and unsupported_steps:
         print(
