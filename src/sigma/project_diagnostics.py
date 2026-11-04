@@ -94,6 +94,22 @@ def append(
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if target.is_symlink():
             raise OSError("Unsafe diagnostics file")
+        # An HTTP retry with the same request correlation must not fabricate
+        # multiple copies of the identical error. Reconcile only exact
+        # (correlation, stage, code, message, session) matches.
+        if target.exists() and record["correlation_id"]:
+            for line in target.read_bytes().splitlines():
+                try:
+                    previous = json.loads(line)
+                except (ValueError, UnicodeDecodeError):
+                    continue
+                if not isinstance(previous, dict):
+                    continue
+                if all(
+                    previous.get(key) == record[key]
+                    for key in ("correlation_id", "stage", "code", "message", "session_id")
+                ):
+                    return previous
         if target.exists() and target.stat().st_size + len(data) > MAX_BYTES:
             raise OSError("Project diagnostics capacity reached; event was not recorded")
         fd = os.open(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
