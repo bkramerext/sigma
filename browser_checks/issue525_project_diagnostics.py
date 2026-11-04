@@ -162,6 +162,81 @@ def main() -> None:
                     assert unreachable["recorded"] is False
                     assert "not recorded" in unreachable["status"]
                     assert "offline-525" in unreachable["status"]
+                    # Real failed deletion transport used by ResearchWorkspace:
+                    # the visible alert and persisted export must agree.
+                    deleted_message = "Session removal failed: stale project revision."
+                    captured_error = {}
+
+                    page.route(
+                        "**/api/projects/research-sessions/session-525",
+                        lambda route: route.fulfill(
+                            status=409,
+                            content_type="application/json",
+                            body='{"error":"Session removal failed: stale project revision."}',
+                        ),
+                    )
+                    page.unroute("**/api/projects/diagnostics")
+                    def report_deletion(route):
+                        captured_error.update(route.request.post_data_json)
+                        route.fulfill(
+                            status=200,
+                            content_type="application/json",
+                            body='{"recorded":true,"diagnostic":{"message":"Session removal failed: stale project revision.","code":"browser_request_failed","correlation_id":"delete-525"}}',
+                        )
+                    page.route("**/api/projects/diagnostics", report_deletion)
+                    page.evaluate(
+                        """async () => {
+                          const host = document.createElement('div');
+                          host.innerHTML = '<button id="delete-fixture">Remove saved session</button><p role="alert" id="delete-error"></p>';
+                          document.body.appendChild(host);
+                          const { removeResearchSession } = await import('/src/session-removal-request.ts');
+                          const { reportProjectDiagnostic } = await import('/src/project-diagnostic-report.ts');
+                          host.querySelector('button').addEventListener('click', async () => {
+                            try {
+                              await removeResearchSession('/fixture/project.json', 'session-525', 'stale-revision');
+                            } catch (cause) {
+                              const message = cause.message;
+                              host.querySelector('#delete-error').textContent = message;
+                              const reported = await reportProjectDiagnostic(
+                                '/fixture/project.json', message, 'session_delete', 'delete-525'
+                              );
+                              if (reported.message) host.querySelector('#delete-error').textContent = reported.message;
+                            }
+                          });
+                        }"""
+                    )
+                    page.get_by_role("button", name="Remove saved session").click()
+                    expect(page.get_by_role("alert", name="")).to_have_text(deleted_message)
+                    page.wait_for_function(
+                        "() => document.querySelector('#delete-error')?.textContent?.includes('stale project revision')"
+                    )
+                    assert captured_error["message"] == deleted_message
+                    assert captured_error["stage"] == "session_delete"
+                    page.unroute("**/api/projects/diagnostics/download?**")
+                    actual_export = (
+                        "# Project diagnostics\\n\\n"
+                        "## 2026-11-03T20:00:01Z · session_delete · browser_request_failed\\n"
+                        "Event ID: delete-525\\n"
+                        f"Message (escaped newlines): {captured_error['message']}\\n"
+                    )
+                    page.route(
+                        "**/api/projects/diagnostics/download?**",
+                        lambda route: route.fulfill(
+                            status=200,
+                            content_type="text/markdown",
+                            body=actual_export,
+                            headers={
+                                "Content-Disposition": 'attachment; filename="project-diagnostics.log"'
+                            },
+                        ),
+                    )
+                    panel.get_by_role("button", name="Copy project diagnostics").click()
+                    expect(panel.get_by_role("status")).to_contain_text("copied")
+                    copied_after_delete = page.evaluate("navigator.clipboard.readText()")
+                    assert deleted_message in copied_after_delete
+                    with page.expect_download() as deletion_download:
+                        panel.get_by_role("link", name="Download project diagnostics").click()
+                    assert Path(deletion_download.value.path()).read_text() == copied_after_delete
                     browser.close()
             finally:
                 process.terminate()
