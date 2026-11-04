@@ -95,7 +95,7 @@ async def verify_provider_free_admission() -> None:
             patch.dict(
                 os.environ,
                 {
-                    "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS": "true",
+                    "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS": "false",
                     "SIGMA_REFERENCE_COMPILATION_ENABLED": "true",
                 },
             ),
@@ -124,6 +124,69 @@ async def verify_provider_free_admission() -> None:
             assert research_sessions._all(str(path)) == []
             mock_worker.assert_not_called()
 
+            # Retrieval status alone is not proof of inspected content. The
+            # gate must reject absent excerpts, mismatched excerpt hashes, and
+            # malformed full-source digests, without saving or dispatching.
+            no_excerpt = source("Missing-excerpt")
+            no_excerpt["retrieval"]["excerpt"] = None
+            wrong_excerpt_hash = source("Invalid-excerpt-hash")
+            wrong_excerpt_hash["retrieval"]["excerpt_sha256"] = "0" * 64
+            wrong_content_hash = source("Invalid-content-hash")
+            wrong_content_hash["retrieval"]["content_sha256"] = "not-a-sha256"
+            for broken, expected in (
+                (no_excerpt, "Missing-excerpt"),
+                (wrong_excerpt_hash, "Invalid-excerpt-hash"),
+                (wrong_content_hash, "Invalid-content-hash"),
+            ):
+                snapshot = {**methods, "sources": [source("Valid"), broken]}
+                with patch.object(
+                    research_sessions, "select_method_sources", return_value=snapshot
+                ):
+                    try:
+                        await research_sessions.start_session(
+                            str(path),
+                            strategy.id,
+                            str(uuid4()),
+                            view.project.id,
+                            credential["identity"],
+                            expected_limits=limits,
+                            strategy_ids=[strategy.id],
+                        )
+                    except ProjectError as exc:
+                        message = str(exc)
+                        assert expected in message and "SHA-256" in message, message
+                        assert "before provider dispatch" in message, message
+                    else:
+                        raise AssertionError(f"Unverified method {expected} was accepted")
+                assert research_sessions._all(str(path)) == []
+                mock_worker.assert_not_called()
+
+            # Compilation being disabled does not bypass the source gate.
+            with (
+                patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "false"}),
+                patch.object(
+                    research_sessions,
+                    "select_method_sources",
+                    return_value={**methods, "sources": [no_excerpt]},
+                ),
+            ):
+                try:
+                    await research_sessions.start_session(
+                        str(path),
+                        strategy.id,
+                        str(uuid4()),
+                        view.project.id,
+                        credential["identity"],
+                        expected_limits=limits,
+                        strategy_ids=[strategy.id],
+                    )
+                except ProjectError as exc:
+                    assert "Missing-excerpt" in str(exc), str(exc)
+                else:
+                    raise AssertionError("Compiler opt-out bypassed retrieval readiness")
+            assert research_sessions._all(str(path)) == []
+            mock_worker.assert_not_called()
+
             # A complete, hash-verified three-reference snapshot must pass
             # admission without requiring a model request.
             ready = {
@@ -135,11 +198,12 @@ async def verify_provider_free_admission() -> None:
                 ],
                 "retrieval_summary": {"retrieved": 3, "unavailable": 0},
             }
+            ready_idempotency_key = str(uuid4())
             with patch.object(research_sessions, "select_method_sources", return_value=ready):
                 started = await research_sessions.start_session(
                     str(path),
                     strategy.id,
-                    str(uuid4()),
+                    ready_idempotency_key,
                     view.project.id,
                     credential["identity"],
                     expected_limits=limits,
@@ -152,6 +216,25 @@ async def verify_provider_free_admission() -> None:
             assert saved["reference_compilation"]["required_for_acceptance"] is True
             assert saved["calls_used"] == 0
             assert saved["steps"] == []
+
+            # Restarting the same request must reuse its frozen snapshot,
+            # never re-fetch the URLs or rewrite the saved record.
+            with patch.object(
+                research_sessions,
+                "select_method_sources",
+                side_effect=AssertionError("saved session unexpectedly re-fetched methods"),
+            ):
+                replay = await research_sessions.start_session(
+                    str(path),
+                    strategy.id,
+                    ready_idempotency_key,
+                    view.project.id,
+                    credential["identity"],
+                    expected_limits=limits,
+                    strategy_ids=[strategy.id],
+                )
+            assert replay["id"] == started["id"]
+            assert research_sessions._read(str(path), started["id"]) == saved
 
             # Simulate all compiler retries exhausted. The saved strict-policy
             # checkpoint must prevent the worker from starting research.
@@ -171,7 +254,89 @@ async def verify_provider_free_admission() -> None:
         assert blocked["outcome"]["source_material"]["compilation"]["status"] == "fallback"
 
 
+async def verify_empty_and_single_reference_sessions() -> None:
+    # Zero enabled sources is valid. One enabled source is also sufficient:
+    # three is a recommendation, not an admission minimum.
+    for selected, compiler_enabled, expected_status, required in (
+        ([], "true", "not_needed", False),
+        ([source("Only-selected")], "true", "pending", True),
+        ([source("Only-selected")], "false", "disabled", False),
+    ):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "optional-methods.sigma"
+            view, strategy, fixture_credential, config = await fixture.setup(path)
+            credential = AuthContext(
+                token=fixture_credential["token"],
+                mode=fixture_credential["mode"],
+                status=fixture_credential["status"],
+                identity=fixture_credential["identity"],
+            )
+            selection = {
+                "version": "project-type-methods-v1",
+                "status": "selected" if selected else "unavailable",
+                "mode": "literature",
+                "sources": selected,
+                "retrieval_summary": {"retrieved": len(selected), "unavailable": 0},
+            }
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS": "true",
+                        "SIGMA_REFERENCE_COMPILATION_ENABLED": compiler_enabled,
+                    },
+                ),
+                patch.object(
+                    research_sessions, "auth_context", new=AsyncMock(return_value=credential)
+                ),
+                patch.object(
+                    research_sessions, "configuration", new=AsyncMock(return_value=config)
+                ),
+                patch.object(research_sessions, "select_method_sources", return_value=selection),
+                patch.object(research_sessions, "_worker", new=AsyncMock()),
+            ):
+                started = await research_sessions.start_session(
+                    str(path),
+                    strategy.id,
+                    str(uuid4()),
+                    view.project.id,
+                    credential["identity"],
+                    expected_limits=research_sessions.get_limits(str(path)),
+                    strategy_ids=[strategy.id],
+                )
+            assert started["status"] == "queued"
+            saved = research_sessions._read(str(path), started["id"])
+            assert len(saved["research_method_sources"]["sources"]) == len(selected)
+            assert saved["reference_compilation"]["source_count"] == len(selected)
+            assert saved["reference_compilation"]["status"] == expected_status
+            assert saved["reference_compilation"]["required_for_acceptance"] is required
+            assert saved["calls_used"] == 0 and saved["steps"] == []
+
+
 def verify_curated_method_reference_defaults() -> None:
+    # The built-in methodology defaults must be consumable by SIGMA's
+    # HTML/plain-text-only retriever. Publication references are separate.
+    for project_type in builtin_types():
+        for reference in project_type.research_standards_references:
+            assert reference["url"].startswith("https://"), (project_type.id, reference)
+            assert not reference["url"].split("?", 1)[0].casefold().endswith(".pdf"), (
+                project_type.id,
+                reference,
+            )
+    expected_html = {
+        "biology": (
+            "https://www.nimh.nih.gov/research/research-funded-by-nimh/policies/"
+            "enhancing-the-reliability-of-nimh-supported-research-through-rigorous-study-design-and-reporting"
+        ),
+        "philosophy": "https://writingprogram.gwu.edu/guide-writing-philosophy-papers",
+        "religion": "https://research.kent.ac.uk/religion-methods/topics/comparative-research/",
+    }
+    for project_type in builtin_types():
+        if project_type.id in expected_html:
+            assert [row["url"] for row in project_type.research_standards_references] == [
+                expected_html[project_type.id]
+            ], project_type.id
+
     common = curated_common_references()["research_standards_references"]
     literature = next(item for item in builtin_types() if item.id == "literature")
     urls = {item["url"] for item in common}
@@ -214,13 +379,22 @@ def main() -> None:
         in retrieval_readiness_errors({"sources": [missing_content_hash]})[0]
     )
 
-    # An empty selection is not evidence that all configured methods were read.
-    assert retrieval_readiness_errors({"sources": []})
+    # A legitimate empty selection is valid; malformed source lists fail closed.
+    assert retrieval_readiness_errors({"sources": []}) == []
     assert retrieval_readiness_errors({"sources": "invalid"})
+    malformed_content_hash = source("Not-a-SHA")
+    malformed_content_hash["retrieval"]["content_sha256"] = "invalid"
+    assert (
+        "source-content SHA-256"
+        in retrieval_readiness_errors({"sources": [malformed_content_hash]})[0]
+    )
     verify_curated_method_reference_defaults()
     verify_compiler_receives_verified_excerpts()
     asyncio.run(verify_provider_free_admission())
-    print("PASS: research-reference admission / all-3 retrievable / 403 / no provider dispatch")
+    asyncio.run(verify_empty_and_single_reference_sessions())
+    print(
+        "PASS: unconditional research-method readiness, 403 / hashes / 0-1-3 sources / saved replay"
+    )
 
 
 if __name__ == "__main__":

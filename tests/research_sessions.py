@@ -11492,6 +11492,27 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
     Real project persistence and provider dispatch are exercised; the roles
     themselves are scripted local HTTP fixtures, not research judgments.
     """
+    from hashlib import sha256
+
+    def frozen_method(url: str) -> dict[str, object]:
+        # This is a provider-free dispatch test, not a live-site availability
+        # check. Return inspected, checksum-valid source content for PDFs too.
+        excerpt = (
+            "Deterministic offline methodological reference. Explicitly distinguish "
+            "observations, uncertainty, and assumptions in the tested argument. "
+            "Use reproducible analysis rather than unsupported inference. "
+            f"Configured URL: {url}"
+        )
+        digest = sha256(excerpt.encode("utf-8")).hexdigest()
+        return {
+            "status": "retrieved",
+            "url": url,
+            "excerpt": excerpt,
+            "excerpt_sha256": digest,
+            "content_sha256": digest,
+            "reason": None,
+        }
+
     cases = (
         (
             "biology",
@@ -11558,6 +11579,10 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
             return httpx.Response(200, json=provider_response(response))
 
         with (
+            patch(
+                "sigma.research_reference_content.freeze_reference_content",
+                side_effect=frozen_method,
+            ),
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(research_sessions, "execution_capabilities", return_value=[]),
