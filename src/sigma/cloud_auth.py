@@ -2023,38 +2023,53 @@ def _deliver_admin_notice(subject: str, body: str) -> None:
         send_admin_notification(subject, body, recipients=recipients)
         return
 
+    message = EmailMessage()
+    message["Subject"] = subject
+    message.set_content(body)
+    try:
+        send_smtp_message(message, recipients)
+    except RuntimeError as exc:
+        raise RuntimeError("Administrator notification could not be delivered.") from exc
+
+
+def send_smtp_message(message: EmailMessage, recipients: list[str]) -> None:
+    """Deliver an already-constructed message with the server's existing SMTP account.
+
+    Explicit envelope recipients are Bcc, so the addresses are not disclosed
+    to one another. Credentials and provider details never reach the client.
+    """
+    if not recipients:
+        raise RuntimeError("Email requires a recipient.")
     raw_username = os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
     try:
         username = _normalize_email(raw_username)
+        recipients = [_normalize_email(address) for address in recipients]
     except ValueError as exc:
-        raise RuntimeError("Invitation delivery is not configured.") from exc
+        raise RuntimeError("SMTP delivery is not configured.") from exc
     try:
         password = secret_value("SIGMA_INVITATION_SMTP_PASSWORD")
     except SecretConfigurationError as exc:
-        raise RuntimeError("Invitation delivery is not configured.") from exc
+        raise RuntimeError("SMTP delivery is not configured.") from exc
     if not password:
-        raise RuntimeError("Invitation delivery is not configured.")
+        raise RuntimeError("SMTP delivery is not configured.")
     host = os.environ.get("SIGMA_INVITATION_SMTP_HOST", "smtp.gmail.com").strip()
     try:
         port = int(os.environ.get("SIGMA_INVITATION_SMTP_PORT", "587"))
         if not host or not 1 <= port <= 65535:
-            raise ValueError
-        message = EmailMessage()
-        message["Subject"] = subject
+            raise ValueError("Invalid SMTP configuration")
         message["From"] = username
         message["To"] = username
         message["Bcc"] = ", ".join(recipients)
-        message.set_content(body)
-        with smtplib.SMTP(host, port, timeout=10) as client:
+        with smtplib.SMTP(host, port, timeout=30) as client:
             client.ehlo()
             client.starttls(context=ssl.create_default_context())
             client.ehlo()
             client.login(username, password)
             refused = client.send_message(message, from_addr=username, to_addrs=recipients)
             if isinstance(refused, dict) and refused:
-                raise RuntimeError("Some administrator notifications could not be delivered.")
+                raise RuntimeError("Some recipients were refused by the SMTP server.")
     except (OSError, ValueError, smtplib.SMTPException) as exc:
-        raise RuntimeError("Administrator notification could not be delivered.") from exc
+        raise RuntimeError("SMTP delivery could not be completed.") from exc
 
 
 def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "invitation") -> None:

@@ -1554,6 +1554,40 @@ def import_project_bundle(body: ImportBundleRequest):
         raise ProjectError(f"Cannot import project bundle: {exc}") from exc
 
 
+
+class EmailProjectRequest(OpenRequest):
+    recipients: str = Field(min_length=3, max_length=2000)
+    body: str = Field(default="", max_length=10_000)
+    mode: Literal["project", "pdf", "pdf_tex"] = "project"
+    paper_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/api/projects/email")
+def email_project_view(body: EmailProjectRequest, request: Request):
+    """Mail an importable project and optional paper via server-configured SMTP."""
+    cfg = cloud_auth.config()
+    allowed = {"http://127.0.0.1:5173", "http://localhost:5173"}
+    if cfg.origin:
+        allowed.add(cfg.origin)
+    if (
+        request.headers.get("origin") not in allowed
+        or request.headers.get("content-type", "").split(";")[0] != "application/json"
+    ):
+        raise HTTPException(403, "Project email requires the SIGMA browser origin and JSON.")
+    principal = cloud_auth.current_principal()
+    if cfg.enabled and (principal is None or principal.role == "guest"):
+        raise HTTPException(403, "Member access is required to email a project.")
+    from sigma.project_email import send_project_email
+
+    try:
+        count = send_project_email(
+            body.path, body.recipients, body.body, body.mode, body.paper_id
+        )
+    except RuntimeError as exc:
+        raise HTTPException(503, "Project email could not be delivered. Check SMTP configuration or retry.") from exc
+    return {"sent": count}
+
+
 @app.get("/api/projects/export/report")
 def export_project_report_view(path: str, format: str = "txt"):
     """Create a deterministic, escaped report from the same evidence as the JSON audit."""

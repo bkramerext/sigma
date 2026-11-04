@@ -2077,6 +2077,126 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   </dialog>;
 }
 
+type ProjectEmailMode = 'project' | 'pdf' | 'pdf_tex';
+type ProjectEmailPreferences = { recipients: string; body: string; mode: ProjectEmailMode; paperId: string };
+const defaultEmailPreferences: ProjectEmailPreferences = { recipients: '', body: '', mode: 'project', paperId: '' };
+function projectEmailPreferences(projectId: string): ProjectEmailPreferences {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem('sigma.projectEmail:' + projectId) ?? '{}');
+    return {
+      recipients: typeof saved.recipients === 'string' ? saved.recipients : '',
+      body: typeof saved.body === 'string' ? saved.body : '',
+      mode: saved.mode === 'pdf' || saved.mode === 'pdf_tex' ? saved.mode : 'project',
+      paperId: typeof saved.paperId === 'string' ? saved.paperId : '',
+    };
+  } catch { return { ...defaultEmailPreferences }; }
+}
+
+function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
+  path: string; projectId: string; title: string; onCancel: () => void; onSent: (count: number) => void;
+}) {
+  useDocumentScrollLock();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const addressInput = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
+  const initial = useRef(projectEmailPreferences(projectId)).current;
+  const [recipients, setRecipients] = useState(initial.recipients);
+  const [body, setBody] = useState(initial.body);
+  const [mode, setMode] = useState<ProjectEmailMode>(initial.mode);
+  const [paperId, setPaperId] = useState(initial.paperId);
+  const [availablePapers, setAvailablePapers] = useState<PaperSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const papersByDate = [...availablePapers].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at) || b.paper_version - a.paper_version);
+  const selectedPaperId = papersByDate.some(paper => paper.paper_id === paperId)
+    ? paperId : (papersByDate.find(paper => (paper.score?.total ?? 0) >= 50) ?? papersByDate[0])?.paper_id ?? '';
+  const effectiveMode = loaded && !papersByDate.length ? 'project' : mode;
+  useEffect(() => {
+    if (!dialog.current?.open) {
+      dialog.current?.showModal();
+      addressInput.current?.focus();
+    }
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch('/api/projects/papers?' + new URLSearchParams({ path }), { cache: 'no-store', signal: controller.signal });
+        const detail = await response.json();
+        if (!response.ok) throw new Error(detail.error ?? detail.detail ?? 'Could not list papers');
+        if (!controller.signal.aborted) {
+          setAvailablePapers((detail.papers as PaperSummary[] ?? []).filter(paper => paper.pdf_available));
+          setLoaded(true);
+        }
+      } catch (cause) {
+        if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoaded(true); }
+      }
+    })();
+    return () => controller.abort();
+  }, [path]);
+  useEffect(() => {
+    if (!loaded) return;
+    if (selectedPaperId !== paperId) setPaperId(selectedPaperId);
+    if (effectiveMode !== mode) setMode(effectiveMode);
+  }, [loaded, paperId, selectedPaperId, mode, effectiveMode]);
+  useEffect(() => {
+    window.localStorage.setItem('sigma.projectEmail:' + projectId,
+      JSON.stringify({ recipients, body, mode, paperId }));
+  }, [projectId, recipients, body, mode, paperId]);
+  function cancel() { if (!submitting.current) onCancel(); }
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    if (submitting.current || !loaded) return;
+    const addresses = recipients.trim();
+    if (!addresses) { setError('Enter at least one recipient email address.'); addressInput.current?.focus(); return; }
+    submitting.current = true; setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/projects/email', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, recipients: addresses, body, mode: effectiveMode, paper_id: effectiveMode === 'project' ? null : selectedPaperId }),
+      });
+      const detail = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(detail?.error ?? detail?.detail ?? 'Project email could not be delivered.');
+      onSent(detail.sent as number);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { submitting.current = false; setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-settings-dialog export-project-dialog email-project-dialog" aria-labelledby="email-project-heading"
+    onCancel={event => { event.preventDefault(); cancel(); }}>
+    <form onSubmit={send}>
+      <header className="settings-header">
+        <h2 id="email-project-heading">Email Project</h2>
+        <div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
+      </header>
+      <div className="settings-body">
+        <p className="settings-hint">The current project, <strong>{title}</strong>, will be sent as an importable attachment to the email addresses you provide.</p>
+        <label htmlFor="email-project-recipients">Email addresses (comma or space separated)</label>
+        <input ref={addressInput} id="email-project-recipients" type="text" value={recipients} disabled={busy} required spellCheck={false}
+          onChange={event => { setRecipients(event.target.value); setError(''); }} placeholder="name@example.com, other@example.com" />
+        <label htmlFor="email-project-body">Message (optional)</label>
+        <textarea id="email-project-body" rows={3} value={body} maxLength={10000} disabled={busy}
+          onChange={event => setBody(event.target.value)} />
+        <fieldset className="export-type-options" disabled={busy}>
+          <legend>Attachments</legend>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'project'} onChange={() => setMode('project')}/>Just attach project</label>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf'} disabled={!loaded || papersByDate.length === 0} onChange={() => setMode('pdf')}/>Also attach paper as PDF</label>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf_tex'} disabled={!loaded || papersByDate.length === 0} onChange={() => setMode('pdf_tex')}/>Also attach paper as PDF and its source LaTeX</label>
+        </fieldset>
+        {loaded && !papersByDate.length ? <p className="email-no-papers">No papers generated.</p> : papersByDate.length > 0 ? <>
+          <label htmlFor="email-project-paper">Generated paper</label>
+          <select id="email-project-paper" value={selectedPaperId} disabled={busy || effectiveMode === 'project'} onChange={event => setPaperId(event.target.value)}>
+            {papersByDate.map(paper => <option key={paper.paper_id} value={paper.paper_id}>{paper.title} (v{paper.paper_version}){(paper.score?.total ?? 0) >= 50 ? ' ★' : ''}</option>)}
+          </select>
+        </> : <p className="settings-hint" role="status">Loading generated papers…</p>}
+        {error && <p className="error" role="alert">{error}</p>}
+      </div>
+      <footer className="export-footer"><button type="submit" className="settings-submit" disabled={busy || !loaded || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button></footer>
+    </form>
+  </dialog>;
+}
+
 type PaperScore = {
   rubric_id: string;
   rubric_version: number;
@@ -4908,6 +5028,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
   const [paperMetadata, setPaperMetadata] = useState<{ count: number; best: number | null }>({ count: 0, best: null });
   useEffect(() => {
@@ -5232,6 +5353,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
+      <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" title="Email project" data-tooltip="Email project" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 5.5h13v11H3zM3.4 6l6.1 5 6.1-5"/>
+          <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
+        </svg>
+      </button>
       <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
         <SettingsGearIcon />
       </button>
@@ -5343,6 +5470,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} onRunningChange={setResearchRunning} onRevealNewSession={collapseProjectAndStrategies}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onAdjustReferences={() => { setProjectTypesFocusTypeId(view.project.investigation_type); /* Keep Settings mounted behind Project Types so draft edits survive. */ setProjectTypesOpen(true); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
+    {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
+      onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
+      onSent={count => { setEmailOpen(false); setAnnouncement('Project emailed to ' + count + (count === 1 ? ' recipient.' : ' recipients.')); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}/>}
+
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
       {projectTypesOpen && <ProjectTypesDialog initialOpenTypeId={projectTypesFocusTypeId} onClose={() => { setProjectTypesOpen(false); setProjectTypesFocusTypeId(null); /* ProjectTypesDialog restores focus to the Settings link. */ }} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     {paperOpen && (
