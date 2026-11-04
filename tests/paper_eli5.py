@@ -91,7 +91,6 @@ def test_eli5_persists_in_paper_record_and_reuses_cache() -> None:
             assert result == explanation()
 
 
-
 def test_eli5_structured_schema_uses_provider_supported_keywords() -> None:
     schema = paper_eli5.Explanation.model_json_schema()
     markdown_schema = schema["properties"]["markdown"]
@@ -113,7 +112,9 @@ def test_archived_paper_eli5_roundtrip_and_legacy_duplicate_recovery() -> None:
         snapshot = {
             "schema": "sigma-paper-evidence-v2",
             "project_id": view.project.id,
-            "sources": [{"id": "project:" + view.project.id, "kind": "project", "data": {"title": "Test"}}],
+            "sources": [
+                {"id": "project:" + view.project.id, "kind": "project", "data": {"title": "Test"}}
+            ],
         }
         digest = hashlib.sha256(papers._json(snapshot)).hexdigest()
         papers._save(
@@ -155,7 +156,6 @@ def test_archived_paper_eli5_roundtrip_and_legacy_duplicate_recovery() -> None:
             assert "conflicts" in str(exc)
         else:
             raise AssertionError("Mismatched archived evidence must be rejected")
-
 if __name__ == "__main__":
     test_eli5_cache_requires_matching_pdf_sha_and_prompt_version()
     test_eli5_cache_rejects_invalid_content()
