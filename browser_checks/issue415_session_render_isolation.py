@@ -164,6 +164,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-issue415-chrome-") as temporary:
             page = browser.new_page(viewport={"width": 1440, "height": 1000})
             page_errors, console_errors, network = [], [], []
             mock_backend_statuses = []
+            show_resumed = {"value": False}
             page.on(
                 "pageerror",
                 lambda error: page_errors.append(
@@ -201,6 +202,24 @@ with tempfile.TemporaryDirectory(prefix="sigma-issue415-chrome-") as temporary:
                 mock_backend_statuses.append(running["status"])
                 if running["status"] == "running":
                     running["current_action"] = None
+                # The exact same Session-page progress label serves running,
+                # paused, and resumed records. Only project the v2 display
+                # fields; do not change the saved fixture or scheduler.
+                for session_id in session_ids[:2]:
+                    displayed = next(row for row in payload["sessions"] if row["id"] == session_id)
+                    displayed.update(
+                        {
+                            "scheduler_version": 2,
+                            "research_round": 2,
+                            "research_round_limit": 3,
+                            "paired_turn_in_round": 2,
+                            "turns_per_round": 3,
+                            "calls_used": 26,
+                            "call_limit": 54,
+                        }
+                    )
+                    if session_id == session_ids[0] and show_resumed["value"]:
+                        displayed["status"] = "running"
                 route.fulfill(response=response, json=payload)
 
             page.route("**/api/projects/research-sessions?*", keep_one_session_active)
@@ -230,6 +249,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-issue415-chrome-") as temporary:
                 f'li[data-session-id="{session_ids[1]}"] .session-status'
             ).inner_text()
             assert before_reload_status.casefold() == "running", before_reload_status
+            expected_progress = "Round 2 of 3 · Turn 2 of 3 · 26/54 agent calls"
+            expect(
+                page.locator(f'li[data-session-id="{session_ids[1]}"] .session-progress-inline')
+            ).to_contain_text(expected_progress)
+            expect(
+                page.locator(f'li[data-session-id="{session_ids[0]}"] .session-progress-inline')
+            ).to_contain_text(expected_progress)
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "6 sessions"
             )
@@ -248,6 +274,16 @@ with tempfile.TemporaryDirectory(prefix="sigma-issue415-chrome-") as temporary:
             ).inner_text()
             assert refreshed_status.casefold() in {"running", "ended"}, refreshed_status
             expect(page.locator(".session-list")).to_be_visible()
+            paused_row = page.locator(f'li[data-session-id="{session_ids[0]}"]')
+            active_row = page.locator(f'li[data-session-id="{session_ids[1]}"]')
+            expect(paused_row.locator(".session-progress-inline")).to_contain_text(
+                expected_progress
+            )
+            expect(active_row.locator(".session-progress-inline")).to_contain_text(
+                expected_progress
+            )
+            assert "Pair 2/3" not in paused_row.locator(".session-progress-inline").inner_text()
+            assert "Pair 2/3" not in active_row.locator(".session-progress-inline").inner_text()
             long_session = page.locator(f'li[data-session-id="{session_ids[5]}"]')
             page.get_by_role("button", name="Session #6").click()
             expect(long_session.get_by_role("alert")).to_have_count(0)
@@ -268,6 +304,12 @@ with tempfile.TemporaryDirectory(prefix="sigma-issue415-chrome-") as temporary:
                 if name.startswith("research-sessions/") and name.endswith(".json")
             ]
             assert len(exported_sessions) == 6, exported_sessions
+            show_resumed["value"] = True
+            page.reload(wait_until="domcontentloaded")
+            expect(paused_row.locator(".session-status")).to_contain_text("running")
+            expect(paused_row.locator(".session-progress-inline")).to_contain_text(
+                expected_progress
+            )
             assert not page_errors, f"Uncaught browser exceptions: {page_errors}"
             assert any("research-sessions?" in url and status == 200 for status, url in network), (
                 network
