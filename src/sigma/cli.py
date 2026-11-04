@@ -146,9 +146,9 @@ COMMAND_DETAILS = {
     "send_feedback": (
         "Send a local feedback notification and show safe mail diagnostics.",
         './sigma send_feedback "hello world"',
-        "Uses the locally configured Google sign-in address from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL; "
+        ("Uses the locally configured Google sign-in address from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL; "
         "a CLI process cannot read a browser sign-in session. --transport smtp tests SMTP "
-        "without modifying the saved Gmail configuration.",
+        "without modifying the saved Gmail configuration."),
     ),
     "start": (
         "Start or safely restart this checkout's browser UI.",
@@ -367,6 +367,7 @@ def main() -> None:
         sys.exit(0)
     if args.command == "send_feedback":
         from sigma.feedback_diagnostic import run
+
         sys.exit(run(args.message, transport=args.transport))
     if args.command == "start":
         sys.exit(
