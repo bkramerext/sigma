@@ -255,7 +255,6 @@ def test_rubric_omits_stale_scores() -> None:
     assert paper_scores.cached_score({"pdf_sha256": sha, "score": score}) == score
 
 
-
 def test_score_write_preserves_archived_paper_snapshot() -> None:
     with TemporaryDirectory() as temp:
         path = Path(temp) / "score-archive.sigma"
@@ -264,7 +263,9 @@ def test_score_write_preserves_archived_paper_snapshot() -> None:
         snapshot = {
             "schema": "sigma-paper-evidence-v2",
             "project_id": view.project.id,
-            "sources": [{"id": "project:" + view.project.id, "kind": "project", "data": {"title": "Test"}}],
+            "sources": [
+                {"id": "project:" + view.project.id, "kind": "project", "data": {"title": "Test"}}
+            ],
         }
         digest = hashlib.sha256(papers._json(snapshot)).hexdigest()
         papers._save(
@@ -285,11 +286,12 @@ def test_score_write_preserves_archived_paper_snapshot() -> None:
         original = papers.get_paper(str(path), paper_id)
         score = paper_scores._make_score(judgment(), original["pdf_sha256"])
         paper_scores._save_score(str(path), paper_id, score)
-        saved = json.loads((papers._paper_dir(str(path), create=False) / f"{paper_id}.json").read_text())
+        saved = json.loads(
+            (papers._paper_dir(str(path), create=False) / f"{paper_id}.json").read_text()
+        )
         assert saved["snapshot_ref"] == digest and "snapshot" not in saved
         assert papers.get_paper(str(path), paper_id)["score"] == score
         assert papers.get_pdf(str(path), paper_id) == b"%PDF-score-archive"
-
 def main() -> None:
     test_scoring_weights_and_normalized_total()
     test_score_bounds_and_best_known_only()
