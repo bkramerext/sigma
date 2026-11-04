@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from sigma import paper_eli5, papers
-from sigma.projects import initialize_project
+from sigma.projects import ProjectError, initialize_project
 
 
 def explanation() -> str:
@@ -89,9 +91,78 @@ def test_eli5_persists_in_paper_record_and_reuses_cache() -> None:
             assert result == explanation()
 
 
+def test_eli5_structured_schema_uses_provider_supported_keywords() -> None:
+    schema = paper_eli5.Explanation.model_json_schema()
+    markdown_schema = schema["properties"]["markdown"]
+    assert "minLength" not in markdown_schema and "maxLength" not in markdown_schema
+    try:
+        paper_eli5.Explanation(markdown="too short")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Runtime validation must still reject short explanations")
+
+
+def test_archived_paper_eli5_roundtrip_and_legacy_duplicate_recovery() -> None:
+    """A fresh ELI5 generation must not make its own paper PDF unreadable."""
+    with TemporaryDirectory() as temp:
+        path = Path(temp) / "archived.sigma"
+        view = initialize_project(path, "Archived ELI5", "Explain archived evidence.")
+        paper_id = "e" * 32
+        snapshot = {
+            "schema": "sigma-paper-evidence-v2",
+            "project_id": view.project.id,
+            "sources": [
+                {"id": "project:" + view.project.id, "kind": "project", "data": {"title": "Test"}}
+            ],
+        }
+        digest = hashlib.sha256(papers._json(snapshot)).hexdigest()
+        papers._save(
+            str(path),
+            {
+                "schema_version": 1,
+                "paper_id": paper_id,
+                "project_id": view.project.id,
+                "created_at": "2026-11-04T00:00:00+00:00",
+                "snapshot_sha256": digest,
+                "snapshot": snapshot,
+                "draft": {"title": "Archived test", "abstract": "Test"},
+                "generation": {},
+                "validation_warnings": [],
+            },
+            b"%PDF-archived-fixture",
+        )
+        filename = papers._paper_dir(str(path), create=False) / f"{paper_id}.json"
+        raw = json.loads(filename.read_text())
+        assert raw["snapshot_ref"] == digest and "snapshot" not in raw
+
+        # Recreate the production corruption caused by the former ELI5 writer.
+        raw["snapshot"] = snapshot
+        filename.write_text(json.dumps(raw))
+        assert papers.get_paper(str(path), paper_id)["snapshot"] == snapshot
+        assert papers.get_pdf(str(path), paper_id) == b"%PDF-archived-fixture"
+        paper_eli5._save(str(path), paper_id, raw["pdf_sha256"], explanation())
+        repaired = json.loads(filename.read_text())
+        assert repaired["snapshot_ref"] == digest and "snapshot" not in repaired
+        assert paper_eli5.cached(papers.get_paper(str(path), paper_id)) == explanation()
+        assert papers.get_pdf(str(path), paper_id) == b"%PDF-archived-fixture"
+
+        # A genuinely divergent duplicate is still rejected as tampering.
+        repaired["snapshot"] = {**snapshot, "sources": []}
+        filename.write_text(json.dumps(repaired))
+        try:
+            papers.get_paper(str(path), paper_id)
+        except ProjectError as exc:
+            assert "conflicts" in str(exc)
+        else:
+            raise AssertionError("Mismatched archived evidence must be rejected")
+
+
 if __name__ == "__main__":
     test_eli5_cache_requires_matching_pdf_sha_and_prompt_version()
     test_eli5_cache_rejects_invalid_content()
     test_eli5_input_bounded_and_preserves_question_and_conclusion()
     test_eli5_persists_in_paper_record_and_reuses_cache()
+    test_eli5_structured_schema_uses_provider_supported_keywords()
+    test_archived_paper_eli5_roundtrip_and_legacy_duplicate_recovery()
     print("PASS ELI5 cache identity, simple explanation prompt, bounded context and persistence")
