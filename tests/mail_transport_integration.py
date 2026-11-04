@@ -114,49 +114,57 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
                     return_value="\\\\begin{document}fixture\\\\end{document}",
                 ),
             ):
-                emailed = self.client.post(
-                    "/api/projects/email",
-                    json={
-                        "request_id": str(uuid4()),
-                        "path": "/project.json",
-                        "recipients": "recipient@example.org",
-                        "body": "Here is the project",
-                        "mode": "pdf_tex",
-                        "paper_id": "paper-1",
-                    },
-                    headers={"Origin": "http://127.0.0.1:5173"},
-                )
-            self.assertEqual(emailed.status_code, 200, emailed.text)
-            self.assertEqual(emailed.json(), {"sent": 1})
+                for mode in ("project", "pdf", "pdf_tex"):
+                    emailed = self.client.post(
+                        "/api/projects/email",
+                        json={
+                            "request_id": str(uuid4()),
+                            "path": "/project.json",
+                            "recipients": "recipient@example.org",
+                            "body": "Here is the project",
+                            "mode": mode,
+                            "paper_id": None if mode == "project" else "paper-1",
+                        },
+                        headers={"Origin": "http://127.0.0.1:5173"},
+                    )
+                    self.assertEqual(emailed.status_code, 200, emailed.text)
+                    self.assertEqual(emailed.json(), {"sent": 1})
 
-        self.assertEqual(calls.count(gmail_delivery.TOKEN_ENDPOINT), 2)
-        self.assertEqual(calls.count(gmail_delivery.SEND_ENDPOINT), 2)
+        self.assertEqual(calls.count(gmail_delivery.TOKEN_ENDPOINT), 4)
+        self.assertEqual(calls.count(gmail_delivery.SEND_ENDPOINT), 4)
         self.assertEqual(
             [m["Subject"] for m in messages],
             [
                 "New SIGMA feedback",
                 "SIGMA project: Attachment Test",
+                "SIGMA project: Attachment Test",
+                "SIGMA project: Attachment Test",
             ],
         )
         self.assertEqual(messages[0]["To"], "admin@example.org")
-        self.assertEqual(messages[1]["To"], "recipient@example.org")
+        for message in messages[1:]:
+            self.assertEqual(message["To"], "recipient@example.org")
         self.assertIn(
             "Please improve the About dialog feedback",
             messages[0].get_payload(decode=True).decode(),
         )
         self.assertEqual(list(messages[0].iter_attachments()), [])
-        attachments = list(messages[1].iter_attachments())
-        self.assertEqual(
-            [item.get_filename() for item in attachments],
+        expected_filenames = [
+            ["sigma-Attachment-Test.json"],
+            ["sigma-Attachment-Test.json", "paper-v1.pdf"],
             ["sigma-Attachment-Test.json", "paper-v1.pdf", "paper-v1.tex"],
-        )
-        self.assertEqual(
-            [item.get_content_type() for item in attachments],
-            ["application/json", "application/pdf", "application/x-tex"],
-        )
-        self.assertEqual(attachments[0].get_payload(decode=True), b'{"files":{}}')
-        self.assertEqual(attachments[1].get_payload(decode=True), b"%PDF-1.7\nfixture")
-        self.assertIn(b"begin{document}", attachments[2].get_payload(decode=True))
+        ]
+        for message, names in zip(messages[1:], expected_filenames, strict=True):
+            attachments = list(message.iter_attachments())
+            self.assertEqual([item.get_filename() for item in attachments], names)
+            self.assertEqual(attachments[0].get_content_type(), "application/json")
+            self.assertEqual(attachments[0].get_payload(decode=True), b'{"files":{}}')
+            if len(attachments) >= 2:
+                self.assertEqual(attachments[1].get_content_type(), "application/pdf")
+                self.assertEqual(attachments[1].get_payload(decode=True), b"%PDF-1.7\nfixture")
+            if len(attachments) == 3:
+                self.assertEqual(attachments[2].get_content_type(), "application/x-tex")
+                self.assertIn(b"begin{document}", attachments[2].get_payload(decode=True))
 
     def test_hosted_email_does_not_see_local_gmail_grant(self):
         with patch.dict(
