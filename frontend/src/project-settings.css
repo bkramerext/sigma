@@ -410,7 +410,7 @@
 
 /* Saved paper title actions use the same 28px hover rectangle as Copy.
    Avoid the old brightening-only star/balloon rules and gradient effects. */
-.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools :is(
+.project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools :is(
   .saved-paper-score-star, button.ai-paper-eli5-balloon, button.text-copy-button
 ) {
   position: relative; box-sizing: border-box; display: inline-flex; flex: 0 0 28px;
@@ -427,13 +427,13 @@
 .project-settings-dialog.ai-paper-dialog .saved-paper-title-tools button.ai-paper-eli5-balloon {
   color: #e5ba69; line-height: 1;
 }
-.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools :is(
+.project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools :is(
   .saved-paper-score-star, button.ai-paper-eli5-balloon, button.text-copy-button
 ):is(:hover, :focus-visible) {
   border-color: #ac7054; background: #3b3029; box-shadow: none;
   text-decoration: none;
 }
-.project-settings-dialog.ai-paper-dialog .saved-paper-title-tools :is(
+.project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools :is(
   .saved-paper-score-star, button.ai-paper-eli5-balloon, button.text-copy-button
 ):focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
@@ -455,7 +455,16 @@
 .project-settings-dialog.ai-paper-dialog .ai-paper-explaining > span[aria-hidden] {
   display: inline-flex; width: 20px; justify-content: center;
 }
-.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-thanks { width: auto; padding: 0; margin: 0; font-size: 13px; }
+/* Once ELI5 is open, show a gold prayer icon in the exact same 28px action
+   slot as Copy, Star, and the explanation balloon. */
+.project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools button.ai-paper-eli5-thanks {
+  width: 28px; min-width: 28px; height: 28px; min-height: 28px;
+  padding: 0; color: #e5ba69;
+}
+.project-settings-dialog.ai-paper-dialog .ai-paper-eli5-prayer-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; font-size: 20px; line-height: 1;
+}
 .ai-paper-eli5-output { max-width: 75ch; line-height: 1.65; }
 
 /* The paper preview is a nested scroll region. Leave a visible bottom inset
