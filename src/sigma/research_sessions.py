@@ -6189,20 +6189,17 @@ async def start_session(
                 records,
                 fetch_content=True,
             )
-            # Pilot admission: every selected methodological reference must be
-            # actually retrieved and hash-verified before billable provider work.
-            strict_reference_acceptance = os.environ.get(
-                "SIGMA_REQUIRE_RETRIEVED_RESEARCH_METHODS", ""
-            ).strip().lower() in {"1", "true", "yes", "on"}
-            if strict_reference_acceptance:
-                reference_issues = retrieval_readiness_errors(record["research_method_sources"])
-                if reference_issues:
-                    raise ProjectError(
-                        "Research-reference admission blocked before provider dispatch: "
-                        + "; ".join(reference_issues)[:1600]
-                        + " Replace inaccessible references or repair source retrieval "
-                        "before this acceptance run."
-                    )
+            # Every selected methodology reference must have inspected,
+            # hash-verified content before this new session can spend provider
+            # capacity. No references selected is a valid configuration.
+            reference_issues = retrieval_readiness_errors(record["research_method_sources"])
+            if reference_issues:
+                raise ProjectError(
+                    "Research-reference admission blocked before provider dispatch: "
+                    + "; ".join(reference_issues)[:1600]
+                    + " Disable or replace the inaccessible references, or repair "
+                    "source retrieval before starting research."
+                )
             record["research_method_sources"]["sha256"] = methodology_digest(
                 record["research_method_sources"]
             )
@@ -6215,7 +6212,7 @@ async def start_session(
             ).strip().lower() in {"1", "true", "yes", "on"}
             record["reference_compilation"] = {
                 "version": research_reference_compiler.VERSION,
-                "required_for_acceptance": strict_reference_acceptance,
+                "required_for_acceptance": bool(source_count and compilation_enabled),
                 "status": (
                     "disabled"
                     if not compilation_enabled

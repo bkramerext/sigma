@@ -9,6 +9,7 @@ the compiler without counting it as an Investigator/Skeptic turn.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import sys
@@ -25,6 +26,25 @@ import research_sessions as fixture
 
 from sigma import research_reference_compiler, research_sessions
 from sigma.openai_connection import AuthContext
+
+
+def attach_verified_excerpts(catalog: dict) -> None:
+    """Give each offline source a real excerpt and locally verified hashes."""
+    for row in catalog["sources"]:
+        excerpt = (
+            f"{row['title']}. {row['notes']} "
+            "Inspect assumptions, check the underlying reasoning, and do not "
+            "present unsupported methodological guidance as independently verified."
+        )
+        digest = hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
+        row["retrieval"] = {
+            "status": "retrieved",
+            "url": row["url"],
+            "excerpt": excerpt,
+            "excerpt_sha256": digest,
+            "content_sha256": digest,
+            "reason": None,
+        }
 
 
 async def verify_compilation(
@@ -91,6 +111,8 @@ async def verify_compilation(
             },
         ],
     }
+    # URL/notes-only references are not sufficient for a new session.
+    attach_verified_excerpts(source_catalog)
     calls: list[str] = []
     role_requests: list[str] = []
     selection: list[str] = []
@@ -205,6 +227,14 @@ async def verify_compilation(
             expected_limits=limits,
             strategy_ids=strategy_ids,
         )
+        # New sessions require completed compilation when enabled. These
+        # historic optional-compiler regressions deliberately replay the
+        # older durable permissive policy; the separate readiness suite tests
+        # strict new-session fallback blocking.
+        historical = research_sessions._read(str(path), started["id"])
+        assert historical["reference_compilation"]["required_for_acceptance"] is True
+        historical["reference_compilation"]["required_for_acceptance"] = False
+        research_sessions._save(str(path), historical)
         if not skip_compiler:
             await asyncio.wait_for(compilation_started.wait(), timeout=5.0)
             compiling = research_sessions._read(str(path), started["id"])
@@ -684,6 +714,7 @@ async def verify_compiler_preflight_auth_failure(path: Path) -> None:
             }
         ],
     }
+    attach_verified_excerpts(catalog)
     with (
         patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "true"}),
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
@@ -736,6 +767,7 @@ async def verify_compiler_billing_settlement_failure(path: Path) -> None:
             }
         ],
     }
+    attach_verified_excerpts(catalog)
     provider_calls = 0
 
     async def provider(request: httpx.Request) -> httpx.Response:

@@ -389,13 +389,16 @@ def select_method_sources(
 
 
 def retrieval_readiness_errors(selection: Mapping[str, Any]) -> list[str]:
-    """Audit frozen method content before paid pilot dispatch.
+    """Audit selected method sources before new-session provider dispatch.
 
-    No network access or source substitution: URLs and notes are not content.
+    URLs and notes are not content. An empty selection is valid; malformed
+    selections are not.
     """
     rows = selection.get("sources")
-    if not isinstance(rows, list) or not rows:
-        return ["No research-method references are configured."]
+    if not isinstance(rows, list):
+        return ["Research-method sources must be a list."]
+    if not rows:
+        return []
     errors: list[str] = []
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, Mapping):
@@ -420,8 +423,13 @@ def retrieval_readiness_errors(selection: Mapping[str, Any]) -> list[str]:
         ):
             errors.append(f"{title}: missing or invalid excerpt SHA-256.")
             continue
-        if not isinstance(retrieval.get("content_sha256"), str):
-            errors.append(f"{title}: missing source-content SHA-256.")
+        content_digest = retrieval.get("content_sha256")
+        if (
+            not isinstance(content_digest, str)
+            or len(content_digest) != 64
+            or any(char not in "0123456789abcdef" for char in content_digest.lower())
+        ):
+            errors.append(f"{title}: missing or invalid source-content SHA-256.")
     return errors
 
 
