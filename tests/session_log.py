@@ -699,7 +699,9 @@ def test_session_status_and_correlated_errors_match_export() -> None:
         patch.object(api.session_log, "read", return_value=record),
         patch.object(api.project_diagnostics, "read", return_value=diagnostics),
     ):
-        exported = bytes(api.research_session_log_download_view(session_id, "/fixture").body).decode()
+        exported = bytes(
+            api.research_session_log_download_view(session_id, "/fixture").body
+        ).decode()
     for piece in (
         "Status: stopped",
         "Context assembly blocked",
