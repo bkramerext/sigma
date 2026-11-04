@@ -27,7 +27,7 @@ from sigma.projects import ProjectError, initialize_project, inspect_project, re
 
 
 
-def main() -> None:
+def main_part1() -> None:
     test_review_proofreader_accepts_safe_patch_but_rejects_mutation()
     test_review_fallback_question_and_tex_safety()
     test_publication_preserves_failed_final_skeptic_as_research_limitation()
@@ -110,6 +110,9 @@ def main() -> None:
     test_three_papers_reach_compilation_together_and_hold_capacity()
     test_eight_research_sessions_overlap_three_paper_generators()
     test_tadpoles_five_session_mock_provider_to_pdf_timing()
+
+
+def main_part2() -> None:
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
         initialize_project(
