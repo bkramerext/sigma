@@ -2694,10 +2694,18 @@ async def test_restart_missing_provider_reservation_is_durably_blocked(path: Pat
                 ),
             }
         )
-        record["strategy_runs"][0].update(
-            {"status": "running", "cycle": 1, "calls_used": 1}
-        )
+        record["strategy_runs"][0].update({"status": "running", "cycle": 1, "calls_used": 1})
         research_sessions._save(str(path), record)
+        # Emulate a new backend process: the old in-memory worker is gone.
+        research_sessions._tasks.pop(started["id"], None)
+        research_sessions._control.pop(started["id"], None)
+        recovered = research_sessions._recover(research_sessions._read(str(path), started["id"]))
+        assert recovered["status"] == "paused"
+        assert recovered["steps"][0]["status"] == "interrupted"
+        assert (
+            recovered["hard_budget_ledger"]["blocked_reason"]
+            == "Saved interrupted provider call has no matching reservation"
+        )
         try:
             await research_sessions.control_session(str(path), started["id"], "resume")
         except ProjectError as exc:
@@ -2765,13 +2773,11 @@ async def test_restart_matching_provider_reservation_is_recoverable(path: Path) 
                 "hard_budget_ledger": ledger,
             }
         )
-        record["strategy_runs"][0].update(
-            {"status": "running", "cycle": 1, "calls_used": 1}
-        )
+        record["strategy_runs"][0].update({"status": "running", "cycle": 1, "calls_used": 1})
         research_sessions._save(str(path), record)
-        interrupted = research_sessions._recover(
-            research_sessions._read(str(path), started["id"])
-        )
+        research_sessions._tasks.pop(started["id"], None)
+        research_sessions._control.pop(started["id"], None)
+        interrupted = research_sessions._recover(research_sessions._read(str(path), started["id"]))
         assert interrupted["status"] == "paused"
         assert interrupted["steps"][0]["status"] == "interrupted"
         assert interrupted["hard_budget_ledger"]["calls"][0]["status"] == "unknown"

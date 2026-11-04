@@ -6506,14 +6506,12 @@ async def control_session(
                         "Saved interrupted provider call has no matching reservation"
                     )
                     _save(path, record)
-                elif uncertain_steps:
+                elif uncertain_steps and isinstance(calls, list):
                     # A historical paused record may still call its reservation
                     # 'reserved' even after the worker disappeared. Mark it
                     # unknown before any call can pass portfolio admission.
                     for step in uncertain_steps:
-                        item = next(
-                            row for row in calls if row.get("call_id") == step["id"]
-                        )
+                        item = next(row for row in calls if row.get("call_id") == step["id"])
                         if item["status"] == "reserved":
                             mark_unknown(ledger, call_id=step["id"])
                     if ledger.get("blocked_reason") is None:
@@ -6620,9 +6618,7 @@ async def control_session(
                             effective_deadline += datetime.now(UTC) - datetime.fromisoformat(
                                 stopped_at
                             )
-                        minimum_time = timedelta(
-                            seconds=int(plan["required_calls"]) * CALL_TIMEOUT
-                        )
+                        minimum_time = timedelta(seconds=int(plan["required_calls"]) * CALL_TIMEOUT)
                         if effective_deadline < datetime.now(UTC) + minimum_time:
                             minutes = math.ceil(minimum_time.total_seconds() / 60)
                             raise ProjectError(
