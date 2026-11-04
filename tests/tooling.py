@@ -104,7 +104,14 @@ def check_failures() -> None:
     for index, step in enumerate(whole):
         assert step == plans[shard_names[index % 8]][index // 8]
     assert not any("ruff" in step for step in combined)
-    assert any("tests/papers.py" in step for step in combined)
+    # Split suites must each appear once; legacy aggregate drivers are not
+    # scheduled in addition to their independently runnable pieces.
+    for suite, parts in (("research_sessions", 4), ("papers", 2), ("cloud_auth", 2)):
+        for part in range(1, parts + 1):
+            name = f"tests/{suite}_part{part}.py"
+            assert sum(name in step for step in combined) == 1, name
+        assert not any(f"tests/{suite}.py" in step for step in combined)
+
     assert any("tests/cloud_auth.py" in step for step in combined)
     assert any("scripts/increment15_offline_pairs.py" in step for step in combined)
     assert any(step[-2:] == ["run", "build"] for step in combined)
