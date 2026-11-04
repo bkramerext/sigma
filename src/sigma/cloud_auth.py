@@ -1682,9 +1682,12 @@ async def callback(
         from sigma.local_gmail_cli_bridge import receive
 
         if receive(cfg.database.parent, state, code=code, error=error):
-            result = HTMLResponse(
-                "<!doctype html><meta charset='utf-8'><title>SIGMA Gmail</title>"
-                "<p>Google responded to the SIGMA CLI. Return to your terminal.</p>"
+            result = Response(
+                content=(
+                    "<!doctype html><meta charset='utf-8'><title>SIGMA Gmail</title>"
+                    "<p>Google responded to the SIGMA CLI. Return to your terminal.</p>"
+                ),
+                media_type="text/html",
             )
             result.headers["Cache-Control"] = "no-store"
             result.headers["Content-Security-Policy"] = "default-src 'none'"
