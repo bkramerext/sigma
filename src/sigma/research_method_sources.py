@@ -434,6 +434,12 @@ def retrieval_readiness_errors(selection: Mapping[str, Any]) -> list[str]:
         if not isinstance(retrieval, Mapping):
             errors.append(f"{title}: no frozen retrieval result.")
             continue
+        # Redirect targets may differ from the configured URL. For new frozen
+        # snapshots the explicit request identity must still match exactly.
+        requested = retrieval.get("requested_url")
+        if requested is not None and requested != row.get("url"):
+            errors.append(f"{title}: frozen retrieval source URL mismatch.")
+            continue
         status = retrieval.get("status")
         if status == "unavailable":
             # HTTP 403/404, too-large payloads, timeouts, unsupported media,
