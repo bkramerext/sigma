@@ -660,7 +660,6 @@ def test_session_log_download_route_content_and_name() -> None:
     assert 'filename="A_Long_Project_Name.session_7.log"' in fallback.headers["content-disposition"]
 
 
-
 def test_session_status_and_correlated_errors_match_export() -> None:
     from sigma import api
 
