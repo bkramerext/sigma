@@ -82,9 +82,19 @@ You can create projects and strategies without an AI connection. To use AI resea
 
 `./sigma setup` installs the locked Python development environment with `uv sync --locked --group dev` and the frontend dependencies with `npm ci`. Setup and local startup were verified in a fresh Git worktree on the existing macOS 14.6 Apple Silicon host (not on a clean machine); the frontend and local API both returned ready responses. This does not establish behavior on every macOS/Linux distribution. See [Getting Started](docs/GETTING_STARTED.md) for troubleshooting.
 
-## Optional: local feedback and Email Project (SMTP)
+## Optional: local feedback and Email Project (Gmail or SMTP)
 
-Local SIGMA can send **Send Feedback** notifications and **Email Project** messages (including JSON, PDF, and LaTeX attachments) through SMTP. **Google OAuth branding verification is not required for SMTP.** The sender needs an SMTP credential, such as a Gmail **app password**, not your normal Google-account password. Gmail accounts must meet Google's eligibility requirements for app passwords.
+Local SIGMA supports email notifications and **Email Project** messages with JSON, PDF, and LaTeX attachments. Two transports are available.
+
+**Use your existing Google UI sign-in (recommended for local Gmail delivery):** Start SIGMA with `./sigma start --navigate`, sign in with your real Google admin account (not `./sigma start --signin`), then open **http://127.0.0.1:5173/api/cloud-auth/mail/authorize** in that same signed-in browser. Google asks for additional `gmail.send` permission, because normal SIGMA sign-in (`openid email profile`) proves identity but cannot send mail. Approve it once; the protected, account-bound authorization is saved under `~/.sigma/local-cloud-auth/gmail-send-token.json`. Then run:
+
+```sh
+./sigma send_feedback "hello world" --transport gmail
+```
+
+The ordinary `./sigma send_feedback "hello world"` command and the local browser feedback sender will prefer this valid local grant. The CLI reuses the Google identity verified during the UI's permission flow; it does **not** read browser cookies or automatically acquire mail access without consent. No SMTP password is needed for Gmail API sending. The consent is local-only; no production server configuration changes are made. If Google's OAuth app is in Testing, Gmail refresh tokens may expire after seven days. If Google blocks the sensitive scope, the app may require tester enrollment or consent-screen verification. Neither outcome changes working production SMTP.
+
+**SMTP alternative:** Local SIGMA can also use Gmail SMTP. **Google OAuth branding verification is not required for SMTP.** The sender needs an SMTP credential, such as a Gmail **app password**, not your normal Google-account password. Gmail accounts must meet Google's eligibility requirements for app passwords.
 
 *Needs a guinea pig to prove local setup works. Will pay with lettuce.*
 
@@ -116,7 +126,7 @@ From the checkout, test the SMTP transport directly (without requiring a running
 
 The diagnostic prints which transport was selected, whether SMTP credentials are configured, and whether the mail provider accepted delivery; it never prints the password. It sends the test message to `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. The CLI does **not** read the current browser's Google session and cannot independently assert who is signed in. Normal **Send Feedback** uses the authenticated Google account's email as its contact address, or an optional unverified contact address for guests.
 
-If you previously configured `SIGMA_GMAIL_TOKEN_FILE`, `SIGMA_EMAIL_GMAIL_TOKEN_FILE`, or `SIGMA_INVITATION_GMAIL_TOKEN_FILE`, ordinary feedback sending prefers the Gmail API path instead of SMTP. The `--transport smtp` flag overrides this **for the CLI invocation only**; to use SMTP in the browser, remove/disable the Gmail token-file setting from the local backend environment and restart `./sigma start`. Environment variables exported in your shell override the ignored `.env`, even if empty. Never commit credentials or copy the protected password file into Git.
+If local Gmail Send permission has been granted, the backend prefers it over older Gmail token-file paths. The `--transport smtp` flag overrides mail selection **for the CLI invocation only**. To explicitly select SMTP in the local browser, set `SIGMA_GMAIL_TOKEN_FILE=` (empty) in the local backend environment and restart `./sigma start`. Environment variables exported in your shell override the ignored `.env`, even if empty. Never commit credentials or copy the protected password file into Git.
 
 ## Optional: test Google sign-in locally
 
