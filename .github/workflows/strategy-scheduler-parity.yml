@@ -64,12 +64,12 @@ jobs:
         run: |
           PYTHONPATH="$GITHUB_WORKSPACE/v1-main/src" \
             uv run --project candidate --locked --no-sync python \
-            candidate/tests/strategy_scheduler_parity.py v1-main v1-main-parity.json legacy-v1
+            candidate/tests/strategy_scheduler_parity.py v1-main v1-main-parity.json parallel-v1
       - name: Run candidate parallel scheduler against identical synthetic provider
         run: |
           PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
             uv run --project candidate --locked --no-sync python \
-            candidate/tests/strategy_scheduler_parity.py candidate parallel-parity.json
+            candidate/tests/strategy_scheduler_parity.py candidate parallel-parity.json parallel-v1
       - name: Verify actual v2 paired-turn session, enabled selection and peer transfers
         run: |
           PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
