@@ -1554,7 +1554,6 @@ def import_project_bundle(body: ImportBundleRequest):
         raise ProjectError(f"Cannot import project bundle: {exc}") from exc
 
 
-
 class EmailProjectRequest(OpenRequest):
     recipients: str = Field(min_length=3, max_length=2000)
     body: str = Field(default="", max_length=10_000)
@@ -1580,11 +1579,11 @@ def email_project_view(body: EmailProjectRequest, request: Request):
     from sigma.project_email import send_project_email
 
     try:
-        count = send_project_email(
-            body.path, body.recipients, body.body, body.mode, body.paper_id
-        )
+        count = send_project_email(body.path, body.recipients, body.body, body.mode, body.paper_id)
     except RuntimeError as exc:
-        raise HTTPException(503, "Project email could not be delivered. Check SMTP configuration or retry.") from exc
+        raise HTTPException(
+            503, "Project email could not be delivered. Check SMTP configuration or retry."
+        ) from exc
     return {"sent": count}
 
 

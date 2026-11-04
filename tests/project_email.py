@@ -19,7 +19,9 @@ from sigma.projects import ProjectError
 class ProjectEmailTests(unittest.TestCase):
     def test_parse_recipients_and_reject_bad_input(self):
         self.assertEqual(
-            project_email.parse_recipients("First@Example.com,\nsecond@example.com first@example.com"),
+            project_email.parse_recipients(
+                "First@Example.com,\nsecond@example.com first@example.com"
+            ),
             ["first@example.com", "second@example.com"],
         )
         for invalid in ("", "bad@example.com;other@example.com", "not-an-email"):
@@ -36,16 +38,18 @@ class ProjectEmailTests(unittest.TestCase):
             project_id = str(uuid4())
             session_id = str(uuid4())
             members = {
-                "project.json": json.dumps({
-                    "schema_version": 11, "id": project_id, "title": "Shared Test"
-                }).encode(),
-                f"research-sessions/{session_id}.json": json.dumps({
-                    "id": session_id,
-                    "project_id": project_id,
-                    "project_path": "/sender/old-project.json",
-                    "session_number": 2,
-                    "status": "stopped",
-                }).encode(),
+                "project.json": json.dumps(
+                    {"schema_version": 11, "id": project_id, "title": "Shared Test"}
+                ).encode(),
+                f"research-sessions/{session_id}.json": json.dumps(
+                    {
+                        "id": session_id,
+                        "project_id": project_id,
+                        "project_path": "/sender/old-project.json",
+                        "session_number": 2,
+                        "status": "stopped",
+                    }
+                ).encode(),
                 "artifacts/evidence.bin": b"\x00real\xff",
                 "artifacts/papers/old.json": b'{"paper_id":"old"}',
                 "artifacts/papers/old.pdf": b"%PDF-1.4",
@@ -70,14 +74,20 @@ class ProjectEmailTests(unittest.TestCase):
             self.assertEqual(read_file(target, "artifacts/evidence.bin"), b"\x00real\xff")
 
     @patch.object(project_email.cloud_auth, "send_smtp_message")
-    @patch.object(project_email, "email_project_bundle", return_value=(b'{"files":{}}', "shared.json"))
+    @patch.object(
+        project_email, "email_project_bundle", return_value=(b'{"files":{}}', "shared.json")
+    )
     @patch.object(project_email, "inspect_project")
     def test_attachments_and_privacy(self, inspect, bundle, smtp):
         inspect.return_value.project.title = "Subject"
         with (
-            patch.object(project_email.papers, "list_papers", return_value=[
-                {"paper_id": "p1", "pdf_available": True},
-            ]),
+            patch.object(
+                project_email.papers,
+                "list_papers",
+                return_value=[
+                    {"paper_id": "p1", "pdf_available": True},
+                ],
+            ),
             patch.object(project_email.papers, "paper_download_basename", return_value="paper-v1"),
             patch.object(project_email.papers, "get_pdf", return_value=b"%PDF"),
             patch.object(project_email.papers, "paper_tex", return_value=r"\begin{document}"),
@@ -104,11 +114,13 @@ class ProjectEmailTests(unittest.TestCase):
     @patch.object(project_email, "inspect_project")
     def test_missing_paper_is_never_emailed(self, inspect, _bundle, smtp):
         inspect.return_value.project.title = "Sample"
-        with patch.object(project_email.papers, "list_papers", return_value=[]):
-            with self.assertRaisesRegex(ProjectError, "no longer available"):
-                project_email.send_project_email(
-                    "/project.json", "one@example.com", "", "pdf", "missing"
-                )
+        with (
+            patch.object(project_email.papers, "list_papers", return_value=[]),
+            self.assertRaisesRegex(ProjectError, "no longer available"),
+        ):
+            project_email.send_project_email(
+                "/project.json", "one@example.com", "", "pdf", "missing"
+            )
         smtp.assert_not_called()
 
     @patch.object(project_email.cloud_auth, "send_smtp_message")
@@ -118,7 +130,9 @@ class ProjectEmailTests(unittest.TestCase):
         inspect.return_value.project.title = "Sample"
         bundle.return_value = (b"X" * (project_email.MAX_ATTACHMENT_BYTES + 1), "project.json")
         with self.assertRaisesRegex(ProjectError, "size limit"):
-            project_email.send_project_email("/project.json", "one@example.com", "", "project", None)
+            project_email.send_project_email(
+                "/project.json", "one@example.com", "", "project", None
+            )
         smtp.assert_not_called()
 
     def test_smtp_envelope_recipients_are_bcc(self):
@@ -126,11 +140,14 @@ class ProjectEmailTests(unittest.TestCase):
         message["Subject"] = "Project"
         message.set_content("Body")
         with (
-            patch.dict("os.environ", {
-                "SIGMA_INVITATION_SMTP_USERNAME": "sender@example.com",
-                "SIGMA_INVITATION_SMTP_HOST": "mail.example.com",
-                "SIGMA_INVITATION_SMTP_PORT": "587",
-            }),
+            patch.dict(
+                "os.environ",
+                {
+                    "SIGMA_INVITATION_SMTP_USERNAME": "sender@example.com",
+                    "SIGMA_INVITATION_SMTP_HOST": "mail.example.com",
+                    "SIGMA_INVITATION_SMTP_PORT": "587",
+                },
+            ),
             patch.object(cloud_auth, "secret_value", return_value="secret"),
             patch.object(cloud_auth.smtplib, "SMTP") as smtp,
         ):

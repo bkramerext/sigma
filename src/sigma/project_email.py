@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import re
 from email.message import EmailMessage
-from pathlib import Path
 from typing import Literal
 
 from sigma import cloud_auth, papers
@@ -20,6 +19,7 @@ from sigma.projects import ProjectError, inspect_project, project_path
 MailMode = Literal["project", "pdf", "pdf_tex"]
 MAX_RECIPIENTS = 10
 MAX_ATTACHMENT_BYTES = 18 * 1024 * 1024
+
 
 def parse_recipients(raw: str) -> list[str]:
     """Comma- or whitespace-separated, distinct, validated mailboxes."""
@@ -56,7 +56,9 @@ def email_project_bundle(path: str) -> tuple[bytes, str]:
     for name in tuple(files):
         if name.startswith(("artifacts/papers/", "papers/")):
             del files[name]
-    content = (json.dumps(bundle, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    content = (json.dumps(bundle, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(
+        "utf-8"
+    )
     slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", project.title).strip("-")[:80] or "project"
     return content, f"sigma-{slug}.json"
 
@@ -83,20 +85,32 @@ def send_project_email(
         if not paper_id:
             raise ProjectError("Select a generated paper.")
         available = next(
-            (item for item in papers.list_papers(path)
-             if item["paper_id"] == paper_id and item["pdf_available"]),
+            (
+                item
+                for item in papers.list_papers(path)
+                if item["paper_id"] == paper_id and item["pdf_available"]
+            ),
             None,
         )
         if available is None:
             raise ProjectError("The selected paper is no longer available.")
         basename = papers.paper_download_basename(path, paper_id)
-        attachments.append((f"{basename}.pdf", papers.get_pdf(path, paper_id), "application", "pdf"))
+        attachments.append(
+            (f"{basename}.pdf", papers.get_pdf(path, paper_id), "application", "pdf")
+        )
         if mode == "pdf_tex":
             attachments.append(
-                (f"{basename}.tex", papers.paper_tex(path, paper_id).encode("utf-8"), "application", "x-tex")
+                (
+                    f"{basename}.tex",
+                    papers.paper_tex(path, paper_id).encode("utf-8"),
+                    "application",
+                    "x-tex",
+                )
             )
     if sum(len(item[1]) for item in attachments) > MAX_ATTACHMENT_BYTES:
-        raise ProjectError("Attachments exceed the email size limit (18 MB). Export the project instead.")
+        raise ProjectError(
+            "Attachments exceed the email size limit (18 MB). Export the project instead."
+        )
     title = re.sub(r"[\r\n\x00-\x1f]+", " ", project.title).strip()[:180] or "Untitled project"
     message = EmailMessage()
     message["Subject"] = f"SIGMA project: {title}"

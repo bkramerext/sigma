@@ -2060,7 +2060,7 @@ def send_smtp_message(message: EmailMessage, recipients: list[str]) -> None:
         message["From"] = username
         message["To"] = username
         message["Bcc"] = ", ".join(recipients)
-        with smtplib.SMTP(host, port, timeout=30) as client:
+        with smtplib.SMTP(host, port, timeout=10) as client:
             client.ehlo()
             client.starttls(context=ssl.create_default_context())
             client.ehlo()
