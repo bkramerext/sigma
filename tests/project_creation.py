@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from uuid import uuid4
 
 import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
@@ -229,6 +230,104 @@ def main() -> None:
                 assert recents.status_code == 200, recents.text
                 recent_paths = {item["path"] for item in recents.json()["projects"]}
                 assert imported.json()["path"] in recent_paths
+
+                # Save As is a full independent project, including persisted
+                # session provenance and binary attachments, not a fresh shell.
+                from sigma.project_bundle import update_files
+
+                source_path = response.json()["path"]
+                source_id = response.json()["project"]["id"]
+                session_id = str(uuid4())
+                session_member = f"research-sessions/{session_id}.json"
+                session = {
+                    "id": session_id,
+                    "project_id": source_id,
+                    "project_path": source_path,
+                    "session_number": 1,
+                    "status": "completed",
+                }
+                attachment = b"%PDF-1.4\ncopied evidence\x00\xff"
+                update_files(
+                    source_path,
+                    {
+                        session_member: json.dumps(session).encode(),
+                        "papers/copy.pdf": attachment,
+                    },
+                )
+                before_copy = Path(source_path).read_bytes()
+                saved_as = client.post(
+                    "/api/projects/save-as",
+                    json={"path": source_path, "title": "API math v2"},
+                )
+                assert saved_as.status_code == 201, saved_as.text
+                clone = saved_as.json()
+                assert clone["project"]["title"] == "API math v2"
+                assert clone["project"]["id"] != source_id
+                assert clone["path"] != source_path
+                assert inspect_project(clone["path"]).project.title == "API math v2"
+                assert len(clone["project"]["events"]) == len(response.json()["project"]["events"]) + 1
+                assert clone["project"]["events"][-1]["kind"] == "project.updated"
+                assert read_file(clone["path"], "papers/copy.pdf") == attachment
+                copied_session = json.loads(read_file(clone["path"], session_member))
+                assert copied_session["project_id"] == clone["project"]["id"]
+                assert copied_session["project_path"] == clone["path"]
+                assert copied_session["id"] == session_id
+                assert Path(source_path).read_bytes() == before_copy
+                assert json.loads(read_file(source_path, session_member)) == session
+                assert (
+                    client.post(
+                        "/api/projects/save-as",
+                        json={"path": source_path, "title": "API math v2"},
+                    ).status_code
+                    == 400
+                )
+                assert (
+                    client.post(
+                        "/api/projects/save-as",
+                        json={"path": source_path, "title": "../unsafe"},
+                    ).status_code
+                    == 400
+                )
+                assert (
+                    client.post(
+                        "/api/projects/save-as",
+                        json={
+                            "path": source_path,
+                            "title": "Not allowed",
+                            "unexpected": True,
+                        },
+                    ).status_code
+                    == 422
+                )
+                running = {**session, "status": "running"}
+                update_files(source_path, {session_member: json.dumps(running).encode()})
+                active_copy = client.post(
+                    "/api/projects/save-as",
+                    json={"path": source_path, "title": "Not an active copy"},
+                )
+                assert active_copy.status_code == 400
+                assert "Stop active research" in active_copy.json()["error"]
+                assert not (managed / "not-an-active-copy.json").exists()
+                update_files(source_path, {session_member: None, "papers/copy.pdf": None})
+                print(
+                    "PASS Save As identity, event history, full bundle, "
+                    "validation and active-copy safety"
+                )
+
+                # Competing Save As requests cannot silently overwrite one another.
+                from sigma.projects import save_project_as
+
+                def competing_save_as(_index):
+                    try:
+                        return save_project_as(source_path, "API math concurrent copy")
+                    except ProjectError:
+                        return None
+
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    copies = list(pool.map(competing_save_as, range(4)))
+                assert sum(item is not None for item in copies) == 1
+                assert inspect_project(next(item.path for item in copies if item is not None))
+
 
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (

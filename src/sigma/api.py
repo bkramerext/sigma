@@ -58,6 +58,7 @@ from sigma.projects import (
     remove_strategy,
     reorder_strategies,
     set_strategy_enabled,
+    save_project_as,
     update_project,
 )
 from sigma.proposals import (
@@ -1666,6 +1667,16 @@ def create_project_view(body: CreateProjectRequest):
             body.show_advanced_outcome_details,
         )
     )
+
+
+class SaveProjectAsRequest(OpenRequest):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+
+
+@app.post("/api/projects/save-as", status_code=201)
+def save_project_as_view(body: SaveProjectAsRequest):
+    return asdict(save_project_as(body.path, body.title))
 
 
 class StageRequest(RemoveStrategyRequest):

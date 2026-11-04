@@ -8,6 +8,8 @@ from playwright.sync_api import expect, sync_playwright
 
 UI_URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5193")
 create_payloads = []
+save_as_payloads = []
+saved_entries = []
 
 
 def api_fixture(route):
@@ -49,8 +51,9 @@ def api_fixture(route):
         }
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
     elif path in {"/api/projects/samples", "/api/projects/recent"}:
+        entries = saved_entries if path.endswith("/recent") else []
         route.fulfill(
-            status=200, content_type="application/json", body=json.dumps({"projects": []})
+            status=200, content_type="application/json", body=json.dumps({"projects": entries})
         )
     elif path == "/api/projects/destination":
         body = {
@@ -59,6 +62,32 @@ def api_fixture(route):
             "exists": False,
         }
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+    elif path == "/api/projects/save-as":
+        payload = json.loads(route.request.post_data or "{}")
+        save_as_payloads.append(payload)
+        route.fulfill(
+            status=201,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "path": "/tmp/sigma-project-create-contract/copied-project.json",
+                    "project": {
+                        "id": "8dcb585d-4094-4a52-bca2-bcc40b366606",
+                        "title": payload["title"],
+                        "problem": "Original research problem",
+                        "schema_version": 11,
+                        "ai_model": "gpt-6.1-sol",
+                        "reasoning_effort": "high",
+                        "difficulty": "medium",
+                        "show_advanced_outcome_details": False,
+                        "investigation_type": "literature",
+                        "events": [],
+                        "strategies": [],
+                        "active_order": [],
+                    },
+                }
+            ),
+        )
     elif path == "/api/projects/create":
         create_payloads.append(json.loads(route.request.post_data or "{}"))
         request = create_payloads[-1]
@@ -162,6 +191,63 @@ with sync_playwright() as playwright:
     )
     expect(dialog.get_by_role("combobox", name="Research category")).to_contain_text("Mathematics")
     expect(dialog.get_by_label("Difficulty")).to_have_value("hard")
+    # Saved Projects places Save As immediately after Pin, and the dialog
+    # presents the next version name without affecting the original.
+    saved_entries.extend(
+        [
+            {
+                "id": f"00000000-0000-4000-8000-00000000000{n}",
+                "path": f"/tmp/sigma-project-create-contract/crucible-v{n}.json",
+                "title": f"The Crucible v{n}",
+                "investigation_type": "literature",
+                "strategy_count": 3,
+                "paper_count": 0,
+                "best_paper_score": None,
+                "difficulty": "medium",
+                "research_running": False,
+                "available": True,
+                "pinned": False,
+                "error": None,
+            }
+            for n in (3, 4)
+        ]
+    )
+    page.goto(UI_URL)
+    page.get_by_role("tab", name="Saved").click()
+    group = page.locator(".recent-type-group").first
+    expect(group).to_be_visible()
+    if group.get_attribute("open") is None:
+        group.locator("summary").click()
+    row = page.locator(".recent-entry").filter(
+        has=page.get_by_role("button", name="The Crucible v4")
+    )
+    expect(row).to_be_visible()
+    actions = row.locator(".recent-meta-row button").evaluate_all(
+        "(nodes) => nodes.map(node => node.getAttribute('aria-label'))"
+    )
+    assert actions == [
+        "Just show this version of the project",
+        "Save project with a new name",
+        "Remove this project",
+    ], actions
+    row.get_by_role("button", name="Save project with a new name").click()
+    save_as = page.get_by_role("dialog", name="Save Project As")
+    expect(save_as).to_be_visible()
+    expect(save_as.get_by_label("New project name")).to_have_value("The Crucible v5")
+    save_as.get_by_role("button", name="Cancel").click()
+    expect(save_as).not_to_be_visible()
+    assert not save_as_payloads
+    row.get_by_role("button", name="Save project with a new name").click()
+    save_as = page.get_by_role("dialog", name="Save Project As")
+    save_as.get_by_label("New project name").fill("The Crucible alternate history")
+    save_as.get_by_role("button", name="Save", exact=True).click()
+    page.wait_for_function("window.location.pathname === '/project'")
+    assert save_as_payloads == [
+        {
+            "path": "/tmp/sigma-project-create-contract/crucible-v4.json",
+            "title": "The Crucible alternate history",
+        }
+    ], save_as_payloads
     browser.close()
 
-print("PASS real Chrome default local AI connection and project creation Outcome preference.")
+print("PASS real Chrome project creation, Save As action/dialog and new-name copy.")
