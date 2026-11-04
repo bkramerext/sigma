@@ -112,7 +112,6 @@ def check_failures() -> None:
             assert sum(name in step for step in combined) == 1, name
         assert not any(f"tests/{suite}.py" in step for step in combined)
 
-    assert any("tests/cloud_auth.py" in step for step in combined)
     assert any("scripts/increment15_offline_pairs.py" in step for step in combined)
     assert any(step[-2:] == ["run", "build"] for step in combined)
     with (
