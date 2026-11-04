@@ -1482,6 +1482,90 @@ def export_complete_project(value: str | Path) -> bytes:
     return encode(path)
 
 
+def save_project_as(value: str | Path, title: str) -> ProjectView:
+    """Create a separately identified, complete copy without modifying the source.
+
+    Keep historical session/artifact identifiers for internal evidence links, but
+    give the project a new identity and rebind sessions to it. Record the new
+    title as a genuine project edit so existing settings history stays valid.
+    """
+    from sigma.project_bundle import BundleError, import_bundle
+    from sigma.recents import record_access
+
+    title, name = _project_name(title)
+    source = project_path(value)
+    root = projects_root()
+    destination = (root / name).with_suffix(".json")
+    try:
+        with _title_registry_lock(root):
+            _require_available_title(title, root)
+            if os.path.lexists(destination) or os.path.lexists(root / name):
+                raise ProjectError("A project already uses that destination name.")
+            with project_write_lock(source):
+                original = inspect_project(source).project
+                payload = json.loads(export_complete_project(source))
+                new_id = str(uuid4())
+                renamed = replace(
+                    original,
+                    id=new_id,
+                    title=title,
+                    schema_version=max(11, original.schema_version),
+                )
+                renamed = replace(
+                    renamed,
+                    events=(
+                        *original.events,
+                        Event(
+                            len(original.events) + 1,
+                            "project.updated",
+                            _next_timestamp(original),
+                            project_change=ProjectChange(
+                                project_settings(original), project_settings(renamed)
+                            ),
+                        ),
+                    ),
+                )
+                payload["files"]["project.json"] = json.loads(_document(renamed))
+                from sigma.project_copy import rebase_copy
+
+                session_ids: dict[str, str] = {}
+                session_numbers: dict[str, int] = {}
+                independent = rebase_copy(
+                    payload,
+                    source_id=original.id,
+                    new_id=new_id,
+                    source_path=str(source),
+                    destination_path=str(destination),
+                    session_ids_out=session_ids,
+                    session_numbers_out=session_numbers,
+                )
+                imported = import_bundle(independent, destination)
+                from sigma.project_copy_logs import clone_project_logs
+
+                try:
+                    clone_project_logs(
+                        source,
+                        destination,
+                        original.id,
+                        new_id,
+                        session_ids,
+                        session_numbers,
+                    )
+                except Exception:
+                    # The bundle has been imported, but Save As is not
+                    # complete until its external diagnostic history exists.
+                    # This file was exclusively created by this operation.
+                    destination.unlink()
+                    raise
+        view = inspect_project(imported)
+        record_access(view)
+        return view
+    except (OSError, ValueError, UnicodeDecodeError, KeyError, TypeError, BundleError) as exc:
+        if isinstance(exc, ProjectError):
+            raise
+        raise ProjectError(f"Could not save a copy of this project: {exc}") from exc
+
+
 def copy_project_between_workspaces(
     value: str | Path,
     source_workspace: Any | None,

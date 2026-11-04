@@ -100,6 +100,24 @@ with sync_playwright() as playwright:
         "heading", name=re.compile(r"^Nonconsecutive Subset Sums Modulo 3 v\d+$")
     )
     expect(project_heading).to_be_visible()
+    # Export actions are beside Cancel in the header, never below the form.
+    page.locator('.project-pane-actions [aria-label="Export project"]').click()
+    export_dialog = page.get_by_role("dialog", name="Export Project")
+    expect(export_dialog).to_be_visible()
+    header_actions = export_dialog.locator(".settings-header .settings-actions > button")
+    assert header_actions.all_inner_texts() == ["Download", "Cancel"]
+    assert export_dialog.locator(".export-footer").count() == 0
+    filename_field = export_dialog.get_by_label("Filename")
+    download_action = export_dialog.get_by_role("button", name="Download")
+    expect(download_action).to_be_enabled()
+    filename_field.fill("")
+    expect(download_action).to_be_disabled()
+    filename_field.fill("   ")
+    expect(download_action).to_be_disabled()
+    filename_field.fill("named-export")
+    expect(download_action).to_be_enabled()
+    export_dialog.get_by_role("button", name="Cancel").click()
+    expect(export_dialog).not_to_be_visible()
     project_title = project_heading.inner_text()
     project_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     project_id = json.loads(Path(project_path, "project.json").read_text())["id"]

@@ -1925,9 +1925,12 @@ type TextDisplay = 'plain' | 'rendered';
 type TextVersion = { body: string; kind: 'authored' | 'ai_derived'; current: boolean; source_digest: string; source_format: TextFormat; created_at: string; provenance: { provider: string; model: string; reasoning_effort: string | null } | null; warnings: string[] };
 type TextRepresentations = { source_format: TextFormat; source_digest: string; plain: TextVersion | null; markdown: TextVersion | null };
 
-async function post<T>(route: string, body: object = {}, signal?: AbortSignal): Promise<T> {
+async function post<T>(route: string, body: object = {}, signal?: AbortSignal, handleErrorLocally = false): Promise<T> {
   const response = await fetch(`/api/projects/${route}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: {
+      'Content-Type': 'application/json',
+      ...(handleErrorLocally ? { 'X-Sigma-Error-Handled': 'true' } : {}),
+    },
     body: JSON.stringify(body), signal,
   });
   const data = await response.json();
@@ -2056,6 +2059,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       <header className="settings-header">
         <h2 id="export-project-heading">{demo ? 'Export Demo Project' : 'Export Project'}</h2>
         <div className="settings-actions">
+          <button type="submit" className="settings-submit" disabled={busy || !filename.trim()}>{busy ? 'Downloading…' : 'Download'}</button>
           <button type="button" className="settings-cancel" title="Close without downloading" disabled={busy} onClick={() => cancel()}>Cancel</button>
         </div>
       </header>
@@ -2073,9 +2077,6 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
         {exportType !== 'bundle' && <label className="export-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>}
         {error && <p className="error" role="alert">{error}</p>}
       </div>
-      <footer className="export-footer">
-        <button type="submit" className="settings-submit" title="Download the selected project export" disabled={busy}>{busy ? 'Downloading…' : 'Download'}</button>
-      </footer>
     </form>
   </dialog>;
 }
@@ -4180,11 +4181,74 @@ function visibleRecentProjects(projects: RecentProject[]): RecentProject[] {
 type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number; best_paper_score?: number | null };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 const paperCount = (count: number) => `${count} ${count === 1 ? 'paper' : 'papers'}`;
+function suggestedSaveAsName(title: string): string {
+  const version = title.match(/^(.*\bv)(\d+)$/i);
+  if (version) return version[1] + String(Number(version[2]) + 1);
+  return title.slice(0, 193) + ' (copy)';
+}
+
+function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
+  entry: RecentProject;
+  onCancel: () => void;
+  onSaved: (view: ProjectView) => void;
+}) {
+  useDocumentScrollLock();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
+  const [title, setTitle] = useState(() => suggestedSaveAsName(entry.title));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    if (!element.open) element.showModal();
+    nameInput.current?.focus();
+    nameInput.current?.select();
+    return () => { if (element.open) element.close(); };
+  }, []);
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (submitting.current || !title.trim()) return;
+    submitting.current = true; setBusy(true); setError('');
+    try {
+      const copy = await post<ProjectView>('save-as', { path: entry.path, title: title.trim() }, undefined, true);
+      onSaved(copy);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      submitting.current = false; setBusy(false);
+    }
+  }
+  return <dialog ref={dialog} className="project-settings-dialog save-as-project-dialog"
+    aria-labelledby="save-as-project-heading"
+    onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
+    <form onSubmit={save}>
+      <header className="settings-header">
+        <h2 id="save-as-project-heading">Save Copy</h2>
+        <div className="settings-actions">
+          <button type="submit" className="settings-cancel" disabled={busy || !title.trim()}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button>
+        </div>
+      </header>
+      <div className="settings-body">
+        <label htmlFor="save-as-project-title">New project name</label>
+        <input ref={nameInput} id="save-as-project-title" type="text" value={title}
+          required maxLength={200} disabled={busy} spellCheck={false}
+          aria-invalid={!!error} aria-describedby={error ? 'save-as-project-error' : undefined}
+          onChange={event => { setTitle(event.target.value); setError(''); }}/>
+        {error && <p className="save-as-project-error" id="save-as-project-error" role="alert">{error}</p>}
+      </div>
+    </form>
+  </dialog>;
+}
+
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
+  const [saveAsEntry, setSaveAsEntry] = useState<RecentProject | null>(null);
   const [confirmRemovePlacement, setConfirmRemovePlacement] = useState<'above' | 'below'>('below');
   const [error, setError] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -4296,7 +4360,11 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
             {entry.best_paper_score != null && entry.best_paper_score >= 50 && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="Top scoring paper, click to view" data-tooltip="Top scoring paper, click to view" data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" onClick={event => {
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}<button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
+            aria-label="Save project with a new name" data-tooltip="Save project with a new name"
+            onClick={() => { setConfirmRemoveId(''); setSaveAsEntry(entry); }}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+          </button>{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" onClick={event => {
             if (confirmRemoveId === entry.id) { setConfirmRemoveId(''); return; }
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
@@ -4309,6 +4377,8 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     </details>;
     })}
     {error && <p role="alert" className="error">{error}</p>}
+    {saveAsEntry && <ProjectSaveAsDialog key={saveAsEntry.id} entry={saveAsEntry}
+      onCancel={() => setSaveAsEntry(null)} onSaved={view => { setSaveAsEntry(null); onOpen(view); }}/>} 
   </div>;
 }
 

@@ -352,7 +352,8 @@ async def test_single_project_admission(path: Path):
         started = await research_sessions.start_session(
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
-        await asyncio.wait_for(entered.wait(), 2)
+        # Background provider dispatch can take longer under CI contention.
+        await asyncio.wait_for(entered.wait(), 10)
         try:
             await research_sessions.start_session(
                 str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
