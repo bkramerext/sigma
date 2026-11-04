@@ -88,11 +88,45 @@ INSTRUCTIONS = (
 )
 
 
+def compilation_eligible_sources(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Select only inspected method excerpts when retrieval snapshots exist.
+
+    Legacy unit inputs without retrieval metadata retain their previous
+    behavior. New-session source snapshots always include retrieval results.
+    Unavailable URLs remain in the durable source catalog, not in the prompt
+    asking the compiler to attribute inspected methodological guidance.
+    """
+    if not any(isinstance(row, Mapping) and "retrieval" in row for row in sources):
+        return sources
+    eligible: list[dict[str, Any]] = []
+    for row in sources:
+        if not isinstance(row, Mapping):
+            continue
+        retrieval = row.get("retrieval")
+        if not isinstance(retrieval, Mapping) or retrieval.get("status") != "retrieved":
+            continue
+        excerpt = retrieval.get("excerpt")
+        excerpt_sha = retrieval.get("excerpt_sha256")
+        full_sha = retrieval.get("content_sha256")
+        if (
+            isinstance(excerpt, str)
+            and excerpt.strip()
+            and isinstance(excerpt_sha, str)
+            and hashlib.sha256(excerpt.encode("utf-8")).hexdigest() == excerpt_sha
+            and isinstance(full_sha, str)
+            and len(full_sha) == 64
+            and all(character in "0123456789abcdef" for character in full_sha.lower())
+        ):
+            eligible.append(dict(row))
+    return eligible
+
+
 def compile_input(record: Mapping[str, Any]) -> str:
     selected = record.get("research_method_sources")
     sources = selected.get("sources", []) if isinstance(selected, Mapping) else []
     if not isinstance(sources, list) or len(sources) > MAX_COMPILATION_SOURCES:
         raise ProjectError("Research-method references exceed compilation bounds")
+    sources = compilation_eligible_sources(sources)
     strategies = record.get("strategy_runs", [])
     payload = {
         "project": {
