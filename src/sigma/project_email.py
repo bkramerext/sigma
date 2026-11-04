@@ -89,7 +89,9 @@ def _delivery_connection():
             )"""
         )
         # Preserve ledgers from earlier development builds of this feature.
-        columns = {item["name"] for item in db.execute("PRAGMA table_info(project_email_dispatches)")}
+        columns = {
+            item["name"] for item in db.execute("PRAGMA table_info(project_email_dispatches)")
+        }
         if "attempts" not in columns:
             db.execute(
                 "ALTER TABLE project_email_dispatches ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1"
