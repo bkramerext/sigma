@@ -208,6 +208,38 @@ function sessionForDisplay(value: unknown): ResearchSession | null {
   } as ResearchSession;
 }
 
+/**
+ * Historical sessions can finish every configured Investigator/Skeptic slot
+ * while retaining a legacy round-limit termination code. Derive completion
+ * from accepted role slots, not the attempt ceiling or an old status label.
+ * This is display-only: it never rewrites saved research or usage accounting.
+ */
+function sessionHasAcceptedEveryConfiguredTurn(session: ResearchSession): boolean {
+  const ids = session.strategy_ids;
+  const branches = session.strategy_runs;
+  const cycles = session.cycle_limit;
+  if (!Array.isArray(ids) || ids.length === 0 || !Array.isArray(branches)
+    || branches.length !== ids.length || typeof cycles !== 'number'
+    || !Number.isInteger(cycles) || cycles < 1
+    || ids.some(id => typeof id !== 'string' || !id)
+    || new Set(ids).size !== ids.length
+    || branches.some(branch => !ids.includes(branch.strategy_id))
+    || new Set(branches.map(branch => branch.strategy_id)).size !== ids.length) return false;
+  const accepted = new Set(session.steps
+    .filter(step => step.status === 'completed'
+      && (step.role === 'investigator' || step.role === 'skeptic')
+      && typeof step.strategy_id === 'string' && ids.includes(step.strategy_id)
+      && Number.isInteger(step.cycle) && step.cycle >= 1 && step.cycle <= cycles)
+    .map(step => JSON.stringify([step.strategy_id, step.role, step.cycle])));
+  return accepted.size === ids.length * cycles * 2;
+}
+
+function sessionOffersResume(session: ResearchSession): boolean {
+  if (!['stopped', 'paused', 'failed', 'ended'].includes(session.status)) return false;
+  if (['protocol_complete', 'research_completed_early'].includes(session.termination_reason_code ?? '')) return false;
+  return !sessionHasAcceptedEveryConfiguredTurn(session);
+}
+
 function sessionEstimatedCostLabel(session: ResearchSession): string {
   const cost = session.estimated_cost_usd;
   // ChatGPT tokens are not billed to the operator's API account; show the
@@ -1860,7 +1892,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {(['stopped', 'paused', 'failed'].includes(item.status) || (item.status === 'ended' && !['protocol_complete', 'research_completed_early'].includes(item.termination_reason_code ?? ''))) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} title="Resume this session" data-tooltip="Resume this session" disabled={busy || !!readError || projectAtCapacity} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
+                  {sessionOffersResume(item) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} title="Resume this session" data-tooltip="Resume this session" disabled={busy || !!readError || projectAtCapacity} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} title={`Stop Session ${item.session_number}; it can be resumed later`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
                   {!['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}

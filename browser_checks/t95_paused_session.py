@@ -195,6 +195,77 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
         json.dumps(timed, separators=(",", ":")), encoding="utf-8"
     )
 
+    # Historical ONP-style session: 12 accepted roles across two strategies
+    # and three rounds, with a separate 18-attempt allowance and the old
+    # round_limit_reached termination code. No research turn remains to resume.
+    completed_protocol = json.loads(json.dumps(session))
+    completed_protocol_id = str(uuid4())
+    protocol_strategy_ids = [str(uuid4()), str(uuid4())]
+    protocol_steps = [
+        {
+            "id": str(uuid4()),
+            "strategy_id": strategy_id,
+            "role": role,
+            "cycle": cycle,
+            "status": "completed",
+            "started_at": "2026-01-01T00:00:00+00:00",
+            "call_number": number,
+        }
+        for number, (strategy_id, cycle, role) in enumerate(
+            (
+                (strategy_id, cycle, role)
+                for strategy_id in protocol_strategy_ids
+                for cycle in range(1, 4)
+                for role in ("investigator", "skeptic")
+            ),
+            start=1,
+        )
+    ]
+    completed_protocol.update(
+        {
+            "id": completed_protocol_id,
+            "session_number": 12,
+            "strategy_ids": protocol_strategy_ids,
+            "strategy_runs": [
+                {
+                    "strategy_id": strategy_id,
+                    "strategy_title": f"Accepted strategy {index}",
+                    "status": "ended",
+                    "current_action": "Ended · round limit",
+                    "current_question": "",
+                    "cycle": 3,
+                    "calls_used": 6,
+                    "artifacts": [],
+                }
+                for index, strategy_id in enumerate(protocol_strategy_ids, start=1)
+            ],
+            "status": "ended",
+            "termination_reason_code": "round_limit_reached",
+            "current_action": "Ended · research incomplete",
+            "cycle": 3,
+            "cycle_limit": 3,
+            "calls_used": 12,
+            "call_limit": 18,
+            "steps": protocol_steps,
+        }
+    )
+    (sessions_path / f"{completed_protocol_id}.json").write_text(
+        json.dumps(completed_protocol, separators=(",", ":")), encoding="utf-8"
+    )
+    incomplete_protocol = json.loads(json.dumps(completed_protocol))
+    incomplete_protocol_id = str(uuid4())
+    incomplete_protocol.update(
+        {
+            "id": incomplete_protocol_id,
+            "session_number": 13,
+            "calls_used": 11,
+            "steps": protocol_steps[:-1],
+        }
+    )
+    (sessions_path / f"{incomplete_protocol_id}.json").write_text(
+        json.dumps(incomplete_protocol, separators=(",", ":")), encoding="utf-8"
+    )
+
     api_port, ui_port = free_port(), free_port()
     while api_port == ui_port:
         ui_port = free_port()
@@ -289,6 +360,22 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             for number, guidance in expected_guidance.items():
                 variant = page.locator(".session-row").filter(has_text=f"Session #{number}")
                 expect(variant.locator(".stopped-session-guidance")).to_contain_text(guidance)
+            completed_protocol_row = page.locator(
+                f'li[data-session-id="{completed_protocol_id}"]'
+            )
+            incomplete_protocol_row = page.locator(
+                f'li[data-session-id="{incomplete_protocol_id}"]'
+            )
+            expect(completed_protocol_row.locator(".session-status")).to_have_text("ended")
+            expect(completed_protocol_row.locator(".session-progress-inline")).to_contain_text(
+                "12/18 agent calls"
+            )
+            expect(
+                completed_protocol_row.locator('button[title="Resume this session"]')
+            ).to_have_count(0)
+            expect(
+                incomplete_protocol_row.locator('button[title="Resume this session"]')
+            ).to_be_visible()
             completed_row = page.locator(f'li[data-session-id="{early_id}"]')
             interrupted_row = page.locator(f'li[data-session-id="{interrupted_id}"]')
             timed_row = page.locator(f'li[data-session-id="{timed_id}"]')
