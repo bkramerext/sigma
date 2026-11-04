@@ -92,11 +92,8 @@ with sync_playwright() as playwright:
         page.evaluate("el => parseFloat(getComputedStyle(el).fontSize)", qa_button.element_handle())
         >= 16
     )
-    assert page.evaluate("el => getComputedStyle(el).fontWeight", qa_button.element_handle()) in (
-        "600",
-        "700",
-        "800",
-        "900",
+    assert page.evaluate("el => getComputedStyle(el).fontWeight", qa_button.element_handle()) == page.evaluate(
+        "el => getComputedStyle(el).fontWeight", tex.element_handle()
     )
     lean = page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
     assert (
@@ -237,7 +234,9 @@ with sync_playwright() as playwright:
     last_title_rect = title_rects[-1]
     assert copied_icon_box and copied_icon_box["x"] > markdown_box["x"]
     assert markdown_box["x"] >= last_title_rect["right"] - 1, (markdown_box, last_title_rect)
-    assert markdown_box["x"] - last_title_rect["right"] <= 18, (markdown_box, last_title_rect)
+    assert abs(markdown_box["x"] - last_title_rect["right"] - 12) <= 2, (
+        markdown_box, last_title_rect
+    )
     assert normal_copy_box and normal_icon_box
     assert copied_icon_box == normal_copy_box
     assert (
@@ -334,7 +333,9 @@ with sync_playwright() as playwright:
         ),
     )
     markdown_icon.click()
+    expect(title_line.get_by_role("status")).to_have_text("Formatting with AI…")
     expect(title_line.get_by_role("button", name="Show plain answer")).to_be_visible(timeout=30000)
+    expect(title_line.get_by_role("status")).to_have_count(0)
     expect(card.locator(".outcome-markdown")).to_contain_text("The saved research answers")
     rendered = card.locator(".outcome-markdown").inner_text()
     title_line.get_by_role("button", name="Show plain answer").click()
