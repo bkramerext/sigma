@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
+from sigma import research_sessions
+from sigma.projects import ProjectError
 from sigma.research_context_budget import (
     compact_dispatch_context,
     restrict_obligation_citations_to_supplied_context,
@@ -171,3 +173,24 @@ def test_legacy_context_and_oversized_question_remain_fail_closed() -> None:
     }
     assert not compact_dispatch_context(oversized, limit=LIMIT)
     assert len(oversized["problem"]) == LIMIT + 1
+
+
+def test_omitted_obligations_cannot_be_closed_by_skeptic() -> None:
+    context = _context(128, unique_scope=True)
+    assert compact_dispatch_context(context, limit=LIMIT)
+    omitted_id = context["obligation_ledger_omitted_ids"][0]
+    review = {
+        "obligation_id": omitted_id,
+        "basis_artifact_ids": [],
+        "basis_step_ids": [],
+    }
+    try:
+        research_sessions._validate_obligation_review_basis(context, review)
+    except ProjectError as exc:
+        assert "not supplied" in str(exc) and omitted_id in str(exc)
+    else:
+        raise AssertionError("An omitted obligation was accepted for review")
+    allowed_id = context["obligation_ledger"][0]["obligation_id"]
+    research_sessions._validate_obligation_review_basis(
+        context, {**review, "obligation_id": allowed_id}
+    )
