@@ -7,7 +7,7 @@ import fcntl
 import os
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 
@@ -16,7 +16,16 @@ ELI5_VERSION = 2
 
 class Explanation(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    markdown: str = Field(min_length=100, max_length=6000)
+    # Provider strict JSON schemas do not permit minLength/maxLength, so
+    # enforce the bounds locally rather than putting them in the wire schema.
+    markdown: str
+
+    @field_validator("markdown")
+    @classmethod
+    def validate_markdown(cls, value: str) -> str:
+        if not 100 <= len(value) <= 6000:
+            raise ValueError("Paper explanation must be 100–6000 characters.")
+        return value
 
 
 INSTRUCTIONS = """Explain this SAVED PAPER to a curious reader using VERY simple everyday language.
@@ -72,7 +81,7 @@ def _save(path: str, paper_id: str, sha: str, markdown: str) -> str:
         if existing is not None:
             return existing
         record["eli5"] = {"version": ELI5_VERSION, "source_sha256": sha, "markdown": markdown}
-        data = papers._json(record)
+        data = papers._stored_paper_record_json(record)
         if len(data) > papers.MAX_PAPER_BYTES:
             raise ProjectError("Paper explanation exceeds storage limit.")
         target = project_path(path)

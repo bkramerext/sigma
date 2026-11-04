@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -258,7 +259,7 @@ export function markdownWithMathDelimiters(body: string): string {
   }).join('\n');
 }
 
-export default function RenderedMarkdown({ body, citationProjectPath, citationUrls = [] }: { body: string; citationProjectPath?: string; citationUrls?: string[] }) {
+export default function RenderedMarkdown({ body, citationProjectPath, citationUrls = [], questionHeadingAction }: { body: string; citationProjectPath?: string; citationUrls?: string[]; questionHeadingAction?: ReactNode }) {
   const allowedCitationUrls = new Set(citationUrls);
   const urlTransform = (url: string) => {
     if (url.startsWith('#')) return url;
@@ -295,5 +296,12 @@ export default function RenderedMarkdown({ body, citationProjectPath, citationUr
   return <ReactMarkdown skipHtml remarkPlugins={[remarkGfm, remarkMath, semanticMath]}
     rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false }]]}
     urlTransform={urlTransform}
-    components={{ img: () => null }}>{markdownWithMathDelimiters(body)}</ReactMarkdown>;
+    components={{
+      img: () => null,
+      h2: ({ children }) => {
+        // Only the explicitly configured ELI5 view gets a heading copy action.
+        const title = (Array.isArray(children) ? children.filter(item => typeof item === 'string').join('') : typeof children === 'string' ? children : '').trim().toLowerCase();
+        return <h2>{children}{title === 'the question' && questionHeadingAction}</h2>;
+      },
+    }}>{markdownWithMathDelimiters(body)}</ReactMarkdown>;
 }
