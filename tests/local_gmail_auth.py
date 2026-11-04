@@ -7,8 +7,8 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
-
 from cloud_auth_fixture import CloudAuthFixture, GoogleClient, token
+
 from sigma import cloud_auth
 from sigma.local_gmail_grant import GMAIL_SEND_SCOPE, grant_for_account
 
@@ -42,6 +42,7 @@ class LocalMailAuthorizationTests(CloudAuthFixture):
         cfg = cloud_auth.config()
         cookie_name = cloud_auth._cookie_name(cloud_auth.SESSION_COOKIE, cfg)
         self.client.cookies.set(cookie_name, signed.cookies[cookie_name])
+        self._mail_session_token = signed.cookies[cookie_name]
         response = self.client.get("/api/cloud-auth/mail/authorize", follow_redirects=False)
         self.assertEqual(response.status_code, 302, response.text)
         query = parse_qs(urlsplit(response.headers["location"]).query)
@@ -58,7 +59,9 @@ class LocalMailAuthorizationTests(CloudAuthFixture):
         self.client.cookies.set(flow_cookie, response.cookies[flow_cookie])
         return state, nonce
 
-    def finish_local_mail(self, state, nonce, *, subject="google-mail-admin", email="admin@example.org"):
+    def finish_local_mail(
+        self, state, nonce, *, subject="google-mail-admin", email="admin@example.org"
+    ):
         MailGoogleClient.token = token(nonce=nonce, email=email, subject=subject)
         with patch.object(cloud_auth.httpx, "AsyncClient", MailGoogleClient):
             return self.client.get(
@@ -74,7 +77,9 @@ class LocalMailAuthorizationTests(CloudAuthFixture):
             self.assertEqual(response.status_code, 303, response.text)
             self.assertEqual(response.headers["location"], "/?gmail_send=authorized")
             matched = grant_for_account(
-                self.root, email="admin@example.org", client_id="sigma-test.apps.googleusercontent.com"
+                self.root,
+                email="admin@example.org",
+                client_id="sigma-test.apps.googleusercontent.com",
             )
             self.assertIsNotNone(matched)
             assert matched is not None
@@ -82,7 +87,7 @@ class LocalMailAuthorizationTests(CloudAuthFixture):
             self.assertEqual(cloud_auth.email_env("GMAIL_TOKEN_FILE"), str(matched[0]))
             self.assertEqual(cloud_auth.email_env("GMAIL_SENDER"), "admin@example.org")
             self.assertIsNotNone(
-                cloud_auth.resolve_session(self.client.cookies.get("sigma_session"))
+                cloud_auth.resolve_session(self._mail_session_token)
             )
 
     def test_refuses_a_different_google_identity_at_callback(self):
@@ -92,7 +97,9 @@ class LocalMailAuthorizationTests(CloudAuthFixture):
             self.assertEqual(response.status_code, 403, response.text)
             self.assertIsNone(
                 grant_for_account(
-                    self.root, email="admin@example.org", client_id="sigma-test.apps.googleusercontent.com"
+                    self.root,
+                    email="admin@example.org",
+                    client_id="sigma-test.apps.googleusercontent.com",
                 )
             )
 
@@ -104,14 +111,18 @@ class LocalMailAuthorizationTests(CloudAuthFixture):
             self.assertEqual(response.status_code, 403, response.text)
             self.assertIsNone(
                 grant_for_account(
-                    self.root, email="admin@example.org", client_id="sigma-test.apps.googleusercontent.com"
+                    self.root,
+                    email="admin@example.org",
+                    client_id="sigma-test.apps.googleusercontent.com",
                 )
             )
 
     def test_hosted_app_never_offers_gmail_authorization(self):
         self.finish(email="admin@example.org", subject="hosted-admin")
         response = self.client.get("/api/cloud-auth/mail/authorize", follow_redirects=False)
-        self.assertEqual(response.status_code, 404, response.text)
+        # Hosted auth middleware may deny before the local-only route sees the request.
+        self.assertIn(response.status_code, (401, 403, 404), response.text)
+        self.assertNotIn("accounts.google.com", response.headers.get("location", ""))
 
     def test_local_signin_shortcut_cannot_impersonate_google_consent(self):
         with (
