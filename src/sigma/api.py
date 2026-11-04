@@ -57,8 +57,8 @@ from sigma.projects import (
     project_destination,
     remove_strategy,
     reorder_strategies,
-    set_strategy_enabled,
     save_project_as,
+    set_strategy_enabled,
     update_project,
 )
 from sigma.proposals import (

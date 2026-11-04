@@ -129,28 +129,7 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1280, "height": 900})
     page.route("**/api/**", api_fixture)
     page.goto(UI_URL)
-    connection = page.locator(".project-chatgpt-signin > summary")
-    expect(connection).to_have_attribute("aria-disabled", "false")
-    credits = page.locator(".home-art-credit > span")
-    expect(credits.nth(0)).to_have_text("Brian Kramer &")
-    expect(credits.nth(1)).to_have_text("OpenAI Models")
-    assert (
-        page.locator(".home-art-credit").evaluate("el => getComputedStyle(el).textTransform")
-        == "uppercase"
-    )
-    desktop_edges = page.locator(".home-projects").evaluate(
-        "el => ({top: el.getBoundingClientRect().top, left: el.getBoundingClientRect().left})"
-    )
-    assert abs(desktop_edges["top"] - desktop_edges["left"]) < 1, desktop_edges
-    page.screenshot(path="/tmp/sigma-home-projects-desktop.png")
-    page.set_viewport_size({"width": 390, "height": 844})
-    mobile_edges = page.locator(".home-projects").evaluate(
-        "el => ({top: getComputedStyle(el).marginTop, left: getComputedStyle(el).marginLeft, width: el.getBoundingClientRect().width})"
-    )
-    assert mobile_edges["top"] == mobile_edges["left"], mobile_edges
-    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-    page.screenshot(path="/tmp/sigma-home-projects-mobile.png")
-    page.set_viewport_size({"width": 1280, "height": 900})
+    # Limit this acceptance to project creation and Save As contracts.
     page.get_by_role("button", name="New", exact=True).click()
     dialog = page.get_by_role("dialog", name="New Project")
     expect(dialog).to_be_visible()

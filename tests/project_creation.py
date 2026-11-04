@@ -3,9 +3,9 @@
 import hashlib
 import json
 import os
-import zlib
 import subprocess
 import sys
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -390,10 +390,10 @@ def main() -> None:
                     for name in list_files(clone["path"])
                     if name.startswith("research-sessions/")
                     and name.endswith(".json")
-                    and name not in {
-                        "research-sessions/limits.json",
-                        "research-sessions/sequence.json",
-                        "research-sessions/obligation-ids.json",
+                    and Path(name).stem not in {
+                        "limits",
+                        "sequence",
+                        "obligation-ids",
                     }
                 ]
                 assert len(session_members) == 1
@@ -490,7 +490,6 @@ def main() -> None:
                 # paper PDF/metadata, Q/A citations and session history.
                 from sigma import papers, research_qa
                 from sigma.project_bundle import list_files
-                from sigma.projects import save_project_as
 
                 legacy_fixture = ROOT / "projects/complete/xenopus-tadpoles.sigma"
                 legacy_id = inspect_project(legacy_fixture).project.id
@@ -499,7 +498,8 @@ def main() -> None:
                 assert original_papers, "The real-paper fixture is missing its papers"
                 assert original_answers, "The real-Q/A fixture is missing its answers"
                 source_session_ids = {
-                    item.stem for item in (legacy_fixture / "research-sessions").glob("*.json")
+                    item.stem
+                    for item in (legacy_fixture / "research-sessions").glob("*.json")
                     if item.stem not in {"limits", "sequence", "obligation-ids"}
                 }
                 legacy_copy = save_project_as(

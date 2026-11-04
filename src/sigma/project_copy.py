@@ -29,15 +29,13 @@ _MAX_FROZEN_BYTES = 128 * 1024 * 1024
 
 def _canonical(value: Any) -> bytes:
     """Match the canonical digest used by sigma.papers._json."""
-    return json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 def _encode(value: Any) -> bytes:
-    return (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode(
-        "utf-8"
-    )
+    return (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
 
 
 def _member_name(name: str) -> str:
@@ -118,9 +116,7 @@ def rebase_copy(
             ):
                 raise ProjectError("Cannot copy a foreign or invalid research session.")
             if session.get("status") in {"queued", "running"}:
-                raise ProjectError(
-                    "Stop active research before saving a copy of this project."
-                )
+                raise ProjectError("Stop active research before saving a copy of this project.")
             session_ids[old_session_id] = str(uuid4())
             prior_path = session.get("project_path")
             if isinstance(prior_path, str) and prior_path.startswith("/"):
@@ -172,10 +168,7 @@ def rebase_copy(
             encoded = _canonical(package)
             new_digest = hashlib.sha256(encoded).hexdigest()
             digest_map[old_digest] = new_digest
-            target_name = _FROZEN_FILE.sub(
-                lambda _match: f"artifacts/papers/snapshots/{new_digest}.json.zlib",
-                name,
-            )
+            target_name = f"artifacts/papers/snapshots/{new_digest}.json.zlib"
             if target_name in rewritten:
                 raise ProjectError("Copied frozen evidence hash collision.")
             rewritten[target_name] = zlib.compress(encoded, level=6)
@@ -210,10 +203,7 @@ def rebase_copy(
                         digest_map[old] = digest
                     data["snapshot_sha256"] = digest
                 frozen = data.get("frozen_package")
-                if (
-                    isinstance(frozen, dict)
-                    and frozen.get("schema") == "sigma-paper-evidence-v2"
-                ):
+                if isinstance(frozen, dict) and frozen.get("schema") == "sigma-paper-evidence-v2":
                     digest = hashlib.sha256(_canonical(frozen)).hexdigest()
                     old = data.get("snapshot_sha256")
                     if isinstance(old, str):

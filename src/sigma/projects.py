@@ -1506,7 +1506,10 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                 payload = json.loads(export_complete_project(source))
                 new_id = str(uuid4())
                 renamed = replace(
-                    original, id=new_id, title=title, schema_version=max(11, original.schema_version)
+                    original,
+                    id=new_id,
+                    title=title,
+                    schema_version=max(11, original.schema_version),
                 )
                 renamed = replace(
                     renamed,
