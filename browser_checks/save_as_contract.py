@@ -131,7 +131,8 @@ with sync_playwright() as playwright:
         "Remove this project",
     ], actions
     copy = row.get_by_role("button", name="Save project with a new name")
-    expect(copy).to_have_attribute("title", "Save project with a new name")
+    expect(copy).to_have_attribute("data-tooltip", "Save project with a new name")
+    expect(copy).not_to_have_attribute("title", "Save project with a new name")
     copy.click()
     dialog = page.get_by_role("dialog", name="Save Copy")
     save_button = dialog.locator('button[type="submit"]')
