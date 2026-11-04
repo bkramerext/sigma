@@ -52,15 +52,11 @@ def send_invitation(
 
 def send_admin_notification(subject: str, body: str, *, recipients: list[str]) -> None:
     """Send one privacy-preserving email to verified active administrators."""
-    sender = _email_env("GMAIL_SENDER").lower()
-    if not sender or not recipients:
+    if not recipients:
         raise RuntimeError("Invitation delivery is not configured.")
+    # send_message owns recipient headers for both one and multiple recipients.
+    # Duplicating them here makes send_message reject every administrator notice.
     message = EmailMessage()
-    if len(recipients) == 1:
-        message["To"] = recipients[0]
-    else:
-        message["To"] = sender
-        message["Bcc"] = ", ".join(recipients)
     message["Subject"] = subject
     message.set_content(body)
     send_message(message, recipients=recipients)
