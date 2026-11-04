@@ -11,12 +11,12 @@ import json
 import os
 from email import message_from_bytes
 from io import BytesIO
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
 from cloud_auth_fixture import CLIENT_ID, CloudAuthFixture
+
 from sigma import cloud_auth, gmail_delivery, project_email
 from sigma.local_gmail_cli_auth import GMAIL_SEND_SCOPE, _save_grant
 
@@ -88,7 +88,8 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
 
             with (
                 patch.object(
-                    project_email, "inspect_project",
+                    project_email,
+                    "inspect_project",
                     return_value=SimpleNamespace(project=SimpleNamespace(title="Attachment Test")),
                 ),
                 patch.object(
@@ -130,10 +131,13 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
 
         self.assertEqual(calls.count(gmail_delivery.TOKEN_ENDPOINT), 2)
         self.assertEqual(calls.count(gmail_delivery.SEND_ENDPOINT), 2)
-        self.assertEqual([m["Subject"] for m in messages], [
-            "New SIGMA feedback",
-            "SIGMA project: Attachment Test",
-        ])
+        self.assertEqual(
+            [m["Subject"] for m in messages],
+            [
+                "New SIGMA feedback",
+                "SIGMA project: Attachment Test",
+            ],
+        )
         self.assertEqual(messages[0]["To"], "admin@example.org")
         self.assertEqual(messages[1]["To"], "recipient@example.org")
         self.assertIn(
