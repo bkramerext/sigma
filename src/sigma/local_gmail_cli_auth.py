@@ -66,7 +66,9 @@ def _private_home(*, create: bool) -> Path:
         try:
             home.mkdir(parents=True, exist_ok=True, mode=0o700)
         except OSError as exc:
-            raise LocalGmailAuthError("Cannot create the local Gmail credential directory.") from exc
+            raise LocalGmailAuthError(
+                "Cannot create the local Gmail credential directory."
+            ) from exc
     try:
         info = home.lstat()
     except OSError as exc:
@@ -121,8 +123,7 @@ def existing_grant() -> tuple[Path, str] | None:
 
 
 def _save_grant(
-    *, sender: str, subject: str, client_id: str, client_secret: str,
-    refresh_token: str, scope: str
+    *, sender: str, subject: str, client_id: str, client_secret: str, refresh_token: str, scope: str
 ) -> Path:
     home = _private_home(create=True)
     if not subject or not refresh_token or GMAIL_SEND_SCOPE not in scope.split():
@@ -182,7 +183,8 @@ def _verified_google_identity(
         jwks = jwt.PyJWKSet.from_dict(jwks_response.json())
         header = jwt.get_unverified_header(id_token)
         matched = [
-            key for key in jwks.keys
+            key
+            for key in jwks.keys
             if key.key_id == header.get("kid")
             and key.algorithm_name == "RS256"
             and key.public_key_use == "sig"
@@ -211,7 +213,14 @@ def _verified_google_identity(
         if not isinstance(subject, str) or not subject or len(subject) > 255:
             raise ValueError("Invalid Google subject.")
         return sender, subject
-    except (httpx.HTTPError, jwt.PyJWTError, ValueError, KeyError, TypeError, AttributeError) as exc:
+    except (
+        httpx.HTTPError,
+        jwt.PyJWTError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+    ) as exc:
         raise LocalGmailAuthError(
             "Google identity validation failed; no Gmail authorization was saved."
         ) from exc
@@ -254,9 +263,9 @@ def _wait_for_google_callback(expected_state: str, authorize_url: str) -> str:
             else:
                 result["code"] = code[0]
             body = (
-                "<!doctype html><meta charset='utf-8'><title>SIGMA Gmail</title>"
-                "<p>SIGMA received the Google response. Return to your terminal.</p>"
-            ).encode()
+                b"<!doctype html><meta charset='utf-8'><title>SIGMA Gmail</title>"
+                b"<p>SIGMA received the Google response. Return to your terminal.</p>"
+            )
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -290,7 +299,9 @@ def _wait_for_google_callback(expected_state: str, authorize_url: str) -> str:
     if "error" in result:
         raise LocalGmailAuthError(result["error"])
     if "code" not in result:
-        raise LocalGmailAuthError("Google permission was not completed before the local callback expired.")
+        raise LocalGmailAuthError(
+            "Google permission was not completed before the local callback expired."
+        )
     return result["code"]
 
 
@@ -300,9 +311,9 @@ def authorize() -> tuple[Path, str]:
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(48)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(
-        b"="
-    ).decode()
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    )
     params = {
         "client_id": client_id,
         "redirect_uri": REDIRECT_URI,
@@ -332,7 +343,7 @@ def authorize() -> tuple[Path, str]:
             response.raise_for_status()
             token_data = response.json()
             if not isinstance(token_data, dict):
-                raise ValueError("Invalid Google response.")
+                raise TypeError("Invalid Google response.")
             scope = str(token_data.get("scope", ""))
             refresh_token = token_data.get("refresh_token")
             id_token = token_data.get("id_token")
