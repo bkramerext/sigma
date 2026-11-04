@@ -298,7 +298,6 @@ async def verify_empty_and_single_reference_sessions() -> None:
             assert saved["calls_used"] == 0 and saved["steps"] == []
 
 
-
 async def verify_unavailable_reference_sessions() -> None:
     """Broken URLs cannot consume providers or block a valid new session."""
     cases = (
@@ -349,10 +348,10 @@ async def verify_unavailable_reference_sessions() -> None:
                 patch.object(
                     research_sessions, "auth_context", new=AsyncMock(return_value=credential)
                 ),
-                patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
                 patch.object(
-                    research_sessions, "select_method_sources", return_value=selection
+                    research_sessions, "configuration", new=AsyncMock(return_value=config)
                 ),
+                patch.object(research_sessions, "select_method_sources", return_value=selection),
                 patch.object(research_sessions, "_worker", new=AsyncMock()),
             ):
                 started = await research_sessions.start_session(
@@ -383,13 +382,10 @@ async def verify_unavailable_reference_sessions() -> None:
             context = research_sessions._portfolio_context(
                 saved, saved["strategy_runs"][0], "investigator", 1
             )
-            assert [item["id"] for item in context["methodology_source_material"]] == (
-                expected_ids
-            )
+            assert [item["id"] for item in context["methodology_source_material"]] == (expected_ids)
             assert context["methodology_retrieval_summary"]["unavailable"] == (
                 len(sources) - len(expected_ids)
             )
-
 
 
 def verify_curated_method_reference_defaults() -> None:
