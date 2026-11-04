@@ -1,3 +1,4 @@
+# ruff: noqa: F401, F821, F811
 # pyright: reportUndefinedVariable=false
 """Bounded paper evidence validation, rendering safety and durable version scenarios."""
 
