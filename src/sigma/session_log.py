@@ -1155,10 +1155,12 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
             "id": session_id,
             "number": session.get("session_number"),
             "status": session.get("status"),
-            "current_action": str(session.get("current_action") or "")[:300],
-            "termination_reason_code": str(session.get("termination_reason_code") or "")[:120],
-            "reason": str(session.get("reason") or "")[:1200],
-            "message": str(session.get("message") or "")[:1200],
+            "current_action": _redact(str(session.get("current_action") or "")[:300]),
+            "termination_reason_code": _redact(
+                str(session.get("termination_reason_code") or "")[:120]
+            ),
+            "reason": _redact(str(session.get("reason") or "")[:1200]),
+            "message": _redact(str(session.get("message") or "")[:1200]),
         },
     }
 
