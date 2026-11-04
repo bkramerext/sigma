@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ["1", "2"]
+        shard: ["1", "2", "3", "4"]
     env:
       CI: "true"
       # Cloud mode and live provider access must never be enabled by this workflow.
