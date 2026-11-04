@@ -75,6 +75,8 @@ def rebase_copy(
     new_id: str,
     source_path: str,
     destination_path: str,
+    session_ids_out: dict[str, str] | None = None,
+    session_numbers_out: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Return a portable, independently identified project bundle.
 
@@ -98,6 +100,8 @@ def rebase_copy(
         if source == destination or source_id == new_id:
             raise ProjectError("Save As must create a different project.")
         session_ids: dict[str, str] = {}
+        admission_keys: dict[str, str] = {}
+        session_numbers: dict[str, int] = {}
         historical_paths: set[str] = set()
         for name, data in members.items():
             if name in _SKIPPED_SESSION_FILES:
@@ -118,6 +122,16 @@ def rebase_copy(
             if session.get("status") in {"queued", "running"}:
                 raise ProjectError("Stop active research before saving a copy of this project.")
             session_ids[old_session_id] = str(uuid4())
+            session_numbers[old_session_id] = int(session.get("session_number", 1))
+            original_key = session.get("idempotency_key")
+            if original_key is not None:
+                if (
+                    not isinstance(original_key, str)
+                    or not original_key
+                    or original_key in admission_keys
+                ):
+                    raise ProjectError("Cannot copy an ambiguous session admission key.")
+                admission_keys[original_key] = str(uuid4())
             prior_path = session.get("project_path")
             if isinstance(prior_path, str) and prior_path.startswith("/"):
                 historical_paths.add(prior_path)
@@ -129,6 +143,7 @@ def rebase_copy(
             **{path: str(destination) for path in historical_paths},
             source_id: new_id,
             **session_ids,
+            **admission_keys,
         }
         substitutions = dict(
             sorted(substitutions.items(), key=lambda pair: len(pair[0]), reverse=True)
@@ -193,7 +208,42 @@ def rebase_copy(
                     ) from None
                 staged[name] = raw
                 continue
+            original_data = data
             data = _rewrite(data, substitutions)
+            session_match = _SESSION_FILE.fullmatch(name)
+            if session_match is not None and isinstance(data, dict):
+                if not isinstance(data.get("idempotency_key"), str):
+                    data["idempotency_key"] = str(uuid4())
+            if name == "artifacts/research-qa/records.json" and isinstance(data, dict):
+                # An in-flight question belongs to the original provider request.
+                # A clone must never replay it using the old request identity.
+                data["pending_requests"] = []
+                old_records = original_data.get("records", []) if isinstance(original_data, dict) else []
+                new_records = data.get("records", [])
+                if isinstance(old_records, list) and isinstance(new_records, list):
+                    for old_record, copied_record in zip(old_records, new_records):
+                        if not isinstance(old_record, dict) or not isinstance(copied_record, dict):
+                            continue
+                        original_digest = old_record.get("snapshot_sha256")
+                        if not isinstance(original_digest, str):
+                            continue
+                        copied_record["source_snapshot_sha256"] = old_record.get(
+                            "source_snapshot_sha256", original_digest
+                        )
+                        copied_record["snapshot_derivation"] = "save_as_rebased_selected_sources_v1"
+                        derivative = {
+                            "schema": "sigma.qa.rebased-selected-sources-v1",
+                            "project_id": new_id,
+                            "evidence_snapshot": copied_record.get("evidence_snapshot", []),
+                        }
+                        copied_record["snapshot_sha256"] = hashlib.sha256(
+                            _canonical(derivative)
+                        ).hexdigest()
+                        before_answer = old_record.get("answer")
+                        if isinstance(before_answer, str) and before_answer != copied_record.get("answer"):
+                            copied_record["source_answer_sha256"] = hashlib.sha256(
+                                before_answer.encode("utf-8")
+                            ).hexdigest()
             if isinstance(data, dict):
                 inline = data.get("snapshot")
                 if isinstance(inline, dict) and inline.get("schema") == "sigma-paper-evidence-v2":
@@ -224,6 +274,10 @@ def rebase_copy(
                                 f"Copied paper references unavailable frozen evidence: {name}."
                             )
                 staged[name] = _encode(record)
+        if session_ids_out is not None:
+            session_ids_out.update(session_ids)
+        if session_numbers_out is not None:
+            session_numbers_out.update(session_numbers)
         return portable_bundle(staged)
     except (BundleError, OSError, UnicodeDecodeError, ValueError, TypeError, zlib.error) as exc:
         if isinstance(exc, ProjectError):

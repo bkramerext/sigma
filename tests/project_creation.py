@@ -249,7 +249,9 @@ def main() -> None:
                     "project_id": source_id,
                     "project_path": source_path,
                     "session_number": 1,
-                    "status": "completed",
+                    "idempotency_key": str(uuid4()),
+                    "cloud_sponsored": True,
+                    "status": "paused",
                     "artifacts": [
                         {
                             "id": str(uuid4()),
@@ -335,7 +337,12 @@ def main() -> None:
                     "schema_version": 1,
                     "project_id": source_id,
                     "records": [qa_record],
-                    "pending_requests": [],
+                    "pending_requests": [
+                        {
+                            "request_id": uuid4().hex,
+                            "question_sha256": hashlib.sha256(b"unsettled").hexdigest(),
+                        }
+                    ],
                 }
                 update_files(
                     source_path,
@@ -352,6 +359,26 @@ def main() -> None:
                         "artifacts/research-qa/records.json": json.dumps(qa_archive).encode(),
                     },
                 )
+                from sigma import project_diagnostics, session_log
+
+                event = {
+                    "type": "test",
+                    "project_id": source_id,
+                    "session_id": session_id,
+                    "message": "Saved diagnostic history",
+                }
+                session_log._append_sync(
+                    source_path, session, event, session_log._root(Path(source_path))
+                )
+                project_diagnostics.append(
+                    source_path,
+                    stage="research",
+                    code="save_as_history",
+                    message="Audit the cloned project",
+                    session_id=session_id,
+                )
+                source_log = session_log.log_path(source_path, source_id, session_id)
+                original_log = source_log.read_bytes()
                 before_copy = Path(source_path).read_bytes()
                 saved_as = client.post(
                     "/api/projects/save-as",
@@ -380,7 +407,22 @@ def main() -> None:
                     clone["path"],
                     read_file(clone["path"], "artifacts/research-qa/records.json"),
                 )
+                assert _pending == []
                 assert saved_archive[0]["qa_id"] == qa_id
+                assert saved_archive[0]["source_snapshot_sha256"] == qa_record["snapshot_sha256"]
+                assert saved_archive[0]["snapshot_derivation"] == (
+                    "save_as_rebased_selected_sources_v1"
+                )
+                derivative = {
+                    "schema": "sigma.qa.rebased-selected-sources-v1",
+                    "project_id": clone["project"]["id"],
+                    "evidence_snapshot": saved_archive[0]["evidence_snapshot"],
+                }
+                assert saved_archive[0]["snapshot_sha256"] == hashlib.sha256(
+                    json.dumps(
+                        derivative, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                    ).encode()
+                ).hexdigest()
                 assert saved_archive[0]["project_id"] == clone["project"]["id"]
                 assert saved_archive[0]["sources"][0]["source_id"] == (
                     f"project:{clone['project']['id']}"
@@ -390,7 +432,8 @@ def main() -> None:
                     for name in list_files(clone["path"])
                     if name.startswith("research-sessions/")
                     and name.endswith(".json")
-                    and Path(name).stem not in {
+                    and Path(name).stem
+                    not in {
                         "limits",
                         "sequence",
                         "obligation-ids",
@@ -402,6 +445,20 @@ def main() -> None:
                 assert copied_session["project_id"] == clone["project"]["id"]
                 assert copied_session["project_path"] == clone["path"]
                 assert copied_session["id"] != session_id
+                assert copied_session["idempotency_key"] != session["idempotency_key"]
+                assert copied_session["cloud_sponsored"] is True
+                cloned_log = session_log.log_path(
+                    clone["path"], clone["project"]["id"], copied_session["id"]
+                )
+                assert cloned_log.is_file()
+                copied_events, _ = session_log._frames(cloned_log)
+                assert copied_events[0]["project_id"] == clone["project"]["id"]
+                assert copied_events[0]["session_id"] == copied_session["id"]
+                assert source_log.read_bytes() == original_log
+                saved_diagnostics = project_diagnostics.read(clone["path"])
+                assert len(saved_diagnostics) == 1
+                assert saved_diagnostics[0]["project_id"] == clone["project"]["id"]
+                assert saved_diagnostics[0]["session_id"] == copied_session["id"]
                 assert copied_session["artifacts"][0]["session_id"] == copied_session["id"]
                 assert copied_session["artifacts"][0]["project_id"] == clone["project"]["id"]
                 assert copied_session["artifacts"][0]["source_ref"] == (

@@ -1528,14 +1528,35 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                 payload["files"]["project.json"] = json.loads(_document(renamed))
                 from sigma.project_copy import rebase_copy
 
+                session_ids: dict[str, str] = {}
+                session_numbers: dict[str, int] = {}
                 independent = rebase_copy(
                     payload,
                     source_id=original.id,
                     new_id=new_id,
                     source_path=str(source),
                     destination_path=str(destination),
+                    session_ids_out=session_ids,
+                    session_numbers_out=session_numbers,
                 )
                 imported = import_bundle(independent, destination)
+                from sigma.project_copy_logs import clone_project_logs
+
+                try:
+                    clone_project_logs(
+                        source,
+                        destination,
+                        original.id,
+                        new_id,
+                        session_ids,
+                        session_numbers,
+                    )
+                except Exception:
+                    # The bundle has been imported, but Save As is not
+                    # complete until its external diagnostic history exists.
+                    # This file was exclusively created by this operation.
+                    destination.unlink()
+                    raise
         view = inspect_project(imported)
         record_access(view)
         return view

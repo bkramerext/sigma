@@ -157,7 +157,7 @@ jobs:
           done
           export SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
-          uv run --with playwright python browser_checks/project_create_contract.py
+          uv run --with playwright python browser_checks/save_as_contract.py
       - name: Preserve browser screenshots and debug logs
         if: always()
         uses: actions/upload-artifact@v4
