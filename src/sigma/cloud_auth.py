@@ -2167,14 +2167,14 @@ def _deliver_feedback(
     account_email: str | None,
     contact_email: str | None,
 ) -> None:
-    """Notification content is plain text; contact is explicitly unverified."""
+    """Notification content distinguishes signed-in identity from guest contact."""
     _deliver_admin_notice(
         "New SIGMA feedback",
         (
             f"Feedback ID: {feedback_id}\n"
             f"Submitted at (UTC epoch): {submitted_at}\n"
             f"Verified account: {account_email or 'None (guest)'}\n"
-            f"Provided contact (unverified): {contact_email or 'None'}\n\n"
+            f"Contact email ({'signed-in Google account' if account_email and contact_email == account_email else 'unverified'}): {contact_email or 'None'}\n\n"
             f"Message:\n{message}\n"
         ),
     )
@@ -2462,6 +2462,10 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
         principal = resolve_session(raw_session)
     except (sqlite3.Error, OSError, RuntimeError) as exc:
         raise HTTPException(503, "Feedback is temporarily unavailable.") from exc
+    # An authenticated Google account is the authoritative reply contact.
+    # A browser-supplied contact address must not impersonate that identity.
+    if principal:
+        contact_email = principal.email
 
     rate_cookie = request.cookies.get(_cookie_name(FEEDBACK_RATE_COOKIE, cfg))
     set_rate_cookie = not rate_cookie or not re.fullmatch(r"[A-Za-z0-9_-]{40,64}", rate_cookie)
