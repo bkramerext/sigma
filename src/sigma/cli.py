@@ -286,9 +286,7 @@ def main() -> None:
     add_command(commands, "test", help="Run tests, API/CLI checks, lint, types and build")
     feedback = add_command(commands, "send_feedback")
     feedback.add_argument("message")
-    feedback.add_argument(
-        "--attach", metavar="PATH", help="Attach one local file (maximum 18 MB)"
-    )
+    feedback.add_argument("--attach", metavar="PATH", help="Attach one local file (maximum 18 MB)")
     feedback.add_argument(
         "--transport", choices=("configured", "smtp", "gmail"), default="configured"
     )

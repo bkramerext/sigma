@@ -49,8 +49,12 @@ def _read_attachment(path_string: str) -> tuple[str, bytes, str, str]:
 
 
 def _attached_feedback_message(
-    *, feedback_id: str, text: str, submitted_at: int,
-    account_email: str, contact_email: str,
+    *,
+    feedback_id: str,
+    text: str,
+    submitted_at: int,
+    account_email: str,
+    contact_email: str,
     attachment: tuple[str, bytes, str, str],
 ) -> EmailMessage:
     """Match the existing feedback notification, with an additional MIME attachment."""
@@ -263,7 +267,9 @@ def _smtp_failure_hint(exc: Exception) -> str:
 
 
 def _execute(
-    message: str, *, verified_gmail_sender: str | None = None,
+    message: str,
+    *,
+    verified_gmail_sender: str | None = None,
     attachment: tuple[str, bytes, str, str] | None = None,
 ) -> int:
     from sigma import cloud_auth
@@ -348,8 +354,11 @@ def _execute(
 
 
 def run(
-    message: str, *, transport: str = "configured",
-    reauthorize: bool = False, attach: str | None = None,
+    message: str,
+    *,
+    transport: str = "configured",
+    reauthorize: bool = False,
+    attach: str | None = None,
 ) -> int:
     """Exercise actual feedback delivery without a browser app or feedback record."""
     try:
@@ -407,9 +416,7 @@ def run(
                 },
             ):
                 print("Using Google Gmail Send permission from the local CLI.")
-                return _execute(
-                    message, verified_gmail_sender=sender, attachment=attachment
-                )
+                return _execute(message, verified_gmail_sender=sender, attachment=attachment)
         return _execute(message, attachment=attachment)
 
     print("ERROR: Unsupported transport.", file=sys.stderr)

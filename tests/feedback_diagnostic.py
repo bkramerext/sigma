@@ -173,8 +173,6 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         self.assertIn("Contact source: Google OAuth verified account", output.getvalue())
 
     def test_gmail_feedback_attachment_uses_existing_mime_delivery(self):
-        from sigma.gmail_delivery import send_message
-
         with TemporaryDirectory() as directory:
             attachment = Path(directory) / "research.pdf"
             attachment.write_bytes(b"%PDF-1.7\nfixture-data")
@@ -253,7 +251,9 @@ class FeedbackDiagnosticTests(unittest.TestCase):
 
     def test_invalid_attachment_aborts_before_google_auth_or_mail(self):
         with (
-            patch.dict(os.environ, {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org"}, clear=True),
+            patch.dict(
+                os.environ, {"SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org"}, clear=True
+            ),
             patch.object(feedback_diagnostic, "load_local_config"),
             patch("sigma.local_gmail_cli_auth.authorize") as authorize,
             patch.object(cloud_auth, "_deliver_feedback") as feedback,
@@ -279,9 +279,7 @@ class FeedbackDiagnosticTests(unittest.TestCase):
                 patch("sigma.gmail_delivery.send_message") as send,
                 redirect_stderr(io.StringIO()) as errors,
             ):
-                status = feedback_diagnostic.run(
-                    "hello world", transport="gmail", attach=str(path)
-                )
+                status = feedback_diagnostic.run("hello world", transport="gmail", attach=str(path))
         self.assertEqual(status, 2)
         self.assertIn("18 MB email attachment limit", errors.getvalue())
         authorize.assert_not_called()
