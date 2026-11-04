@@ -353,7 +353,9 @@ def select_method_sources(
                 == previous_retrieval["excerpt_sha256"]
                 and isinstance(previous_retrieval.get("content_sha256"), str)
                 and len(previous_retrieval["content_sha256"]) == 64
-                and all(c in "0123456789abcdef" for c in previous_retrieval["content_sha256"].lower())
+                and all(
+                    c in "0123456789abcdef" for c in previous_retrieval["content_sha256"].lower()
+                )
             ):
                 continue
             if time.monotonic() - started >= MAX_REFERENCE_SNAPSHOT_SECONDS:
