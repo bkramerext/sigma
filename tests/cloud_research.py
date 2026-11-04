@@ -88,9 +88,7 @@ def workspace(root: Path, identifier: str, email: str | None = None) -> cloud_wo
     return cloud_workspaces.Workspace(identifier, identifier, path, email)
 
 
-def test_imported_session_keys_do_not_alias_hosted_jobs(
-    root: Path, ledger_root: Path
-) -> None:
+def test_imported_session_keys_do_not_alias_hosted_jobs(root: Path, ledger_root: Path) -> None:
     """Recipient imports must not reuse the sender's globally keyed job UUID."""
     from sigma.project_bundle import import_bundle, list_files, read_file
 
@@ -125,6 +123,7 @@ def test_imported_session_keys_do_not_alias_hosted_jobs(
             os.environ,
             {
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "100",
                 "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "100",
                 "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
             },
@@ -133,7 +132,7 @@ def test_imported_session_keys_do_not_alias_hosted_jobs(
         patch.object(
             cloud_research,
             "_effective_user_spend_ceiling_decimal",
-            return_value=Decimal("100"),
+            return_value=Decimal(100),
         ),
         patch("sigma.cloud_sponsor.inference_provider", return_value="api_key"),
     ):
@@ -156,10 +155,12 @@ def test_imported_session_keys_do_not_alias_hosted_jobs(
         try:
             import_bundle(portable, destination)
             paths = [
-                item for item in list_files(destination)
+                item
+                for item in list_files(destination)
                 if item.startswith("research-sessions/")
                 and item.endswith(".json")
-                and item not in {
+                and item
+                not in {
                     "research-sessions/sequence.json",
                     "research-sessions/limits.json",
                     "research-sessions/obligation-ids.json",
