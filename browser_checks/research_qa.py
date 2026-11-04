@@ -208,7 +208,13 @@ with sync_playwright() as playwright:
     title_toggle.evaluate("el => el.blur()")
     page.mouse.move(1, 1)
     title_line.screenshot(path=str(OUT / "research-qa-title-normal.png"))
+    markdown_icon = title_line.get_by_role("link", name="Open Markdown answer")
+    expect(markdown_icon).to_be_visible()
+    expect(markdown_icon).to_have_attribute("data-tooltip", "Open Markdown answer")
+    markdown_box = markdown_icon.bounding_box()
+    assert markdown_box and markdown_icon.locator("svg.markdown-logo").count() == 1
     normal_copy_button = title_line.get_by_role("button", name="Copy Markdown answer")
+    assert normal_copy_button.bounding_box()["x"] - (markdown_box["x"] + markdown_box["width"]) == 12
     normal_copy_box = normal_copy_button.bounding_box()
     normal_icon_box = normal_copy_button.locator("svg").bounding_box()
     normal_icon_bounds = normal_copy_button.locator("svg").evaluate(
@@ -225,8 +231,9 @@ with sync_playwright() as playwright:
         "button", name="Copied Markdown answer to clipboard"
     ).bounding_box()
     last_title_rect = title_rects[-1]
-    assert copied_icon_box and copied_icon_box["x"] >= last_title_rect["right"] - 1
-    assert copied_icon_box["x"] - last_title_rect["right"] <= 8, (copied_icon_box, last_title_rect)
+    assert copied_icon_box and copied_icon_box["x"] > markdown_box["x"]
+    assert markdown_box["x"] >= last_title_rect["right"] - 1, (markdown_box, last_title_rect)
+    assert markdown_box["x"] - last_title_rect["right"] <= 18, (markdown_box, last_title_rect)
     assert normal_copy_box and normal_icon_box
     assert copied_icon_box == normal_copy_box
     assert (
@@ -249,7 +256,16 @@ with sync_playwright() as playwright:
     if expanded_before_copy != "true":
         card.locator(".saved-paper-expand").click()
     expect(card.locator(".saved-paper-expand")).to_have_attribute("aria-expanded", "true")
-    expect(card.locator(".ai-paper-preview")).to_contain_text("The saved research answers")
+    preview = card.locator(".ai-paper-preview")
+    expect(preview).to_contain_text("The saved research answers")
+    assert preview.evaluate("el => getComputedStyle(el).paddingBottom") == "40px"
+    assert dialog.locator(".settings-body.ai-paper-body").evaluate(
+        "el => getComputedStyle(el).paddingBottom"
+    ) == "40px"
+    preview.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+    assert preview.evaluate(
+        "el => el.scrollHeight - el.clientHeight - el.scrollTop < 2"
+    ), "The last answer content must be reachable through its scrollport"
     citation = card.locator(".ai-paper-preview a").filter(has_text="Session #1").first
     expect(citation).to_be_visible()
     citation_url = citation.get_attribute("href")
@@ -299,7 +315,7 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("alert")).to_contain_text("Clipboard access failed")
 
     with page.expect_popup() as markdown_popup:
-        card.get_by_role("link", name="Markdown", exact=True).click()
+        markdown_icon.click()
     markdown_page = markdown_popup.value
     expect(markdown_page.locator("body")).to_contain_text("## Question")
     expect(markdown_page.locator("body")).to_contain_text("## Sources")
@@ -307,7 +323,7 @@ with sync_playwright() as playwright:
     markdown_page.screenshot(path=str(OUT / "research-qa-markdown-source.png"), full_page=True)
     markdown_page.close()
     with page.expect_popup() as popup:
-        card.get_by_role("link", name="Open in browser").click()
+        card.get_by_role("button", name="Open in browser").click()
     browser_page = popup.value
     expect(browser_page.get_by_role("heading", name="Research Q/A")).to_be_visible()
     expect(browser_page.get_by_role("heading", name="Evidence-based answer")).to_be_visible()
@@ -362,7 +378,7 @@ with sync_playwright() as playwright:
     browser_page.close()
 
     with page.expect_popup() as understanding_popup:
-        card.get_by_role("link", name="Open in browser").click()
+        card.get_by_role("button", name="Open in browser").click()
     understanding_page = understanding_popup.value
     with understanding_page.expect_navigation():
         understanding_page.locator("main ul a").filter(has_text="Current Understanding").click()
@@ -384,8 +400,8 @@ with sync_playwright() as playwright:
         """() => {
           const row = document.querySelector('li[data-session-id]');
           if (!row) return false;
-          const rect = row.querySelector('.session-row-disclosure').getBoundingClientRect();
-          return rect.top >= 0 && rect.bottom <= innerHeight;
+          const rect = row.querySelector('.session-outcome').getBoundingClientRect();
+          return rect.top >= 0 && rect.top <= innerHeight - 40;
         }"""
     )
 
@@ -420,8 +436,12 @@ with sync_playwright() as playwright:
     mobile_copy_box = mobile_title.get_by_role(
         "button", name="Copied Markdown answer to clipboard"
     ).bounding_box()
-    assert mobile_copy_box and mobile_copy_box["x"] >= mobile_last_line["right"] - 1
-    assert mobile_copy_box["x"] - mobile_last_line["right"] <= 8
+    mobile_markdown = mobile_title.get_by_role("link", name="Open Markdown answer")
+    mobile_markdown_box = mobile_markdown.bounding_box()
+    assert mobile_markdown_box and mobile_copy_box
+    assert mobile_markdown_box["x"] >= mobile_last_line["right"] - 1
+    assert mobile_markdown_box["x"] - mobile_last_line["right"] <= 18
+    assert mobile_copy_box["x"] - (mobile_markdown_box["x"] + mobile_markdown_box["width"]) == 12
     assert (
         abs(
             (mobile_copy_box["y"] + mobile_copy_box["height"] / 2)
@@ -444,6 +464,6 @@ with sync_playwright() as playwright:
     expect(mobile_dialog.locator(".saved-paper-card")).to_have_count(1)
     assert not errors, errors
     print(
-        "Research Q/A Chrome acceptance passed: recovery, archive actions, Markdown copy/source/rendering and math, safe output, Research version/copy, all five citation types and reveal routes, desktop/mobile layout, clipboard errors, and no new research session."
+        "Research Q/A Chrome acceptance passed: recovery, archive actions, Markdown and copy icon alignment, browser/remove actions, 40px nested scroll padding, granular session Outcome/artifact citations, research version, desktop/mobile layout, clipboard errors, and no new research session."
     )
     browser.close()
