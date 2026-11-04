@@ -1539,7 +1539,7 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                     session_ids_out=session_ids,
                     session_numbers_out=session_numbers,
                 )
-                imported = import_bundle(independent, destination)
+                imported = import_bundle(independent, destination, rekey_sessions=False)
                 from sigma.project_copy_logs import clone_project_logs
 
                 try:
