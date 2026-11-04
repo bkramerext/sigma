@@ -65,6 +65,12 @@ These papers are **proofs of concept**, demonstrating what SIGMA can produce tod
 
 ![SIGMA strategies for a mathematical theorem](assets/screenshot_strategies.png)
 
+## Research loop
+
+**Session → Research rounds → Turns per strategy → Investigator call → Skeptic call.** One turn is an Investigator/Skeptic pair; each round allows **3 turns per strategy** by default. Strategies can advance concurrently, but the two calls within a turn run in order.
+
+With three selected strategies, the default ceiling is **3 rounds × 3 turns × 3 strategies × 2 calls = 54 agent calls**—a maximum, not a promise of completion. Saved findings, criticism, unresolved obligations, and bounded selections of earlier evidence can inform later turns and rounds; **there is no separate round-end merge**. The **Session Outcome** summarizes results and remaining uncertainty. See [Getting Started](docs/GETTING_STARTED.md#connect-ai-and-investigate) for details.
+
 ## Run locally
 
 Requires **macOS or Linux**, **Python 3.11+**, **[uv](https://docs.astral.sh/uv/)**, and **Node.js 20.19+** with npm. From a terminal:
