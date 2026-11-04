@@ -65,6 +65,18 @@ These papers are **proofs of concept**, demonstrating what SIGMA can produce tod
 
 ![SIGMA strategies for a mathematical theorem](assets/screenshot_strategies.png)
 
+## How research sessions, rounds, and turns work
+
+SIGMA's research loop has three levels. They are not just progress labels: each level determines **what work runs and how earlier results inform later work**.
+
+- **Session — one bounded investigation.** A session runs the selected strategies against the project's question under a saved configuration and call, time, and spending limits. SIGMA schedules work and preserves evidence, objections, failed attempts, and unanswered questions. A session can stop before using its full budget; its **Session Outcome** summarizes what was learned and what remains uncertain. Starting another session begins a new investigation, not another round of the old one.
+- **Round — another opportunity to develop and challenge the approaches.** A round contains a configured number of turns *for each enabled strategy*. The value of later rounds is that agents can revisit their approaches using critiques, unresolved obligations, and selected evidence accumulated from earlier work, including relevant work from other strategies. A round is **not** one Investigator/Skeptic exchange, a global pause for all strategies, or an automatic merge of their findings.
+- **Turn — one Investigator/Skeptic pair within a strategy.** The Investigator proposes or revises an argument, investigation, or test; then the Skeptic examines its evidence, assumptions, and gaps. The resulting critique and any saved artifacts can guide the strategy's next turn. These are **two sequential agent calls**, not two independent strategies or a guaranteed accepted finding.
+
+Different strategies can advance concurrently, but the Investigator and Skeptic calls within a given turn happen in order. SIGMA supplies **bounded selections** of previous evidence and criticism to later calls; original records remain saved even when not all history fits into a call's context. The scheduler controls execution and persistence—it does not guarantee that later rounds improve the answer.
+
+With the usual configuration, **3 rounds × 3 turns per round × 3 strategies × 2 agent calls per turn = 54 maximum agent calls**. This is a ceiling, not a required number of calls or findings. There is no separate round-end synthesis step; the Session Outcome reports the overall result after the investigation. See [Getting Started](docs/GETTING_STARTED.md#connect-ai-and-investigate) for session controls and details.
+
 ## Run locally
 
 Requires **macOS or Linux**, **Python 3.11+**, **[uv](https://docs.astral.sh/uv/)**, and **Node.js 20.19+** with npm. From a terminal:
