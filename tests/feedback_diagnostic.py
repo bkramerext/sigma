@@ -141,6 +141,65 @@ class FeedbackDiagnosticTests(unittest.TestCase):
         self.assertIn("SMTP TLS handshake/certificate failed", errors.getvalue())
         self.assertNotIn("private certificate info", errors.getvalue())
 
+    def test_google_transport_requires_explicit_consent_without_sending(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org",
+                    "GOOGLE_OIDC_CLIENT_ID": "local-client",
+                },
+                clear=True,
+            ),
+            patch.object(feedback_diagnostic, "load_local_config"),
+            patch.object(cloud_auth, "_deliver_feedback") as deliver,
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            status = feedback_diagnostic.run("hello world", transport="gmail")
+        self.assertEqual(status, 2)
+        self.assertIn("/api/cloud-auth/mail/authorize", output.getvalue())
+        deliver.assert_not_called()
+
+    def test_local_google_grant_selected_over_stale_smtp_environment(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from sigma.local_gmail_grant import GMAIL_SEND_SCOPE, save_grant
+
+        with TemporaryDirectory() as directory:
+            home = Path(directory) / "auth"
+            home.mkdir(mode=0o700)
+            save_grant(
+                home,
+                subject="real-google-subject",
+                sender="signed-in@example.org",
+                client_id="local-client",
+                client_secret="local-secret",
+                refresh_token="private-refresh",
+                scope=GMAIL_SEND_SCOPE,
+            )
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "signed-in@example.org",
+                        "SIGMA_CLOUD_AUTH_HOME": str(home),
+                        "GOOGLE_OIDC_CLIENT_ID": "local-client",
+                        "SIGMA_EMAIL_SMTP_USERNAME": "smtp@example.org",
+                        "SIGMA_EMAIL_SMTP_PASSWORD": "fake",
+                    },
+                    clear=True,
+                ),
+                patch.object(feedback_diagnostic, "load_local_config"),
+                patch.object(cloud_auth, "_deliver_feedback") as deliver,
+                redirect_stdout(io.StringIO()) as output,
+            ):
+                status = feedback_diagnostic.run("hello world")
+                self.assertIsNone(os.environ.get("SIGMA_GMAIL_TOKEN_FILE"))
+                self.assertEqual(deliver.call_args.kwargs["contact_email"], "signed-in@example.org")
+            self.assertEqual(status, 0)
+            self.assertIn("Using local Gmail Send permission", output.getvalue())
+
     def test_missing_contact_fails_before_sending(self):
         with (
             patch.dict(os.environ, {}, clear=True),
