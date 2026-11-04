@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import './style.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
+type SessionState = { number: number; status: string; current_action?: string; termination_reason_code?: string; reason?: string; message?: string };
 type ReferencePreparation = {
   selected_count: number | null;
   verified_count: number;
@@ -21,7 +22,7 @@ export default function SessionLogPage() {
   const [events, setEvents] = useState<SessionLogEvent[]>([]);
   const cursor = useRef(0);
   const seen = useRef(new Set<number>());
-  const [session, setSession] = useState<{ number: number; status: string } | null>(null);
+  const [session, setSession] = useState<SessionState | null>(null);
   const [shortName, setShortName] = useState('Research Project');
   const [projectTitle, setProjectTitle] = useState('');
   const [filter, setFilter] = useState('all');
@@ -67,7 +68,7 @@ export default function SessionLogPage() {
         const query = new URLSearchParams({ path, after: String(cursor.current) });
         const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin' });
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session log.' : 'This session log is unavailable or access was denied.');
-        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; session: { number: number; status: string }; reference_preparation?: ReferencePreparation };
+        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; session: SessionState; reference_preparation?: ReferencePreparation };
         if (!alive) return;
         const fresh = data.events.filter(event => !seen.current.has(event.seq));
         fresh.forEach(event => seen.current.add(event.seq));
@@ -123,6 +124,10 @@ export default function SessionLogPage() {
     {copyState === 'copied' && <p role="status" className="session-log-copy-status">Copied log to clipboard.</p>}
     {copyError && <p role="alert" className="session-log-copy-error">{copyError}</p>}
     {error && <p role="alert">{error}</p>}
+    {session && ['paused', 'stopped', 'failed', 'ended', 'completed'].includes(session.status) && <section aria-label="Saved session status" className="session-log-reference-summary">
+      <p><strong>Status:</strong> {session.status} · <strong>Stage:</strong> {session.current_action || 'not recorded'} · <strong>Reason code:</strong> {session.termination_reason_code || 'not recorded'}</p>
+      <p>{session.reason || session.message || 'No stop reason recorded.'}</p>
+    </section>}
     {referencePreparation && <section className={`session-log-reference-summary${['fallback', 'interrupted', 'failed', 'skipped', 'disabled'].includes(referencePreparation.compiler.status) || referencePreparation.compiler.source_hash_match === false || referencePreparation.references.some(ref => ref.retrieval_status !== 'retrieved' || ref.excerpt_integrity !== true) ? ' session-log-reference-degraded' : ''}`} aria-label="Research reference preparation">
       <p><strong>Research references:</strong> {referencePreparation.selected_count ?? 'unknown/not recorded'} selected · {referencePreparation.verified_count} retrieved with verified excerpts · Compilation {compilationLabel} ({referencePreparation.compiler.attempt_count}/3 attempts) · {referencePreparation.guidance_disposition}</p>
       {referencePreparation.selected_count !== null && referencePreparation.verified_count < referencePreparation.selected_count && <p className="session-log-reference-warning" role="alert">Some selected methodology references were not retrieved with verified excerpts.</p>}
