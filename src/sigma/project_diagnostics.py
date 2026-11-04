@@ -107,20 +107,24 @@ def _write_record(target: Path, record: dict[str, Any], data: bytes) -> dict[str
         raise OSError("Unsafe diagnostics file")
     # Retries on one correlation must not create duplicate error records.
     if target.exists() and record["correlation_id"]:
-        if target.stat().st_size > MAX_BYTES:
-            raise OSError("Project diagnostics capacity reached; event was not recorded")
-        for line in target.read_bytes().splitlines():
-            try:
-                previous = json.loads(line)
-            except (ValueError, UnicodeDecodeError):
-                continue
-            if not isinstance(previous, dict):
-                continue
-            if all(
-                previous.get(key) == record[key]
-                for key in ("correlation_id", "stage", "code", "message", "session_id")
-            ):
-                return previous
+        # Open by descriptor with O_NOFOLLOW, and inspect that same inode.
+        # Path.stat()/read_bytes() could follow a swapped-in symlink.
+        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            if os.fstat(stream.fileno()).st_size > MAX_BYTES:
+                raise OSError("Project diagnostics capacity reached; event was not recorded")
+            for line in stream.read(MAX_BYTES + 1).splitlines():
+                try:
+                    previous = json.loads(line)
+                except (ValueError, UnicodeDecodeError):
+                    continue
+                if not isinstance(previous, dict):
+                    continue
+                if all(
+                    previous.get(key) == record[key]
+                    for key in ("correlation_id", "stage", "code", "message", "session_id")
+                ):
+                    return previous
     existing_bytes = target.stat().st_size if target.exists() else 0
     if existing_bytes + len(data) > MAX_BYTES:
         raise OSError("Project diagnostics capacity reached; event was not recorded")
@@ -162,6 +166,11 @@ def read(path: str) -> list[dict[str, Any]]:
     return results
 
 
+def _markdown_literal(message: str) -> str:
+    """Keep untrusted diagnostic text inside one unmistakable quoted message."""
+    return "\\n".join(message.splitlines()) if "\n" in message else message
+
+
 def export(path: str) -> str:
     items = read(path)
     lines = [
@@ -179,7 +188,7 @@ def export(path: str) -> str:
                 f"Session ID: {item.get('session_id') or 'none (pre-session)'}",
                 f"Correlation ID: {item.get('correlation_id') or 'not recorded'}",
                 f"HTTP status: {item.get('http_status') or 'not recorded'}",
-                f"Message: {item['message']}",
+                f"Message (escaped newlines): {_markdown_literal(str(item['message']))}",
                 *([f"Reference: {item['reference_url']}"] if item.get("reference_url") else []),
                 "",
             ]
