@@ -8003,6 +8003,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
             "No provider call was made; shorten the project question or critical evidence, "
             "or start a narrower session. Saved research records were preserved."
+            + _context_byte_breakdown(context)
         )
     return context
 
@@ -8025,6 +8026,16 @@ def _context_obligation_count(context: dict[str, Any]) -> int:
 
 def _json_bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+def _context_byte_breakdown(context: dict[str, Any]) -> str:
+    """Diagnose blocked dispatches using only byte counts, never raw evidence."""
+    sizes = sorted(
+        ((field, _json_bytes(value)) for field, value in context.items()),
+        key=lambda item: (-item[1], item[0]),
+    )
+    largest = ", ".join(f"{field}={size}B" for field, size in sizes[:6])
+    return f" Context size: {_json_bytes(context)}B; largest fields: {largest}."
 
 
 def _bound_context_manifest(manifest: dict[str, Any]) -> None:
@@ -9360,6 +9371,7 @@ def _portfolio_context(
         raise ResearchContextLimitError(
             "Mandatory peer and research context exceeds the 256 KB UTF-8 byte limit. "
             "No provider call was made; session remains recoverable and saved evidence is intact."
+            + _context_byte_breakdown(context)
         )
     return context
 
@@ -10467,6 +10479,7 @@ async def _portfolio_role_call(
                     raise ResearchContextLimitError(
                         "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
                         "No provider call was made; saved research records were preserved."
+                        + _context_byte_breakdown(context)
                     )
             except Exception as exc:  # noqa: BLE001 — fail this strategy branch without losing peers
                 context_blocked = isinstance(exc, ResearchContextLimitError)
@@ -14633,6 +14646,7 @@ async def _worker(session_id: str, path: str) -> None:
                 raise ResearchContextLimitError(
                     "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
                     "No provider call was made; saved research records were preserved."
+                    + _context_byte_breakdown(context)
                 )
             record["status"] = "queued"
             record["cycle"] = cycle_num
