@@ -594,11 +594,13 @@ class ResearchStartRequest(OpenRequest):
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_limits: dict[str, Any] | None = None
     continue_using_saved_type_settings: bool = False
+    browser_presence_required: bool = Field(default=False, strict=True)
 
 
 class ResearchControlRequest(OpenRequest):
     action: str = Field(min_length=4, max_length=6)
     additional_calls: int = Field(default=0, ge=0, le=12)
+    browser_presence_required: bool = Field(default=False, strict=True)
 
 
 class ResearchInterventionRequest(OpenRequest):
@@ -1060,6 +1062,63 @@ def current_understanding_view(path: str):
     return current_understanding(path)
 
 
+@app.get("/api/projects/research-presence")
+async def research_presence_view(path: str):
+    """Project-scoped browser lease, independent of AI-account binding."""
+    from sigma import research_presence
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot keep paid research active")
+    marker = research_presence.open_viewer(path)
+
+    async def heartbeat():
+        try:
+            while True:
+                research_presence.touch_viewer(marker)
+                yield ": SIGMA browser viewer connected\n\n"
+                await asyncio.sleep(8)
+        finally:
+            research_presence.close_viewer(marker)
+
+    return StreamingResponse(
+        heartbeat(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/user-preferences/unattended-execution")
+def unattended_execution_preference():
+    from sigma import research_preferences
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot change unattended execution preferences")
+    return {
+        "allow_unattended_background_execution": research_preferences.allow_unattended_background_execution()
+    }
+
+
+class UnattendedExecutionPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    allow_unattended_background_execution: bool
+
+
+@app.put("/api/user-preferences/unattended-execution")
+def set_unattended_execution_preference(body: UnattendedExecutionPreference):
+    from sigma import research_preferences
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot change unattended execution preferences")
+    return {
+        "allow_unattended_background_execution": research_preferences.update_unattended_background_execution(
+            body.allow_unattended_background_execution
+        )
+    }
+
+
 @app.get("/api/projects/research-sessions")
 async def research_sessions_view(path: str):
     principal = cloud_auth.current_principal()
@@ -1232,6 +1291,7 @@ async def research_start_view(body: ResearchStartRequest):
             body.expected_limits,
             body.strategy_ids,
             body.continue_using_saved_type_settings,
+            body.browser_presence_required,
         )
     except ProjectError as exc:
         # Admission can fail before Session #1. Never manufacture a session.
@@ -1275,7 +1335,11 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
             raise HTTPException(404, "Not found")
         return simulated
     return await research_sessions.control_session(
-        body.path, session_id, body.action, additional_calls=body.additional_calls
+        body.path,
+        session_id,
+        body.action,
+        additional_calls=body.additional_calls,
+        browser_presence_required=body.browser_presence_required,
     )
 
 

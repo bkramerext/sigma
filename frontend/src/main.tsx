@@ -1604,7 +1604,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       selectedSessionId.current = '';
       const next = mockResearch
         ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current })
-        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current });
+        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, browser_presence_required: true, continue_using_saved_type_settings: continueWithSavedType.current });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
@@ -1637,7 +1637,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       let authorizedCalls = 0;
       for (;;) {
         try {
-          await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls });
+          await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" });
           break;
         } catch (cause) {
           const message = errorMessage(cause);
@@ -3382,7 +3382,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{researchRunning
-        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`Scroll to running session in ${projectTitle}`} title="Scroll to running session" data-tooltip="Scroll to running session" onClick={() => window.dispatchEvent(new Event('sigma-reveal-running-session'))}><span className="project-header-title-text">{projectTitle}</span><span className="research-running-indicator-frame" aria-hidden="true"><span className="research-running-indicator"/></span></button>
+        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`Scroll to running session in ${projectTitle}`} title="Scroll to running session" data-tooltip="Scroll to running session" onClick={() => window.dispatchEvent(new Event('sigma-reveal-running-session'))}><span className="project-header-title-text">{projectTitle}</span></button>
         : <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
@@ -3919,6 +3919,9 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
+  const [userUnattended, setUserUnattended] = useState(false);
+  const [savedUserUnattended, setSavedUserUnattended] = useState(false);
+  const [userPreferenceLoaded, setUserPreferenceLoaded] = useState(false);
   const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : savedNewProjectValues() ?? { title: '', problem: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
@@ -3943,6 +3946,22 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   const callsPerStrategy = researchRounds * turnsPerRound * 2;
   const enabledStrategyCount = initial?.project.strategies.filter(strategy => strategy.enabled && !strategy.removed_at).length ?? 0;
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
+  useEffect(() => {
+    if (!initial) return;
+    const controller = new AbortController();
+    fetch("/api/user-preferences/unattended-execution", { signal: controller.signal })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok || typeof data.allow_unattended_background_execution !== "boolean")
+          throw new Error("User background execution preference could not be loaded.");
+        if (!controller.signal.aborted) {
+          setUserUnattended(data.allow_unattended_background_execution);
+          setSavedUserUnattended(data.allow_unattended_background_execution);
+          setUserPreferenceLoaded(true);
+        }
+      }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
+    return () => controller.abort();
+  }, [initial?.path]);
   useEffect(() => {
     if (!initial) return;
     const controller = new AbortController();
@@ -4006,6 +4025,16 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
         const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Research limits were not saved');
         const saved = draftLimits(result); setLimitDraft(saved); setLoadedLimitDraft(saved);
+      }
+      if (initial && userPreferenceLoaded && userUnattended !== savedUserUnattended) {
+        const response = await fetch("/api/user-preferences/unattended-execution", {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ allow_unattended_background_execution: userUnattended }),
+        });
+        const data = await response.json();
+        if (!response.ok || data.allow_unattended_background_execution !== userUnattended)
+          throw new Error(data.error ?? "User background execution preference was not saved.");
+        setSavedUserUnattended(userUnattended);
       }
       onSaved(next);
     }
@@ -4072,10 +4101,12 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
       {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}
     {initial && <section id="settings-panel-preferences" className="settings-body project-preferences-panel" role="tabpanel" aria-labelledby="settings-tab-preferences" hidden={activeTab !== 'preferences'}>
-      <p>Choose how research outcomes are presented for this project. This preference does not change saved sessions or their evidence.</p>
+      <p>Project presentation and user-wide research execution preferences.</p>
       <fieldset disabled={busy}>
         <label className="project-preference-checkbox" htmlFor="show-advanced-outcome-details"><input id="show-advanced-outcome-details" type="checkbox" checked={values.show_advanced_outcome_details} onChange={event => change('show_advanced_outcome_details', event.target.checked)}/>Show advanced Outcome details</label>
         <p className="settings-hint">When enabled, each saved outcome opens with its conclusion and provides expandable reasoning, evidence, metrics and session details. When disabled, SIGMA shows a concise result with its qualifications.</p>
+        <label className="project-preference-checkbox" htmlFor="allow-unattended-background-execution"><input id="allow-unattended-background-execution" type="checkbox" checked={userUnattended} disabled={!userPreferenceLoaded} onChange={event => setUserUnattended(event.target.checked)}/>Allow unattended background execution</label>
+        <p id="allow-unattended-background-execution-help" className="settings-hint">This user-wide setting applies across all your projects. When enabled, the backend can keep research running after you close the browser page, potentially incurring unexpected AI-provider costs. When disabled, SIGMA pauses browser-started research after the last viewer disconnects, keeping already-dispatched provider results and requiring an explicit Resume.</p>
       </fieldset>
       <div className="project-references-usage">
         <p>Research and publication references may increase AI usage costs. <button type="button" className="project-reference-adjust-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Adjust now</button></p>
@@ -4579,7 +4610,7 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
   </div>;
 }
 
-function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, playButtonRef }: { controls: ProcessControls; disabled: boolean; guest?: boolean; onGuestPlay?: () => void; playButtonRef?: React.RefObject<HTMLButtonElement | null> }) {
+function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, playButtonRef, running = false }: { controls: ProcessControls; disabled: boolean; guest?: boolean; onGuestPlay?: () => void; playButtonRef?: React.RefObject<HTMLButtonElement | null>; running?: boolean }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
         {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Effective session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
@@ -4593,6 +4624,7 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
       </button>
       </>}
+      {running && <span className="research-running-indicator-frame" aria-label="Research running" title="Research running"><span className="research-running-indicator"/></span>}
   </span>;
 }
 
@@ -4794,6 +4826,40 @@ function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
   </div>;
 }
 
+/** Match the existing 1.25s double heartbeat used by .research-running-indicator. */
+function runningFavicon(): () => void {
+  const existing = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  const link = existing ?? document.createElement("link");
+  const priorHref = existing?.getAttribute("href");
+  link.rel = "icon";
+  link.type = "image/svg+xml";
+  if (!existing) document.head.appendChild(link);
+  const keyframes = [[0, 1, 0], [.12, 1.32, 3], [.23, 1, 0], [.32, 1.2, 2], [.42, 1, 0], [1, 1, 0]];
+  const started = performance.now();
+  const motion = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const draw = () => {
+    const at = motion ? ((performance.now() - started) % 1250) / 1250 : 0;
+    const next = keyframes.findIndex(frame => frame[0] >= at);
+    const right = Math.max(next, 1);
+    const left = right - 1;
+    const portion = (at - keyframes[left][0]) / (keyframes[right][0] - keyframes[left][0]);
+    const eased = (1 - Math.cos(Math.PI * portion)) / 2;
+    const size = keyframes[left][1] + (keyframes[right][1] - keyframes[left][1]) * eased;
+    const halo = keyframes[left][2] + (keyframes[right][2] - keyframes[left][2]) * eased;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="${(4.5 * size + halo).toFixed(2)}" fill="#55bd70" fill-opacity=".19"/><circle cx="12" cy="12" r="${(4.5 * size).toFixed(2)}" fill="#55bd70" stroke="#70c889" stroke-width="1"/></svg>`;
+    link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  };
+  draw();
+  const interval = motion ? window.setInterval(draw, 80) : undefined;
+  return () => {
+    if (interval !== undefined) window.clearInterval(interval);
+    if (existing) {
+      if (priorHref === null || priorHref === undefined) link.removeAttribute("href");
+      else link.setAttribute("href", priorHref);
+    } else link.remove();
+  };
+}
+
 function ProjectScreen({ path, initialView, onClose, goHome }: {
   path: string; initialView?: ProjectView; onClose: () => void;
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
@@ -4804,6 +4870,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
   const [researchRunning, setResearchRunning] = useState(false);
+  useEffect(() => researchRunning ? runningFavicon() : undefined, [researchRunning]);
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
@@ -5137,7 +5204,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <SettingsGearIcon />
       </button>
     </div>
-    <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton}/>
+    <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} running={researchRunning}/>
   </div>;
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView} projectActions={projectActionBar}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
@@ -5303,8 +5370,19 @@ function ResearchQABrowserPage({ qaId, path }: { qaId: string; path: string }) {
 }
 
 function App() {
+  const cloud = useCloudIdentity();
   const [openedView, setOpenedView] = useState<ProjectView | null>(null);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
+  const route = new URL(location, window.location.origin);
+  const presencePath = route.pathname === '/project' && !route.searchParams.has('qa_browser')
+    ? route.searchParams.get('path') : null;
+  useEffect(() => {
+    // Server-side heartbeat tracks this project page, including background tabs.
+    // Closing or navigating away releases only this page's lease.
+    if (!presencePath || (cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest'))) return;
+    const viewer = new EventSource(`/api/projects/research-presence?${new URLSearchParams({ path: presencePath })}`);
+    return () => viewer.close();
+  }, [presencePath, cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
   useEffect(() => {

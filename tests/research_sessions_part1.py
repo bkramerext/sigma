@@ -20,7 +20,16 @@ from uuid import uuid4
 
 import httpx
 
-from sigma import agentic, papers, proposals, python_sandbox, research_sessions, text_views
+from sigma import (
+    agentic,
+    papers,
+    proposals,
+    python_sandbox,
+    research_preferences,
+    research_presence,
+    research_sessions,
+    text_views,
+)
 from sigma.projects import (
     ProjectError,
     create_strategy,
@@ -2067,6 +2076,57 @@ async def test_legacy_worker_aggregates_usage_and_audits_inputs(path: Path):
     )
     assert finished["steps"][0]["potential_truncation_fields"] == ["method"]
     assert finished["steps"][1]["potential_truncation_fields"] == ["response"]
+
+
+async def test_legacy_background_disconnect_after_gate_wait(path: Path) -> None:
+    """Legacy dispatch cannot charge after the final viewer closes during preflight."""
+    view, strategy, credential, config = await setup(path)
+    viewer = research_presence.open_viewer(str(path))
+    assert research_presence.has_live_viewer(str(path))
+
+    async def idle_worker(*_args):
+        return None
+
+    with (
+        patch("sigma.research_preferences.projects_root", return_value=path.parent),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=idle_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            browser_presence_required=True,
+        )
+
+    record = research_sessions._read(str(path), started["id"])
+    record.pop("strategy_runs")
+    record["status"] = "queued"
+    research_sessions._save(str(path), record)
+    provider = AsyncMock(side_effect=AssertionError("Unexpected provider dispatch"))
+
+    async def disconnect_during_gate():
+        research_presence.close_viewer(viewer)
+        assert not research_presence.has_live_viewer(str(path))
+        return []
+
+    with (
+        patch("sigma.research_preferences.projects_root", return_value=path.parent),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_acquire_gates", new=disconnect_during_gate),
+        patch.object(research_sessions, "_call", new=provider),
+    ):
+        await research_sessions._worker(started["id"], str(path))
+    saved = research_sessions._read(str(path), started["id"])
+    assert saved["status"] == "paused"
+    assert saved["stop_advisory"] is True
+    assert saved["calls_used"] == 0
+    assert saved["steps"] == []
+    provider.assert_not_awaited()
 
 
 async def test_investigator_python_is_run_and_reviewed(path: Path):
