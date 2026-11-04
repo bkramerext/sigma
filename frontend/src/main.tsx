@@ -1540,7 +1540,11 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       setPendingStrategyIds(chosenIds);
       setConfig(current); setLimits(currentLimits);
       setConfirmStart(true);
-    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    } catch (cause) {
+      const message = errorMessage(cause);
+      setError(message); reportRequestFailure(message);
+      void recordClientError(message, 'admission_preflight');
+    }
     finally { setBusy(false); }
   }
 
