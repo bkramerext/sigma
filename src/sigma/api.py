@@ -740,6 +740,10 @@ async def research_qa_answer(body: ResearchQARequest):
         )
     try:
         return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if memory_guard.is_critical():
+            return JSONResponse({"error": memory_guard.MESSAGE}, status_code=503)
+        raise
     finally:
         if task.done():
             _cleanup_research_qa_task(key, task)
@@ -848,11 +852,16 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    return {
-        "score": await paper_scores.score_paper(
-            body.path, paper_id, body.expected_binding, body.expected_project_id
-        )
-    }
+    try:
+        return {
+            "score": await paper_scores.score_paper(
+                body.path, paper_id, body.expected_binding, body.expected_project_id
+            )
+        }
+    except asyncio.CancelledError:
+        if memory_guard.is_critical():
+            return JSONResponse({"error": memory_guard.MESSAGE}, status_code=503)
+        raise
 
 
 @app.post("/api/projects/papers/{paper_id}/eli5")
@@ -866,6 +875,10 @@ async def paper_eli5_view(paper_id: str, body: PaperScoreRequest):
         markdown = await explain(
             body.path, paper_id, body.expected_binding, body.expected_project_id
         )
+    except asyncio.CancelledError:
+        if memory_guard.is_critical():
+            return JSONResponse({"error": memory_guard.MESSAGE}, status_code=503)
+        raise
     except ProjectError:
         raise
     except Exception:
@@ -1849,14 +1862,15 @@ async def strategy_inference_view(body: ProposalRequest):
             return current
         except asyncio.CancelledError:
             proposals.fail_inference(body.path, request_id, record["owner"], uncertain=True)
+            pressure = memory_guard.is_critical()
             return JSONResponse(
                 {
-                    "error": "Cancellation was requested. The provider outcome may be uncertain; this request will not be repeated.",
+                    "error": memory_guard.MESSAGE if pressure else "Cancellation was requested. The provider outcome may be uncertain; this request will not be repeated.",
                     "inference_status": proposals.inference_status(
                         body.path, body.expected_project_id, request_id
                     )["status"],
                 },
-                status_code=409,
+                status_code=503 if pressure else 409,
             )
         except Exception:
             proposals.fail_inference(body.path, request_id, record["owner"], uncertain=True)
@@ -1933,6 +1947,8 @@ async def proposal_view(body: ProposalRequest, request: Request):
         try:
             return await task
         except asyncio.CancelledError:
+            if memory_guard.is_critical():
+                return JSONResponse({"error": memory_guard.MESSAGE}, status_code=503)
             return JSONResponse(
                 {"error": "Proposal request cancelled; nothing saved"}, status_code=499
             )
@@ -2064,7 +2080,12 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             return JSONResponse(
                 {"error": "Conversion cancelled; source text was kept"}, status_code=499
             )
-        return await task
+        try:
+            return await task
+        except asyncio.CancelledError:
+            if memory_guard.is_critical():
+                return JSONResponse({"error": memory_guard.MESSAGE}, status_code=503)
+            raise
     finally:
         for pending in (task, connection):
             if not pending.done():
