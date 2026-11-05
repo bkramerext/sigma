@@ -15731,7 +15731,10 @@ async def _worker(session_id: str, path: str) -> None:
                 record["current_action"] = "Paused · memory pressure"
                 record["termination_reason_code"] = "backend_memory_pressure"
                 for step in record.get("steps", []):
-                    if step.get("status") == "interrupted" and step.get("interruption_reason") == "user_pause":
+                    if (
+                        step.get("status") == "interrupted"
+                        and step.get("interruption_reason") == "user_pause"
+                    ):
                         step["interruption_reason"] = "backend_memory_pressure"
                 for branch in record.get("strategy_runs", []):
                     if branch.get("status") == "paused":
