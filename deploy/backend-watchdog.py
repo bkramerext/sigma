@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -83,6 +84,16 @@ def main() -> int:
             note("Backend health is unknown; refusing speculative restart")
             return 1
 
+        # Limit flapping while an upstream dependency is unavailable.
+        stamp = Path('/run/sigma-backend-watchdog-last-restart')
+        try:
+            last = float(stamp.read_text(encoding='ascii'))
+        except (OSError, ValueError):
+            last = 0.0
+        if time.time() - last < 300:
+            note('Backend remains unhealthy; restart cooldown active (5 minutes)')
+            return 1
+        stamp.write_text(str(time.time()), encoding='ascii')
         # Persist the reason before attempting recovery.
         note(f"Restarting backend container={container[:12]} running={running} health={status} oom_killed={oom}")
         restarted = command("docker", "restart", "--time", "10", container) if running else command(
