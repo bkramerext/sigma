@@ -72,6 +72,9 @@ def create_app() -> FastAPI:
 
     validate_startup()
     _report_configuration_issues()
+    from sigma.production_observability import start as start_observability
+
+    start_observability()
     from sigma.api import app
 
     return app
