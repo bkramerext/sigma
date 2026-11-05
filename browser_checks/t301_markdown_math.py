@@ -92,6 +92,24 @@ with sync_playwright() as playwright:
     expect(root.locator(".katex").filter(has_text="MAX_RETRY_COUNT")).to_have_count(0)
     expect(root.locator(".katex").filter(has_text="DATABASE_URL")).to_have_count(0)
     expect(root.locator(".katex").filter(has_text="2026")).to_have_count(0)
+    # Paper ELI5 prose must not turn 1 + n(n+1)/2 into 1 + n(n + 1/2).
+    page.evaluate(
+        """async body => {
+          const React = (await import('/node_modules/.vite/deps/react.js')).default;
+          const { createRoot } = (await import('/node_modules/.vite/deps/react-dom_client.js')).default;
+          const { default: RenderedMarkdown } = await import('/src/RenderedMarkdown.tsx');
+          const host = document.createElement('section');
+          host.id = 't301-paper-eli5-math';
+          document.body.append(host);
+          createRoot(host).render(React.createElement(RenderedMarkdown, { body }));
+        }""",
+        "The paper's answer is 1 + n(n + 1)/2 regions.",
+    )
+    eli5 = page.locator("#t301-paper-eli5-math")
+    expect(eli5.locator(".katex")).to_have_count(1)
+    annotations = eli5.locator(".katex annotation").all_text_contents()
+    assert annotations == [r"1 + \\frac{n(n + 1)}{2}"], annotations
+    expect(eli5).to_contain_text("regions.")
     page.screenshot(path="docs/evaluations/t301/markdown-render.png", full_page=True)
 
     page.evaluate(

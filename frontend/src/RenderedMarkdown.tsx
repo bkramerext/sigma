@@ -42,6 +42,10 @@ function mathSource(value: string): string {
         : command;
     })
     .replace(/²/g, '^{2}').replace(/³/g, '^{3}')
+    // A single variable multiplied by a parenthesized expression is the
+    // WHOLE numerator: n(n+1)/2 must not render as n(n + 1/2).
+    .replace(/(?<![A-Za-z\\])([A-Za-z])\s*\(([^()\n]{1,50})\)\s*\/\s*(\d+)\b/gu,
+      (_match, variable: string, inner: string, divisor: string) => `\\frac{${variable}(${inner})}{${divisor}}`)
     .replace(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*\/\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)/gu, '\\frac{$1}{$2}')
     .replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/gu, '\\frac{$1}{$2}')
     .replace(/_\(([^()]+)\)/gu, '_{$1}')
@@ -67,6 +71,10 @@ function candidates(text: string, structuralContext = ''): Candidate[] {
       if (!match[0].length) regex.lastIndex++;
     }
   };
+
+  // Recognize the complete figurate-number formula rather than extracting
+  // only (n+1)/2 and leaving the outside n as ordinary text.
+  add(/(?<![\\p{L}\\p{N}_])(?:\\d+\\s*[+−-]\\s*)?[A-Za-z]\\s*\\(\\s*[A-Za-z]\\s*[+−-]\\s*\\d+\\s*\\)\\s*\\/\\s*\\d+\\b/gu, 9, () => true);
 
   // Fractions are recognized only when their shape or surrounding words indicate
   // a quotient. This keeps dates, paths, URLs and version strings as prose.

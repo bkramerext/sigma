@@ -1901,7 +1901,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     <div id="sessions-pane-content" hidden={!expanded}>
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
-    <ProjectDiagnosticsPanel path={path} diagnostics={projectDiagnostics} status={diagnosticStatus}/>
+    <ProjectDiagnosticsPanel diagnostics={projectDiagnostics} status={diagnosticStatus}/>
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
