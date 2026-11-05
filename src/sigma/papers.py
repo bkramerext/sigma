@@ -7174,7 +7174,11 @@ async def _generate_impl(
             if milestone != last_logged_stage:
                 logging.getLogger("sigma.lifecycle").info(
                     "paper.stage project_id=%s run_id=%s stage=%s state=%s elapsed_s=%d",
-                    expected_project_id or "unknown", run_id, stage, state, elapsed,
+                    expected_project_id or "unknown",
+                    run_id,
+                    stage,
+                    state,
+                    elapsed,
                 )
                 last_logged_stage = milestone
             _active_progress[project_key] = saved_progress
@@ -8272,7 +8276,12 @@ async def generate(
             else "Unexpected paper-generation error; review server logs."
         )
         finish_progress(path, "failed", reason)
-        log.error("paper.exception project_id=%s elapsed_s=%.1f error_type=%s", project_id, monotonic() - started, type(exc).__name__)
+        log.error(
+            "paper.exception project_id=%s elapsed_s=%.1f error_type=%s",
+            project_id,
+            monotonic() - started,
+            type(exc).__name__,
+        )
         raise
     finally:
         if _generation_tasks.get(key) is task:
