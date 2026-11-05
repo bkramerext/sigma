@@ -5151,8 +5151,8 @@ function runningFavicon(color: 'green' | 'yellow' = 'green'): () => void {
   if (!existing) document.head.appendChild(link);
   const keyframes = [[0, 1, 0], [.12, 1.32, 3], [.23, 1, 0], [.32, 1.2, 2], [.42, 1, 0], [1, 1, 0]];
   const started = performance.now();
-  const fill = color === 'yellow' ? '#ebbe4d' : '#55bd70';
-  const border = color === 'yellow' ? '#f3d273' : '#70c889';
+  const fill = color === 'yellow' ? '#ffff00' : '#55bd70';
+  const border = color === 'yellow' ? '#a89e00' : '#70c889';
   const motion = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const draw = () => {
     const at = motion ? ((performance.now() - started) % 1250) / 1250 : 0;
