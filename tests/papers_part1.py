@@ -3487,6 +3487,23 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
     assert paper_writing_sources._valid_public_url("https://example.org/guide.pdf")
 
 
+def test_literature_paper_prompts_are_literary_and_preserve_citations() -> None:
+    """Both the long-form and single-shot writers use the built-in style/method lens."""
+    heading, method_heading, result_heading, style = papers._paper_style("literature")
+    assert heading == "Introduction and literary context"
+    assert method_heading == "Interpretive approach and sources"
+    assert result_heading == "Close readings and interpretations"
+    assert "source-grounded literary interpretation" in style
+    instructions = papers._subject_methodology("literature")
+    assert "literary-critical essay, not a proof" in instructions
+    assert "Quote a literary passage only when its actual words are present" in instructions
+    assert "structured\nclaim IDs, evidence references" in instructions
+    assert "External scholarship is citable only when actually" in instructions
+    assert papers._subject_methodology("mathematical") == papers.MATHEMATICS_INSTRUCTIONS
+    assert papers._subject_methodology("physics") == papers.PHYSICS_INSTRUCTIONS
+    assert papers._subject_methodology("default") == ""
+
+
 if __name__ == "__main__":
     from papers_split_runner import run
 
