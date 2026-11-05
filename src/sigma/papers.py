@@ -258,19 +258,43 @@ _submission_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 
 
 def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
-    """Synchronously reserve a project submission before the API yields."""
+    """Reserve the job and fsync its receipt before the HTTP response begins."""
     key = str(project_path(path).resolve())
     existing = _submission_tasks.get(key)
     if existing is not None and not existing.done():
         raise ProjectError("A paper generation is already active or queued for this project")
+    started_at = _now()
+    # API task scheduling is deferred until the request yields; committing
+    # here guarantees an accepted submission survives a crash before it runs.
+    _write_queue_status(path, "queued", started_at)
     _submission_tasks[key] = task
 
     def clear_submitted(completed: asyncio.Task[dict[str, Any]]) -> None:
         if _submission_tasks.get(key) is completed:
             _submission_tasks.pop(key, None)
+        try:
+            receipt = _read_queue_status(path)
+            if receipt is None or receipt["status"] != "queued":
+                return
+            # This also handles cancellation before generate() ever entered
+            # _paper_operation; no checkpoint or provider work was touched.
+            from sigma.memory_guard import MESSAGE, is_critical
+
+            critical = is_critical()
+            if critical:
+                reason = MESSAGE
+            elif completed.cancelled():
+                reason = "Cancelled before paper generation began; no provider calls were made."
+            else:
+                reason = "Paper request ended before generation began; no provider calls were made."
+            _write_queue_status(
+                path, "failed" if critical or not completed.cancelled() else "cancelled",
+                receipt["started_at"], reason,
+            )
+        except (OSError, ProjectError):
+            logging.getLogger("sigma.lifecycle").error("paper.submission_receipt_recovery_failed")
 
     task.add_done_callback(clear_submitted)
-
 
 _CITATION_LIKE = re.compile(
     r"\[[0-9]{1,3}\]|\b(?:doi\s*:|arxiv\s*:|https?://)|\([A-Z][A-Za-z-]+(?:\s+et\s+al\.)?,?\s+20[0-9]{2}[a-z]?\)"
