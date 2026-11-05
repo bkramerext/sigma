@@ -270,8 +270,9 @@ def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
     _submission_tasks[key] = task
 
     def clear_submitted(completed: asyncio.Task[dict[str, Any]]) -> None:
-        if _submission_tasks.get(key) is completed:
-            _submission_tasks.pop(key, None)
+        if _submission_tasks.get(key) is not completed:
+            return  # A newer request owns the receipt; never alter its state.
+        _submission_tasks.pop(key, None)
         try:
             receipt = _read_queue_status(path)
             if receipt is None or receipt["status"] != "queued":
