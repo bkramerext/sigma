@@ -1,0 +1,14 @@
+[Unit]
+Description=Remove SIGMA operational logs older than seven days
+RequiresMountsFor=/srv/sigma-state
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/sigma/log-retention.py
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/sigma-state/auth/operational-logs

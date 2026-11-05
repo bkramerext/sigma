@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from sigma import memory_guard
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 
 ELI5_VERSION = 2
@@ -165,6 +166,8 @@ async def explain(path: str, paper_id: str, expected_binding: str, expected_proj
     prior = cached(record)
     if prior is not None:
         return prior
+    memory_guard.require_capacity()
+
     auth = await auth_context()
     if auth["identity"] != expected_binding:
         raise ProjectError("AI connection changed; reconnect and retry.")
@@ -195,9 +198,14 @@ async def explain(path: str, paper_id: str, expected_binding: str, expected_proj
                 return _save(path, paper_id, sha, Explanation.model_validate(result).markdown)
 
             task = asyncio.create_task(generate())
+            memory_guard.track_task(task)
             _tasks[key] = task
     try:
         return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if memory_guard.is_critical():
+            raise ProjectError(memory_guard.MESSAGE) from None
+        raise
     finally:
         if task.done():
             async with _lock:

@@ -6,6 +6,7 @@ import asyncio
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import re
 import stat
@@ -3067,7 +3068,17 @@ def progress_status(path: str) -> dict[str, Any] | None:
         "total": state["total"],
         "started_at": state["started_at"],
         "elapsed_seconds": elapsed,
-        **({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {}),
+        **(
+            {
+                "detail": (
+                    "The backend restarted during paper generation. Saved work is intact; "
+                    "use Continue to resume from the latest checkpoint. An in-flight provider "
+                    "call might have been billed and will not be blindly repeated."
+                )
+            }
+            if status == "interrupted"
+            else ({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {})
+        ),
         **(
             {"failure_reason": state["failure_reason"]}
             if status == "failed" and state.get("failure_reason")
@@ -7186,6 +7197,7 @@ async def _generate_impl(
         started_at = _now()
         elapsed_before = 0
         work: dict[str, Any] = {}
+        last_logged_stage: tuple[str, str] | None = None
 
         async def report(
             stage: PaperProgressStage,
@@ -7216,6 +7228,18 @@ async def _generate_impl(
             }
             if detail:
                 saved_progress["detail"] = detail[:160]
+            nonlocal last_logged_stage
+            milestone = (str(stage), str(state))
+            if milestone != last_logged_stage:
+                logging.getLogger("sigma.lifecycle").info(
+                    "paper.stage project_id=%s run_id=%s stage=%s state=%s elapsed_s=%d",
+                    expected_project_id or "unknown",
+                    run_id,
+                    stage,
+                    state,
+                    elapsed,
+                )
+                last_logged_stage = milestone
             _active_progress[project_key] = saved_progress
             if work:
                 work["progress"] = saved_progress
@@ -7239,7 +7263,12 @@ async def _generate_impl(
 
             def clear_active(completed_task: asyncio.Task[Any]) -> None:
                 if completed_task.cancelled():
-                    finish_progress(path, "cancelled")
+                    from sigma.memory_guard import MESSAGE, is_critical
+
+                    if is_critical():
+                        finish_progress(path, "failed", MESSAGE)
+                    else:
+                        finish_progress(path, "cancelled")
                 elif completed_task.exception() is not None:
                     finish_progress(path, "failed")
                 active = _active_progress.get(project_key)
@@ -8266,6 +8295,9 @@ async def generate(
     include_sigma_issues: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
+    from sigma.memory_guard import require_capacity
+
+    require_capacity()
     key = str(project_path(path).resolve())
     current = _generation_tasks.get(key)
     if current is not None and not current.done():
@@ -8288,12 +8320,24 @@ async def generate(
         )
     )
     _generation_tasks[key] = task
+    started = monotonic()
+    log = logging.getLogger("sigma.lifecycle")
+    project_id = expected_project_id or "unknown"
+    log.info("paper.start project_id=%s long_form=%s", project_id, force_long_form)
     try:
-        return await task
+        result = await task
+        log.info("paper.complete project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
+        return result
     except asyncio.CancelledError:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-        finish_progress(path, "cancelled")
+        from sigma.memory_guard import MESSAGE, is_critical
+
+        if is_critical():
+            finish_progress(path, "failed", MESSAGE)
+        else:
+            finish_progress(path, "cancelled")
+        log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
     except Exception as exc:
         # The SSE error can disappear on page reload; retain only the same
@@ -8304,6 +8348,15 @@ async def generate(
             else "Unexpected paper-generation error; review server logs."
         )
         finish_progress(path, "failed", reason)
+        from sigma.production_observability import safe_exception_trace
+
+        log.error(
+            "paper.exception project_id=%s elapsed_s=%.1f error_type=%s frames=%s",
+            project_id,
+            monotonic() - started,
+            type(exc).__name__,
+            safe_exception_trace(exc),
+        )
         raise
     finally:
         if _generation_tasks.get(key) is task:
@@ -8316,6 +8369,7 @@ async def cancel_generation(path: str) -> bool:
     task = _generation_tasks.get(key)
     if task is None or task.done():
         return False
+    logging.getLogger("sigma.lifecycle").info("paper.stop_requested")
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
     return True

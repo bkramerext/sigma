@@ -15,6 +15,7 @@ from typing import Any, TypedDict
 import pypdfium2
 from pydantic import BaseModel, ConfigDict, Field
 
+from sigma import memory_guard
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 
 RUBRIC_ID = "sigma-paper-quality"
@@ -354,6 +355,7 @@ async def score_paper(
     previous = cached_score(record)
     if previous is not None:
         return previous
+    memory_guard.require_capacity()
 
     auth = await auth_context()
     if auth["identity"] != expected_binding:
@@ -384,9 +386,14 @@ async def score_paper(
                 return _save_score(path, paper_id, _make_score(judgment, sha))
 
             task = asyncio.create_task(evaluate())
+            memory_guard.track_task(task)
             _tasks[key] = task
     try:
         return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if memory_guard.is_critical():
+            raise ProjectError(memory_guard.MESSAGE) from None
+        raise
     finally:
         if task.done():
             async with _lock:

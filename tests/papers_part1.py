@@ -2229,7 +2229,9 @@ def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
                     "/api/projects/papers/progress", params={"path": str(path)}
                 )
             assert response.status_code == 200, response.text
-            assert response.json()["progress"] == {
+            progress = response.json()["progress"]
+            assert progress.pop("detail").startswith("The backend restarted")
+            assert progress == {
                 "status": "interrupted",
                 "stage": "sections",
                 "current": 2,
