@@ -132,7 +132,8 @@ class ProjectPaperMetadata(TypedDict):
 
 def project_metadata(path: str) -> ProjectPaperMetadata:
     """One canonical aggregate for the project-list and TeX tooltip."""
-    from sigma import papers
+    from sigma import memory_guard, papers
+    memory_guard.require_capacity()
 
     available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
     return {"paper_count": len(available), "best_paper_score": best_score(available)}
@@ -384,6 +385,7 @@ async def score_paper(
                 return _save_score(path, paper_id, _make_score(judgment, sha))
 
             task = asyncio.create_task(evaluate())
+            memory_guard.track_task(task)
             _tasks[key] = task
     try:
         return await asyncio.shield(task)
