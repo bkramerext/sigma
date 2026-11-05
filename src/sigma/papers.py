@@ -135,6 +135,7 @@ MAX_PAPERS = 50
 # Paper synthesis and TeX compilation can have large overlapping peaks.
 # Serialize generation on the single backend worker; requests wait in FIFO order.
 MAX_CONCURRENT_PAPER_GENERATIONS = 1
+MAX_QUEUED_PAPER_GENERATIONS = 32
 _gate = asyncio.Condition()
 _gate_loop: asyncio.AbstractEventLoop | None = None
 _busy_paper_projects: set[str] = set()
@@ -166,6 +167,8 @@ async def _paper_operation(path: str, *, generating: bool):
     async with gate:
         if key in _busy_paper_projects:
             raise ProjectError("A paper generation is already active or queued for this project")
+        if generating and len(_paper_waiters) >= MAX_QUEUED_PAPER_GENERATIONS:
+            raise ProjectError("Paper queue is full; retry after an existing paper finishes")
         if generating:
             now = _now()
             # Commit a tiny, private queue receipt before acknowledging the
@@ -183,7 +186,10 @@ async def _paper_operation(path: str, *, generating: bool):
                 "updated_at": now,
                 "elapsed_seconds": 0,
             }
-            if len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS or len(_paper_waiters) > 1:
+            if (
+                len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS
+                or len(_paper_waiters) > 1
+            ):
                 logging.getLogger("sigma.lifecycle").info(
                     "paper.queued position=%d", len(_paper_waiters)
                 )
@@ -224,7 +230,9 @@ async def _paper_operation(path: str, *, generating: bool):
                             path,
                             "failed" if critical else "cancelled",
                             now,
-                            MESSAGE if critical else "Cancelled before paper generation began; no provider calls were made.",
+                            MESSAGE
+                            if critical
+                            else "Cancelled before paper generation began; no provider calls were made.",
                         )
                     except (OSError, ProjectError):
                         logging.getLogger("sigma.lifecycle").error(
@@ -3126,7 +3134,9 @@ def _queue_status_file(path: str, *, create: bool = False) -> Path:
 
 
 def _write_queue_status(
-    path: str, status: Literal["queued", "cancelled", "failed"], started_at: str,
+    path: str,
+    status: Literal["queued", "cancelled", "failed"],
+    started_at: str,
     reason: str | None = None,
 ) -> None:
     file = _queue_status_file(path, create=True)
@@ -3174,8 +3184,11 @@ def _read_queue_status(path: str) -> dict[str, Any] | None:
             or (value.get("detail") is not None and not isinstance(value["detail"], str))
         ):
             raise ValueError("invalid queue status")
-        datetime.fromisoformat(value["started_at"])
-        datetime.fromisoformat(value["updated_at"])
+        if (
+            datetime.fromisoformat(value["started_at"]).tzinfo is None
+            or datetime.fromisoformat(value["updated_at"]).tzinfo is None
+        ):
+            raise ValueError("queue status times must be timezone-aware")
     except (OSError, ValueError, TypeError) as exc:
         raise ProjectError("Paper queue status is unreadable") from exc
     return value
@@ -3212,14 +3225,18 @@ def progress_status(path: str) -> dict[str, Any] | None:
             elapsed = max(
                 0,
                 int(
-                    (datetime.now(UTC) - datetime.fromisoformat(receipt["started_at"]))
-                    .total_seconds()
+                    (
+                        datetime.now(UTC) - datetime.fromisoformat(receipt["started_at"])
+                    ).total_seconds()
                 ),
             )
             if receipt["status"] == "queued":
                 return {
-                    "status": "interrupted", "stage": "queued", "current": None,
-                    "total": None, "started_at": receipt["started_at"],
+                    "status": "interrupted",
+                    "stage": "queued",
+                    "current": None,
+                    "total": None,
+                    "started_at": receipt["started_at"],
                     "elapsed_seconds": elapsed,
                     "detail": (
                         "The backend restarted while this paper was queued. No AI call was "
@@ -3238,11 +3255,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
                     if receipt["status"] == "failed" and receipt.get("detail")
                     else {}
                 ),
-                **(
-                    {"detail": receipt["detail"]}
-                    if receipt.get("detail")
-                    else {}
-                ),
+                **({"detail": receipt["detail"]} if receipt.get("detail") else {}),
             }
         work = _load_work(path)
         state = work.get("progress") if work is not None else None
@@ -3283,11 +3296,19 @@ def progress_status(path: str) -> dict[str, Any] | None:
 
 
 def finish_progress(
-    path: str, status: Literal["failed", "cancelled"], reason: str | None = None
+    path: str,
+    status: Literal["failed", "cancelled"],
+    reason: str | None = None,
+    *,
+    expected_run_id: str | None = None,
 ) -> None:
     """Freeze the latest checkpointed progress when generation exits abnormally."""
     key = str(project_path(path).resolve())
     active = _active_progress.get(key)
+    if expected_run_id is not None and (
+        active is None or active.get("run_id") != expected_run_id
+    ):
+        return  # A stale task callback must never alter a newer attempt.
     work = _load_work(path)
     saved = work.get("progress") if work is not None else None
     state = active or saved
@@ -7464,15 +7485,18 @@ async def _generate_impl(
         if task is not None:
 
             def clear_active(completed_task: asyncio.Task[Any]) -> None:
+                active = _active_progress.get(project_key)
+                if active is None or active.get("run_id") != run_id:
+                    return
                 if completed_task.cancelled():
                     from sigma.memory_guard import MESSAGE, is_critical
 
                     if is_critical():
-                        finish_progress(path, "failed", MESSAGE)
+                        finish_progress(path, "failed", MESSAGE, expected_run_id=run_id)
                     else:
-                        finish_progress(path, "cancelled")
+                        finish_progress(path, "cancelled", expected_run_id=run_id)
                 elif completed_task.exception() is not None:
-                    finish_progress(path, "failed")
+                    finish_progress(path, "failed", expected_run_id=run_id)
                 active = _active_progress.get(project_key)
                 if active and active.get("run_id") == run_id:
                     _active_progress.pop(project_key, None)
