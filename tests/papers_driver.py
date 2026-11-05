@@ -101,6 +101,7 @@ def main_part1() -> None:
     test_paper_transient_error_classification_excludes_permanent_rejections()
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
     test_paper_failure_reason_survives_reopen()
+    test_paper_progress_counts_keep_generation_resumable()
     test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
     test_parallel_section_failure_drains_dispatched_siblings()
     test_fast_checkpoint_resume_replays_only_incomplete_section()
