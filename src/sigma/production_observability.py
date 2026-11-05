@@ -63,27 +63,32 @@ def _to_mib(value: int | None, *, kib: bool = False) -> int | None:
 
 
 def _sample(period_seconds: int) -> None:
+    last_log = 0.0
+    import time
+
     while True:
         stats = memory_snapshot()
         used, limit = stats["cgroup_used_mib"], stats["cgroup_limit_mib"]
         pct = round(100 * used / limit, 1) if used is not None and limit else None
-        _LOGGER.info(
-            "memory rss_mib=%s rss_peak_mib=%s cgroup_used_mib=%s "
-            "cgroup_limit_mib=%s cgroup_peak_mib=%s cgroup_pct=%s "
-            "host_available_mib=%s",
-            stats["rss_mib"],
-            stats["rss_peak_mib"],
-            used,
-            limit,
-            stats["cgroup_peak_mib"],
-            pct,
-            stats["host_available_mib"],
-        )
+        if time.monotonic() - last_log >= period_seconds:
+            _LOGGER.info(
+                "memory rss_mib=%s rss_peak_mib=%s cgroup_used_mib=%s "
+                "cgroup_limit_mib=%s cgroup_peak_mib=%s cgroup_pct=%s "
+                "host_available_mib=%s",
+                stats["rss_mib"],
+                stats["rss_peak_mib"],
+                used,
+                limit,
+                stats["cgroup_peak_mib"],
+                pct,
+                stats["host_available_mib"],
+            )
+            last_log = time.monotonic()
         from sigma.memory_guard import poll
 
         poll()
         # Event.wait avoids a busy loop and allows clean process exit.
-        threading.Event().wait(period_seconds)
+        threading.Event().wait(5)
 
 
 def start() -> None:
