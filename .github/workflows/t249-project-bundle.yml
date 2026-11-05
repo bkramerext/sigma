@@ -3,6 +3,18 @@ on:
   pull_request:
     paths:
       - 'src/sigma/project_bundle.py'
+      - 'src/sigma/project_email.py'
+      - 'src/sigma/feedback_diagnostic.py'
+      - 'src/sigma/local_gmail_cli_auth.py'
+      - 'src/sigma/mail_transport.py'
+      - 'tests/mail_transport_integration.py'
+      - 'src/sigma/local_gmail_cli_bridge.py'
+      - 'tests/local_gmail_cli_bridge.py'
+      - 'tests/local_gmail_cli_auth.py'
+      - 'src/sigma/cli.py'
+      - 'tests/feedback_diagnostic.py'
+      - 'src/sigma/cloud_auth.py'
+      - 'tests/project_email.py'
       - 'src/sigma/project_copy.py'
       - 'src/sigma/project_copy_logs.py'
       - 'src/sigma/projects.py'
@@ -33,9 +45,19 @@ jobs:
       - name: Install project and test dependencies
         run: python -m pip install -e . httpx uv
       - name: Compile modified Python modules
-        run: python -m compileall -q src/sigma tests/project_bundle.py tests/project_creation.py tests/t249_docker_lifecycle.py tests/cloud_workspaces.py tests/cloud_research_api.py
+        run: python -m compileall -q src/sigma tests/project_bundle.py tests/project_email.py tests/project_creation.py tests/t249_docker_lifecycle.py tests/cloud_workspaces.py tests/cloud_research_api.py
       - name: Verify project bundle
         run: python tests/project_bundle.py
+      - name: Verify project email and SMTP attachments
+        run: python tests/project_email.py
+      - name: Verify About feedback and Email Project use the same Gmail sender
+        run: python tests/mail_transport_integration.py
+      - name: Verify feedback CLI diagnostic
+        run: python tests/feedback_diagnostic.py
+      - name: Verify standalone Gmail authorization
+        run: python tests/local_gmail_cli_auth.py
+      - name: Verify callback handoff to running local SIGMA
+        run: python tests/local_gmail_cli_bridge.py
       - name: Verify project creation and API
         run: python tests/project_creation.py
       - name: Build Python sandbox image

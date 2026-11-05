@@ -20,7 +20,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import research_sessions as fixture
 
-from sigma import api, research_sessions
+from sigma import api, research_sessions, session_log
 from sigma.projects import ProjectError, create_strategy
 from sigma.research_context_budget import restrict_obligation_citations_to_supplied_context
 
@@ -221,6 +221,9 @@ async def main() -> None:
         root = Path(directory)
         await verify_versioned_settings_and_peer_evidence(root / "legacy.sigma")
         await verify_complete_54_call_session(root / "v2.sigma")
+        # Session diagnostics run on daemon writer threads. Drain queued writes
+        # before TemporaryDirectory removes the project and its log root.
+        session_log.flush()
     print(
         "PASS Crucible versioned settings, 54 provider-free calls, strict peer evidence provenance"
     )

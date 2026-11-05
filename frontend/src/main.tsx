@@ -2081,6 +2081,150 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   </dialog>;
 }
 
+type ProjectEmailMode = 'project' | 'pdf' | 'pdf_tex';
+type ProjectEmailPreferences = { recipients: string; body: string; mode: ProjectEmailMode; paperId: string };
+const defaultEmailPreferences: ProjectEmailPreferences = { recipients: '', body: '', mode: 'project', paperId: '' };
+function projectEmailPreferences(projectId: string): ProjectEmailPreferences {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem('sigma.projectEmail:' + projectId) ?? '{}');
+    return {
+      recipients: typeof saved.recipients === 'string' ? saved.recipients : '',
+      body: typeof saved.body === 'string' ? saved.body : '',
+      mode: saved.mode === 'pdf' || saved.mode === 'pdf_tex' ? saved.mode : 'project',
+      paperId: typeof saved.paperId === 'string' ? saved.paperId : '',
+    };
+  } catch { return { ...defaultEmailPreferences }; }
+}
+
+function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
+  path: string; projectId: string; title: string; onCancel: () => void; onSent: (count: number) => void;
+}) {
+  useDocumentScrollLock();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const addressInput = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
+  // An ambiguous SMTP outcome must not be retried with a new request ID.
+  // Reopening the dialog is an explicit new send.
+  const requestId = useRef<string | null>(null);
+  const lastSendDefinitelyFailed = useRef(false);
+  function payloadChanged() {
+    if (lastSendDefinitelyFailed.current) {
+      // After a confirmed no-send, edited content is a new request. Ambiguous
+      // deliveries retain the original UUID to prevent silent duplication.
+      requestId.current = null;
+      lastSendDefinitelyFailed.current = false;
+    }
+  }
+  const initial = useRef(projectEmailPreferences(projectId)).current;
+  const [recipients, setRecipients] = useState(initial.recipients);
+  const [body, setBody] = useState(initial.body);
+  const [mode, setMode] = useState<ProjectEmailMode>(initial.mode);
+  const [paperId, setPaperId] = useState(initial.paperId);
+  const [availablePapers, setAvailablePapers] = useState<PaperSummary[]>([]);
+  const [paperLoad, setPaperLoad] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [paperRetry, setPaperRetry] = useState(0);
+  const loaded = paperLoad === 'ready';
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const papersByDate = [...availablePapers].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at) || b.paper_version - a.paper_version);
+  const selectedPaperId = papersByDate.some(paper => paper.paper_id === paperId)
+    ? paperId : (papersByDate.find(paper => (paper.score?.total ?? 0) >= 50) ?? papersByDate[0])?.paper_id ?? '';
+  const effectiveMode = loaded && !papersByDate.length ? 'project' : mode;
+  useEffect(() => {
+    if (!dialog.current?.open) {
+      dialog.current?.showModal();
+      addressInput.current?.focus();
+    }
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    setPaperLoad('loading');
+    void (async () => {
+      try {
+        const response = await fetch('/api/projects/papers?' + new URLSearchParams({ path }), { cache: 'no-store', signal: controller.signal });
+        const detail = await response.json();
+        if (!response.ok) throw new Error(detail.error ?? detail.detail ?? 'Could not list papers');
+        if (!controller.signal.aborted) {
+          setAvailablePapers((detail.papers as PaperSummary[] ?? []).filter(paper => paper.pdf_available));
+          setPaperLoad('ready');
+          setError('');
+        }
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setPaperLoad('error');
+          setError('Could not load generated papers: ' + errorMessage(cause));
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [path, paperRetry]);
+  useEffect(() => {
+    if (!loaded) return;
+    if (selectedPaperId !== paperId) { payloadChanged(); setPaperId(selectedPaperId); }
+    if (effectiveMode !== mode) { payloadChanged(); setMode(effectiveMode); }
+  }, [loaded, paperId, selectedPaperId, mode, effectiveMode]);
+  useEffect(() => {
+    window.localStorage.setItem('sigma.projectEmail:' + projectId,
+      JSON.stringify({ recipients, body, mode, paperId }));
+  }, [projectId, recipients, body, mode, paperId]);
+  function cancel() { if (!submitting.current) onCancel(); }
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    if (submitting.current || (!loaded && effectiveMode !== 'project')) return;
+    const addresses = recipients.trim();
+    if (!addresses) { setError('Enter at least one recipient email address.'); addressInput.current?.focus(); return; }
+    submitting.current = true; setBusy(true); setError('');
+    try {
+      if (requestId.current === null) requestId.current = crypto.randomUUID();
+      const response = await fetch('/api/projects/email', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: requestId.current, path, recipients: addresses, body, mode: effectiveMode, paper_id: effectiveMode === 'project' ? null : selectedPaperId }),
+      });
+      const detail = await response.json().catch(() => null);
+      if (!response.ok) {
+        // The server reports uncertain/partial sends as 409. Only definitive
+        // pre-dispatch or no-delivery responses permit changing the request.
+        lastSendDefinitelyFailed.current = [422, 429, 503].includes(response.status);
+        throw new Error(detail?.error ?? detail?.detail ?? 'Project email could not be delivered.');
+      }
+      onSent(detail.sent as number);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { submitting.current = false; setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-settings-dialog export-project-dialog email-project-dialog" aria-labelledby="email-project-heading"
+    onCancel={event => { event.preventDefault(); cancel(); }}>
+    <form onSubmit={send}>
+      <header className="settings-header">
+        <h2 id="email-project-heading">Email Project</h2>
+        <div className="settings-actions"><button type="submit" className="settings-submit" disabled={busy || (!loaded && effectiveMode !== 'project') || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
+      </header>
+      <div className="settings-body">
+        <p className="settings-hint">The current project, <strong>{title}</strong>, will be sent as an importable attachment to the email addresses you provide.</p>
+        <label htmlFor="email-project-recipients">Email addresses</label>
+        <input ref={addressInput} id="email-project-recipients" type="text" value={recipients} disabled={busy} required spellCheck={false}
+          onChange={event => { payloadChanged(); setRecipients(event.target.value); setError(''); }} placeholder="name@example.com, other@example.com" />
+        <label htmlFor="email-project-body">Message (optional)</label>
+        <textarea id="email-project-body" rows={3} value={body} maxLength={10000} disabled={busy}
+          onChange={event => { payloadChanged(); setBody(event.target.value); }} />
+        <fieldset className="export-type-options" disabled={busy}>
+          <legend>Attachments</legend>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'project'} onChange={() => { payloadChanged(); setMode('project'); }}/>Just attach project</label>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf'} disabled={!loaded || papersByDate.length === 0} onChange={() => { payloadChanged(); setMode('pdf'); }}/>Also attach paper as PDF</label>
+          <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf_tex'} disabled={!loaded || papersByDate.length === 0} onChange={() => { payloadChanged(); setMode('pdf_tex'); }}/>Also attach paper as PDF and its source LaTeX</label>
+        </fieldset>
+        {paperLoad === 'error' ? <p className="settings-hint" role="status">Paper list unavailable. Your saved attachment choice is unchanged. <button type="button" className="text-view-link" disabled={busy} onClick={() => setPaperRetry(value => value + 1)}>Retry</button></p> : loaded && !papersByDate.length ? <p className="email-no-papers">No papers generated.</p> : loaded && papersByDate.length > 0 ? <>
+          <label htmlFor="email-project-paper">Generated paper</label>
+          <select id="email-project-paper" value={selectedPaperId} disabled={busy || effectiveMode === 'project'} onChange={event => { payloadChanged(); setPaperId(event.target.value); }}>
+            {papersByDate.map(paper => <option key={paper.paper_id} value={paper.paper_id}>{paper.title} (v{paper.paper_version}){(paper.score?.total ?? 0) >= 50 ? ' ★' : ''}</option>)}
+          </select>
+        </> : <p className="settings-hint" role="status">Loading generated papers…</p>}
+        {error && <p className="error" role="alert">{error}</p>}
+      </div>
+    </form>
+  </dialog>;
+}
+
 type PaperScore = {
   rubric_id: string;
   rubric_version: number;
@@ -3327,11 +3471,12 @@ function AboutArchitecture() {
     <p className="about-architecture-caption">SIGMA can try several approaches, challenge each attempt, and try again. It saves the reasoning and evidence instead of giving only a one-shot answer. An AI critique is not a mathematical proof.</p>
   </section>;
 }
-function FeedbackForm() {
+function FeedbackForm({ signedInEmail }: { signedInEmail: string | null }) {
   const [message, setMessage] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [emailFailed, setEmailFailed] = useState(false);
   const [error, setError] = useState('');
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3340,20 +3485,23 @@ function FeedbackForm() {
       const response = await fetch('/api/cloud-auth/feedback', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, contact_email: contactEmail.trim() || null }),
+        body: JSON.stringify({ message, contact_email: signedInEmail || contactEmail.trim() || null }),
       });
       if (!response.ok) throw await cloudFailure(response, 'Feedback could not be sent. Please try again.');
+      const result = await response.json();
+      setEmailFailed(result.email_notification_sent === false);
       setSent(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Feedback could not be sent. Please try again.');
     } finally { setBusy(false); }
   }
   return <>
-      {sent ? <p role="status">Thanks for your feedback. It has been sent for administrator review.</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
+      {sent ? <p role={emailFailed ? 'alert' : 'status'}>{emailFailed ? 'Feedback saved for administrator review, but the email notification failed. Check local mail authorization.' : 'Thanks for your feedback. It has been sent for administrator review.'}</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
         <label>Feedback<textarea required minLength={10} maxLength={4000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Share a suggestion or describe a problem."/></label>
         <button type="submit" className="admin-text-action about-feedback-send" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send Feedback'}</button>
-        <label>Contact email <span>(optional)</span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>
-        <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider. Read the <a href={privacyNoticeHref('about')}>Privacy Notice</a>.</p>
+        {signedInEmail ? <label><span className="about-contact-email-label">Contact email (Google account)</span><input type="email" value={signedInEmail} readOnly/></label> : <label><span className="about-contact-email-label">Contact email <span>(optional)</span></span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>}
+        <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider.</p>
+        <p>Read the <a href={privacyNoticeHref('about')}>Privacy Notice</a>.</p>
         {error && <p role="alert">{error}</p>}
       </form>}
   </>;
@@ -3449,7 +3597,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <summary>Vision for Investigation Provenance</summary>
         <div id="about-provenance-details" className="about-disclosure-content"><AboutProvenanceVision/></div>
       </details>
-      {cloud?.enabled && cloud.ready && <details className="about-disclosure about-feedback-disclosure" data-about-section="feedback" open={aboutDisclosureState('feedback')} onToggle={event => rememberAboutDisclosure(event, 'feedback')}><summary>Send product feedback</summary><div className="about-disclosure-content"><FeedbackForm/></div></details>}
+      {cloud?.enabled && cloud.ready && <details className="about-disclosure about-feedback-disclosure" data-about-section="feedback" open={aboutDisclosureState('feedback')} onToggle={event => rememberAboutDisclosure(event, 'feedback')}><summary>Send product feedback</summary><div className="about-disclosure-content"><FeedbackForm signedInEmail={cloud.authenticated ? cloud.user?.email || null : null}/></div></details>}
     </div>
     <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('about')}>Privacy Notice</a><a className="about-privacy-link" href="/tos">Terms of Service</a></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
   </dialog></div>;
@@ -3717,14 +3865,13 @@ function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView)
     finally { setBusy(false); }
   }
   return <dialog ref={dialog} className="project-entry-dialog import-project-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
+    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Importing…' : 'Import'}</button><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
     <p className="entry-help">Import a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
     <form id="import-project-form" onSubmit={submit}><fieldset disabled={busy}><div className="import-project-label-row"><label htmlFor="import-project-file">Project file</label><button className="choose-project-file" type="button" onClick={() => fileInput.current?.click()}>Choose</button></div>
       <input ref={fileInput} className="sr-only" id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
       <div className="import-project-file-row"><div className="import-project-selected-file" aria-live="polite">{file?.name ?? 'No file chosen'}</div></div>
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset></form>
-    <footer className="import-project-footer"><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Importing…' : 'Import'}</button></footer>
   </dialog>;
 }
 
@@ -5048,6 +5195,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
   const [paperMetadata, setPaperMetadata] = useState<{ count: number; best: number | null }>({ count: 0, best: null });
   useEffect(() => {
@@ -5369,8 +5517,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Generate Lean proof (coming soon)" title="Generate Lean proof (coming soon)" data-tooltip="Generate Lean proof (coming soon)" disabled>
         <img src="/lean-logo.svg" alt="" aria-hidden="true"/>
       </button>
-      <button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" title="Email project with attachments" data-tooltip="Email project with attachments" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 5.5h13v11H3zM3.4 6l6.1 5 6.1-5"/>
+          <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
+        </svg>
       </button>
       <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
         <SettingsGearIcon />
@@ -5483,6 +5637,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} onRunningChange={setResearchRunning} onRevealNewSession={collapseProjectAndStrategies}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onAdjustReferences={() => { setProjectTypesFocusTypeId(view.project.investigation_type); /* Keep Settings mounted behind Project Types so draft edits survive. */ setProjectTypesOpen(true); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
+    {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
+      onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
+      onSent={count => { setEmailOpen(false); setAnnouncement('Project emailed to ' + count + (count === 1 ? ' recipient.' : ' recipients.')); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}/>}
+
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
       {projectTypesOpen && <ProjectTypesDialog initialOpenTypeId={projectTypesFocusTypeId} onClose={() => { setProjectTypesOpen(false); setProjectTypesFocusTypeId(null); /* ProjectTypesDialog restores focus to the Settings link. */ }} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     {paperOpen && (
@@ -6587,7 +6745,7 @@ function PrivacyNoticePage() {
     <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
     <h2>Information SIGMA stores</h2>
     <p>When you sign in with Google, SIGMA receives your stable Google account identifier and verified email address. SIGMA stores them with your access role, whether access is active, assigned workspace, sponsored eligibility, selected model-access mode, and connection status. The hosted sign-in session is represented by a browser cookie and a hashed session token in SIGMA's authentication database. Sessions last up to eight hours. Sign-in flow data expires after five minutes; a temporary denied-sign-in record expires after ten minutes.</p>
-    <p>If you request an invitation, SIGMA stores your Google account identifier, verified email, request time, and request/notification/review status. SIGMA sends your verified email and request time through its configured mail service to the SIGMA invitation administrator. If you send product feedback, SIGMA stores your message, submission time, status, and any optional contact email. When signed in, the feedback record is associated with your account identifier and email. Feedback is reviewed in SIGMA's administrator interface; it is not sent to an AI or mail provider. Feedback submissions are limited to five per 24 hours per signed-in account or signed-out browser.</p>
+    <p>If you request an invitation, SIGMA stores your Google account identifier, verified email, request time, and request/notification/review status. SIGMA sends your verified email and request time through its configured mail service to the SIGMA invitation administrator. If you send product feedback, SIGMA stores your message, submission time, status, and contact email. When signed in, the contact email is your verified Google sign-in email; signed-out visitors may provide an optional unverified contact email. The signed-in feedback record is associated with your account identifier and email. Feedback is reviewed in SIGMA's administrator interface; it is not sent to an AI or mail provider. Feedback submissions are limited to five per 24 hours per signed-in account or signed-out browser.</p>
     <p>Your account workspace can contain project titles and questions, project settings, strategies, research prompts and results, evidence, uploaded or imported project files, code and execution output, analyses, reports, and generated papers. SIGMA also stores research-session identifiers and sponsored-service accounting records, including reserved and estimated usage, call status, and token counts when the provider returns them. Usage estimates are used to enforce SIGMA spending limits and may differ from a provider's final bill.</p>
     <h2>How SIGMA uses and shares information</h2>
     <p>SIGMA uses your Google account information to sign you in, apply access rules, and keep your projects in your account workspace. SIGMA administrators can review invitation requests and product feedback, including any optional contact email.</p>

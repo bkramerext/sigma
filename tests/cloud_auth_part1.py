@@ -1531,6 +1531,31 @@ class CloudAuthTests(CloudAuthFixture):
             401,
         )
 
+    def test_signed_in_feedback_uses_google_identity_as_contact(self):
+        response = self.finish(email="admin@example.org", subject="feedback-contact")
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, response.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        with patch.object(cloud_auth, "_deliver_feedback") as delivered:
+            sent = self.client.post(
+                "/api/cloud-auth/feedback",
+                json={
+                    "message": "Please update the project guide.",
+                    "contact_email": "different@example.org",
+                },
+                headers={"Origin": ORIGIN},
+            )
+        self.assertEqual(sent.status_code, 200)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            stored = db.execute(
+                "SELECT subject,account_email,contact_email FROM feedback_requests WHERE id=?",
+                (sent.json()["id"],),
+            ).fetchone()
+        self.assertEqual(stored["subject"], "feedback-contact")
+        self.assertEqual(stored["account_email"], "admin@example.org")
+        self.assertEqual(stored["contact_email"], "admin@example.org")
+        self.assertEqual(delivered.call_args.kwargs["contact_email"], "admin@example.org")
+
     def test_feedback_records_only_verified_session_identity_and_rate_limits(self):
         signed_in = self.finish(email="admin@example.org", subject="feedback-member")
         self.client.cookies.set(

@@ -15,6 +15,7 @@ import os
 import stat
 import tempfile
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -122,15 +123,49 @@ def bundle_project_document(bundle: dict[str, Any]) -> dict[str, Any]:
 
 
 def rename_bundle_project(bundle: dict[str, Any], title: str) -> dict[str, Any]:
-    """Return a portable copy of a bundle with only its project title changed."""
+    """Preserve the edit-history chain when importing under another title."""
+    from sigma.projects import ProjectError
+    from sigma.projects import _decode as validate_project
+
     members = _decode(bundle)
     try:
         document = json.loads(members["project.json"])
+        validate_project(document)
+        if document["title"] == title:
+            return portable_bundle(members)
+        if document["schema_version"] >= 6:
+            previous = {
+                "title": document["title"],
+                "problem": document["problem"],
+                "investigation_type": document.get(
+                    "investigation_type", document.get("research_mode", "default")
+                ),
+                "ai_model": document["ai_model"],
+                "reasoning_effort": document["reasoning_effort"],
+                "difficulty": document.get("difficulty"),
+                "show_advanced_outcome_details": document.get(
+                    "show_advanced_outcome_details", False
+                ),
+            }
+            latest = datetime.fromisoformat(document["events"][-1]["timestamp"])
+            stamp = max(datetime.now(UTC), latest).isoformat()
+            document["events"].append(
+                {
+                    "sequence": len(document["events"]) + 1,
+                    "kind": "project.updated",
+                    "timestamp": stamp,
+                    "project_change": {
+                        "previous": previous,
+                        "current": {**previous, "title": title},
+                    },
+                }
+            )
         document["title"] = title
+        validate_project(document)
         members["project.json"] = (
             json.dumps(document, ensure_ascii=False, indent=2) + "\n"
         ).encode("utf-8")
-    except (KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError, ProjectError) as exc:
         raise BundleError("Project bundle has no valid project document") from exc
     return portable_bundle(members)
 
@@ -479,19 +514,29 @@ def download_bytes(bundle_path: str | Path) -> bytes:
     )
 
 
-def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
-    """Import a complete JSON project with atomic no-replace publication."""
+def import_bundle(
+    payload: dict[str, Any], destination: str | Path, *, rekey_sessions: bool = True
+) -> Path:
+    """Import a complete JSON project with atomic no-replace publication.
+
+    Save As has already rekeyed sessions and depends on that mapping for logs;
+    only that internal path skips a second session rekey.
+    """
     members = _decode(payload)
     path = Path(destination)
     if path.suffix != ".json" or path.parent.is_symlink() or not path.parent.is_dir():
         raise BundleError("Invalid JSON project destination")
     if os.path.lexists(path):
         raise BundleError("Project destination already exists")
-    # Session provenance includes the project path. Rebase only owned session
-    # records when importing a complete project to a new location.
+    # A new imported project must never share a live research execution identity
+    # with the source. Both the in-process worker maps and the hosted billing
+    # ledger use session UUIDs as global keys.
     project_document = json.loads(members["project.json"])
     project_id = project_document.get("id")
-    for member, raw in list(members.items()):
+    from uuid import UUID, uuid4
+
+    session_members: dict[str, dict[str, Any]] = {}
+    for member, raw in members.items():
         if not (member.startswith("research-sessions/") and member.endswith(".json")):
             continue
         if member in {
@@ -507,8 +552,6 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
         if not isinstance(session, dict) or session.get("project_id") != project_id:
             raise BundleError("Cannot import foreign research session")
         session_id = member.removeprefix("research-sessions/").removesuffix(".json")
-        from uuid import UUID
-
         try:
             if str(UUID(session_id)) != session_id:
                 raise ValueError("Noncanonical session identifier")
@@ -522,10 +565,64 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
             or not isinstance(session.get("project_path"), str)
         ):
             raise BundleError("Cannot import malformed research session")
-        session["project_path"] = str(path.resolve())
-        members[member] = (
-            json.dumps(session, ensure_ascii=False, separators=(",", ":")) + "\n"
-        ).encode()
+        session_members[session_id] = session
+
+    replacements = (
+        {session_id: str(uuid4()) for session_id in session_members} if rekey_sessions else {}
+    )
+
+    def rebase_refs(value: Any) -> Any:
+        """Rewrite exact session references without altering evidence or prose."""
+        if isinstance(value, str):
+            if value in replacements:
+                return replacements[value]
+            prefix = "research-sessions/"
+            if value.startswith(prefix) and value.endswith(".json"):
+                old = value[len(prefix) : -len(".json")]
+                if old in replacements:
+                    return prefix + replacements[old] + ".json"
+            return value
+        if isinstance(value, list):
+            return [rebase_refs(item) for item in value]
+        if isinstance(value, dict):
+            return {rebase_refs(key): rebase_refs(item) for key, item in value.items()}
+        return value
+
+    if replacements:
+        rebased: dict[str, bytes] = {}
+        for member, raw in members.items():
+            old_session_id = (
+                member.removeprefix("research-sessions/").removesuffix(".json")
+                if member.startswith("research-sessions/") and member.endswith(".json")
+                else None
+            )
+            new_member = (
+                f"research-sessions/{replacements[old_session_id]}.json"
+                if old_session_id in session_members
+                else member
+            )
+            if not member.endswith(".json"):
+                rebased[new_member] = raw
+                continue
+            try:
+                document = json.loads(raw)
+            except (ValueError, UnicodeDecodeError):
+                rebased[new_member] = raw
+                continue
+            updated = rebase_refs(document)
+            if old_session_id in session_members:
+                updated["project_path"] = str(path.resolve())
+                updated["imported_via_bundle"] = True
+                updated["source_session_id"] = document.get("source_session_id", old_session_id)
+                # A sender's idempotency key is not transferable to a
+                # recipient account or another copy of the same project.
+                updated["idempotency_key"] = str(uuid4())
+            rebased[new_member] = (
+                (json.dumps(updated, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+                if updated != document
+                else raw
+            )
+        members = rebased
     canonical = {
         "format": FORMAT,
         "version": VERSION,

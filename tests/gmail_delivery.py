@@ -126,6 +126,55 @@ class GmailDeliveryTests(TestCase):
             self.assertNotIn(recipients[0], msg["To"])
             self.assertIn("Improve the onboarding text", msg.get_payload(decode=True).decode())
 
+    def test_project_mime_attachments_use_gmail_oauth(self):
+        from email.message import EmailMessage
+
+        from sigma.gmail_delivery import send_message
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "gmail-token.json"
+            path.write_text(
+                json.dumps(
+                    {"client_id": "id", "client_secret": "secret", "refresh_token": "refresh"}
+                )
+            )
+            delivered = []
+
+            def fake_urlopen(request, timeout):
+                if request.full_url == TOKEN_ENDPOINT:
+                    return FakeResponse({"access_token": "access-token"})
+                raw = json.loads(request.data)["raw"]
+                delivered.append(message_from_bytes(base64.urlsafe_b64decode(raw)))
+                return FakeResponse({"id": "project-id"})
+
+            message = EmailMessage()
+            message["Subject"] = "SIGMA project"
+            message.set_content("Import this project.")
+            message.add_attachment(
+                b'{"files":{}}', maintype="application", subtype="json", filename="project.json"
+            )
+            with (
+                patch.dict(
+                    "os.environ",
+                    {
+                        "SIGMA_INVITATION_GMAIL_TOKEN_FILE": str(path),
+                        "SIGMA_INVITATION_GMAIL_SENDER": "sender@example.org",
+                    },
+                ),
+                patch("sigma.gmail_delivery.urlopen", side_effect=fake_urlopen),
+            ):
+                send_message(
+                    message,
+                    recipients=["a@example.org", "b@example.org"],
+                    reply_to="author@example.org",
+                )
+            self.assertEqual(len(delivered), 1)
+            result = delivered[0]
+            self.assertEqual(result["To"], "sender@example.org")
+            self.assertEqual(result["Bcc"], "a@example.org, b@example.org")
+            self.assertEqual(result["Reply-To"], "author@example.org")
+            self.assertEqual(result.get_payload()[1].get_filename(), "project.json")
+
     def test_requires_configuration(self):
         with (
             patch.dict(

@@ -739,6 +739,68 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
     )
 
 
+async def test_emailed_project_import_resumes_under_recipient_provider(path: Path):
+    """Real start/stop/export/import/Resume, not just synthetic path-rewrite tests."""
+    from sigma.project_bundle import import_bundle
+    from sigma.project_email import email_project_bundle
+
+    view, strategy, sender, config = await setup(path)
+
+    async def idle_worker(*_args):
+        # Admission and persistence are real; a provider call would be unsafe.
+        return None
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=sender)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=idle_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, sender["identity"]
+        )
+        await asyncio.sleep(0)
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+        assert stopped["status"] == "stopped"
+
+    payload, _filename = email_project_bundle(str(path))
+    for label, recipient_mode in (("same", "api_key"), ("different", "chatgpt")):
+        receiver_path = path.parent / f"email-recipient-{label}.json"
+        import_bundle(json.loads(payload), receiver_path)
+        imported = research_sessions._all(str(receiver_path))[0]
+        recipient_session_id = imported["id"]
+        assert recipient_session_id != started["id"]
+        assert imported["source_session_id"] == started["id"]
+        assert imported["imported_via_bundle"] is True
+        assert imported["project_path"] == str(receiver_path.resolve())
+        assert imported["status"] == "stopped"
+        assert imported["project_id"] == view.project.id
+
+        recipient = {
+            **sender,
+            "identity": "independent-researcher-" + label,
+            "mode": recipient_mode,
+            "token": "recipient-credential-" + label,
+        }
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=recipient)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(research_sessions, "_worker", new=idle_worker),
+        ):
+            resumed = await research_sessions.control_session(
+                str(receiver_path), recipient_session_id, "resume"
+            )
+            assert resumed["status"] == "queued", resumed.get("message")
+            saved = research_sessions._read(str(receiver_path), recipient_session_id)
+            assert saved["mode"] == recipient_mode
+            assert saved["project_id"] == view.project.id
+            assert saved["status"] == "queued"
+            assert saved["calls_used"] == stopped["calls_used"]
+            assert saved["steps"] == research_sessions._read(str(path), started["id"])["steps"]
+            assert saved["transport_change_history"][-1]["to_mode"] == recipient_mode
+            assert saved["identity_hash"] == research_sessions._digest(recipient["identity"])
+            assert saved["imported_via_bundle"] is False
+
+
 async def test_legacy_resume_accepts_reverted_eligibility_events(path: Path):
     view, strategy, credential, config = await setup(path)
     gate_entered = asyncio.Event()

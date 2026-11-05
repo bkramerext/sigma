@@ -972,6 +972,7 @@ async def middleware(request: Request, call_next):
             "/api/cloud-auth/status",
             "/api/cloud-auth/login",
             "/api/cloud-auth/callback",
+            "/api/cloud-auth/mail/cli-bridge-ready",
             "/api/cloud-auth/denied",
         }
     )
@@ -1640,6 +1641,26 @@ def login(
     return response
 
 
+@router.get("/mail/cli-bridge-ready")
+def local_cli_mail_bridge_ready(request: Request, state: str = ""):
+    """Only a loopback local backend can acknowledge a private CLI OAuth handoff."""
+    cfg = config()
+    if (
+        not cfg.local
+        or cfg.error
+        or cfg.database is None
+        or request.client is None
+        or request.client.host not in {"127.0.0.1", "::1", "localhost"}
+    ):
+        raise HTTPException(404, "Not found.")
+    from sigma.local_gmail_cli_bridge import ready_proof
+
+    proof = ready_proof(cfg.database.parent, state)
+    response = JSONResponse({"ready": bool(proof), "protocol": 1, "proof": proof})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @router.get("/callback")
 async def callback(
     request: Request,
@@ -1650,6 +1671,27 @@ async def callback(
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.origin or not cfg.client_id or not cfg.client_secret:
         raise HTTPException(503, "Cloud authentication is not ready.")
+    if (
+        cfg.local
+        and cfg.database is not None
+        and request.client is not None
+        and request.client.host in {"127.0.0.1", "::1", "localhost"}
+        and state
+    ):
+        from sigma.local_gmail_cli_bridge import receive
+
+        if receive(cfg.database.parent, state, code=code, error=error):
+            result = Response(
+                content=(
+                    "<!doctype html><meta charset='utf-8'><title>SIGMA Gmail</title>"
+                    "<p>Google responded to the SIGMA CLI. Return to your terminal.</p>"
+                ),
+                media_type="text/html",
+            )
+            result.headers["Cache-Control"] = "no-store"
+            result.headers["Content-Security-Policy"] = "default-src 'none'"
+            result.headers["X-Content-Type-Options"] = "nosniff"
+            return result
     flow_cookie = request.cookies.get(_cookie_name(FLOW_COOKIE, cfg))
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
@@ -1985,6 +2027,41 @@ def denied_identity(request: Request):
     return response
 
 
+def email_env(suffix: str, default: str = "") -> str:
+    """Resolve shared mail settings; only the local UI may reuse a CLI Gmail grant.
+
+    In local mode a verified CLI Gmail grant takes priority over stale
+    environment paths. Hosted SIGMA keeps explicit configured credentials.
+    """
+    if suffix in {"GMAIL_TOKEN_FILE", "GMAIL_SENDER"} and config().local:
+        from sigma.local_gmail_cli_auth import existing_grant
+
+        grant = existing_grant()
+        if grant is not None:
+            path, sender = grant
+            return str(path) if suffix == "GMAIL_TOKEN_FILE" else sender
+    if suffix.startswith("GMAIL_"):
+        direct = os.environ.get(f"SIGMA_{suffix}")
+        if direct is not None:
+            return direct.strip()
+    modern = os.environ.get(f"SIGMA_EMAIL_{suffix}")
+    if modern is not None:
+        return modern.strip()
+    legacy = os.environ.get(f"SIGMA_INVITATION_{suffix}")
+    if legacy is not None:
+        return legacy.strip()
+    return default
+
+
+def email_secret(suffix: str) -> str | None:
+    """Read a shared mail secret, including _FILE, without unsafe fallback."""
+    modern = f"SIGMA_EMAIL_{suffix}"
+    legacy = f"SIGMA_INVITATION_{suffix}"
+    if modern in os.environ or f"{modern}_FILE" in os.environ:
+        return secret_value(modern)
+    return secret_value(legacy)
+
+
 def _notification_admin_recipients(cfg: Config) -> list[str]:
     """Derive active administrators from verified identities and admin grants.
 
@@ -2008,53 +2085,121 @@ def _notification_admin_recipients(cfg: Config) -> list[str]:
                 "SELECT value FROM grants WHERE kind='email' AND role='admin' AND active=1"
             )
         )
+        # The local --signin shortcut has no Google identity record. The
+        # configured operator email remains a trusted local recipient, but
+        # hosted notification recipients still require explicit authorization.
+        if cfg.local and cfg.admin_contact_email:
+            recipients.add(cfg.admin_contact_email)
         return sorted(recipients)
 
 
-def _deliver_admin_notice(subject: str, body: str) -> None:
-    """One privacy-preserving multi-recipient notice through existing Gmail/SMTP."""
-    cfg = config()
-    recipients = _notification_admin_recipients(cfg)
+def _deliver_admin_notice(
+    subject: str, body: str, *, diagnostic_recipients: list[str] | None = None
+) -> None:
+    """Deliver administrator mail; CLI may supply a local diagnostic recipient."""
+    recipients = (
+        diagnostic_recipients
+        if diagnostic_recipients is not None
+        else _notification_admin_recipients(config())
+    )
     if not recipients:
         raise RuntimeError("No verified SIGMA administrator notification recipient is available.")
-    if os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip():
-        from sigma.gmail_delivery import send_admin_notification
+    from sigma.mail_transport import send_message
 
-        send_admin_notification(subject, body, recipients=recipients)
-        return
+    message = EmailMessage()
+    message["Subject"] = subject
+    message.set_content(body)
+    try:
+        send_message(message, recipients=recipients)
+    except RuntimeError as exc:
+        if diagnostic_recipients is not None:
+            # Preserve SMTPDeliveryError.state for operator-only CLI diagnostics.
+            raise
+        raise RuntimeError("Administrator notification could not be delivered.") from exc
 
-    raw_username = os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
+
+class SMTPDeliveryError(RuntimeError):
+    """Known no-delivery, partial acceptance, or ambiguous SMTP outcome."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        state: str,
+        accepted_count: int = 0,
+        refused_recipients: tuple[str, ...] = (),
+    ):
+        super().__init__(message)
+        self.state = state
+        self.accepted_count = accepted_count
+        self.refused_recipients = refused_recipients
+
+
+def send_smtp_message(
+    message: EmailMessage, recipients: list[str], *, reply_to: str | None = None
+) -> None:
+    """Deliver an already-constructed message with the server's existing SMTP account.
+
+    Explicit envelope recipients are Bcc, so the addresses are not disclosed
+    to one another. Credentials and provider details never reach the client.
+    """
+    if not recipients:
+        raise SMTPDeliveryError("Email requires a recipient.", state="failed")
+    raw_username = email_env("SMTP_USERNAME")
     try:
         username = _normalize_email(raw_username)
+        recipients = [_normalize_email(address) for address in recipients]
     except ValueError as exc:
-        raise RuntimeError("Invitation delivery is not configured.") from exc
+        raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed") from exc
     try:
-        password = secret_value("SIGMA_INVITATION_SMTP_PASSWORD")
+        password = email_secret("SMTP_PASSWORD")
     except SecretConfigurationError as exc:
-        raise RuntimeError("Invitation delivery is not configured.") from exc
+        raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed") from exc
     if not password:
-        raise RuntimeError("Invitation delivery is not configured.")
-    host = os.environ.get("SIGMA_INVITATION_SMTP_HOST", "smtp.gmail.com").strip()
+        raise SMTPDeliveryError("SMTP delivery is not configured.", state="failed")
+    host = email_env("SMTP_HOST", "smtp.gmail.com")
     try:
-        port = int(os.environ.get("SIGMA_INVITATION_SMTP_PORT", "587"))
+        port = int(email_env("SMTP_PORT", "587"))
         if not host or not 1 <= port <= 65535:
-            raise ValueError
-        message = EmailMessage()
-        message["Subject"] = subject
+            raise ValueError("Invalid SMTP configuration")
         message["From"] = username
         message["To"] = username
         message["Bcc"] = ", ".join(recipients)
-        message.set_content(body)
+        if reply_to is not None:
+            message["Reply-To"] = _normalize_email(reply_to)
+        began_delivery = False
         with smtplib.SMTP(host, port, timeout=10) as client:
             client.ehlo()
             client.starttls(context=ssl.create_default_context())
             client.ehlo()
             client.login(username, password)
+            began_delivery = True
             refused = client.send_message(message, from_addr=username, to_addrs=recipients)
             if isinstance(refused, dict) and refused:
-                raise RuntimeError("Some administrator notifications could not be delivered.")
+                accepted = max(0, len(recipients) - len(refused))
+                raise SMTPDeliveryError(
+                    "Some recipients were refused by the SMTP server.",
+                    state="partial" if accepted else "failed",
+                    accepted_count=accepted,
+                    refused_recipients=tuple(
+                        address for address in recipients if address in refused
+                    ),
+                )
+    except smtplib.SMTPRecipientsRefused as exc:
+        raise SMTPDeliveryError(
+            "All SMTP recipients were refused.",
+            state="failed",
+            refused_recipients=tuple(
+                address for address in recipients if address in exc.recipients
+            ),
+        ) from exc
+    except SMTPDeliveryError:
+        raise
     except (OSError, ValueError, smtplib.SMTPException) as exc:
-        raise RuntimeError("Administrator notification could not be delivered.") from exc
+        raise SMTPDeliveryError(
+            "SMTP delivery could not be completed.",
+            state="unknown" if locals().get("began_delivery", False) else "failed",
+        ) from exc
 
 
 def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "invitation") -> None:
@@ -2086,17 +2231,19 @@ def _deliver_feedback(
     *,
     account_email: str | None,
     contact_email: str | None,
+    diagnostic_recipients: list[str] | None = None,
 ) -> None:
-    """Notification content is plain text; contact is explicitly unverified."""
+    """Notification content distinguishes signed-in identity from guest contact."""
     _deliver_admin_notice(
         "New SIGMA feedback",
         (
             f"Feedback ID: {feedback_id}\n"
             f"Submitted at (UTC epoch): {submitted_at}\n"
             f"Verified account: {account_email or 'None (guest)'}\n"
-            f"Provided contact (unverified): {contact_email or 'None'}\n\n"
+            f"Contact email ({'signed-in Google account' if account_email and contact_email == account_email else 'unverified'}): {contact_email or 'None'}\n\n"
             f"Message:\n{message}\n"
         ),
+        diagnostic_recipients=diagnostic_recipients,
     )
 
 
@@ -2382,6 +2529,10 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
         principal = resolve_session(raw_session)
     except (sqlite3.Error, OSError, RuntimeError) as exc:
         raise HTTPException(503, "Feedback is temporarily unavailable.") from exc
+    # An authenticated Google account is the authoritative reply contact.
+    # A browser-supplied contact address must not impersonate that identity.
+    if principal:
+        contact_email = principal.email
 
     rate_cookie = request.cookies.get(_cookie_name(FEEDBACK_RATE_COOKIE, cfg))
     set_rate_cookie = not rate_cookie or not re.fullmatch(r"[A-Za-z0-9_-]{40,64}", rate_cookie)
@@ -2435,6 +2586,7 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
             **_cookie_options(cfg, FEEDBACK_RATE_COOKIE, max_age=FEEDBACK_RATE_SECONDS),
         )
     response.headers["Cache-Control"] = "no-store"
+    notification_sent = True
     try:
         _deliver_feedback(
             feedback_id,
@@ -2444,6 +2596,7 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
             contact_email=contact_email,
         )
     except RuntimeError:
+        notification_sent = False
         # Feedback is durable even if Gmail/SMTP is missing or temporarily
         # unavailable. The admin inbox still contains the message.
         with _db(cfg) as db:
@@ -2451,7 +2604,10 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
                 "UPDATE feedback_requests SET notification_error=? WHERE id=?",
                 ("delivery failed", feedback_id),
             )
-    return {"status": "received", "id": feedback_id}
+    result: dict[str, str | bool] = {"status": "received", "id": feedback_id}
+    if cfg.local:
+        result["email_notification_sent"] = notification_sent
+    return result
 
 
 @router.get("/admin/feedback")

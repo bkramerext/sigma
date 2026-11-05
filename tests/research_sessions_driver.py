@@ -118,6 +118,11 @@ def main(part: int = 1):
             )
         )
         asyncio.run(
+            test_emailed_project_import_resumes_under_recipient_provider(
+                Path(temporary) / "email-import-resume.sigma"
+            )
+        )
+        asyncio.run(
             test_legacy_compiler_checkpoint_resumes_after_account_change(
                 Path(temporary) / "legacy-compiler-resume.sigma"
             )

@@ -399,3 +399,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .current-understanding button.text-view-link:hover { color: #ffe2b9; }
 .workspace-page .current-understanding button.text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 @media (max-width: 600px) { .workspace-page .current-understanding button.text-view-link { min-height: 44px; } }
+
+/* Match Download and Email glyph sizes to neighboring project actions. */
+.workspace-page .project-pane-actions .project-download-button svg,
+.workspace-page .project-pane-actions .project-email-button svg { width: 27px; height: 27px; }

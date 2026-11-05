@@ -143,6 +143,16 @@ COMMAND_DETAILS = {
         "./sigma test",
         "Requires the repository's locked development tools; this command makes no paid model calls.",
     ),
+    "send_feedback": (
+        "Send a local feedback notification and show safe mail diagnostics.",
+        './sigma send_feedback "hello world"',
+        (
+            "Uses the locally configured Google sign-in address from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL; "
+            "the Gmail transport opens a browser for explicit Google Send consent if needed, "
+            "without starting SIGMA UI. --transport smtp forces SMTP for one invocation. "
+            "--attach PATH includes a single local file."
+        ),
+    ),
     "start": (
         "Start or safely restart this checkout's browser UI.",
         "./sigma start --navigate --signin",
@@ -274,6 +284,17 @@ def main() -> None:
     sample.add_argument("--name", required=True)
     add_command(commands, "setup", help="Install locked Python and frontend dependencies")
     add_command(commands, "test", help="Run tests, API/CLI checks, lint, types and build")
+    feedback = add_command(commands, "send_feedback")
+    feedback.add_argument("message")
+    feedback.add_argument("--attach", metavar="PATH", help="Attach one local file (maximum 18 MB)")
+    feedback.add_argument(
+        "--transport", choices=("configured", "smtp", "gmail"), default="configured"
+    )
+    feedback.add_argument(
+        "--reauthorize",
+        action="store_true",
+        help="Reauthorize Gmail with a different Google account",
+    )
     ui_command = add_command(
         commands, "start", help="Start or safely restart this checkout's browser UI"
     )
@@ -355,6 +376,17 @@ def main() -> None:
             print(str(exc), file=sys.stderr)
             sys.exit(2)
         sys.exit(0)
+    if args.command == "send_feedback":
+        from sigma.feedback_diagnostic import run
+
+        sys.exit(
+            run(
+                args.message,
+                transport=args.transport,
+                reauthorize=args.reauthorize,
+                attach=args.attach,
+            )
+        )
     if args.command == "start":
         sys.exit(
             run_ui(

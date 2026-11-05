@@ -617,3 +617,14 @@
 .project-settings-dialog.ai-paper-dialog .settings-body .ai-paper-eli5-output h2 button.text-copy-button:focus-visible {
   outline: 2px solid #edbc77; outline-offset: 2px;
 }
+
+/* Email Project shares the Export layout, copper link action and modal behavior. */
+.project-settings-dialog.email-project-dialog .settings-body > .settings-hint:first-child { margin: 0 0 14px; }
+.project-settings-dialog.email-project-dialog .settings-body > label { display: block; margin: 14px 0 7px; }
+.project-settings-dialog.email-project-dialog .settings-body > input,
+.project-settings-dialog.email-project-dialog .settings-body > select,
+.project-settings-dialog.email-project-dialog .settings-body > textarea { box-sizing: border-box; width: 100%; }
+.project-settings-dialog.email-project-dialog .export-type-options { margin-top: 18px; }
+.project-settings-dialog.email-project-dialog .export-type-options label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.project-settings-dialog.email-project-dialog .email-no-papers { margin: 12px 0 0; color: #adbac7; font-size: 13px; }
+.project-settings-dialog.email-project-dialog .settings-body { padding-bottom: 28px; }

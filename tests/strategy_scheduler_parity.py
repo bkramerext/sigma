@@ -37,7 +37,7 @@ UUID_RE = re.compile(
 TIMESTAMP_RE = re.compile(r"20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|\+00:00)?")
 ROLE_ORDER = {"research_investigator": 0, "research_skeptic": 1}
 MODE = sys.argv[3] if len(sys.argv) > 3 else "legacy-v1"
-assert MODE in {"legacy-v1", "paired-v2", "paired-v2-resume"}, MODE
+assert MODE in {"legacy-v1", "parallel-v1", "paired-v2", "paired-v2-resume"}, MODE
 
 
 def canonicalize(value, names: dict[str, str]):
@@ -157,7 +157,7 @@ async def snapshot():
             if title == first.title and cycle == 1 and role == "research_investigator":
                 first_investigator_active = True
                 try:
-                    if MODE in {"parallel", "paired-v2", "paired-v2-resume"}:
+                    if MODE in {"parallel-v1", "paired-v2", "paired-v2-resume"}:
                         # Wait for the independent Skeptic rather than relying on
                         # a short wall-clock sleep under variable CI load.
                         # A genuinely serialized scheduler still times out.

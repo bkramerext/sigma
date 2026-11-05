@@ -217,6 +217,68 @@ def main() -> None:
                 assert (
                     inspect_project(imported.json()["path"]).project.title == "API math imported v1"
                 )
+                # An emailed bundle with project.updated history must import
+                # under a versioned name without corrupting the source or audit trail.
+                history_source = client.post(
+                    "/api/projects/create",
+                    json={
+                        "title": "Email History Origin",
+                        "problem": "Test an emailed project's rename history",
+                        "investigation_type": "default",
+                        "ai_model": None,
+                        "reasoning_effort": "high",
+                        "difficulty": "medium",
+                        "show_advanced_outcome_details": False,
+                    },
+                )
+                assert history_source.status_code == 201, history_source.text
+                history_path = history_source.json()["path"]
+                initial_project = history_source.json()["project"]
+                settings_fields = (
+                    "title",
+                    "problem",
+                    "investigation_type",
+                    "ai_model",
+                    "reasoning_effort",
+                    "difficulty",
+                    "show_advanced_outcome_details",
+                )
+                initial_settings = {key: initial_project[key] for key in settings_fields}
+                renamed = client.post(
+                    "/api/projects/update",
+                    json={
+                        "path": history_path,
+                        **initial_settings,
+                        "title": "Email History",
+                        "expected": initial_settings,
+                    },
+                )
+                assert renamed.status_code == 200, renamed.text
+                assert renamed.json()["project"]["events"][-1]["kind"] == "project.updated"
+                before_import = Path(history_path).read_bytes()
+                mail_bundle = client.get(
+                    "/api/projects/export", params={"path": history_path}
+                ).json()
+                for index in (1, 2):
+                    mail_import = client.post("/api/projects/import", json={"bundle": mail_bundle})
+                    assert mail_import.status_code == 201, mail_import.text
+                    imported_title = f"Email History v{index}"
+                    assert mail_import.json()["project"]["title"] == imported_title
+                    imported_events = mail_import.json()["project"]["events"]
+                    assert len(imported_events) == len(renamed.json()["project"]["events"]) + 1
+                    assert imported_events[-1]["kind"] == "project.updated"
+                    assert (
+                        imported_events[-1]["project_change"]["previous"]["title"]
+                        == "Email History"
+                    )
+                    assert (
+                        imported_events[-1]["project_change"]["current"]["title"] == imported_title
+                    )
+                    assert (
+                        inspect_project(mail_import.json()["path"]).project.title == imported_title
+                    )
+                assert Path(history_path).read_bytes() == before_import
+
                 # Home discovery and Open Project must work for both original
                 # and imported single-file projects, not only legacy directories.
                 from sigma.projects import list_json_projects
