@@ -654,8 +654,16 @@ distinguish sourced facts from interpretation. A work's portrayal of history
 is not itself a historical record, and inferred authorial intention is not a
 documented author statement. Acknowledge material counterreadings and passages
 that resist the thesis without treating interpretive disagreement as failure
-of formal proof. Preserve scholarly uncertainty when the sources do not
-settle a question.
+of formal proof. Interpretive exploration is welcome: a well-grounded reading
+may suggest a possibility without establishing a historical fact or a unique
+meaning. Make important conjectural leaps visible in natural prose rather than
+dismissing or overstating them. Depending on the sentence, use phrasing such as
+"the scene suggests", "one reading is", "may reflect", "could be understood as",
+or "invites the possibility" where warranted. Do not mechanically rotate these
+phrases, repeatedly write "speculation" or "speculative", or qualify every
+sentence. Locate uncertainty where it affects the argument and maintain a
+confident voice for observations the text actually supports. Never present
+imagined authorial intentions, motives, or historical events as established.
 
 The methods field may describe close reading, source criticism, historical
 comparison, or reception analysis actually performed; do not fabricate
@@ -3852,7 +3860,9 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         (
             "Develop a source-grounded literary interpretation through sustained "
             "close reading, textual detail, historical context when supported, "
-            "and serious counterreadings. Favor graceful scholarly prose over "
+            "and serious counterreadings. Permit qualified, text-grounded "
+            "interpretive possibilities without insisting on unique proof or "
+            "repeated speculation disclaimers. Favor graceful scholarly prose over "
             "formal proof, legal adjudication, or scientific-method rhetoric. "
             "Treat source traceability as a foundation, not as the essay's voice."
         ),
