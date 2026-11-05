@@ -690,6 +690,10 @@ class PaperCancelRequest(OpenRequest):
     expected_binding: str = Field(min_length=1, max_length=512)
 
 
+class PaperDiscardRequest(PaperCancelRequest):
+    confirm_discard: Literal[True]
+
+
 class PaperRestartRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
@@ -824,6 +828,14 @@ async def paper_cancel_view(body: PaperCancelRequest):
         body.expected_binding, body.expected_project_id, body.path
     )
     return {"cancelled": await papers.cancel_generation(body.path)}
+
+
+@app.post("/api/projects/papers/discard")
+async def papers_discard_view(body: PaperDiscardRequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    return await papers.discard_work(body.path, body.expected_project_id)
 
 
 @app.post("/api/projects/papers/restart")
