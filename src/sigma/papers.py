@@ -8231,6 +8231,9 @@ async def generate(
     include_sigma_issues: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
+    from sigma.memory_guard import require_capacity
+
+    require_capacity()
     key = str(project_path(path).resolve())
     current = _generation_tasks.get(key)
     if current is not None and not current.done():
@@ -8264,7 +8267,12 @@ async def generate(
     except asyncio.CancelledError:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-        finish_progress(path, "cancelled")
+        from sigma.memory_guard import MESSAGE, is_critical
+
+        if is_critical():
+            finish_progress(path, "failed", MESSAGE)
+        else:
+            finish_progress(path, "cancelled")
         log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
     except Exception as exc:
