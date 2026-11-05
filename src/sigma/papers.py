@@ -3318,9 +3318,7 @@ def finish_progress(
     """Freeze the latest checkpointed progress when generation exits abnormally."""
     key = str(project_path(path).resolve())
     active = _active_progress.get(key)
-    if expected_run_id is not None and (
-        active is None or active.get("run_id") != expected_run_id
-    ):
+    if expected_run_id is not None and (active is None or active.get("run_id") != expected_run_id):
         return  # A stale task callback must never alter a newer attempt.
     work = _load_work(path)
     saved = work.get("progress") if work is not None else None
