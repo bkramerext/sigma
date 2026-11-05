@@ -8,10 +8,10 @@ attempts are replayed after resource-triggered cancellation.
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import logging
 import os
 import threading
-import fcntl
 import time
 from pathlib import Path
 
@@ -73,9 +73,7 @@ def _notify_admin(snapshot: dict[str, int | None]) -> None:
             LOG.error("memory.alert_log_directory_unavailable")
             return
         marker = directory / "memory-alert-cooldown"
-        fd = os.open(
-            marker, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
-        )
+        fd = os.open(marker, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
             last_bytes = os.read(fd, 48)
