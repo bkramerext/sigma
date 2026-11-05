@@ -267,9 +267,16 @@ def main() -> None:
                     imported_events = mail_import.json()["project"]["events"]
                     assert len(imported_events) == len(renamed.json()["project"]["events"]) + 1
                     assert imported_events[-1]["kind"] == "project.updated"
-                    assert imported_events[-1]["project_change"]["previous"]["title"] == "Email History"
-                    assert imported_events[-1]["project_change"]["current"]["title"] == imported_title
-                    assert inspect_project(mail_import.json()["path"]).project.title == imported_title
+                    assert (
+                        imported_events[-1]["project_change"]["previous"]["title"]
+                        == "Email History"
+                    )
+                    assert (
+                        imported_events[-1]["project_change"]["current"]["title"] == imported_title
+                    )
+                    assert (
+                        inspect_project(mail_import.json()["path"]).project.title == imported_title
+                    )
                 assert Path(history_path).read_bytes() == before_import
 
                 # Home discovery and Open Project must work for both original
