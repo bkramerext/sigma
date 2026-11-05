@@ -4,7 +4,7 @@ RequiresMountsFor=/srv/sigma-state
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/libexec/sigma/log-retention.py
+ExecStart=/usr/bin/python3 /usr/local/libexec/sigma/log-retention.py
 User=root
 Group=root
 UMask=0077
