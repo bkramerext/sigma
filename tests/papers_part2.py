@@ -487,6 +487,36 @@ def test_paper_failure_reason_survives_reopen() -> None:
         assert saved_work["progress"]["failure_reason"] == reason
 
 
+def test_paper_paused_progress_preserves_disconnect_reason() -> None:
+    """Browser disconnection pauses cleanly, not as a falsely reported restart."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "browser-paused.sigma"
+        view = initialize_project(
+            path, "Paused paper", "Persist a viewer-lease pause", research_mode="mathematical"
+        )
+        work = papers._new_work("a" * 64, view.project.id, "b" * 64, "fixture-model", "high")
+        work["progress"] = {
+            "run_id": "c" * 32,
+            "status": "running",
+            "stage": "planning",
+            "current": 1,
+            "total": 3,
+            "started_at": "2026-10-29T01:00:00+00:00",
+            "updated_at": "2026-10-29T01:01:00+00:00",
+            "elapsed_seconds": 60,
+        }
+        papers._save_work(str(path), work)
+        reason = "Paper generation paused because the browser disconnected."
+        papers.finish_progress(str(path), "paused", reason)
+        saved = papers.progress_status(str(path))
+        assert saved is not None
+        assert saved["status"] == "interrupted"
+        assert saved["stage"] == "planning"
+        assert saved["detail"] == reason
+        assert "restarted" not in saved["detail"]
+        assert papers._load_work(str(path))["progress"]["status"] == "paused"
+
+
 def test_paper_progress_counts_keep_generation_resumable() -> None:
     """Zero sections is legitimate; bad display counts must not discard paid work."""
     with TemporaryDirectory() as directory:

@@ -3090,7 +3090,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
                     "call might have been billed and will not be blindly repeated."
                 )
             }
-            if status == "interrupted" && state["status"] == "running"
+            if status == "interrupted" and state["status"] == "running"
             else ({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {})
         ),
         **(
@@ -3127,6 +3127,10 @@ def finish_progress(
     }
     if reason and status == "failed":
         frozen["failure_reason"] = reason[:500]
+    elif reason and status == "paused":
+        # Keep the reason for an intentional browser-presence pause distinct
+        # from an unplanned backend restart.
+        frozen["detail"] = reason[:160]
     if work is not None:
         work["progress"] = frozen
         _save_work(path, work)
@@ -7302,7 +7306,7 @@ async def _generate_impl(
                     else:
                         finish_progress(path, "cancelled")
                 elif isinstance(completed_task.exception(), PaperBrowserPaused):
-                    finish_progress(path, "paused")
+                    finish_progress(path, "paused", str(completed_task.exception()))
                 elif completed_task.exception() is not None:
                     finish_progress(path, "failed")
                 active = _active_progress.get(project_key)
@@ -8375,8 +8379,8 @@ async def generate(
             finish_progress(path, "cancelled")
         log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
-    except PaperBrowserPaused:
-        finish_progress(path, "paused")
+    except PaperBrowserPaused as exc:
+        finish_progress(path, "paused", str(exc))
         log.info("paper.paused project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
     except Exception as exc:

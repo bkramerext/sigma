@@ -2521,8 +2521,10 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
           const next = (body.progress ?? null) as PaperProgress | null;
           setPaperProgress(next);
           if (next?.status !== 'active') {
-            // A completed paper clears its checkpoint, so progress may now be
-            // null. Reload saved versions rather than displaying stale status.
+            // Completion clears the checkpoint. If the client lost its SSE
+            // stream, discard the now-stale draft row when the saved version
+            // takes its place; interrupted checkpoints remain expandable.
+            if (next === null) setNewPaperRequested(false);
             void refresh();
           }
         }
