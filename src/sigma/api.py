@@ -996,7 +996,9 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
         # Reserve synchronously before yielding a StreamingResponse. This
         # closes the window where an immediate Stop could miss the job.
         papers.register_submission(body.path, task)
-    except ProjectError:
+    except BaseException:
+        # Disk failure, duplicate submission, or any other admission error
+        # must never leave an unregistered provider task running.
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         raise
