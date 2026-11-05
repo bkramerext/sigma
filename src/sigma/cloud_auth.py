@@ -2604,7 +2604,7 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
                 "UPDATE feedback_requests SET notification_error=? WHERE id=?",
                 ("delivery failed", feedback_id),
             )
-    result = {"status": "received", "id": feedback_id}
+    result: dict[str, str | bool] = {"status": "received", "id": feedback_id}
     if cfg.local:
         result["email_notification_sent"] = notification_sent
     return result
