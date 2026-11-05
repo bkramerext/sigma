@@ -4,8 +4,20 @@ import { RequestToastStore } from './request-toast-store.js';
 
 const toastStore = new RequestToastStore();
 
+const FETCH_UNREACHABLE_HINT = 'The request could not reach the server. In production, the SIGMA backend may not be running or may be unreachable. Check the backend service and its logs; a network interruption can also cause this error.';
+
+function actionableRequestMessage(message: string): string {
+  const trimmed = message.trim();
+  if (/^(?:TypeError:\s*)?Failed to fetch\.?$/i.test(trimmed)
+      || /^(?:TypeError:\s*)?NetworkError when attempting to fetch resource\.?$/i.test(trimmed)
+      || /^Network request failed\.?$/i.test(trimmed)) {
+    return `${trimmed} — ${FETCH_UNREACHABLE_HINT}`;
+  }
+  return message;
+}
+
 export function reportRequestFailure(message: string) {
-  toastStore.add(message);
+  toastStore.add(actionableRequestMessage(message));
 }
 
 function describeError(body: unknown): string | null {

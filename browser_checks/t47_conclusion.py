@@ -341,16 +341,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 content_type="application/json",
                 body='{"error":"Mock provider unavailable"}',
             )
-            latex_button = page.get_by_role("button", name="LaTeX research paper")
-            expect(latex_button).to_be_visible()
-            latex_button.hover()
-            latex_hover = latex_button.evaluate(
-                "el => ({width: el.getBoundingClientRect().width, "
-                "height: el.getBoundingClientRect().height, "
-                "backgroundImage: getComputedStyle(el).backgroundImage})"
-            )
-            assert latex_hover["width"] == 50 and latex_hover["height"] == 34, latex_hover
-            assert "gradient" in latex_hover["backgroundImage"], latex_hover
+            papers_pane = page.locator(".papers-pane")
+            expect(papers_pane.get_by_role("heading", name="Papers")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="Generate paper")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="Stop paper generation")).to_be_disabled()
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
             )

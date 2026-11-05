@@ -83,21 +83,17 @@ with sync_playwright() as playwright:
         path,
     )
 
-    tex = page.get_by_role("button", name="LaTeX research paper", exact=True)
     qa_button = page.get_by_role("button", name="Research Q/A", exact=True)
-    expect(tex).to_be_visible()
     expect(qa_button).to_be_visible()
-    assert qa_button.bounding_box()["x"] > tex.bounding_box()["x"]
     assert (
         page.evaluate("el => parseFloat(getComputedStyle(el).fontSize)", qa_button.element_handle())
         >= 16
     )
     lean = page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
-    assert (
-        qa_button.bounding_box()["height"]
-        == tex.bounding_box()["height"]
-        == lean.bounding_box()["height"]
-    )
+    expect(lean).to_be_visible()
+    assert qa_button.bounding_box()["x"] < lean.bounding_box()["x"]
+    assert qa_button.bounding_box()["height"] == lean.bounding_box()["height"]
+    expect(page.locator(".papers-pane").get_by_role("heading", name="Papers")).to_be_visible()
     page.screenshot(path=str(OUT / "research-qa-toolbar.png"), full_page=False)
     qa_button.click()
     dialog = page.get_by_role("dialog", name="Research Q/A")

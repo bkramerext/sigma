@@ -671,6 +671,7 @@ class ResearchLimitsRequest(OpenRequest):
 
 
 class PaperGenerateRequest(OpenRequest):
+    browser_presence_required: bool = False
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -966,6 +967,9 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             updates.get_nowait()
         updates.put_nowait(dict(event))
 
+    presence_kwargs: dict[str, Any] = (
+        {"browser_presence_required": True} if body.browser_presence_required else {}
+    )
     task = asyncio.create_task(
         papers.generate(
             body.path,
@@ -980,6 +984,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             include_research_excerpts=body.include_research_excerpts,
             include_sigma_issues=body.include_sigma_issues,
             include_diagrams=body.include_diagrams,
+            **presence_kwargs,
         )
     )
 
@@ -1152,6 +1157,41 @@ def set_unattended_execution_preference(body: UnattendedExecutionPreference):
     return {
         "allow_unattended_background_execution": research_preferences.update_unattended_background_execution(
             body.allow_unattended_background_execution
+        )
+    }
+
+
+@app.get("/api/user-preferences/section-layout")
+def section_layout_preference():
+    from sigma import section_layout_preferences
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot change section layout preferences")
+    return {
+        "expand_one_project_section_at_a_time": (
+            section_layout_preferences.expand_one_project_section_at_a_time()
+        )
+    }
+
+
+class SectionLayoutPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expand_one_project_section_at_a_time: bool
+
+
+@app.put("/api/user-preferences/section-layout")
+def set_section_layout_preference(body: SectionLayoutPreference):
+    from sigma import section_layout_preferences
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot change section layout preferences")
+    return {
+        "expand_one_project_section_at_a_time": (
+            section_layout_preferences.update_expand_one_project_section_at_a_time(
+                body.expand_one_project_section_at_a_time
+            )
         )
     }
 
