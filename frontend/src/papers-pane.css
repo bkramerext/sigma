@@ -21,6 +21,14 @@
 .workspace-page .paper-includes-disclosure .ai-paper-includes { min-width: 0; margin: 6px 0 0; padding: 10px 14px; border: 1px solid #667079; border-radius: 6px; }
 .workspace-page .paper-includes-disclosure .ai-paper-details { display: flex; align-items: center; gap: 7px; margin: 0; color: #dce7f0; font: 13px/1.4 Inter, sans-serif; }
 .workspace-page .paper-includes-disclosure .ai-paper-details input { width: auto; margin: 0; accent-color: #d9a66c; }
+
+.workspace-page .papers-pane .paper-diagnostics-disclosure { margin: 2px 0 4px; min-width: 0; }
+.workspace-page .papers-pane .paper-diagnostics-disclosure > summary { cursor: pointer; }
+.workspace-page .papers-pane .paper-diagnostics-content { padding: 8px 14px 12px; font-size: 13px; line-height: 1.5; color: #c0cad2; }
+.workspace-page .papers-pane .paper-diagnostics-content .ai-paper-details { display: flex; gap: 8px; align-items: baseline; color: #dce7f0; }
+.workspace-page .papers-pane .paper-diagnostics-content .ai-paper-details input { accent-color: #d9a66c; }
+.workspace-page .papers-pane .paper-diagnostics-content ol { margin: 6px 0; padding-left: 22px; overflow-wrap: anywhere; }
+.workspace-page .papers-pane .paper-diagnostics-content li { margin: 4px 0; }
 .workspace-page .papers-pane .ai-paper-status { margin: 0; color: #c0cad2; font-size: 13px; }
 .workspace-page .papers-pane .ai-paper-progress { display: grid; gap: 8px; padding: 12px 18px; border: 1px solid var(--workspace-line); border-radius: 10px; background: #101b26; }
 .workspace-page .papers-pane .ai-paper-progress > strong { color: #e4ebf3; font-size: 13px; }
