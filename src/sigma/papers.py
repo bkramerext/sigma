@@ -3022,7 +3022,13 @@ def progress_status(path: str) -> dict[str, Any] | None:
         "total": state["total"],
         "started_at": state["started_at"],
         "elapsed_seconds": elapsed,
-        **({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {}),
+        **({"detail": (
+            "The backend restarted during paper generation. Saved work is intact; "
+            "use Continue to resume from the latest checkpoint. An in-flight provider "
+            "call might have been billed and will not be blindly repeated."
+        )} if status == "interrupted" else (
+            {"detail": state["detail"]} if isinstance(state.get("detail"), str) else {}
+        )),
         **(
             {"failure_reason": state["failure_reason"]}
             if status == "failed" and state.get("failure_reason")
