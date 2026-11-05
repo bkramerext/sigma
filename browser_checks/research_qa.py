@@ -396,9 +396,7 @@ with sync_playwright() as playwright:
     # on desktop and mobile, not just a full-page screenshot.
     for width in (1280, 390):
         browser_page.set_viewport_size({"width": width, "height": 320})
-        browser_page.wait_for_function(
-            "() => document.scrollingElement.scrollHeight > innerHeight"
-        )
+        browser_page.wait_for_function("() => document.scrollingElement.scrollHeight > innerHeight")
         browser_page.evaluate("window.scrollTo(0, 0)")
         browser_page.mouse.move(170, 120)
         browser_page.mouse.wheel(0, 900)
