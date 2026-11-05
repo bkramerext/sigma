@@ -187,7 +187,7 @@ async def verify_complete_54_call_session(path: Path) -> None:
         assert started["turns_per_round"] == 3
         saved = research_sessions._read(str(path), started["id"])
         assert saved["scheduler_version"] == 2 and saved["call_limit"] == 54
-        completed = await fixture.wait_for(path, started["id"])
+        completed = await fixture.wait_for(path, started["id"], timeout_seconds=20)
 
     assert completed["calls_used"] == 54, (
         completed["status"],

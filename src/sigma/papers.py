@@ -2551,6 +2551,25 @@ def _work_file(path: str, *, create: bool) -> Path:
     return directory / "checkpoint.json"
 
 
+_PAPER_PROGRESS_RECOVERY_ISSUE = (
+    "SIGMA recovered inconsistent paper-generation progress counters by clearing only "
+    "the progress display; saved sections and provider-call accounting were preserved."
+)
+
+
+def _paper_progress_counts_valid(current: Any, total: Any) -> bool:
+    """Zero completed work is valid; a nonempty total is required for numbered stages."""
+    if current is None or total is None:
+        return current is None and total is None
+    return type(current) is int and type(total) is int and total >= 1 and 0 <= current <= total
+
+
+def _note_paper_progress_recovery(work: dict[str, Any]) -> None:
+    issues = work.setdefault("generation_issues", [])
+    if _PAPER_PROGRESS_RECOVERY_ISSUE not in issues and len(issues) < 20:
+        issues.append(_PAPER_PROGRESS_RECOVERY_ISSUE)
+
+
 def _load_work(path: str) -> dict[str, Any] | None:
     file = _work_file(path, create=False)
     if not file.exists() and not file.is_symlink():
@@ -2606,7 +2625,15 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "writing_source_selection",
         "publication_compilation",
         "publication_compiler_calls",
+        "generation_issues",
     }
+    generation_issues = value.get("generation_issues", [])
+    if (
+        not isinstance(generation_issues, list)
+        or len(generation_issues) > 20
+        or any(not isinstance(issue, str) or len(issue) > 300 for issue in generation_issues)
+    ):
+        raise ProjectError("Saved paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
     if "frozen_package_ref" in value:
@@ -2918,17 +2945,14 @@ def _load_work(path: str) -> dict[str, Any] | None:
             or progress_state["elapsed_seconds"] < 0
         ):
             raise ProjectError("Paper progress checkpoint is invalid")
-        for key in ("current", "total"):
-            count = progress_state.get(key)
-            if count is not None and (type(count) is not int or count < 1):
-                raise ProjectError("Paper progress count is invalid")
-        if (progress_state.get("current") is None) != (progress_state.get("total") is None):
-            raise ProjectError("Paper progress count is incomplete")
-        if (
-            progress_state.get("current") is not None
-            and progress_state["current"] > progress_state["total"]
+        if not _paper_progress_counts_valid(
+            progress_state.get("current"), progress_state.get("total")
         ):
-            raise ProjectError("Paper progress count exceeds its actual total")
+            # Progress is advisory metadata, not the saved draft or provider-call ledger.
+            # Keep generation resumable even if a prior build stored bad counters.
+            _note_paper_progress_recovery(value)
+            progress_state["current"] = None
+            progress_state["total"] = None
         for key in ("started_at", "updated_at"):
             timestamp = progress_state.get(key)
             if not isinstance(timestamp, str):
@@ -7112,6 +7136,11 @@ async def _generate_impl(
             *,
             detail: str | None = None,
         ) -> None:
+            if not _paper_progress_counts_valid(current, total):
+                # A progress-display mistake must not abort paid paper authoring.
+                if work:
+                    _note_paper_progress_recovery(work)
+                current = total = None
             now = _now()
             elapsed = elapsed_before + max(
                 0, int((datetime.now(UTC) - datetime.fromisoformat(started_at)).total_seconds())
@@ -8027,7 +8056,7 @@ async def _generate_impl(
             "needs_review" if layout_warnings else "no_severe_box_warnings_reported"
         )
         record["generation"]["layout_warnings"] = layout_warnings
-        sigma_issues: list[str] = []
+        sigma_issues: list[str] = list(work.get("generation_issues", []))
         restored_math = int(work.get("static_math_restorations", 0))
         if restored_math:
             sigma_issues.append(
