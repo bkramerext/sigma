@@ -430,8 +430,8 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 }
 .workspace-page .project-pane-actions .project-download-button svg { width: 22px; height: 22px; }
 
-/* The email action uses the same copper yellow as neighboring project icons. */
-.workspace-page .project-pane-actions .text-view-icon.project-email-button:not(:disabled) { color: #e4b57c; }
+/* Use the same icon color and hover rules as the adjacent action buttons. */
+.workspace-page .project-pane-actions .text-view-icon.project-email-button { color: inherit; }
 .workspace-page .project-pane-actions .text-view-icon.project-email-button:hover:not(:disabled) { color: #ffe1ad; }
 
 /* Place project actions in the Project section and reclaim header space for titles. */

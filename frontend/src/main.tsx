@@ -2385,6 +2385,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
     if (!includeOptionsOpen && dialog.open) dialog.close();
   }, [includeOptionsOpen]);
   const [newPaperRequested, setNewPaperRequested] = useState(false);
+  const [confirmNewPaper, setConfirmNewPaper] = useState(false);
   const [draftPaperExpanded, setDraftPaperExpanded] = useState(true);
   useEffect(() => {
     const opened = (event: Event) => {
@@ -2826,8 +2827,13 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
     <header className="workspace-pane-heading papers-pane-heading">
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
       {!guest && !showDraftPaper && <div className="papers-heading-actions strategy-heading-actions">
-        <button type="button" className="text-view-link papers-header-action papers-new-action" aria-label="New paper" data-tooltip="New paper" disabled={showDraftPaper || loading} onClick={() => { if (!expanded) onSectionOpened(); setNewPaperRequested(true); setDraftPaperExpanded(true); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); }}>New</button>
-        <button type="button" className="text-view-link papers-header-action papers-include-action" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => setIncludeOptionsOpen(true)}>Include</button>
+        {confirmNewPaper ? <>
+          <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); }}>Start Paper {draftVersion}</button>
+          <button type="button" className="text-view-link session-start-link" onClick={() => setConfirmNewPaper(false)}>Cancel</button>
+        </> : <>
+          <button type="button" className="text-view-link papers-header-action papers-new-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}>New</button>
+          <button type="button" className="text-view-link papers-header-action papers-include-action" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => setIncludeOptionsOpen(true)}>Include</button>
+        </>}
       </div>}
       <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
