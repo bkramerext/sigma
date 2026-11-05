@@ -141,6 +141,9 @@ _busy_paper_projects: set[str] = set()
 _generating_paper_projects: set[str] = set()
 _paper_waiters: deque[str] = deque()
 _queued_progress: dict[str, dict[str, Any]] = {}
+# Tracks attempts that actually entered the provider/compilation lifecycle.
+# Cancelling a still-queued request must never rewrite an earlier checkpoint.
+_started_paper_attempts: set[str] = set()
 
 
 def _paper_gate() -> asyncio.Condition:
@@ -163,23 +166,24 @@ async def _paper_operation(path: str, *, generating: bool):
     async with gate:
         if key in _busy_paper_projects:
             raise ProjectError("A paper generation is already active or queued for this project")
+        if generating:
+            now = _now()
+            # Commit a tiny, private queue receipt before acknowledging the
+            # request. A backend crash must not silently erase a waiting job.
+            _write_queue_status(path, "queued", now)
         _busy_paper_projects.add(key)
         if generating:
             _paper_waiters.append(key)
-            if (
-                len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS
-                or _paper_waiters[0] != key
-            ):
-                now = _now()
-                _queued_progress[key] = {
-                    "status": "queued",
-                    "stage": "queued",
-                    "current": None,
-                    "total": None,
-                    "started_at": now,
-                    "updated_at": now,
-                    "elapsed_seconds": 0,
-                }
+            _queued_progress[key] = {
+                "status": "queued",
+                "stage": "queued",
+                "current": None,
+                "total": None,
+                "started_at": now,
+                "updated_at": now,
+                "elapsed_seconds": 0,
+            }
+            if len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS or len(_paper_waiters) > 1:
                 logging.getLogger("sigma.lifecycle").info(
                     "paper.queued position=%d", len(_paper_waiters)
                 )
@@ -192,6 +196,8 @@ async def _paper_operation(path: str, *, generating: bool):
                         and len(_generating_paper_projects) < MAX_CONCURRENT_PAPER_GENERATIONS
                     )
                 )
+                # Never start provider work with a stale queued receipt.
+                _clear_queue_status(path)
                 _paper_waiters.popleft()
                 _queued_progress.pop(key, None)
                 _generating_paper_projects.add(key)
@@ -208,6 +214,22 @@ async def _paper_operation(path: str, *, generating: bool):
                         _paper_waiters.remove(key)
                     except ValueError:
                         pass
+                    # No model call was dispatched. Keep an accurate terminal
+                    # state rather than damaging any older research checkpoint.
+                    from sigma.memory_guard import MESSAGE, is_critical
+
+                    critical = is_critical()
+                    try:
+                        _write_queue_status(
+                            path,
+                            "failed" if critical else "cancelled",
+                            now,
+                            MESSAGE if critical else "Cancelled before paper generation began; no provider calls were made.",
+                        )
+                    except (OSError, ProjectError):
+                        logging.getLogger("sigma.lifecycle").error(
+                            "paper.queue_status_write_failed"
+                        )
                 else:
                     _generating_paper_projects.discard(key)
             gate.notify_all()
@@ -7266,6 +7288,10 @@ async def _generate_impl(
 
         require_capacity()  # A queued job must pass admission again when its turn arrives.
         project_key = str(project_path(path).resolve())
+        _started_paper_attempts.add(project_key)
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.start project_id=%s", expected_project_id or "unknown"
+        )
         run_id = uuid4().hex
         started_at = _now()
         elapsed_before = 0
@@ -8396,7 +8422,7 @@ async def generate(
     started = monotonic()
     log = logging.getLogger("sigma.lifecycle")
     project_id = expected_project_id or "unknown"
-    log.info("paper.start project_id=%s long_form=%s", project_id, force_long_form)
+    log.info("paper.requested project_id=%s long_form=%s", project_id, force_long_form)
     try:
         result = await task
         log.info("paper.complete project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
@@ -8406,10 +8432,11 @@ async def generate(
         await asyncio.gather(task, return_exceptions=True)
         from sigma.memory_guard import MESSAGE, is_critical
 
-        if is_critical():
-            finish_progress(path, "failed", MESSAGE)
-        else:
-            finish_progress(path, "cancelled")
+        if key in _started_paper_attempts:
+            if is_critical():
+                finish_progress(path, "failed", MESSAGE)
+            else:
+                finish_progress(path, "cancelled")
         log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
     except Exception as exc:
@@ -8420,7 +8447,8 @@ async def generate(
             if isinstance(exc, ProjectError)
             else "Unexpected paper-generation error; review server logs."
         )
-        finish_progress(path, "failed", reason)
+        if key in _started_paper_attempts:
+            finish_progress(path, "failed", reason)
         from sigma.production_observability import safe_exception_trace
 
         log.error(
@@ -8432,6 +8460,7 @@ async def generate(
         )
         raise
     finally:
+        _started_paper_attempts.discard(key)
         if _generation_tasks.get(key) is task:
             _generation_tasks.pop(key, None)
 
