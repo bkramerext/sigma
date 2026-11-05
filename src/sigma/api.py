@@ -119,6 +119,21 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
+
+
+@app.on_event("startup")
+async def start_memory_protection() -> None:
+    from sigma.memory_guard import attach_loop
+
+    attach_loop(asyncio.get_running_loop())
+
+
+@app.on_event("shutdown")
+async def stop_memory_protection() -> None:
+    from sigma.memory_guard import detach_loop
+
+    detach_loop()
+
 _research_qa_tasks: dict[
     tuple[str, str], tuple[tuple[str, str, str], asyncio.Task[dict[str, Any]]]
 ] = {}
