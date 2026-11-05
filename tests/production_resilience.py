@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 import json
+import os
 import tempfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from sigma.production_observability import memory_snapshot
 from sigma import memory_guard
+from sigma.production_observability import memory_snapshot
 from sigma.projects import ProjectError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,9 +115,17 @@ def main() -> None:
     assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4250})
     assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4500})
     assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4488})
-    with patch.object(memory_guard, "memory_snapshot", return_value={
-        **base, "cgroup_used_mib": 4500,
-    }), patch.object(memory_guard, "_CRITICAL", False):
+    with (
+        patch.object(
+            memory_guard,
+            "memory_snapshot",
+            return_value={
+                **base,
+                "cgroup_used_mib": 4500,
+            },
+        ),
+        patch.object(memory_guard, "_CRITICAL", False),
+    ):
         try:
             memory_guard.require_capacity()
         except ProjectError as exc:
@@ -133,12 +141,15 @@ def main() -> None:
         root = Path(temporary)
         (root / "operational-logs").mkdir()
         sent: list[tuple[str, str]] = []
+
         def capture(subject: str, body: str) -> None:
             sent.append((subject, body))
 
-        with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_HOME": str(root)}), patch.object(
-            cloud_auth, "config", return_value=SimpleNamespace(enabled=True)
-        ), patch.object(cloud_auth, "_deliver_admin_notice", side_effect=capture):
+        with (
+            patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_HOME": str(root)}),
+            patch.object(cloud_auth, "config", return_value=SimpleNamespace(enabled=True)),
+            patch.object(cloud_auth, "_deliver_admin_notice", side_effect=capture),
+        ):
             with patch.object(memory_guard, "_LAST_ALERT", 0.0):
                 memory_guard._notify_admin(base)
                 assert len(sent) == 1
