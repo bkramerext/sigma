@@ -3144,6 +3144,80 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
             os.close(fd)
     finally:
         staged.unlink(missing_ok=True)
+    if isinstance(state.get("progress"), dict):
+        _write_progress_status(path, state["progress"])
+
+
+def _progress_status_file(path: str, *, create: bool = False) -> Path:
+    return _work_file(path, create=create).with_name("progress-status.json")
+
+
+def _write_progress_status(path: str, state: dict[str, Any]) -> None:
+    """Keep a bounded progress sidecar; never deserialize 100 MB for polling."""
+    fields = (
+        "run_id",
+        "status",
+        "stage",
+        "current",
+        "total",
+        "started_at",
+        "updated_at",
+        "elapsed_seconds",
+        "detail",
+        "failure_reason",
+    )
+    record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
+    encoded = _json(record)
+    if len(encoded) > 4096:
+        raise ProjectError("Paper progress metadata exceeds its safety bound")
+    file = _progress_status_file(path, create=True)
+    staged = _stage(file.parent, encoded)
+    try:
+        os.replace(staged, file)
+        fd = os.open(file.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def _read_progress_status(path: str) -> dict[str, Any] | None:
+    file = _progress_status_file(path)
+    if not file.exists() and not file.is_symlink():
+        return None
+    if file.is_symlink() or not file.is_file() or file.stat().st_size > 4096:
+        raise ProjectError("Paper progress metadata is unsafe")
+    try:
+        record = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(record, dict) or record.get("schema_version") != 1:
+            raise ValueError("invalid version")
+        state = record.get("progress")
+        if (
+            not isinstance(state, dict)
+            or state.get("status") not in {"running", "failed", "cancelled", "complete"}
+            or not isinstance(state.get("stage"), str)
+            or not isinstance(state.get("started_at"), str)
+            or not isinstance(state.get("updated_at"), str)
+            or type(state.get("elapsed_seconds")) is not int
+        ):
+            raise ValueError("invalid progress metadata")
+        if (
+            datetime.fromisoformat(state["started_at"]).tzinfo is None
+            or datetime.fromisoformat(state["updated_at"]).tzinfo is None
+        ):
+            raise ValueError("progress timestamps require timezone")
+        return state
+    except (OSError, ValueError, TypeError) as exc:
+        raise ProjectError("Paper progress metadata is unreadable") from exc
+
+
+def _clear_progress_status(path: str) -> None:
+    file = _progress_status_file(path)
+    if file.is_symlink():
+        raise ProjectError("Paper progress metadata is unsafe")
+    file.unlink(missing_ok=True)
 
 
 def _clear_work(path: str) -> None:
@@ -3151,6 +3225,7 @@ def _clear_work(path: str) -> None:
     if file.is_symlink():
         raise ProjectError("Long-paper checkpoint is unsafe")
     file.unlink(missing_ok=True)
+    _clear_progress_status(path)
 
 
 def _queue_status_file(path: str, *, create: bool = False) -> Path:
@@ -3290,8 +3365,18 @@ def progress_status(path: str) -> dict[str, Any] | None:
                 ),
                 **({"detail": receipt["detail"]} if receipt.get("detail") else {}),
             }
-        work = _load_work(path)
-        state = work.get("progress") if work is not None else None
+        state = _read_progress_status(path)
+        if state is None:
+            work = _load_work(path)
+            state = work.get("progress") if work is not None else None
+            if state is not None:
+                # Migrate pre-sidecar checkpoints once, preserving full work.
+                try:
+                    _write_progress_status(path, state)
+                except (OSError, ProjectError):
+                    logging.getLogger("sigma.lifecycle").warning(
+                        "paper.progress_sidecar_migration_failed"
+                    )
     if state is None:
         return None
     running_here = bool(active and active.get("run_id") == state.get("run_id"))
