@@ -13371,12 +13371,15 @@ async def _portfolio_strategy_pipeline(
             session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
         )
     except Exception as exc:  # noqa: BLE001 — preserve completed sibling outputs
+        from sigma.production_observability import safe_exception_trace
+
         logging.getLogger("sigma.lifecycle").error(
-            "session.strategy_exception session_id=%s strategy_id=%s role=%s error_type=%s",
+            "session.strategy_exception session_id=%s strategy_id=%s role=%s error_type=%s frames=%s",
             session_id,
             strategy_id,
             role,
             type(exc).__name__,
+            safe_exception_trace(exc),
         )
         async with state_lock:
             record = _read(path, session_id)
@@ -15746,8 +15749,13 @@ async def _worker(session_id: str, path: str) -> None:
             pass
         raise
     except (ProjectError, OSError, ValueError, TypeError, httpx.HTTPError, TimeoutError) as exc:
+        from sigma.production_observability import safe_exception_trace
+
         log.error(
-            "session.worker_exception session_id=%s error_type=%s", session_id, type(exc).__name__
+            "session.worker_exception session_id=%s error_type=%s frames=%s",
+            session_id,
+            type(exc).__name__,
+            safe_exception_trace(exc),
         )
         try:
             record = _read(path, session_id)
