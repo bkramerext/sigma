@@ -110,8 +110,11 @@ def main() -> None:
                           }));
                         }"""
                     )
-                    panel = page.get_by_role("region", name="Project diagnostics")
-                    panel.locator("summary").click()
+                    panel = page.get_by_role("region", name="Diagnostics", exact=True)
+                    summary = panel.locator("summary")
+                    expect(summary).to_have_text("Diagnostics (1)")
+                    expect(panel.locator("details")).not_to_have_attribute("open")
+                    summary.click()
                     expect(panel).to_contain_text("pre-session")
                     expect(panel).to_contain_text("reference_http_404")
                     panel.get_by_role("button", name="Copy project diagnostics").click()

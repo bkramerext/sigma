@@ -40,14 +40,14 @@ with sync_playwright() as playwright:
     page.goto(base_url + "/project?path=" + quote(str(path), safe=""))
     expect(page.get_by_role("heading", name="T201 overflow fixture")).to_be_visible()
 
-    page.get_by_role("button", name="Start a new research session").click()
-    expect(page.locator(".session-start-limits")).to_have_text(
-        "1 round × 1 paired turn × 2 agents × 1 enabled strategy = 2 maximum agent calls"
-    )
+    page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True).click()
+    expect(
+        page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 2")
+    ).to_be_visible()
     page.set_viewport_size({"width": 390, "height": 844})
     for button in (
-        page.get_by_role("button", name="Start Session #2"),
-        page.locator('button[title="Cancel starting a research session"]'),
+        page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 2"),
+        page.locator(".sessions-pane-heading").get_by_role("button", name="Cancel"),
     ):
         box = button.bounding_box()
         assert box is not None, "Research start action must be visible"
@@ -55,8 +55,8 @@ with sync_playwright() as playwright:
             f"Research start action overflows narrow viewport: {box}"
         )
     page.set_viewport_size({"width": 1440, "height": 900})
-    page.locator('button[title="Start Session #2"]').click()
-    row = page.locator(".session-row").filter(has_text="Session #2")
+    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 2").click()
+    row = page.locator(".session-row").filter(has_text="Session 2")
     expect(row).to_be_visible(timeout=15000)
     expect(row.locator(".session-status")).to_have_text(
         re.compile("completed|ended"), timeout=30000
@@ -89,9 +89,9 @@ with sync_playwright() as playwright:
     assert info["omitted_text"] not in str(manifest)
 
     # The same eligible strategy remains usable, with its durable history intact.
-    page.get_by_role("button", name="Start a new research session").click()
-    page.locator('button[title="Start Session #3"]').click()
-    second_row = page.locator(".session-row").filter(has_text="Session #3")
+    page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True).click()
+    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 3").click()
+    second_row = page.locator(".session-row").filter(has_text="Session 3")
     expect(second_row).to_be_visible(timeout=15000)
     expect(second_row.locator(".session-status")).to_have_text(
         re.compile("completed|ended"), timeout=30000

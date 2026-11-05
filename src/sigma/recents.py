@@ -399,6 +399,7 @@ class RecentProject:
     project_type_snapshot: dict | None = None
     paper_count: int = 0
     best_paper_score: int | None = None
+    paper_generating: bool = False
 
 
 def recent_projects() -> dict:
@@ -425,7 +426,15 @@ def recent_projects() -> dict:
                 except ValueError:
                     pass
             entries.append(copied)
+    from sigma import papers
     from sigma.research_sessions import has_active_session
+
+    def paper_generation_running(path: str) -> bool:
+        try:
+            return papers.has_active_generation(path)
+        except (ProjectError, OSError):
+            # A bad or unreadable paper checkpoint must not hide the project.
+            return False
 
     recent = []
     for entry in entries:
@@ -448,6 +457,7 @@ def recent_projects() -> dict:
                         best_paper_score=paper_metadata["best_paper_score"],
                         difficulty=view.project.difficulty,
                         research_running=has_active_session(view.path),
+                        paper_generating=paper_generation_running(view.path),
                         available=True,
                         pinned=(view.project.id in pins.values()),
                         pin_state=(

@@ -163,6 +163,13 @@ _active_progress: dict[str, dict[str, Any]] = {}
 # Hold strong references to running authoring tasks independently of SSE clients.
 # Losing a browser connection must never cancel an already dispatched AI call.
 _generation_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+
+
+def has_active_generation(path: str) -> bool:
+    """Cheap activity flag for Home polling; never load large paper checkpoints."""
+    return str(project_path(path).resolve()) in _generating_paper_projects
+
+
 _CITATION_LIKE = re.compile(
     r"\[[0-9]{1,3}\]|\b(?:doi\s*:|arxiv\s*:|https?://)|\([A-Z][A-Za-z-]+(?:\s+et\s+al\.)?,?\s+20[0-9]{2}[a-z]?\)"
 )
@@ -172,6 +179,26 @@ class PaperSnapshotConflict(ProjectError):
     """A changed evidence snapshot rejected before this attempt used a provider."""
 
     provider_calls_attempted = 0
+
+
+class PaperBrowserPaused(ProjectError):
+    """Browser-origin paper work stopped at a saved boundary without starting new calls."""
+
+
+def _require_browser_presence(path: str, required: bool) -> None:
+    """Prevent new browser-origin provider calls without an authorized viewer."""
+    if not required:
+        return
+    from sigma import research_preferences, research_presence
+
+    if (
+        not research_preferences.allow_unattended_background_execution()
+        and not research_presence.has_live_viewer(path)
+    ):
+        raise PaperBrowserPaused(
+            "Paper generation paused because the browser disconnected. "
+            "Saved work can be continued after reopening the project."
+        )
 
 
 class PaperConnectionFailure(ProjectError):
@@ -2969,7 +2996,8 @@ def _load_work(path: str) -> dict[str, Any] | None:
             )
             or not isinstance(progress_state.get("run_id"), str)
             or not re.fullmatch(r"[0-9a-f]{32}", progress_state["run_id"])
-            or progress_state.get("status") not in {"running", "failed", "cancelled", "complete"}
+            or progress_state.get("status")
+            not in {"running", "failed", "cancelled", "complete", "paused"}
             or progress_state.get("stage")
             not in {
                 "snapshot",
@@ -3048,7 +3076,9 @@ def progress_status(path: str) -> dict[str, Any] | None:
     """Return only persisted stage metadata; never expose prompts or provider content."""
     key = str(project_path(path).resolve())
     active = _active_progress.get(key)
-    work = _load_work(path)
+    # Polling and SSE heartbeats must not repeatedly deserialize a potentially
+    # large evidence/draft checkpoint while an in-memory run is active.
+    work = _load_work(path) if active is None else None
     saved = work.get("progress") if work is not None else None
     state = active or saved
     if state is None:
@@ -3057,6 +3087,8 @@ def progress_status(path: str) -> dict[str, Any] | None:
     status = state["status"]
     if status == "running":
         status = "active" if running_here else "interrupted"
+    elif status == "paused":
+        status = "interrupted"
     elapsed = int(state["elapsed_seconds"])
     if running_here:
         updated_at = datetime.fromisoformat(state["updated_at"])
@@ -3076,7 +3108,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
                     "call might have been billed and will not be blindly repeated."
                 )
             }
-            if status == "interrupted"
+            if status == "interrupted" and state["status"] == "running"
             else ({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {})
         ),
         **(
@@ -3088,7 +3120,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
 
 
 def finish_progress(
-    path: str, status: Literal["failed", "cancelled"], reason: str | None = None
+    path: str, status: Literal["failed", "cancelled", "paused"], reason: str | None = None
 ) -> None:
     """Freeze the latest checkpointed progress when generation exits abnormally."""
     key = str(project_path(path).resolve())
@@ -3113,6 +3145,10 @@ def finish_progress(
     }
     if reason and status == "failed":
         frozen["failure_reason"] = reason[:500]
+    elif reason and status == "paused":
+        # Keep the reason for an intentional browser-presence pause distinct
+        # from an unplanned backend restart.
+        frozen["detail"] = reason[:160]
     if work is not None:
         work["progress"] = frozen
         _save_work(path, work)
@@ -7190,6 +7226,7 @@ async def _generate_impl(
     include_diagrams: bool = True,
     frozen_snapshot: dict[str, Any] | None = None,
     include_sigma_issues: bool = False,
+    browser_presence_required: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -7257,6 +7294,12 @@ async def _generate_impl(
                         "detail": detail,
                     }
                 )
+            # Respect the existing unattended-execution preference only for
+            # browser-originated work, and only before an expensive new stage.
+            # Never cancel an in-flight provider response merely because the
+            # browser connection ended: the response must be checkpointed.
+            if state == "milestone" or (stage == "publication_compilation" and not work):
+                _require_browser_presence(path, browser_presence_required)
 
         task = asyncio.current_task()
         if task is not None:
@@ -7269,6 +7312,8 @@ async def _generate_impl(
                         finish_progress(path, "failed", MESSAGE)
                     else:
                         finish_progress(path, "cancelled")
+                elif isinstance(completed_task.exception(), PaperBrowserPaused):
+                    finish_progress(path, "paused", str(completed_task.exception()))
                 elif completed_task.exception() is not None:
                     finish_progress(path, "failed")
                 active = _active_progress.get(project_key)
@@ -7624,6 +7669,9 @@ async def _generate_impl(
                     "updated_at": _now(),
                     "elapsed_seconds": elapsed_before,
                 }
+                # Check viewer presence before recording a paid attempt. The
+                # browser might have left after the publication milestone.
+                _require_browser_presence(path, browser_presence_required)
                 # Persist a conservative attempted-call count BEFORE dispatch.
                 # An unsuccessful or interrupted response still may have used
                 # provider allowance. Clearing the explicit reset marker keeps
@@ -7640,6 +7688,9 @@ async def _generate_impl(
                         # An in-flight request may have consumed allowance;
                         # record each authorized replay before dispatch.
                         await asyncio.sleep(0.4 * (attempt_number - 1))
+                        # A transient failure must not spend more allowance
+                        # after the final viewer leaves with unattended disabled.
+                        _require_browser_presence(path, browser_presence_required)
                         work["provider_calls"] = int(work["provider_calls"]) + 1
                         work["provider_calls_total"] = int(work["provider_calls_total"]) + 1
                         _save_work(path, work)
@@ -8293,8 +8344,9 @@ async def generate(
     *,
     frozen_snapshot: dict[str, Any] | None = None,
     include_sigma_issues: bool = False,
+    browser_presence_required: bool = False,
 ) -> dict[str, Any]:
-    """Run independently of a browser stream, with explicit cancellation only."""
+    """Run independently of the stream; browser-bound work obeys user preference at safe boundaries."""
     from sigma.memory_guard import require_capacity
 
     require_capacity()
@@ -8317,6 +8369,7 @@ async def generate(
             include_diagrams,
             frozen_snapshot,
             include_sigma_issues,
+            browser_presence_required,
         )
     )
     _generation_tasks[key] = task
@@ -8338,6 +8391,10 @@ async def generate(
         else:
             finish_progress(path, "cancelled")
         log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
+        raise
+    except PaperBrowserPaused as exc:
+        finish_progress(path, "paused", str(exc))
+        log.info("paper.paused project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
     except Exception as exc:
         # The SSE error can disappear on page reload; retain only the same

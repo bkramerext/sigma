@@ -73,8 +73,8 @@ with sync_playwright() as playwright:
         arg=path,
         timeout=20000,
     )
-    page.get_by_role("button", name="Start a new research session", exact=True).click()
-    page.get_by_role("button", name="Start Session #1", exact=True).click()
+    page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True).click()
+    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 1").click()
     expect(page.locator("li[data-session-id]").first.locator(".session-status")).to_have_text(
         "ended", timeout=30000
     )
@@ -83,21 +83,17 @@ with sync_playwright() as playwright:
         path,
     )
 
-    tex = page.get_by_role("button", name="LaTeX research paper", exact=True)
     qa_button = page.get_by_role("button", name="Research Q/A", exact=True)
-    expect(tex).to_be_visible()
     expect(qa_button).to_be_visible()
-    assert qa_button.bounding_box()["x"] > tex.bounding_box()["x"]
     assert (
         page.evaluate("el => parseFloat(getComputedStyle(el).fontSize)", qa_button.element_handle())
         >= 16
     )
-    lean = page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
-    assert (
-        qa_button.bounding_box()["height"]
-        == tex.bounding_box()["height"]
-        == lean.bounding_box()["height"]
-    )
+    # The retired Lean action must not be reintroduced to the project header.
+    expect(
+        page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
+    ).to_have_count(0)
+    expect(page.locator(".papers-pane").get_by_role("heading", name="Papers")).to_be_visible()
     page.screenshot(path=str(OUT / "research-qa-toolbar.png"), full_page=False)
     qa_button.click()
     dialog = page.get_by_role("dialog", name="Research Q/A")
