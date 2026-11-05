@@ -14,8 +14,9 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 256
-    mem_limit: 5g
-    cpus: 2.0
+    mem_limit: 10g
+    memswap_limit: 10g
+    cpus: 3.0
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m,uid=${SIGMA_BACKEND_UID:-10001},gid=${SIGMA_BACKEND_GID:-10001},mode=0700
     volumes:
