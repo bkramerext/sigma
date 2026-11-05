@@ -636,12 +636,57 @@ validated phenomena. State unresolved falsification and physical feasibility
 obligations precisely; preserve meaningful negative results and objections."""
 
 
+LITERATURE_INSTRUCTIONS = """Write a literary-critical essay, not a proof, legal brief,
+laboratory report, or research audit. Develop a sustained, nuanced interpretation of
+the work in readable scholarly prose. Organize the argument around an interpretive
+question, a persuasive thesis, close readings of relevant passages or scenes, and
+an ending that explains what the reading illuminates. Use thematic or interpretive
+section headings rather than labels such as theorem, proof, experiment, hypothesis
+test, or verification result.
+
+Attend to diction, imagery, character, dialogue, narrative voice, dramatic
+construction, genre, form, and ambiguity insofar as the saved evidence supports
+them. Quote a literary passage only when its actual words are present in the
+frozen evidence; otherwise paraphrase accurately without invented quotation
+marks, page numbers, line numbers, acts, scenes, editions, or citations. Where
+research includes historical context, criticism, biography, or reception,
+distinguish sourced facts from interpretation. A work's portrayal of history
+is not itself a historical record, and inferred authorial intention is not a
+documented author statement. Acknowledge material counterreadings and passages
+that resist the thesis without treating interpretive disagreement as failure
+of formal proof. Interpretive exploration is welcome: a well-grounded reading
+may suggest a possibility without establishing a historical fact or a unique
+meaning. Make important conjectural leaps visible in natural prose rather than
+dismissing or overstating them. Depending on the sentence, use phrasing such as
+"the scene suggests", "one reading is", "may reflect", "could be understood as",
+or "invites the possibility" where warranted. Do not mechanically rotate these
+phrases, repeatedly write "speculation" or "speculative", or qualify every
+sentence. Locate uncertainty where it affects the argument and maintain a
+confident voice for observations the text actually supports. Never present
+imagined authorial intentions, motives, or historical events as established.
+
+The methods field may describe close reading, source criticism, historical
+comparison, or reception analysis actually performed; do not fabricate
+archival research or impose experimental protocol. Maintain the structured
+claim IDs, evidence references, and unresolved questions required for SIGMA's
+internal traceability, but keep that bookkeeping out of reader-facing prose.
+Avoid legalistic and mathematical diction such as burden of proof, proof
+obligation, theorem, lemma, adjudication, validation workflow, or falsification
+unless it is genuinely part of the work being analyzed. Do not narrate an
+Investigator/Skeptic exchange. Write like a careful literature scholar:
+precise about evidence, generous to ambiguity, and clear about why an
+interpretation matters. External scholarship is citable only when actually
+supplied and inspected; never manufacture a bibliography or consensus."""
+
+
 def _subject_methodology(investigation_type: str) -> str:
     """Broad writing guidance suited to research type, not a narrow specialty."""
     if investigation_type == "mathematical":
         return MATHEMATICS_INSTRUCTIONS
     if investigation_type == "physics":
         return PHYSICS_INSTRUCTIONS
+    if investigation_type == "literature":
+        return LITERATURE_INSTRUCTIONS
     return ""
 
 
@@ -3806,6 +3851,20 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         (
             "Distinguish documented textual claims from interpretations; acknowledge "
             "traditions, counterarguments, and open questions."
+        ),
+    ),
+    "literature": (
+        "Introduction and literary context",
+        "Interpretive approach and sources",
+        "Close readings and interpretations",
+        (
+            "Develop a source-grounded literary interpretation through sustained "
+            "close reading, textual detail, historical context when supported, "
+            "and serious counterreadings. Permit qualified, text-grounded "
+            "interpretive possibilities without insisting on unique proof or "
+            "repeated speculation disclaimers. Favor graceful scholarly prose over "
+            "formal proof, legal adjudication, or scientific-method rhetoric. "
+            "Treat source traceability as a foundation, not as the essay's voice."
         ),
     ),
     "default": (

@@ -3165,6 +3165,40 @@ RESEARCH_LEGAL_METHOD_GUIDANCE = (
     "effective dates; distinguish a cited primary legal text from an "
     "unverified interpretation and examine adverse precedent or exceptions. "
 )
+# Literary scholarship needs source-critical interpretation, not mathematical proof.
+# This lens is always present for the built-in Literature type, whether or not
+# a user has enabled optional external methodology references.
+RESEARCH_LITERATURE_METHOD_GUIDANCE = (
+    "For literary research, develop a defensible interpretation rather than a formal proof. "
+    "Close-read the actual work: its diction, imagery, dialogue, narrative voice, "
+    "characterization, genre, form, and dramatic structure where relevant. "
+    "Tie each interpretation to specific passages genuinely available in the supplied "
+    "evidence; never invent quotations, act or scene references, page numbers, editions, "
+    "historical records, scholarly sources, or biographical details. "
+    "Separate what a literary work depicts from documented history, authorial intent, "
+    "and later critical reception; identify temporal distance, provenance, and any "
+    "uninspected primary or secondary sources that materially limit an inference. "
+    "Allow imaginative, tentative readings when grounded in textual features or "
+    "clearly identified context: a defensible possibility need not be demonstrable "
+    "fact. Indicate material uncertainty in natural varied language, such as "
+    "'suggests', 'may evoke', 'could be read as', or 'one possible reading', "
+    "without repeatedly announcing that an interpretation is speculative. "
+    "Qualify the particular inference where needed, not every sentence; do not "
+    "turn unsupported historical events or authorial motives into facts. "
+    "Compare plausible alternative readings, including details that complicate "
+    "the preferred reading; several interpretations may remain defensible. "
+    "The Investigator should build an interpretive thesis and examine difficult "
+    "passages, not manufacture lemmas or numerical tests. The Skeptic should probe "
+    "selective quotation, missing context, anachronism, unsupported intentions, "
+    "and overlooked counterreadings rather than demanding deductive certainty "
+    "or rejecting a clearly qualified interpretation merely because it cannot "
+    "be proven uniquely. "
+    "Interpret generic schema words such as claim, test, counterexample, and open "
+    "obligation as a scholarly reading, a textual or historical check, contrary "
+    "evidence, and a consequential unresolved question. Keep evidence provenance "
+    "auditable without describing literary analysis as proof, refutation, "
+    "a theorem, or a formal verification exercise. "
+)
 RESEARCH_OTHER_METHOD_GUIDANCE = (
     "Match the chosen inquiry to its actual discipline: determine the unit "
     "of analysis, relevant primary evidence, rival explanation and valid "
@@ -3180,6 +3214,7 @@ RESEARCH_MODE_METHOD_GUIDANCE: dict[str, str] = {
     "chemistry": RESEARCH_CHEMISTRY_METHOD_GUIDANCE,
     "philosophy": RESEARCH_PHILOSOPHY_METHOD_GUIDANCE,
     "law": RESEARCH_LEGAL_METHOD_GUIDANCE,
+    "literature": RESEARCH_LITERATURE_METHOD_GUIDANCE,
     "military": RESEARCH_OTHER_METHOD_GUIDANCE,
     "religion": RESEARCH_OTHER_METHOD_GUIDANCE,
     "default": RESEARCH_OTHER_METHOD_GUIDANCE,
