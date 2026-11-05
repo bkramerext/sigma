@@ -271,9 +271,7 @@ def main() -> None:
             }
             papers._active_progress[key] = later
             try:
-                papers.finish_progress(
-                    second_name, "failed", expected_run_id="old-run"
-                )
+                papers.finish_progress(second_name, "failed", expected_run_id="old-run")
                 assert papers._active_progress[key] is later
                 assert papers._load_work(second_name) == old_work
             finally:
@@ -296,7 +294,8 @@ def main() -> None:
             assert papers.activity_status(second_name) == "queued"
             with (
                 patch.object(
-                    memory_guard, "require_capacity",
+                    memory_guard,
+                    "require_capacity",
                     side_effect=ProjectError(memory_guard.MESSAGE),
                 ),
                 patch.object(memory_guard, "is_critical", return_value=True),
