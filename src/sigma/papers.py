@@ -2356,6 +2356,7 @@ def _allocate_paper_version(path: str) -> int:
 def paper_download_basename(path: str, paper_id: str) -> str:
     """Return the shared, stable human-readable basename for a saved version."""
     record = get_paper(path, paper_id)
+    project = inspect_project(path).project
     slug = _paper_filename_slug(project.title)
     version = record.get("paper_version")
     if type(version) is not int or version < 1:
@@ -8686,10 +8687,7 @@ def list_papers(path: str) -> list[dict[str, Any]]:
     for file, contents in files:
         try:
             value = json.loads(contents)
-            if (
-                isinstance(value, dict)
-                and value.get("project_id") == project.id
-            ):
+            if isinstance(value, dict) and value.get("project_id") == project.id:
                 records.append(
                     {
                         "paper_id": value["paper_id"],
