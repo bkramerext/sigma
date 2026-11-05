@@ -136,27 +136,48 @@ MAX_PAPERS = 50
 # Serialize generation on the single backend worker; requests wait in FIFO order.
 MAX_CONCURRENT_PAPER_GENERATIONS = 1
 _gate = asyncio.Condition()
+_gate_loop: asyncio.AbstractEventLoop | None = None
 _busy_paper_projects: set[str] = set()
 _generating_paper_projects: set[str] = set()
 _paper_waiters: deque[str] = deque()
 _queued_progress: dict[str, dict[str, Any]] = {}
 
 
+def _paper_gate() -> asyncio.Condition:
+    """Bind the gate to the running loop; CLI/tests may use successive loops."""
+    global _gate, _gate_loop
+    loop = asyncio.get_running_loop()
+    if _gate_loop is not loop:
+        if _busy_paper_projects:
+            raise RuntimeError("Paper generation cannot move between active event loops")
+        _gate = asyncio.Condition()
+        _gate_loop = loop
+    return _gate
+
+
 @asynccontextmanager
 async def _paper_operation(path: str, *, generating: bool):
     key = str(project_path(path).resolve())
+    gate = _paper_gate()
     admitted = False
-    async with _gate:
+    async with gate:
         if key in _busy_paper_projects:
             raise ProjectError("A paper generation is already active or queued for this project")
         _busy_paper_projects.add(key)
         if generating:
             _paper_waiters.append(key)
-            if len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS or _paper_waiters[0] != key:
+            if (
+                len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS
+                or _paper_waiters[0] != key
+            ):
                 now = _now()
                 _queued_progress[key] = {
-                    "status": "queued", "stage": "queued", "current": None,
-                    "total": None, "started_at": now, "updated_at": now,
+                    "status": "queued",
+                    "stage": "queued",
+                    "current": None,
+                    "total": None,
+                    "started_at": now,
+                    "updated_at": now,
                     "elapsed_seconds": 0,
                 }
                 logging.getLogger("sigma.lifecycle").info(
@@ -164,10 +185,12 @@ async def _paper_operation(path: str, *, generating: bool):
                 )
     try:
         if generating:
-            async with _gate:
-                await _gate.wait_for(
-                    lambda: _paper_waiters[0] == key
-                    and len(_generating_paper_projects) < MAX_CONCURRENT_PAPER_GENERATIONS
+            async with gate:
+                await gate.wait_for(
+                    lambda: (
+                        _paper_waiters[0] == key
+                        and len(_generating_paper_projects) < MAX_CONCURRENT_PAPER_GENERATIONS
+                    )
                 )
                 _paper_waiters.popleft()
                 _queued_progress.pop(key, None)
@@ -176,7 +199,7 @@ async def _paper_operation(path: str, *, generating: bool):
                 logging.getLogger("sigma.lifecycle").info("paper.dequeued")
         yield
     finally:
-        async with _gate:
+        async with gate:
             _busy_paper_projects.discard(key)
             _queued_progress.pop(key, None)
             if generating:
@@ -187,7 +210,7 @@ async def _paper_operation(path: str, *, generating: bool):
                         pass
                 else:
                     _generating_paper_projects.discard(key)
-            _gate.notify_all()
+            gate.notify_all()
 
 
 _active_progress: dict[str, dict[str, Any]] = {}
