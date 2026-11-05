@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import json
 import tempfile
 import time
@@ -11,6 +12,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from sigma.production_observability import memory_snapshot
+from sigma import memory_guard
+from sigma.projects import ProjectError
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -96,12 +99,52 @@ def main() -> None:
         for file in (old, recent, active, other):
             file.write_text("test", encoding="utf-8")
         earlier = time.time() - 10 * 86400
-        import os
-
         for file in (old, active, other):
             os.utime(file, (earlier, earlier))
         assert cleanup.main() == 0
         assert not old.exists() and recent.exists() and active.exists() and other.exists()
+
+    # Cgroup pressure is a fail-closed admission and cancellation threshold,
+    # not a comparison against process RSS or the host's spare RAM.
+    base = {
+        "cgroup_used_mib": 1000,
+        "cgroup_limit_mib": 5000,
+        "host_available_mib": 8000,
+    }
+    assert not memory_guard.critical_snapshot(base)
+    assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4250})
+    assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4500})
+    assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4488})
+    with patch.object(memory_guard, "memory_snapshot", return_value={
+        **base, "cgroup_used_mib": 4500,
+    }), patch.object(memory_guard, "_CRITICAL", False):
+        try:
+            memory_guard.require_capacity()
+        except ProjectError as exc:
+            assert "nearly exhausted" in str(exc)
+        else:
+            raise AssertionError("New work was admitted at critical memory pressure")
+
+    # Operator mail is addressed to the existing verified administrator roster
+    # and guarded against duplicate sends after a process restart.
+    from sigma import cloud_auth
+
+    with tempfile.TemporaryDirectory(prefix="sigma-memory-alert-") as temporary:
+        root = Path(temporary)
+        (root / "operational-logs").mkdir()
+        sent: list[tuple[str, str]] = []
+        def capture(subject: str, body: str) -> None:
+            sent.append((subject, body))
+
+        with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_HOME": str(root)}), patch.object(
+            cloud_auth, "config", return_value=SimpleNamespace(enabled=True)
+        ), patch.object(cloud_auth, "_deliver_admin_notice", side_effect=capture):
+            with patch.object(memory_guard, "_LAST_ALERT", 0.0):
+                memory_guard._notify_admin(base)
+                assert len(sent) == 1
+            with patch.object(memory_guard, "_LAST_ALERT", 0.0):
+                memory_guard._notify_admin(base)
+                assert len(sent) == 1, "Restart-safe cooldown should prevent another alert"
 
     print("SIGMA resilience offline checks passed.")
 
