@@ -20,7 +20,7 @@ from research_sessions import (
     wait_for,
 )
 
-from sigma import continuations, research_sessions
+from sigma import continuations, research_sessions, session_log
 from sigma.api import export_project_view
 from sigma.project_reports import render_report
 from sigma.projects import create_strategy, initialize_project, inspect_project
@@ -881,6 +881,9 @@ async def main() -> None:
                 indent=2,
             )
         )
+        # Research session diagnostics write in background threads. Ensure all
+        # queued writes finish before the temporary project directory is removed.
+        session_log.flush()
 
 
 if __name__ == "__main__":
