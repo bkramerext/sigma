@@ -157,6 +157,26 @@ def main() -> None:
                 memory_guard._notify_admin(base)
                 assert len(sent) == 1, "Restart-safe cooldown should prevent another alert"
 
+    # All tracked AI activities are cancelled along with session/paper workers.
+    import asyncio
+
+    async def test_other_activity_cancellation() -> None:
+        began = asyncio.Event()
+
+        async def active() -> None:
+            began.set()
+            await asyncio.Event().wait()
+
+        task = asyncio.create_task(active())
+        memory_guard.track_task(task)
+        await began.wait()
+        await memory_guard._cancel_active()
+        assert task.cancelled()
+        assert task not in memory_guard._ACTIVE_TASKS
+        assert not memory_guard._SHUTDOWN_PENDING
+
+    asyncio.run(test_other_activity_cancellation())
+
     print("SIGMA resilience offline checks passed.")
 
 
