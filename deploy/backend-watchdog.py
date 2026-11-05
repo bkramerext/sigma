@@ -3,6 +3,7 @@
 Docker"s restart policy alone cannot act on an unhealthy but running container.
 This script runs from a systemd timer; it never deletes application state.
 """
+
 from __future__ import annotations
 
 import fcntl
