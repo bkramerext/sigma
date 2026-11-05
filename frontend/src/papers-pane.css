@@ -180,3 +180,40 @@
 }
 .workspace-page .papers-pane .saved-paper-title-first-line .saved-paper-title,
 .workspace-page .papers-pane .saved-paper-second-line { font-weight: 600; }
+
+/* Draft paper actions share the 28px Session control geometry. A missing
+   session-heading-actions ancestor previously left an empty, 42px box. */
+.workspace-page .papers-pane .paper-draft-process-control {
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box; flex: 0 0 28px;
+  width: 28px; min-width: 28px; height: 28px; min-height: 28px;
+  margin: 0; padding: 3px; border: 1px solid transparent;
+  border-radius: 5px; background: transparent; box-shadow: none; color: #c7a16d;
+}
+.workspace-page .papers-pane .paper-draft-process-control svg {
+  display: block; width: 20px; height: 20px; fill: currentColor;
+}
+.workspace-page .papers-pane .paper-draft-process-control:hover:not(:disabled) {
+  background: #3b3029; border-color: #ac7054;
+}
+.workspace-page .papers-pane .paper-draft-process-control:disabled {
+  opacity: .5; cursor: not-allowed;
+}
+/* Show the stages as a compact Session-like status sequence instead of a
+   full-width bordered dashboard with large empty columns. */
+.workspace-page .papers-pane .paper-draft-card .paper-draft-content { margin-top: 5px; }
+.workspace-page .papers-pane .paper-draft-card .ai-paper-progress {
+  display: grid; gap: 4px; margin: 0; padding: 2px 0;
+  border: 0; border-radius: 0; background: transparent;
+}
+.workspace-page .papers-pane .paper-draft-card .paper-stage-list {
+  display: flex; align-items: baseline; flex-wrap: wrap;
+  column-gap: 16px; row-gap: 3px;
+}
+.workspace-page .papers-pane .paper-draft-card .paper-stage-list li {
+  display: inline-flex; flex-wrap: nowrap; align-items: baseline;
+  gap: 5px; padding: 0; min-width: max-content; font-size: 12px;
+}
+.workspace-page .papers-pane .paper-draft-card .paper-stage-list li span {
+  white-space: normal; min-width: 0;
+}
