@@ -202,6 +202,11 @@ async def _paper_operation(path: str, *, generating: bool):
                         and len(_generating_paper_projects) < MAX_CONCURRENT_PAPER_GENERATIONS
                     )
                 )
+                # Admission is rechecked after the previous paper releases
+                # memory; a failed check retains a durable, provider-free error.
+                from sigma.memory_guard import require_capacity
+
+                require_capacity()
                 # Never start provider work with a stale queued receipt.
                 _clear_queue_status(path)
                 _paper_waiters.popleft()
@@ -3165,6 +3170,13 @@ def _clear_queue_status(path: str) -> None:
     if file.is_symlink():
         raise ProjectError("Paper queue status is unsafe")
     file.unlink(missing_ok=True)
+    # Do not dispatch a billable request until removal is durable. Otherwise,
+    # a crash could resurrect a stale "no provider call" queue receipt.
+    fd = os.open(file.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _read_queue_status(path: str) -> dict[str, Any] | None:
@@ -3240,7 +3252,8 @@ def progress_status(path: str) -> dict[str, Any] | None:
                     "elapsed_seconds": elapsed,
                     "detail": (
                         "The backend restarted while this paper was queued. No AI call was "
-                        "started for this queued request. Select Generate to queue it again."
+                        "started for this queued request. Use Continue or Generate to queue it "
+                        "again; any earlier paper checkpoint remains intact."
                     ),
                 }
             return {
@@ -7408,9 +7421,6 @@ async def _generate_impl(
     include_sigma_issues: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
-        from sigma.memory_guard import require_capacity
-
-        require_capacity()  # A queued job must pass admission again when its turn arrives.
         project_key = str(project_path(path).resolve())
         _started_paper_attempts.add(project_key)
         logging.getLogger("sigma.lifecycle").info(
