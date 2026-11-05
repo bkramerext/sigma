@@ -60,9 +60,7 @@ def main() -> None:
                 return SimpleNamespace(returncode=0, stdout="container123\n")
             raise AssertionError(args)
 
-        with patch.object(watchdog, "command", side_effect=run), patch.object(
-            watchdog.Path, "open", wraps=Path.open
-        ):
+        with patch.object(watchdog, "command", side_effect=run):
             # /run watchdog lock and cooldown files cannot be touched in CI.
             # Check the restart-decision logic independently of systemd by
             # replacing the special paths with test-local paths.
