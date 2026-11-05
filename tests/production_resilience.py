@@ -254,7 +254,7 @@ def main() -> None:
             assert recovery and recovery["status"] == "interrupted"
             assert recovery["stage"] == "queued"
             assert "No AI call was started" in recovery["detail"]
-            assert papers.activity_status(restarted_name) is None
+            assert papers.activity_status(restarted_name) == "interrupted"
 
             # A callback from a previous attempt cannot corrupt a newer
             # attempt's progress or overwrite previously saved evidence.
