@@ -2273,8 +2273,18 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 }
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[] } };
+type PaperActivityStatus = 'queued' | 'active' | 'interrupted' | 'failed';
+
 type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
+
+function PaperActivityMarker({ status }: { status: PaperActivityStatus }) {
+  const label = status === 'queued' ? 'Paper generation queued' : status === 'active'
+    ? 'Paper generation running' : status === 'failed' ? 'Paper generation failed' : 'Paper generation interrupted';
+  return status === 'queued' || status === 'active'
+    ? <span className={`paper-activity-indicator paper-${status}`} aria-label={label} title={label}/>
+    : <span className="paper-activity-warning" role="status" aria-label={label} title={label}>!</span>;
+}
 
 function paperProgressOperation(progress: PaperProgress): string {
   const count = progress.current !== null && progress.total !== null ? ` (${progress.current} of ${progress.total})` : '';
@@ -3604,7 +3614,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 }
 
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperActivity = null }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperActivity?: 'queued' | 'active' | null }) {
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperActivity?: PaperActivityStatus | null }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
@@ -3612,7 +3622,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{researchRunning
         ? <button type="button" className="project-header-title project-header-title-action" aria-label={`Scroll to running session in ${projectTitle}`} title="Scroll to running session" data-tooltip="Scroll to running session" onClick={() => window.dispatchEvent(new Event('sigma-reveal-running-session'))}><span className="project-header-title-text">{projectTitle}</span></button>
-        : <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}{paperActivity && <span className={`paper-activity-indicator paper-${paperActivity}`} title={paperActivity === 'queued' ? 'Paper generation queued' : 'Paper generation running'} aria-label={paperActivity === 'queued' ? 'Paper generation queued' : 'Paper generation running'}/>}</div>{projectActions}</>}</div>
+        : <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}{paperActivity && <PaperActivityMarker status={paperActivity}/>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
@@ -3646,7 +3656,7 @@ function focusWorkspace(id: string) {
 
 function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false, paperActivity = null }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperActivity?: 'queued' | 'active' | null;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperActivity?: PaperActivityStatus | null;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -4359,7 +4369,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   </dialog>;
 }
 
-type RecentProject = { paper_activity?: 'queued' | 'active' | null; id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; pinned: boolean; error: string | null };
+type RecentProject = { paper_activity?: PaperActivityStatus | null; id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; pinned: boolean; error: string | null };
 // A versioned project's family is its title without the final " vN" suffix.
 // Pinning is a presentation choice: hidden siblings remain in the account's
 // complete Saved Projects index and become visible again on unpin.
@@ -4554,7 +4564,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         <div className="recent-entry">
           <div className="recent-title-row">
             {entry.best_paper_score != null && entry.best_paper_score >= 50 && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="Top scoring paper, click to view" data-tooltip="Top scoring paper, click to view" data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
-            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : undefined} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{opening === entry.id && <ProjectOpeningStatus/>}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}{entry.paper_activity && <span className={`paper-activity-indicator paper-${entry.paper_activity}`} title={entry.paper_activity === 'queued' ? 'Paper queued' : 'Paper generating'} aria-label={entry.paper_activity === 'queued' ? 'Paper queued' : 'Paper generating'}/>}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : undefined} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{opening === entry.id && <ProjectOpeningStatus/>}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}{entry.paper_activity && <PaperActivityMarker status={entry.paper_activity}/>}</button>
           </div>
           <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}<button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
@@ -5187,8 +5197,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
   const [researchRunning, setResearchRunning] = useState(false);
-  const [paperActivity, setPaperActivity] = useState<'queued' | 'active' | null>(null);
-  useEffect(() => researchRunning ? runningFavicon() : paperActivity ? runningFavicon(paperActivity === 'queued' ? 'yellow' : 'green') : undefined, [researchRunning, paperActivity]);
+  const [paperActivity, setPaperActivity] = useState<PaperActivityStatus | null>(null);
+  useEffect(() => researchRunning ? runningFavicon() : (paperActivity === 'queued' || paperActivity === 'active') ? runningFavicon(paperActivity === 'queued' ? 'yellow' : 'green') : undefined, [researchRunning, paperActivity]);
   useEffect(() => {
     if (!path || guest) return;
     let disposed = false;
@@ -5197,7 +5207,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store' });
         if (!response.ok) return;
         const data = await response.json();
-        if (!disposed) setPaperActivity(['queued', 'active'].includes(data?.progress?.status) ? data.progress.status : null);
+        if (!disposed) setPaperActivity(['queued', 'active', 'interrupted', 'failed'].includes(data?.progress?.status) ? data.progress.status : null);
       } catch { /* Retain current state until the server responds. */ }
     };
     void poll();
