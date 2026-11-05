@@ -8289,11 +8289,14 @@ async def generate(
             else "Unexpected paper-generation error; review server logs."
         )
         finish_progress(path, "failed", reason)
+        from sigma.production_observability import safe_exception_trace
+
         log.error(
-            "paper.exception project_id=%s elapsed_s=%.1f error_type=%s",
+            "paper.exception project_id=%s elapsed_s=%.1f error_type=%s frames=%s",
             project_id,
             monotonic() - started,
             type(exc).__name__,
+            safe_exception_trace(exc),
         )
         raise
     finally:
