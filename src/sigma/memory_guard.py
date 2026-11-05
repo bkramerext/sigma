@@ -37,7 +37,6 @@ def track_task(task: asyncio.Task[object]) -> None:
     task.add_done_callback(_ACTIVE_TASKS.discard)
 
 
-
 def critical_snapshot(snapshot: dict[str, int | None]) -> bool:
     used = snapshot["cgroup_used_mib"]
     limit = snapshot["cgroup_limit_mib"]
