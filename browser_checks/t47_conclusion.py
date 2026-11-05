@@ -355,7 +355,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(papers_pane.get_by_role("button", name="New paper")).to_have_count(0)
             expect(papers_pane.get_by_role("button", name="Include")).to_have_count(0)
             expect(papers_pane.locator(".section-count")).to_contain_text("1 paper")
-            expect(papers_pane.get_by_role("button", name="Remove unfinished Paper 1")).to_be_visible()
+            expect(
+                papers_pane.get_by_role("button", name="Remove unfinished Paper 1")
+            ).to_be_visible()
             expect(papers_pane.get_by_role("button", name="Stop Paper 1")).to_have_count(0)
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
