@@ -382,3 +382,14 @@ successful production verification. During recovery-host troubleshooting,
 `networkmanagement.googleapis.com`; it was immediately disabled and verified
 off. Temporary project SSH metadata was removed while preserving the existing
 admin key entry. No persistent API, IAM, SSH, or network change remains.
+
+
+## Production backend watchdog, retained logs, and recovery
+
+On the GCE host, after deploying the release checkout, run `sudo /opt/sigma/current/deploy/install-resilience.sh` once (or rerun `install-host-monitor.sh` to refresh all timer units). Inspect `systemctl status sigma-backend-watchdog.timer sigma-log-retention.timer` and `journalctl -u sigma-backend-watchdog.service`.
+
+The watchdog checks every minute; Docker's `restart: unless-stopped` covers exited backend processes and the watchdog handles running-but-unhealthy containers. It refuses repair during an inactive SIGMA service/deploy or unmounted state disk. It only restarts the backend container, not the project state, and requires exactly one Compose backend container.
+
+Backend INFO logs and RSS/cgroup memory usage are written under `/srv/sigma-state/auth/operational-logs/backend.log` on the dedicated persistent disk (container path `/var/lib/sigma-auth/operational-logs/backend.log`). Samples default to 30 seconds. The cgroup used/limit and percentage are the primary OOM pressure indicator; RSS alone underreports child processes and filesystem cache. The host watchdog writes dated files in the same directory. These logs are sensitive operational data; do not make the directory public or include it in web exports. `sigma-log-retention.timer` runs every 12 hours and removes only retired backend and watchdog log files older than seven days; the active `backend.log` is never deleted. Confirm retention and free disk periodically.
+
+After an unexpected backend restart, in-progress research is recovered via its persisted session/ledger locks and interrupted-state logic. Paper generation is **not** auto-replayed (provider attempts can already be billed); progress reports an interruption and user can Continue from saved checkpoints when preflight permits. Some one-shot runs with no saved draft require explicit restart rather than an automatic repeat. Never reset workspaces or ledgers to fix an OOM.
