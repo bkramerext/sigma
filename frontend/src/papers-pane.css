@@ -22,18 +22,18 @@
 .workspace-page .paper-includes-disclosure .ai-paper-details { display: flex; align-items: center; gap: 7px; margin: 0; color: #dce7f0; font: 13px/1.4 Inter, sans-serif; }
 .workspace-page .paper-includes-disclosure .ai-paper-details input { width: auto; margin: 0; accent-color: #d9a66c; }
 .workspace-page .papers-pane .ai-paper-status { margin: 0; color: #c0cad2; font-size: 13px; }
-.workspace-page .papers-pane .ai-paper-progress { display: grid; gap: 8px; padding: 12px 18px; border: 1px solid var(--workspace-line); border-radius: 10px; background: #101b26; }
+.workspace-page .papers-pane .ai-paper-progress { display: grid; gap: 4px; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .workspace-page .papers-pane .ai-paper-progress > strong { color: #e4ebf3; font-size: 13px; }
-.workspace-page .papers-pane .paper-stage-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
-.workspace-page .papers-pane .paper-stage-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 0; min-width: 0; padding: 2px 0; color: #8c9eae; }
+.workspace-page .papers-pane .paper-stage-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.workspace-page .papers-pane .paper-stage-list li { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 5px; margin: 0; padding: 1px 0; color: #8598a8; }
 .workspace-page .papers-pane .paper-stage-list li strong { color: inherit; }
 .workspace-page .papers-pane .paper-stage-list li.is-active { color: #d6bd8b; }
 .workspace-page .papers-pane .paper-stage-list li.is-active::before { content: ''; width: 8px; height: 8px; flex: 0 0 8px; margin-right: 2px; border-radius: 50%; background: #55bd70; animation: research-running-heartbeat 1.25s ease-in-out infinite; }
 .workspace-page .papers-pane .paper-stage-list li.is-past { color: #a9b9c6; }
 .workspace-page .papers-pane .paper-stage-list li span { color: #d4e0eb; }
 .workspace-page .papers-pane .paper-progress-error { color: #efa89a; }
-.workspace-page .papers-pane .saved-paper-library { gap: 0; margin-top: 2px; border: 2px solid var(--workspace-line); border-radius: 12px; }
-.workspace-page .papers-pane .saved-paper-card { display: grid; min-width: 0; padding: 14px 24px; border: 0; border-top: 1px solid var(--workspace-line); border-radius: 0; background: transparent; }
+.workspace-page .papers-pane .saved-paper-library { gap: 0; margin-top: 2px; border: 1px solid var(--workspace-line); border-radius: 10px; overflow: visible; }
+.workspace-page .papers-pane .saved-paper-card { display: grid; min-width: 0; padding: 11px 16px; border: 0; border-top: 1px solid var(--workspace-line); border-radius: 0; background: transparent; }
 .workspace-page .papers-pane .saved-paper-card:first-child { border-top: 0; }
 .workspace-page .papers-pane .saved-paper-row { display: block; min-width: 0; }
 .workspace-page .papers-pane .saved-paper-heading { gap: 4px; }
@@ -160,7 +160,7 @@
   overflow-wrap: anywhere;
 }
 .workspace-page .papers-pane .paper-draft-card .paper-draft-title { color: #b8c5cf; }
-.workspace-page .papers-pane .paper-draft-card .paper-draft-content { min-width: 0; margin: 12px 0 0 28px; }
+.workspace-page .papers-pane .paper-draft-card .paper-draft-content { min-width: 0; margin: 3px 0 0 28px; }
 .workspace-page .papers-pane .paper-draft-card .paper-draft-content[hidden] { display: none; }
 .workspace-page .papers-pane .saved-paper-card .ai-paper-progress { margin: 0; }
 .workspace-page .papers-pane .saved-paper-card .ai-paper-restart-notice { margin: 0 0 10px; }
@@ -181,8 +181,7 @@
 .workspace-page .papers-pane .saved-paper-title-first-line .saved-paper-title,
 .workspace-page .papers-pane .saved-paper-second-line { font-weight: 600; }
 
-/* Draft paper actions share the 28px Session control geometry. A missing
-   session-heading-actions ancestor previously left an empty, 42px box. */
+/* Paper-only controls must not depend on Session ancestor selectors. */
 .workspace-page .papers-pane .paper-draft-process-control {
   display: inline-flex; align-items: center; justify-content: center;
   box-sizing: border-box; flex: 0 0 28px;
@@ -191,7 +190,7 @@
   border-radius: 5px; background: transparent; box-shadow: none; color: #c7a16d;
 }
 .workspace-page .papers-pane .paper-draft-process-control svg {
-  display: block; width: 20px; height: 20px; fill: currentColor;
+  display: block; flex: none; width: 20px; height: 20px; fill: currentColor;
 }
 .workspace-page .papers-pane .paper-draft-process-control:hover:not(:disabled) {
   background: #3b3029; border-color: #ac7054;
@@ -199,21 +198,28 @@
 .workspace-page .papers-pane .paper-draft-process-control:disabled {
   opacity: .5; cursor: not-allowed;
 }
-/* Show the stages as a compact Session-like status sequence instead of a
-   full-width bordered dashboard with large empty columns. */
-.workspace-page .papers-pane .paper-draft-card .paper-draft-content { margin-top: 5px; }
+.workspace-page .papers-pane .paper-draft-pulse {
+  display: inline-flex; flex: 0 0 28px; align-items: center;
+  justify-content: center; width: 28px; height: 28px;
+}
+.workspace-page .papers-pane .paper-draft-card .paper-draft-content { margin-top: 3px; }
 .workspace-page .papers-pane .paper-draft-card .ai-paper-progress {
-  display: grid; gap: 4px; margin: 0; padding: 2px 0;
-  border: 0; border-radius: 0; background: transparent;
+  display: grid; gap: 4px; margin: 0; padding: 0;
+  border: 0; background: transparent;
 }
-.workspace-page .papers-pane .paper-draft-card .paper-stage-list {
-  display: flex; align-items: baseline; flex-wrap: wrap;
-  column-gap: 16px; row-gap: 3px;
+.workspace-page .papers-pane .paper-stage-list li.is-upcoming { color: #7f919f; }
+.workspace-page .papers-pane .paper-stage-list li.is-past::before {
+  content: '✓'; padding-right: 1px; color: #7aab89;
 }
-.workspace-page .papers-pane .paper-draft-card .paper-stage-list li {
-  display: inline-flex; flex-wrap: nowrap; align-items: baseline;
-  gap: 5px; padding: 0; min-width: max-content; font-size: 12px;
+.workspace-page .papers-pane .paper-stage-history {
+  margin: 0; padding: 0; border: none; background: transparent;
+  color: #9baebb; font-size: 12px;
 }
-.workspace-page .papers-pane .paper-draft-card .paper-stage-list li span {
-  white-space: normal; min-width: 0;
+.workspace-page .papers-pane .paper-stage-history > summary {
+  display: list-item; width: fit-content; margin: 0; padding: 1px 0;
+  color: #a8b8c6; cursor: pointer;
 }
+.workspace-page .papers-pane .paper-stage-history > summary:hover {
+  color: #f1c58d;
+}
+.workspace-page .papers-pane .paper-stage-history .paper-stage-list { margin-top: 5px; }

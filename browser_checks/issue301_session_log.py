@@ -219,7 +219,9 @@ def main() -> None:
           return {dx: (svg.left + svg.width / 2) - (button.left + button.width / 2),
                   dy: (svg.top + svg.height / 2) - (button.top + button.height / 2)};
         })""")
-        assert all(abs(center["dx"]) <= 1 and abs(center["dy"]) <= 1 for center in icon_centers), icon_centers
+        assert all(abs(center["dx"]) <= 1 and abs(center["dy"]) <= 1 for center in icon_centers), (
+            icon_centers
+        )
         copy_button = page.get_by_role("button", name="Copy log to clipboard")
         copy_button.focus()
         page.keyboard.press("Enter")

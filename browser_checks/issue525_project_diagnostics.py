@@ -98,8 +98,12 @@ def main() -> None:
                     summary.click()
                     expect(panel).to_contain_text("pre-session")
                     expect(panel).to_contain_text("reference_http_404")
-                    expect(panel.get_by_role("button", name="Copy project diagnostics")).to_have_count(0)
-                    expect(panel.get_by_role("link", name="Download project diagnostics")).to_have_count(0)
+                    expect(
+                        panel.get_by_role("button", name="Copy project diagnostics")
+                    ).to_have_count(0)
+                    expect(
+                        panel.get_by_role("link", name="Download project diagnostics")
+                    ).to_have_count(0)
                     # Exercise the actual browser reporter on a transient
                     # HTTP request error, then with its backend unreachable.
                     requests: list[dict] = []
