@@ -535,7 +535,8 @@ def test_paper_progress_counts_keep_generation_resumable() -> None:
                 reopened is not None
                 and reopened["generation_issues"] == recovered["generation_issues"]
             )
-            assert papers.progress_status(str(path))["current"] is None
+            status_after = papers.progress_status(str(path))
+            assert status_after is not None and status_after["current"] is None
 
         tex = r"""\documentclass{article}
 \begin{document}
