@@ -28,18 +28,25 @@ export default function ProjectDiagnosticsPanel({ path, diagnostics, status }: {
       setCopyStatus('Project diagnostic export could not be copied.');
     }
   };
-  return <section aria-label="Project diagnostics" className="project-diagnostics-panel">
-    <details>
-      <summary>Project diagnostics ({diagnostics.length})</summary>
-      <p>Includes errors before Session #1 exists. Sanitized readable export; not the full raw provider-wire audit log.</p>
-      <button type="button" aria-label="Copy project diagnostics" onClick={() => void copy()}>Copy diagnostics</button>
-      <a href={downloadUrl} aria-label="Download project diagnostics">Download diagnostics</a>
-      <ol>{diagnostics.map(item => <li key={item.id}>
-        <time>{item.timestamp}</time> · {item.stage} · {item.code}: {item.message}
-        <small> Event {item.id}{item.session_id ? ` · Session ${item.session_id}` : ' · pre-session'}</small>
-      </li>)}</ol>
+  return <section aria-label="Diagnostics" className="project-diagnostics-panel">
+    <details className="outcome-subsection project-diagnostics-disclosure">
+      <summary>
+        <svg aria-hidden="true" className="disclosure-chevron" viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
+        <span>Diagnostics ({diagnostics.length})</span>
+      </summary>
+      <div className="project-diagnostics-content">
+        <p>Includes errors before Session #1 exists. Sanitized readable export; not the full raw provider-wire audit log.</p>
+        <div className="project-diagnostics-actions">
+          <button type="button" className="text-view-link" aria-label="Copy project diagnostics" onClick={() => void copy()}>Copy</button>
+          <a className="text-view-link" href={downloadUrl} aria-label="Download project diagnostics">Download</a>
+        </div>
+        <ol>{diagnostics.map(item => <li key={item.id}>
+          <time>{item.timestamp}</time> · {item.stage} · {item.code}: {item.message}
+          <small> Event {item.id}{item.session_id ? ` · Session ${item.session_id}` : ' · pre-session'}</small>
+        </li>)}</ol>
+        {status && <p role="status">{status}</p>}
+        {copyStatus && <p role="status">{copyStatus}</p>}
+      </div>
     </details>
-    {status && <p role="status">{status}</p>}
-    {copyStatus && <p role="status">{copyStatus}</p>}
   </section>;
 }
