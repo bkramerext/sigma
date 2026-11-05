@@ -3318,6 +3318,16 @@ async def _restart_work_locked(
     }
 
 
+async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
+    """Discard unpublished paper work without touching saved paper versions."""
+    async with _paper_operation(path, generating=False):
+        view = inspect_project(path)
+        if view.project.id != expected_project_id:
+            raise ProjectError("Paper project identity changed")
+        _clear_work(path)
+        return {"discarded": True}
+
+
 async def restart_work(
     path: str,
     expected_project_id: str,

@@ -181,3 +181,7 @@
 }
 .workspace-page .papers-pane .saved-paper-title-first-line .saved-paper-title,
 .workspace-page .papers-pane .saved-paper-second-line { font-weight: 600; }
+
+/* Plain recovery text and standard action styling. */
+.workspace-page .papers-pane .paper-start-over-action { color: #e4b65b; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.workspace-page .papers-pane .ai-paper-restart-notice { margin: 0 0 10px; padding: 0; border: 0; background: none; color: #c0cad2; font-size: 13px; }

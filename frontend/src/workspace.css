@@ -462,12 +462,10 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
-.workspace-page .project-header-title-action {
-  align-items: flex-start;
-}
-.workspace-page .project-header-title-action .research-running-indicator-frame {
-  align-self: center;
-}
+/* Title text and its pulse must wrap together, including on line two. */
+.workspace-page .project-header-title-row .project-header-title-action { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; white-space: normal; max-width: 100%; }
+.workspace-page .project-header-title-action .project-header-title-text { display: inline; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
+.workspace-page .project-header-title-action .research-running-indicator-frame { display: inline-flex; vertical-align: middle; margin-left: 2px; }
 @media (max-width: 700px) {
   .workspace-page .project-art-header .project-title-line {
     width: 100%;
