@@ -1024,6 +1024,17 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 yield "data: " + json.dumps(update, separators=(",", ":")) + "\n\n"
             result = await task
             yield "data: " + json.dumps({"type": "complete", "result": result}) + "\n\n"
+        except asyncio.CancelledError:
+            # Differentiate cancellation of the job itself from teardown of
+            # this SSE viewer. Disconnects never cancel the backend paper.
+            if not task.cancelled():
+                raise
+            reason = (
+                memory_guard.MESSAGE
+                if memory_guard.is_critical()
+                else "Paper generation cancelled; saved work remains available."
+            )
+            yield "data: " + json.dumps({"type": "error", "error": reason}) + "\n\n"
         except ProjectError as exc:
             event: dict[str, str | int] = {"type": "error", "error": str(exc)}
             provider_calls_attempted = getattr(exc, "provider_calls_attempted", None)
