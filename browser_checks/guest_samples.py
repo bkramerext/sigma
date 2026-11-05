@@ -475,7 +475,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(papers_pane).to_contain_text("Sign in to export your research as TeX.")
         expect(papers_pane.get_by_role("button", name="Generate paper")).to_have_count(0)
         assert len(paper_requests) == papers_before, paper_requests
-        play = page.get_by_role("button", name="Start a new research session", exact=True)
+        play = page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True)
         expect(play).to_be_enabled()
         mutations_before_play = len(mutation_requests)
         dispatches_before_play = len(research_dispatch_requests)
@@ -600,7 +600,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         if missing_type.is_visible():
             expect(missing_type).to_contain_text("complete saved settings")
             missing_type.get_by_role("button", name="Continue with saved settings").click()
-        expect(page.get_by_role("button", name="Start Session #1")).to_be_visible(timeout=15000)
+        expect(page.get_by_role("button", name="Start Session 1")).to_be_visible(timeout=15000)
         assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") is None
         resumed_mutations = len(mutation_requests)
         page.locator(".session-start-link").filter(has_text="Cancel").click()

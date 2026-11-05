@@ -514,7 +514,9 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
         assert saved["stage"] == "planning"
         assert saved["detail"] == reason
         assert "restarted" not in saved["detail"]
-        assert papers._load_work(str(path))["progress"]["status"] == "paused"
+        saved_work = papers._load_work(str(path))
+        assert saved_work is not None
+        assert saved_work["progress"]["status"] == "paused"
 
 
 def test_paper_progress_counts_keep_generation_resumable() -> None:

@@ -603,7 +603,7 @@ with sync_playwright() as playwright:
     configs_before = len(
         [(url, payload) for url, payload in api_requests if "/proposals/config?" in url]
     )
-    play = page.get_by_role("button", name="Start a new research session")
+    play = page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True)
     play.click()
     warning = page.get_by_role("alertdialog", name="Project type unavailable")
     expect(warning).to_be_visible()
@@ -632,15 +632,17 @@ with sync_playwright() as playwright:
 
     warning.get_by_role("button", name="Continue with saved settings").click()
     expect(warning).not_to_be_visible()
-    expect(page.locator(".session-start-limits")).to_be_visible(timeout=15000)
-    start_button = page.get_by_role("button", name="Start Session #1")
+    start_button = page.locator(".sessions-pane-heading").get_by_role(
+        "button", name="Start Session 1"
+    )
+    expect(start_button).to_be_visible(timeout=15000)
     expect(start_button).to_be_visible()
     page.set_viewport_size({"width": 390, "height": 844})
     bounds = start_button.bounding_box()
     assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390, bounds
     page.set_viewport_size({"width": 1440, "height": 1000})
     start_button.click()
-    row = page.locator(".session-row").filter(has_text="Session #1")
+    row = page.locator(".session-row").filter(has_text="Session 1")
     expect(row).to_be_visible(timeout=15000)
     expect(row.locator(".session-status")).to_have_text("ended", timeout=60000)
     start_payloads = [
@@ -672,7 +674,7 @@ with sync_playwright() as playwright:
     legacy_export = json.loads(Path(legacy_download.value.path()).read_text())
     assert legacy_export["files"]["project.json"]["investigation_type"] == "default"
     assert legacy_export["files"]["project.json"]["project_type_snapshot"] is None
-    play = page.get_by_role("button", name="Start a new research session")
+    play = page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True)
     play.click()
     unsafe_warning = page.get_by_role("alertdialog", name="Project type unavailable")
     expect(unsafe_warning).to_be_visible()

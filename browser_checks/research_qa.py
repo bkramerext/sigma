@@ -73,8 +73,8 @@ with sync_playwright() as playwright:
         arg=path,
         timeout=20000,
     )
-    page.get_by_role("button", name="Start a new research session", exact=True).click()
-    page.get_by_role("button", name="Start Session #1", exact=True).click()
+    page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True).click()
+    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 1").click()
     expect(page.locator("li[data-session-id]").first.locator(".session-status")).to_have_text(
         "ended", timeout=30000
     )
