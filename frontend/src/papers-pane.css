@@ -65,7 +65,7 @@
 .workspace-page .papers-pane .saved-paper-title-tools :is(.paper-remove-button,.paper-download-button,.paper-view-pdf-icon,.ai-paper-eli5-balloon):focus-visible { border-color: #ac7054; background: #3b3029; }
 .workspace-page .papers-pane .saved-paper-title-tools .paper-remove-button svg { display: block; width: 20px; height: 20px; }
 .workspace-page .papers-pane .paper-action-menu { position: relative; display: inline-flex; vertical-align: middle; }
-.workspace-page .papers-pane .paper-action-popover { position: absolute; z-index: 60; right: 0; top: calc(100% + 4px); display: grid; width: max-content; min-width: 180px; max-width: min(290px, 75vw); padding: 5px; border: 1px solid #73583e; border-radius: 8px; background: #101b26; box-shadow: 0 14px 35px #000b; }
+.workspace-page .papers-pane .paper-action-popover { position: absolute; z-index: 60; left: 0; top: calc(100% + 4px); display: grid; width: max-content; min-width: 180px; max-width: min(290px, 75vw); padding: 5px; border: 1px solid #73583e; border-radius: 8px; background: #101b26; box-shadow: 0 14px 35px #000b; }
 .workspace-page .papers-pane .paper-action-popover :is(a,button) { display: block; width: 100%; min-height: 30px; margin: 0; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: #dfc092; box-shadow: none; text-align: left; text-decoration: none; font: 13px/1.4 Inter, sans-serif; cursor: pointer; }
 .workspace-page .papers-pane .paper-action-popover :is(a,button):is(:hover,:focus-visible) { background: #3b3029; color: #fce0b5; }
 .workspace-page .papers-pane .paper-action-popover button.destructive-action { color: #dfc092; }
@@ -76,7 +76,7 @@
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link:hover:not(:disabled) { color: #ffe1ad; background: transparent; }
 /* Match the anchored Session deletion confirmation and its copper text actions. */
 .workspace-page .papers-pane .paper-remove-anchor { position: relative; display: inline-flex; align-items: center; }
-.workspace-page .papers-pane .paper-remove-actions { position: absolute; z-index: 60; top: calc(100% + 5px); right: 0; width: min(280px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
+.workspace-page .papers-pane .paper-remove-actions { position: absolute; z-index: 60; top: calc(100% + 5px); left: 0; width: min(280px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
 .workspace-page .papers-pane .paper-remove-actions .research-stop-confirm { width: 100%; margin: 0; padding: 12px 14px; box-sizing: border-box; box-shadow: 0 14px 35px #0009; }
 .workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button { color: #d9b17e; }
 .workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button:hover:not(:disabled) { color: #f3cd9e; }
@@ -257,3 +257,7 @@
 .workspace-page .papers-pane .paper-stage-history .paper-stage-list { margin-top: 5px; }
 
 .workspace-page .papers-pane .ai-paper-restart-notice { margin: 0 0 10px; padding: 0; border: 0; background: none; color: #c0cad2; font-size: 13px; }
+
+.workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure { margin: 10px 0 0 28px; border: 0; background: transparent; }
+.workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure > summary { padding: 4px 0; color: #b5a18c; font-size: 12px; }
+.workspace-page .papers-pane .saved-paper-card .paper-diagnostics-content { padding: 4px 10px 8px; }
