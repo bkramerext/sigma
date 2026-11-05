@@ -81,6 +81,7 @@ MAX_PAPER_BYTES = 100_000_000
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
 PaperProgressStage = Literal[
+    "queued",
     "snapshot",
     "source_material",
     "publication_compilation",
@@ -131,32 +132,62 @@ class PaperStageCallback(Protocol):
 CALL_SECONDS = 60 * 60
 PLANNING_CALL_SECONDS = 60 * 60
 MAX_PAPERS = 50
-MAX_CONCURRENT_PAPER_GENERATIONS = 3
-# The backend is deployed as a single Uvicorn process. Admission is atomic
-# under this short-lived lock; no AI await or TeX compilation holds it.
-_gate = asyncio.Lock()
+# Paper synthesis and TeX compilation can have large overlapping peaks.
+# Serialize generation on the single backend worker; requests wait in FIFO order.
+MAX_CONCURRENT_PAPER_GENERATIONS = 1
+_gate = asyncio.Condition()
 _busy_paper_projects: set[str] = set()
 _generating_paper_projects: set[str] = set()
+_paper_waiters: deque[str] = deque()
+_queued_progress: dict[str, dict[str, Any]] = {}
 
 
 @asynccontextmanager
 async def _paper_operation(path: str, *, generating: bool):
     key = str(project_path(path).resolve())
+    admitted = False
     async with _gate:
         if key in _busy_paper_projects:
-            raise ProjectError("A paper generation is already active for this project")
-        if generating and len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS:
-            raise ProjectError("Paper generation capacity is full; please try again shortly")
+            raise ProjectError("A paper generation is already active or queued for this project")
         _busy_paper_projects.add(key)
         if generating:
-            _generating_paper_projects.add(key)
+            _paper_waiters.append(key)
+            if len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS or _paper_waiters[0] != key:
+                now = _now()
+                _queued_progress[key] = {
+                    "status": "queued", "stage": "queued", "current": None,
+                    "total": None, "started_at": now, "updated_at": now,
+                    "elapsed_seconds": 0,
+                }
+                logging.getLogger("sigma.lifecycle").info(
+                    "paper.queued position=%d", len(_paper_waiters)
+                )
     try:
+        if generating:
+            async with _gate:
+                await _gate.wait_for(
+                    lambda: _paper_waiters[0] == key
+                    and len(_generating_paper_projects) < MAX_CONCURRENT_PAPER_GENERATIONS
+                )
+                _paper_waiters.popleft()
+                _queued_progress.pop(key, None)
+                _generating_paper_projects.add(key)
+                admitted = True
+                logging.getLogger("sigma.lifecycle").info("paper.dequeued")
         yield
     finally:
         async with _gate:
             _busy_paper_projects.discard(key)
+            _queued_progress.pop(key, None)
             if generating:
-                _generating_paper_projects.discard(key)
+                if not admitted:
+                    try:
+                        _paper_waiters.remove(key)
+                    except ValueError:
+                        pass
+                else:
+                    _generating_paper_projects.discard(key)
+            _gate.notify_all()
 
 
 _active_progress: dict[str, dict[str, Any]] = {}
@@ -3047,6 +3078,12 @@ def _clear_work(path: str) -> None:
 def progress_status(path: str) -> dict[str, Any] | None:
     """Return only persisted stage metadata; never expose prompts or provider content."""
     key = str(project_path(path).resolve())
+    queued = _queued_progress.get(key)
+    if queued is not None:
+        return {
+            **queued,
+            "detail": f"Waiting for an available paper-generation slot (position {list(_paper_waiters).index(key) + 1}).",
+        }
     active = _active_progress.get(key)
     work = _load_work(path)
     saved = work.get("progress") if work is not None else None
