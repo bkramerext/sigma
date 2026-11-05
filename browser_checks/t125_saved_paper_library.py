@@ -255,8 +255,15 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             confirmation = row.get_by_role("group", name="Confirm removal of Saved fixture 1")
             expect(confirmation).to_be_visible()
             expect(confirmation).to_contain_text("Other versions and research history will remain")
+            assert confirmation.locator(".session-remove-confirm-actions button").count() == 2
             confirmation.get_by_role("button", name="Cancel").click()
+            expect(confirmation).to_have_count(0)
             expect(row).to_be_visible()
+            row.get_by_role("button", name="Remove").click()
+            confirmation = row.get_by_role("group", name="Confirm removal of Saved fixture 1")
+            expect(confirmation).to_be_visible()
+            page.keyboard.press("Escape")
+            expect(confirmation).to_have_count(0)
             row.get_by_role("button", name="Remove").click()
             row.get_by_role("group", name="Confirm removal of Saved fixture 1").get_by_role(
                 "button", name="Confirm", exact=True

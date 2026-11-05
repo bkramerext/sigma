@@ -495,3 +495,20 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 }
 
 .home-page .home-catalog .project-opening-label { margin-left: 5px; color: #e0aa8b; font-size: .85em; font-weight: 400; white-space: nowrap; }
+
+/* The project list shows one heartbeat: green for active work, yellow only
+   when paper generation is waiting and no work is running. */
+.home-page .home-recents .research-running-indicator.paper-queued-indicator {
+  border-color: #eac16a; background: #e3b74d;
+  box-shadow: 0 0 0 0 #e3b74d80;
+  animation-name: paper-queued-heartbeat;
+}
+.home-page .home-recents .recent-running.recent-queued { color: #e3b74d; }
+@keyframes paper-queued-heartbeat {
+  0%, 42%, 100% { transform: scale(1); box-shadow: 0 0 0 0 #e3b74d00; }
+  12% { transform: scale(1.32); box-shadow: 0 0 0 3px #e3b74d80; }
+  32% { transform: scale(1.2); box-shadow: 0 0 0 2px #e3b74d50; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-page .home-recents .paper-queued-indicator { animation: none; }
+}

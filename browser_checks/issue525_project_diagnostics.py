@@ -1,4 +1,4 @@
-"""Actual Chromium copy/download acceptance for Issue #525 project diagnostics."""
+"""Actual Chromium diagnostics display and error-reporting acceptance."""
 
 from __future__ import annotations
 
@@ -24,13 +24,6 @@ def free_port() -> int:
 def main() -> None:
     port = free_port()
     base = f"http://127.0.0.1:{port}"
-    export_body = (
-        "# Project diagnostics\n\n"
-        "Sanitized exportable errors (not the full append-only provider wire log).\n\n"
-        "## 2026-11-03T20:00:00+00:00 · admission · reference_http_404\n"
-        "Event ID: diagnostic-525\nSession ID: none (pre-session)\n"
-        "Message: Source retrieval failed with HTTP 404.\n"
-    )
     with tempfile.TemporaryDirectory(prefix="sigma-diagnostics-browser-") as temp:
         logfile = Path(temp) / "vite.log"
         with logfile.open("w") as output:
@@ -73,20 +66,8 @@ def main() -> None:
                         ),
                         headless=True,
                     )
-                    context = browser.new_context(accept_downloads=True)
-                    context.grant_permissions(["clipboard-read", "clipboard-write"])
+                    context = browser.new_context()
                     page = context.new_page()
-                    page.route(
-                        "**/api/projects/diagnostics/download?**",
-                        lambda route: route.fulfill(
-                            status=200,
-                            content_type="text/markdown",
-                            body=export_body,
-                            headers={
-                                "Content-Disposition": 'attachment; filename="project-diagnostics.log"'
-                            },
-                        ),
-                    )
                     page.goto(base, wait_until="domcontentloaded")
                     page.evaluate(
                         """async () => {
@@ -117,15 +98,12 @@ def main() -> None:
                     summary.click()
                     expect(panel).to_contain_text("pre-session")
                     expect(panel).to_contain_text("reference_http_404")
-                    panel.get_by_role("button", name="Copy project diagnostics").click()
-                    expect(panel.get_by_role("status")).to_contain_text("copied")
-                    copied = page.evaluate("navigator.clipboard.readText()")
-                    assert copied == export_body
-                    with page.expect_download() as download:
-                        panel.get_by_role("link", name="Download project diagnostics").click()
-                    received = download.value
-                    assert received.suggested_filename == "project-diagnostics.log"
-                    assert Path(received.path()).read_text() == copied
+                    expect(
+                        panel.get_by_role("button", name="Copy project diagnostics")
+                    ).to_have_count(0)
+                    expect(
+                        panel.get_by_role("link", name="Download project diagnostics")
+                    ).to_have_count(0)
                     # Exercise the actual browser reporter on a transient
                     # HTTP request error, then with its backend unreachable.
                     requests: list[dict] = []
@@ -221,34 +199,7 @@ def main() -> None:
                     expect(page.locator("#delete-error")).to_have_text(deleted_message)
                     assert captured_error["message"] == deleted_message
                     assert captured_error["stage"] == "session_delete"
-                    page.unroute("**/api/projects/diagnostics/download?**")
-                    actual_export = (
-                        "# Project diagnostics\\n\\n"
-                        "## 2026-11-03T20:00:01Z · session_delete · browser_request_failed\\n"
-                        "Event ID: delete-525\\n"
-                        f"Message (escaped newlines): {captured_error['message']}\\n"
-                    )
-                    page.route(
-                        "**/api/projects/diagnostics/download?**",
-                        lambda route: route.fulfill(
-                            status=200,
-                            content_type="text/markdown",
-                            body=actual_export,
-                            headers={
-                                "Content-Disposition": 'attachment; filename="project-diagnostics.log"'
-                            },
-                        ),
-                    )
-                    panel.get_by_role("button", name="Copy project diagnostics").click()
-                    page.wait_for_function(
-                        """async () => (await navigator.clipboard.readText())
-                          .includes('Session removal failed: stale project revision.')"""
-                    )
-                    copied_after_delete = page.evaluate("navigator.clipboard.readText()")
-                    assert deleted_message in copied_after_delete
-                    with page.expect_download() as deletion_download:
-                        panel.get_by_role("link", name="Download project diagnostics").click()
-                    assert Path(deletion_download.value.path()).read_text() == copied_after_delete
+                    expect(panel).to_contain_text("reference_http_404")
                     browser.close()
             finally:
                 process.terminate()
@@ -257,7 +208,7 @@ def main() -> None:
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait()
-    print("PASS: real Chromium project diagnostic display and exact copy/download parity.")
+    print("PASS: real Chromium project diagnostic display, no export controls, and reporting.")
 
 
 if __name__ == "__main__":
