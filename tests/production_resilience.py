@@ -328,11 +328,13 @@ def main() -> None:
 
             task = asyncio.create_task(would_dispatch())
             papers.register_submission(path, task)
+            assert papers._read_queue_status(path)["status"] == "queued"
             assert await papers.cancel_generation(path)
             assert task.cancelled()
             assert provider_calls == 0
             await asyncio.sleep(0)
             assert papers._submission_tasks == {}
+            assert papers.progress_status(path)["status"] == "cancelled"
             assert await papers.cancel_generation(path) is False
 
             pending = asyncio.create_task(asyncio.Event().wait())
