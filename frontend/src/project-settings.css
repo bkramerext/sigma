@@ -628,3 +628,11 @@
 .project-settings-dialog.email-project-dialog .export-type-options label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
 .project-settings-dialog.email-project-dialog .email-no-papers { margin: 12px 0 0; color: #adbac7; font-size: 13px; }
 .project-settings-dialog.email-project-dialog .settings-body { padding-bottom: 28px; }
+
+/* Q/A: keep the question close to its heading and separate it from saved answers. */
+.project-settings-dialog.research-qa-dialog .research-qa-form {
+  display: grid; gap: 6px; margin-top: 0; margin-bottom: 18px;
+}
+.project-settings-dialog.research-qa-dialog .research-qa-form textarea {
+  margin-top: 0;
+}
