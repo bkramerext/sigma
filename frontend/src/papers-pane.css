@@ -255,3 +255,5 @@
   color: #f1c58d;
 }
 .workspace-page .papers-pane .paper-stage-history .paper-stage-list { margin-top: 5px; }
+
+.workspace-page .papers-pane .ai-paper-restart-notice { margin: 0 0 10px; padding: 0; border: 0; background: none; color: #c0cad2; font-size: 13px; }

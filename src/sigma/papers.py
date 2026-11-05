@@ -3702,6 +3702,21 @@ async def _restart_work_locked(
     }
 
 
+async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
+    """Remove unpublished work without affecting saved paper versions."""
+    async with _paper_operation(path, generating=False):
+        key = str(project_path(path).resolve())
+        submission = _submission_tasks.get(key)
+        if submission is not None and not submission.done():
+            raise ProjectError("A paper generation submission is still active")
+        view = inspect_project(path)
+        if view.project.id != expected_project_id:
+            raise ProjectError("Paper project identity changed")
+        _clear_work(path)
+        _clear_queue_status(path)
+        return {"discarded": True}
+
+
 async def restart_work(
     path: str,
     expected_project_id: str,
