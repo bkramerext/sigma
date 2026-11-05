@@ -313,6 +313,46 @@ def main() -> None:
 
     asyncio.run(test_paper_queue())
 
+    async def test_immediate_stop() -> None:
+        # A job accepted by the API must be cancellable before generate()
+        # even begins. No eventual provider call may escape this Stop.
+        with tempfile.TemporaryDirectory(prefix="sigma-paper-stop-") as temporary:
+            path = str(Path(temporary) / "immediate.sigma")
+            Path(path).mkdir()
+            provider_calls = 0
+
+            async def would_dispatch() -> dict[str, object]:
+                nonlocal provider_calls
+                provider_calls += 1
+                return {}
+
+            task = asyncio.create_task(would_dispatch())
+            papers.register_submission(path, task)
+            assert await papers.cancel_generation(path)
+            assert task.cancelled()
+            assert provider_calls == 0
+            await asyncio.sleep(0)
+            assert papers._submission_tasks == {}
+            assert await papers.cancel_generation(path) is False
+
+            pending = asyncio.create_task(asyncio.Event().wait())
+            papers.register_submission(path, pending)
+            duplicate = asyncio.create_task(asyncio.Event().wait())
+            try:
+                papers.register_submission(path, duplicate)
+            except ProjectError as exc:
+                assert "already active or queued" in str(exc)
+            else:
+                raise AssertionError("Duplicate API submission was admitted")
+            duplicate.cancel()
+            await asyncio.gather(duplicate, return_exceptions=True)
+            assert await papers.cancel_generation(path)
+            assert pending.cancelled()
+            await asyncio.sleep(0)
+            assert papers._submission_tasks == {}
+
+    asyncio.run(test_immediate_stop())
+
     print("SIGMA resilience offline checks passed.")
 
 
