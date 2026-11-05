@@ -6054,10 +6054,13 @@ or document markup."""
         )
         return LongSectionDraft(
             paragraphs=[
-                "Editorial notice: The writing for this section was interrupted or invalid. "
-                "The missing analysis is not supplied by SIGMA, and no claim is "
-                "established by this placeholder.",
-                "The intended subject of this section was: " + section.purpose
+                (
+                    "Editorial notice: The writing for this section was interrupted or invalid. "
+                    "The missing analysis is not supplied by SIGMA, and no claim is "
+                    "established by this placeholder."
+                ),
+                "The intended subject of this section was: "
+                + section.purpose
                 + " The original saved evidence and claim register are retained "
                 "in the paper archive for independent inspection.",
             ]
@@ -6127,9 +6130,7 @@ or document markup."""
                 max_input_bytes=220_000,
                 legacy=not fast_path,
             )
-            section_draft = sanitize_section_tables(
-                section, LongSectionDraft.model_validate(body)
-            )
+            section_draft = sanitize_section_tables(section, LongSectionDraft.model_validate(body))
             if len(_json(section_draft.model_dump())) > 250_000:
                 _record_paper_generation_issue(
                     state,
@@ -6137,7 +6138,11 @@ or document markup."""
                     "oversized optional content was discarded.",
                 )
                 section_draft = section_draft.model_copy(
-                    update={"paragraphs": section_draft.paragraphs[:12], "tables": [], "examples": []}
+                    update={
+                        "paragraphs": section_draft.paragraphs[:12],
+                        "tables": [],
+                        "examples": [],
+                    }
                 )
             if len(_json(section_draft.model_dump())) > 250_000:
                 raise ProjectError(

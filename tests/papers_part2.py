@@ -485,7 +485,6 @@ def test_paper_section_permanent_provider_rejection_does_not_publish_placeholder
     assert not state.get("section_drafts")
 
 
-
 def test_paper_transient_error_classification_excludes_permanent_rejections() -> None:
     from sigma.plan_stream import ChatGPTProviderRejection
 
