@@ -386,7 +386,7 @@ admin key entry. No persistent API, IAM, SSH, or network change remains.
 
 ## Production backend watchdog, retained logs, and recovery
 
-On the GCE host, after deploying the release checkout, run `sudo /opt/sigma/current/deploy/install-resilience.sh` once (or rerun `install-host-monitor.sh` to refresh all timer units). Inspect `systemctl status sigma-backend-watchdog.timer sigma-log-retention.timer` and `journalctl -u sigma-backend-watchdog.service`.
+On the GCE host, after deploying the release checkout, run `sudo bash /opt/sigma/current/deploy/install-resilience.sh` once (or rerun `install-host-monitor.sh` to refresh all timer units). Inspect `systemctl status sigma-backend-watchdog.timer sigma-log-retention.timer` and `journalctl -u sigma-backend-watchdog.service`.
 
 The watchdog checks every minute; Docker's `restart: unless-stopped` covers exited backend processes and the watchdog handles running-but-unhealthy containers. It refuses repair during an inactive SIGMA service/deploy or unmounted state disk. It only restarts the backend container, not the project state, and requires exactly one Compose backend container.
 
