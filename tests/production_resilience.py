@@ -183,45 +183,69 @@ def main() -> None:
     from sigma import papers
 
     async def test_paper_queue() -> None:
-        first_started = asyncio.Event()
-        release_first = asyncio.Event()
-        order: list[str] = []
+        with tempfile.TemporaryDirectory(prefix="sigma-paper-queue-") as temporary:
+            root = Path(temporary)
+            first_name, second_name, third_name, restarted_name = (
+                str(root / f"paper-{name}.sigma")
+                for name in ("first", "second", "third", "restarted")
+            )
+            for name in (first_name, second_name, third_name, restarted_name):
+                Path(name).mkdir(mode=0o700)
+            first_started = asyncio.Event()
+            release_first = asyncio.Event()
+            order: list[str] = []
 
-        async def paper(name: str) -> None:
-            async with papers._paper_operation(name, generating=True):
-                order.append(name)
-                if name == "paper-first.sigma":
-                    first_started.set()
-                    await release_first.wait()
+            async def paper(name: str) -> None:
+                async with papers._paper_operation(name, generating=True):
+                    order.append(name)
+                    if name == first_name:
+                        first_started.set()
+                        await release_first.wait()
 
-        first = asyncio.create_task(paper("paper-first.sigma"))
-        await first_started.wait()
-        second = asyncio.create_task(paper("paper-second.sigma"))
-        third = asyncio.create_task(paper("paper-third.sigma"))
-        await asyncio.sleep(0)
-        assert papers.activity_status("paper-first.sigma") == "active"
-        assert papers.activity_status("paper-second.sigma") == "queued"
-        assert papers.activity_status("paper-third.sigma") == "queued"
-        assert papers.progress_status("paper-second.sigma")["status"] == "queued"
-        assert "position 2" in papers.progress_status("paper-third.sigma")["detail"]
-        assert order == ["paper-first.sigma"], "Queued projects must not run concurrently"
-        try:
-            async with papers._paper_operation("paper-first.sigma", generating=True):
-                raise AssertionError("Duplicate paper project was admitted")
-        except ProjectError as exc:
-            assert "already active or queued" in str(exc)
+            first = asyncio.create_task(paper(first_name))
+            await first_started.wait()
+            # An existing paper checkpoint must survive cancellation of a
+            # queued attempt that never reached provider work.
+            old_work = papers._new_work("1" * 64, "original", "2" * 64, "model", "high")
+            papers._save_work(second_name, old_work)
+            second = asyncio.create_task(paper(second_name))
+            third = asyncio.create_task(paper(third_name))
+            await asyncio.sleep(0)
+            assert papers.activity_status(first_name) == "active"
+            assert papers.activity_status(second_name) == "queued"
+            assert papers.activity_status(third_name) == "queued"
+            assert papers.progress_status(second_name)["status"] == "queued"
+            assert "position 2" in papers.progress_status(third_name)["detail"]
+            assert order == [first_name], "Queued projects must not run concurrently"
+            try:
+                async with papers._paper_operation(first_name, generating=True):
+                    raise AssertionError("Duplicate paper project was admitted")
+            except ProjectError as exc:
+                assert "already active or queued" in str(exc)
 
-        second.cancel()
-        result = await asyncio.gather(second, return_exceptions=True)
-        assert isinstance(result[0], asyncio.CancelledError)
-        assert papers.activity_status("paper-second.sigma") is None
-        release_first.set()
-        await asyncio.gather(first, third)
-        assert order == ["paper-first.sigma", "paper-third.sigma"]
-        assert papers.activity_status("paper-third.sigma") is None
-        assert not papers._paper_waiters
-        assert not papers._generating_paper_projects
-        assert not papers._busy_paper_projects
+            second.cancel()
+            result = await asyncio.gather(second, return_exceptions=True)
+            assert isinstance(result[0], asyncio.CancelledError)
+            assert papers.activity_status(second_name) is None
+            assert papers.progress_status(second_name)["status"] == "cancelled"
+            assert papers._load_work(second_name) == old_work
+            release_first.set()
+            await asyncio.gather(first, third)
+            assert order == [first_name, third_name]
+            assert papers.activity_status(third_name) is None
+            assert not papers._paper_waiters
+            assert not papers._generating_paper_projects
+            assert not papers._busy_paper_projects
+
+            # A backend crash bypasses finally/cleanup. The durable receipt
+            # must report interruption, not pretend this job is still running
+            # or vanish entirely. No provider attempt began while queued.
+            papers._write_queue_status(restarted_name, "queued", papers._now())
+            recovery = papers.progress_status(restarted_name)
+            assert recovery and recovery["status"] == "interrupted"
+            assert recovery["stage"] == "queued"
+            assert "No AI call was started" in recovery["detail"]
+            assert papers.activity_status(restarted_name) is None
 
     asyncio.run(test_paper_queue())
 
