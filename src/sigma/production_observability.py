@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from datetime import UTC
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
