@@ -185,6 +185,22 @@ class PaperBrowserPaused(ProjectError):
     """Browser-origin paper work stopped at a saved boundary without starting new calls."""
 
 
+def _require_browser_presence(path: str, required: bool) -> None:
+    """Prevent new browser-origin provider calls without an authorized viewer."""
+    if not required:
+        return
+    from sigma import research_preferences, research_presence
+
+    if (
+        not research_preferences.allow_unattended_background_execution()
+        and not research_presence.has_live_viewer(path)
+    ):
+        raise PaperBrowserPaused(
+            "Paper generation paused because the browser disconnected. "
+            "Saved work can be continued after reopening the project."
+        )
+
+
 class PaperConnectionFailure(ProjectError):
     """Provider connection failed before request delivery; safe for bounded retry."""
 
@@ -3060,7 +3076,9 @@ def progress_status(path: str) -> dict[str, Any] | None:
     """Return only persisted stage metadata; never expose prompts or provider content."""
     key = str(project_path(path).resolve())
     active = _active_progress.get(key)
-    work = _load_work(path)
+    # Polling and SSE heartbeats must not repeatedly deserialize a potentially
+    # large evidence/draft checkpoint while an in-memory run is active.
+    work = _load_work(path) if active is None else None
     saved = work.get("progress") if work is not None else None
     state = active or saved
     if state is None:
@@ -7280,19 +7298,8 @@ async def _generate_impl(
             # browser-originated work, and only before an expensive new stage.
             # Never cancel an in-flight provider response merely because the
             # browser connection ended: the response must be checkpointed.
-            if browser_presence_required and (
-                state == "milestone" or (stage == "publication_compilation" and not work)
-            ):
-                from sigma import research_preferences, research_presence
-
-                if (
-                    not research_preferences.allow_unattended_background_execution()
-                    and not research_presence.has_live_viewer(path)
-                ):
-                    raise PaperBrowserPaused(
-                        "Paper generation paused because the browser disconnected. "
-                        "Saved work can be continued after reopening the project."
-                    )
+            if state == "milestone" or (stage == "publication_compilation" and not work):
+                _require_browser_presence(path, browser_presence_required)
 
         task = asyncio.current_task()
         if task is not None:
@@ -7662,6 +7669,9 @@ async def _generate_impl(
                     "updated_at": _now(),
                     "elapsed_seconds": elapsed_before,
                 }
+                # Check viewer presence before recording a paid attempt. The
+                # browser might have left after the publication milestone.
+                _require_browser_presence(path, browser_presence_required)
                 # Persist a conservative attempted-call count BEFORE dispatch.
                 # An unsuccessful or interrupted response still may have used
                 # provider allowance. Clearing the explicit reset marker keeps
@@ -7678,6 +7688,9 @@ async def _generate_impl(
                         # An in-flight request may have consumed allowance;
                         # record each authorized replay before dispatch.
                         await asyncio.sleep(0.4 * (attempt_number - 1))
+                        # A transient failure must not spend more allowance
+                        # after the final viewer leaves with unattended disabled.
+                        _require_browser_presence(path, browser_presence_required)
                         work["provider_calls"] = int(work["provider_calls"]) + 1
                         work["provider_calls_total"] = int(work["provider_calls_total"]) + 1
                         _save_work(path, work)

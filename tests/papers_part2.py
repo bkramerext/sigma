@@ -487,6 +487,72 @@ def test_paper_failure_reason_survives_reopen() -> None:
         assert saved_work["progress"]["failure_reason"] == reason
 
 
+def test_active_paper_progress_poll_avoids_checkpoint_deserialization() -> None:
+    """High-frequency browser heartbeats must not reload large active drafts."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "active-progress.sigma"
+        initialize_project(
+            path, "Active paper", "A mathematical question", research_mode="mathematical"
+        )
+        key = str(papers.project_path(str(path)).resolve())
+        progress = {
+            "run_id": "d" * 32,
+            "status": "running",
+            "stage": "sections",
+            "current": 1,
+            "total": 5,
+            "started_at": papers._now(),
+            "updated_at": papers._now(),
+            "elapsed_seconds": 3,
+        }
+        with (
+            patch.dict(papers._active_progress, {key: progress}),
+            patch.object(
+                papers,
+                "_load_work",
+                side_effect=AssertionError("Do not read checkpoints during active polling"),
+            ),
+        ):
+            status = papers.progress_status(str(path))
+        assert status is not None
+        assert status["status"] == "active"
+        assert status["stage"] == "sections"
+        assert (status["current"], status["total"]) == (1, 5)
+
+
+def test_paper_browser_presence_gates_new_paid_attempts() -> None:
+    """No viewer means no new paid attempt, including transient retries."""
+    from sigma import research_preferences, research_presence
+
+    with (
+        patch.object(
+            research_preferences, "allow_unattended_background_execution", return_value=False
+        ),
+        patch.object(research_presence, "has_live_viewer", return_value=False) as viewer_check,
+    ):
+        # Programmatic callers must not inherit browser-only lease requirements.
+        papers._require_browser_presence("unrelated-project.sigma", False)
+        assert viewer_check.call_count == 0
+        try:
+            papers._require_browser_presence("unrelated-project.sigma", True)
+        except papers.PaperBrowserPaused:
+            pass
+        else:
+            raise AssertionError("Disconnected browser generation should pause")
+
+    with (
+        patch.object(
+            research_preferences, "allow_unattended_background_execution", return_value=True
+        ),
+        patch.object(
+            research_presence,
+            "has_live_viewer",
+            side_effect=AssertionError("Unattended-enabled runs need no active viewer"),
+        ),
+    ):
+        papers._require_browser_presence("unrelated-project.sigma", True)
+
+
 def test_paper_paused_progress_preserves_disconnect_reason() -> None:
     """Browser disconnection pauses cleanly, not as a falsely reported restart."""
     with TemporaryDirectory() as directory:
