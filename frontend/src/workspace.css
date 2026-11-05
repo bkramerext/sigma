@@ -412,3 +412,38 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 /* Match Download and Email glyph sizes to neighboring project actions. */
 .workspace-page .project-pane-actions .project-download-button svg,
 .workspace-page .project-pane-actions .project-email-button svg { width: 27px; height: 27px; }
+
+
+/* Paper activity uses the same heartbeat in every project surface.
+   Yellow is waiting in the FIFO queue; green is actively generating. */
+.paper-activity-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-left: 5px;
+  flex: 0 0 10px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: #55bd70;
+  box-shadow: 0 0 0 0 #55bd7066;
+  animation: paper-activity-pulse 1.25s ease-in-out infinite;
+}
+.paper-activity-indicator.paper-queued {
+  background: #ebbe4d;
+  box-shadow: 0 0 0 0 #ebbe4d66;
+}
+.paper-activity-indicator.paper-failed,
+.paper-activity-indicator.paper-cancelled,
+.paper-activity-indicator.paper-complete,
+.paper-activity-indicator.paper-interrupted {
+  display: none;
+}
+@keyframes paper-activity-pulse {
+  0%, 42%, 100% { transform: scale(1); opacity: .9; }
+  12% { transform: scale(1.32); opacity: 1; }
+  23% { transform: scale(1); opacity: .9; }
+  32% { transform: scale(1.2); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .paper-activity-indicator { animation: none; }
+}
