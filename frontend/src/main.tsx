@@ -2377,12 +2377,36 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
   const [paperMenu, setPaperMenu] = useState<{ paperId: string; kind: 'download' | 'actions' } | null>(null);
   const [includeOptionsOpen, setIncludeOptionsOpen] = useState(false);
-  const includeDialogRef = useRef<HTMLDialogElement>(null);
+  const includePopupRef = useRef<HTMLDivElement>(null);
+  const includeButtonRef = useRef<HTMLButtonElement>(null);
+  const [includePopupOffset, setIncludePopupOffset] = useState(0);
+  function openIncludeOptions() {
+    const button = includeButtonRef.current;
+    if (!button) return;
+    const bounds = button.getBoundingClientRect();
+    const width = Math.min(340, window.innerWidth - 32);
+    setIncludePopupOffset(Math.max(16, Math.min(bounds.left, window.innerWidth - width - 16)) - bounds.left);
+    setIncludeOptionsOpen(true);
+  }
   useEffect(() => {
-    const dialog = includeDialogRef.current;
-    if (!dialog) return;
-    if (includeOptionsOpen && !dialog.open) dialog.showModal();
-    if (!includeOptionsOpen && dialog.open) dialog.close();
+    if (!includeOptionsOpen) return;
+    const dismissOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node &&
+          !includePopupRef.current?.contains(event.target) &&
+          !includeButtonRef.current?.contains(event.target)) setIncludeOptionsOpen(false);
+    };
+    const dismissEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }
+    };
+    const dismissOnResize = () => setIncludeOptionsOpen(false);
+    document.addEventListener('pointerdown', dismissOutside);
+    document.addEventListener('keydown', dismissEscape);
+    window.addEventListener('resize', dismissOnResize);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('keydown', dismissEscape);
+      window.removeEventListener('resize', dismissOnResize);
+    };
   }, [includeOptionsOpen]);
   const [newPaperRequested, setNewPaperRequested] = useState(false);
   const [draftPaperExpanded, setDraftPaperExpanded] = useState(true);
@@ -2816,12 +2840,10 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
       {!guest && <div className="papers-heading-actions strategy-heading-actions">
         <button type="button" className="text-view-link papers-header-action papers-new-action" aria-label="New paper" data-tooltip="New paper" disabled={showDraftPaper || loading} onClick={() => { if (!expanded) onSectionOpened(); setNewPaperRequested(true); setDraftPaperExpanded(true); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); }}>New</button>
-        <button type="button" className="text-view-link papers-header-action papers-include-action" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => setIncludeOptionsOpen(true)}>Include</button>
-      </div>}
-      <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
-    </header>
-    {!guest && <dialog ref={includeDialogRef} id="paper-include-options" className="paper-includes-dialog" aria-labelledby="paper-includes-title" onClose={() => setIncludeOptionsOpen(false)} onCancel={() => setIncludeOptionsOpen(false)}>
-      <div className="paper-includes-dialog-heading"><h2 id="paper-includes-title">Include in paper</h2><div className="settings-actions"><button type="button" className="settings-cancel" onClick={() => setIncludeOptionsOpen(false)}>Close</button></div></div>
+        <span className="paper-includes-anchor">
+          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}>Include</button>
+          {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className="paper-includes-dialog" role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset }}>
+      <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><button type="button" className="text-view-link paper-includes-close" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}>Close</button></div>
       <fieldset className="ai-paper-includes">
 
         <legend className="sr-only">Include</legend>
@@ -2834,7 +2856,12 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
         </div>
 
       </fieldset>
-    </dialog>}
+          </div>}
+        </span>
+      </div>}
+      <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
+    </header>
+
     {error && <div className="request-toast-stack ai-paper-toast-stack" aria-label="Paper generation errors">
       <div className="request-toast-item"><div className="request-toast-item-inner"><div className="request-toast" role="alert">
         <div className="request-toast-content"><strong>Paper generation</strong><p>{error}</p></div>
@@ -2859,18 +2886,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
               </>}/>
           </div></div>
           <div id="paper-draft-content" className="paper-draft-content" hidden={!draftPaperExpanded}>
-      {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
-        <p>{checkpointMismatch.incomplete_one_shot
-          ? 'The last writing attempt did not save a draft. Start over to generate again.'
-          : 'Research or AI settings changed. Start over to generate again.'} Saved research and papers remain.</p>
-        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>{checkpointMismatch.incomplete_one_shot ? 'Start over' : 'Clear outdated paper work'}</button>
+      {checkpointMismatch && !generating && <div className="paper-restart-inline" role="group" aria-label="Unfinished paper work needs a fresh start">
+        <span>{checkpointMismatch.incomplete_one_shot ? 'Last writing attempt did not save a draft.' : 'Research or AI settings changed.'} Saved research and papers remain.</span>
+        <button type="button" className="text-view-link papers-header-action paper-restart-action" disabled={busy || loading || !binding || !checkpointMismatch.checkpoint_can_restart} onClick={() => void restartCheckpoint()}>Start over</button>
       </div>}
-      {resetConfirm && !generating && restartableCheckpoint && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Confirm starting paper over">
-        <p>Discard unfinished paper work?</p>
-        <div className="ai-paper-controls">
-          <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm</button>
-          <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Cancel</button>
-        </div>
+      {resetConfirm && !generating && restartableCheckpoint && !checkpointMismatch && <div className="paper-restart-inline" role="group" aria-label="Confirm starting paper over">
+        <span>Discard unfinished paper work?</span>
+        <button type="button" className="text-view-link papers-header-action paper-restart-action" disabled={busy} onClick={() => void restartCheckpoint()}>Start over</button>
+        <button type="button" className="text-view-link papers-header-action paper-restart-action" onClick={() => setResetConfirm(false)}>Cancel</button>
       </div>}
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {paperProgress && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
