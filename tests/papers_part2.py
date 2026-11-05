@@ -1007,6 +1007,7 @@ def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None
 
         asyncio.run(check())
 
+
 def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
     """The queue remains serial through PDF compilation, not just AI calls."""
     with TemporaryDirectory() as temporary:
@@ -1086,6 +1087,7 @@ def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
                 assert not papers._generating_paper_projects
 
         asyncio.run(check())
+
 
 def test_eight_research_sessions_overlap_three_paper_generators() -> None:
     """Cross-feature smoke: 8 live mock research calls + 3 paper model calls."""
