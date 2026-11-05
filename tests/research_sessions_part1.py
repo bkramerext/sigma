@@ -881,9 +881,8 @@ async def wait_for(path, session_id, terminal=True, *, timeout_seconds=15.0):
         if progress != previous_progress:
             latest_progress_at = now
             previous_progress = progress
-        if (
-            now - latest_progress_at >= timeout_seconds
-            or now - started_at >= max(120.0, timeout_seconds * 6)
+        if now - latest_progress_at >= timeout_seconds or now - started_at >= max(
+            120.0, timeout_seconds * 6
         ):
             raise AssertionError(
                 "research worker did not make progress "
