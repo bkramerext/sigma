@@ -108,7 +108,7 @@ with sync_playwright() as playwright:
     eli5 = page.locator("#t301-paper-eli5-math")
     expect(eli5.locator(".katex")).to_have_count(1)
     annotations = eli5.locator(".katex annotation").all_text_contents()
-    assert annotations == [r"1 + \\frac{n(n + 1)}{2}"], annotations
+    assert annotations == [r"1 + \frac{n(n + 1)}{2}"], annotations
     expect(eli5).to_contain_text("regions.")
     page.screenshot(path="docs/evaluations/t301/markdown-render.png", full_page=True)
 

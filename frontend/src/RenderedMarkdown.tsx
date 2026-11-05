@@ -74,7 +74,7 @@ function candidates(text: string, structuralContext = ''): Candidate[] {
 
   // Recognize the complete figurate-number formula rather than extracting
   // only (n+1)/2 and leaving the outside n as ordinary text.
-  add(/(?<![\\p{L}\\p{N}_])(?:\\d+\\s*[+−-]\\s*)?[A-Za-z]\\s*\\(\\s*[A-Za-z]\\s*[+−-]\\s*\\d+\\s*\\)\\s*\\/\\s*\\d+\\b/gu, 9, () => true);
+  add(/(?<![\p{L}\p{N}_])(?:\d+\s*[+−-]\s*)?[A-Za-z]\s*\(\s*[A-Za-z]\s*[+−-]\s*\d+\s*\)\s*\/\s*\d+\b/gu, 9, () => true);
 
   // Fractions are recognized only when their shape or surrounding words indicate
   // a quotient. This keeps dates, paths, URLs and version strings as prose.
