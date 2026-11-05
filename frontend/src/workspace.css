@@ -438,6 +438,19 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .paper-activity-indicator.paper-interrupted {
   display: none;
 }
+.paper-activity-warning {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  border: 1px solid #ff8a7d;
+  border-radius: 50%;
+  color: #ff8a7d;
+  font: 700 10px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  animation: none;
+}
 @keyframes paper-activity-pulse {
   0%, 42%, 100% { transform: scale(1); opacity: .9; }
   12% { transform: scale(1.32); opacity: 1; }
