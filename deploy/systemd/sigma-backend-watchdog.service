@@ -5,7 +5,7 @@ RequiresMountsFor=/srv/sigma-state
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/libexec/sigma/backend-watchdog.py
+ExecStart=/usr/bin/python3 /usr/local/libexec/sigma/backend-watchdog.py
 User=root
 Group=root
 UMask=0077
