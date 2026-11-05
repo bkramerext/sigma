@@ -183,6 +183,9 @@ def main() -> None:
                 pass
             else:
                 raise AssertionError("secret file symlinks must be rejected")
+    from production_resilience import main as check_production_resilience
+
+    check_production_resilience()
     print("Deployment package structure and secret-source checks passed.")
 
 
