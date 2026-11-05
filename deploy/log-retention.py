@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Low-cadence deletion of expired SIGMA operational logs only."""
 from __future__ import annotations
 
@@ -19,9 +18,10 @@ def main() -> int:
     for candidate in LOGS.iterdir():
         name = candidate.name
         # Never touch the active backend.log or any project/other durable data.
-        if not (name.startswith("backend.log.") or (
-            name.startswith("watchdog-") and name.endswith(".log")
-        )):
+        if not (
+            name.startswith("backend.log.")
+            or (name.startswith("watchdog-") and name.endswith(".log"))
+        ):
             continue
         if candidate.is_symlink() or not candidate.is_file():
             continue
