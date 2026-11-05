@@ -178,6 +178,53 @@ def main() -> None:
 
     asyncio.run(test_other_activity_cancellation())
 
+    # FIFO paper queue: one running paper, two queued projects, and safe
+    # cancellation of a queued project without blocking the next request.
+    from sigma import papers
+
+    async def test_paper_queue() -> None:
+        first_started = asyncio.Event()
+        release_first = asyncio.Event()
+        order: list[str] = []
+
+        async def paper(name: str) -> None:
+            async with papers._paper_operation(name, generating=True):
+                order.append(name)
+                if name == "paper-first":
+                    first_started.set()
+                    await release_first.wait()
+
+        first = asyncio.create_task(paper("paper-first"))
+        await first_started.wait()
+        second = asyncio.create_task(paper("paper-second"))
+        third = asyncio.create_task(paper("paper-third"))
+        await asyncio.sleep(0)
+        assert papers.activity_status("paper-first") == "active"
+        assert papers.activity_status("paper-second") == "queued"
+        assert papers.activity_status("paper-third") == "queued"
+        assert papers.progress_status("paper-second")["status"] == "queued"
+        assert "position 2" in papers.progress_status("paper-third")["detail"]
+        assert order == ["paper-first"], "Queued projects must not run concurrently"
+        try:
+            async with papers._paper_operation("paper-first", generating=True):
+                raise AssertionError("Duplicate paper project was admitted")
+        except ProjectError as exc:
+            assert "already active or queued" in str(exc)
+
+        second.cancel()
+        result = await asyncio.gather(second, return_exceptions=True)
+        assert isinstance(result[0], asyncio.CancelledError)
+        assert papers.activity_status("paper-second") is None
+        release_first.set()
+        await asyncio.gather(first, third)
+        assert order == ["paper-first", "paper-third"]
+        assert papers.activity_status("paper-third") is None
+        assert not papers._paper_waiters
+        assert not papers._generating_paper_projects
+        assert not papers._busy_paper_projects
+
+    asyncio.run(test_paper_queue())
+
     print("SIGMA resilience offline checks passed.")
 
 
