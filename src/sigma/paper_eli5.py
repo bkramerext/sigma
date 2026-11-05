@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from sigma import memory_guard
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 
 ELI5_VERSION = 2
@@ -67,8 +68,7 @@ def cached(record: dict[str, Any]) -> str | None:
 
 
 def _save(path: str, paper_id: str, sha: str, markdown: str) -> str:
-    from sigma import memory_guard, papers
-    memory_guard.require_capacity()
+    from sigma import papers
 
     lock = papers._paper_version_lock(path)
     try:
@@ -166,6 +166,8 @@ async def explain(path: str, paper_id: str, expected_binding: str, expected_proj
     prior = cached(record)
     if prior is not None:
         return prior
+    memory_guard.require_capacity()
+
     auth = await auth_context()
     if auth["identity"] != expected_binding:
         raise ProjectError("AI connection changed; reconnect and retry.")
