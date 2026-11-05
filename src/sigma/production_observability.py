@@ -3,6 +3,7 @@
 The log directory lives on the existing durable auth disk, not in Docker's
 ephemeral writable layer. No prompts, credentials, or workspace content are logged.
 """
+
 from __future__ import annotations
 
 import logging
