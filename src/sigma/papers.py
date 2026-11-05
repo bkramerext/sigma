@@ -3425,8 +3425,17 @@ def finish_progress(
     active = _active_progress.get(key)
     if expected_run_id is not None and (active is None or active.get("run_id") != expected_run_id):
         return  # A stale task callback must never alter a newer attempt.
-    work = _load_work(path)
-    saved = work.get("progress") if work is not None else None
+    from sigma.memory_guard import is_critical
+
+    # The memory-pressure breaker must not deserialize and rewrite a
+    # potentially huge checkpoint while the container is close to OOM.
+    critical = is_critical()
+    work = None if critical else _load_work(path)
+    saved = (
+        _read_progress_status(path)
+        if critical
+        else work.get("progress") if work is not None else _read_progress_status(path)
+    )
     state = active or saved
     if state is None:
         return
@@ -3448,6 +3457,8 @@ def finish_progress(
     if work is not None:
         work["progress"] = frozen
         _save_work(path, work)
+    else:
+        _write_progress_status(path, frozen)
     if active and active.get("run_id") == state.get("run_id"):
         _active_progress.pop(key, None)
 
