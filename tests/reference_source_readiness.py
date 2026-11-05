@@ -194,6 +194,11 @@ async def verify_provider_free_admission() -> None:
                     expected_limits=limits,
                     strategy_ids=[strategy.id],
                 )
+                # The admission test owns the spawned worker until it exits;
+                # never remove the temporary workspace while it can still write.
+                await asyncio.gather(
+                    research_sessions._tasks[started["id"]], return_exceptions=True
+                )
             assert started["status"] == "queued"
             saved = research_sessions._read(str(path), started["id"])
             assert saved["research_method_sources"]["retrieval_summary"]["retrieved"] == 3
@@ -289,6 +294,11 @@ async def verify_empty_and_single_reference_sessions() -> None:
                     expected_limits=research_sessions.get_limits(str(path)),
                     strategy_ids=[strategy.id],
                 )
+                # The admission test owns the spawned worker until it exits;
+                # never remove the temporary workspace while it can still write.
+                await asyncio.gather(
+                    research_sessions._tasks[started["id"]], return_exceptions=True
+                )
             assert started["status"] == "queued"
             saved = research_sessions._read(str(path), started["id"])
             assert len(saved["research_method_sources"]["sources"]) == len(selected)
@@ -362,6 +372,11 @@ async def verify_unavailable_reference_sessions() -> None:
                     credential["identity"],
                     expected_limits=research_sessions.get_limits(str(path)),
                     strategy_ids=[strategy.id],
+                )
+                # The admission test owns the spawned worker until it exits;
+                # never remove the temporary workspace while it can still write.
+                await asyncio.gather(
+                    research_sessions._tasks[started["id"]], return_exceptions=True
                 )
             assert started["status"] == "queued"
             saved = research_sessions._read(str(path), started["id"])
