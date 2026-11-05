@@ -46,8 +46,8 @@ def main() -> None:
         state.mkdir()
         logs = state / "auth" / "operational-logs"
         logs.mkdir(parents=True)
-        setattr(watchdog, "STATE", state)
-        setattr(watchdog, "LOGS", logs)
+        setattr(watchdog, "STATE", state)  # noqa: B010
+        setattr(watchdog, "LOGS", logs)  # noqa: B010
 
         calls: list[tuple[str, ...]] = []
         health = {"value": "healthy"}
@@ -91,7 +91,7 @@ def main() -> None:
                 assert watchdog.main() == 1  # cooldown prevents repeated restarts
                 assert len([c for c in calls if c[:2] == ("docker", "restart")]) == 1
 
-        setattr(cleanup, "LOGS", logs)
+        setattr(cleanup, "LOGS", logs)  # noqa: B010
         old = logs / "backend.log.2020-01-01"
         recent = logs / "backend.log.2026-11-05"
         active = logs / "backend.log"
