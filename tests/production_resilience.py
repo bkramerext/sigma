@@ -24,8 +24,14 @@ def load(name: str, filename: str):
 
 def main() -> None:
     stats = memory_snapshot()
-    assert {"rss_mib", "rss_peak_mib", "cgroup_used_mib", "cgroup_limit_mib",
-            "cgroup_peak_mib", "host_available_mib"} <= stats.keys()
+    assert {
+        "rss_mib",
+        "rss_peak_mib",
+        "cgroup_used_mib",
+        "cgroup_limit_mib",
+        "cgroup_peak_mib",
+        "host_available_mib",
+    } <= stats.keys()
     assert all(value is None or isinstance(value, int) for value in stats.values())
 
     watchdog = load("sigma_watchdog_test", "backend-watchdog.py")
@@ -52,9 +58,8 @@ def main() -> None:
                 return SimpleNamespace(returncode=0, stdout="container123\n")
             if args[:2] == ("docker", "inspect"):
                 return SimpleNamespace(
-                    returncode=0, stdout=json.dumps(
-                        {"Running": True, "Health": {"Status": health["value"]}}
-                    )
+                    returncode=0,
+                    stdout=json.dumps({"Running": True, "Health": {"Status": health["value"]}}),
                 )
             if args[:2] == ("docker", "restart"):
                 return SimpleNamespace(returncode=0, stdout="container123\n")
@@ -65,12 +70,14 @@ def main() -> None:
             # Check the restart-decision logic independently of systemd by
             # replacing the special paths with test-local paths.
             original_path = watchdog.Path
+
             def test_path(value):
                 if value == "/run/sigma-backend-watchdog.lock":
                     return root / "lock"
                 if value == "/run/sigma-backend-watchdog-last-restart":
                     return root / "last"
                 return original_path(value)
+
             with patch.object(watchdog, "Path", side_effect=test_path):
                 assert watchdog.main() == 0
                 assert not any(c[:2] == ("docker", "restart") for c in calls)
@@ -89,6 +96,7 @@ def main() -> None:
             file.write_text("test", encoding="utf-8")
         earlier = time.time() - 10 * 86400
         import os
+
         for file in (old, active, other):
             os.utime(file, (earlier, earlier))
         assert cleanup.main() == 0
