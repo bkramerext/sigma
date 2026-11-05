@@ -115,6 +115,7 @@ def main() -> None:
     assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4250})
     assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4500})
     assert memory_guard.critical_snapshot({**base, "cgroup_used_mib": 4488})
+    assert memory_guard.critical_snapshot({**base, "host_available_mib": 700})
     with (
         patch.object(
             memory_guard,
