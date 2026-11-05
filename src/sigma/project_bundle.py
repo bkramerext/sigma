@@ -14,8 +14,8 @@ import json
 import os
 import stat
 import tempfile
-from datetime import UTC, datetime
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -124,7 +124,8 @@ def bundle_project_document(bundle: dict[str, Any]) -> dict[str, Any]:
 
 def rename_bundle_project(bundle: dict[str, Any], title: str) -> dict[str, Any]:
     """Preserve the edit-history chain when importing under another title."""
-    from sigma.projects import ProjectError, _decode as validate_project
+    from sigma.projects import ProjectError
+    from sigma.projects import _decode as validate_project
 
     members = _decode(bundle)
     try:
