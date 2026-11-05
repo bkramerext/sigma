@@ -25,6 +25,7 @@ from sigma import (
     cloud_demo,
     cloud_research,
     cloud_workspaces,
+    memory_guard,
     paper_scores,
     papers,
     project_diagnostics,
@@ -298,6 +299,7 @@ async def require_cloud_inference_binding(
     require_project: bool = True,
 ) -> None:
     """Require explicit project/account intent before admitting sponsored inference."""
+    memory_guard.require_capacity()
     if not cloud_workspaces.enabled():
         return
     view = inspect_project(path)
@@ -731,6 +733,7 @@ async def research_qa_answer(body: ResearchQARequest):
                 body.request_id,
             )
         )
+        memory_guard.track_task(task)
         _research_qa_tasks[key] = (fingerprint, task)
         task.add_done_callback(
             lambda completed, task_key=key: _cleanup_research_qa_task(task_key, completed)
@@ -1830,6 +1833,7 @@ async def strategy_inference_view(body: ProposalRequest):
             inference_owner=record["owner"],
         )
     )
+    memory_guard.track_task(task)
     try:
         register_request(request_id, task)
     except ProjectError:
@@ -1910,6 +1914,7 @@ async def proposal_view(body: ProposalRequest, request: Request):
             expected_project_id=body.expected_project_id,
         )
     )
+    memory_guard.track_task(task)
     request_id = str(body.request_id) if body.request_id else None
     if request_id:
         try:
@@ -1918,6 +1923,7 @@ async def proposal_view(body: ProposalRequest, request: Request):
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
             raise
+    memory_guard.track_task(task)
     connection = asyncio.create_task(disconnected())
     try:
         done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
