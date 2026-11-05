@@ -353,6 +353,43 @@ def main() -> None:
 
     asyncio.run(test_immediate_stop())
 
+    def test_bounded_progress_recovery() -> None:
+        with tempfile.TemporaryDirectory(prefix="sigma-paper-progress-") as temporary:
+            path = str(Path(temporary) / "checkpoint.sigma")
+            Path(path).mkdir()
+            work = papers._new_work("1" * 64, "original", "2" * 64, "model", "high")
+            work["progress"] = {
+                "run_id": "a" * 32,
+                "status": "running",
+                "stage": "sections",
+                "current": 1,
+                "total": 5,
+                "started_at": papers._now(),
+                "updated_at": papers._now(),
+                "elapsed_seconds": 6,
+            }
+            papers._save_work(path, work)
+            # Reading status must never need the entire saved evidence bundle.
+            with patch.object(papers, "_load_work", side_effect=AssertionError("large read")):
+                recovered = papers.progress_status(path)
+            assert recovered is not None and recovered["status"] == "interrupted"
+            assert recovered["current"] == 1
+            with (
+                patch.object(memory_guard, "is_critical", return_value=True),
+                patch.object(papers, "_load_work", side_effect=AssertionError("large read")),
+            ):
+                papers.finish_progress(path, "failed", memory_guard.MESSAGE)
+            failed = papers.progress_status(path)
+            assert failed is not None and failed["status"] == "failed"
+            assert failed["failure_reason"] == memory_guard.MESSAGE
+            # Emergency status only updates tiny sidecar, not the full
+            # checkpoint with provider-call accounting and frozen evidence.
+            assert papers._load_work(path) == work
+            papers._clear_work(path)
+            assert papers.progress_status(path) is None
+
+    test_bounded_progress_recovery()
+
     print("SIGMA resilience offline checks passed.")
 
 
