@@ -2810,7 +2810,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
       <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
     {!guest && <dialog ref={includeDialogRef} id="paper-include-options" className="paper-includes-dialog" aria-labelledby="paper-includes-title" onClose={() => setIncludeOptionsOpen(false)} onCancel={() => setIncludeOptionsOpen(false)}>
-      <div className="paper-includes-dialog-heading"><h2 id="paper-includes-title">Include in paper</h2><button type="button" className="text-view-link" onClick={() => setIncludeOptionsOpen(false)}>Close</button></div>
+      <div className="paper-includes-dialog-heading"><h2 id="paper-includes-title">Include in paper</h2><div className="settings-actions"><button type="button" className="settings-cancel" onClick={() => setIncludeOptionsOpen(false)}>Close</button></div></div>
       <fieldset className="ai-paper-includes">
 
         <legend className="sr-only">Include</legend>

@@ -483,8 +483,8 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .session-log-page .session-log-secondary-action:hover { color: #ffe1ad; }
 
 /* Icon pair matches workspace copy/export actions while preserving tab focus. */
-.session-log-page .session-log-toolbar-icon { width: 30px; height: 30px; min-height: 30px; padding: 4px; border: 1px solid transparent; border-radius: 4px; color: #f1c58d; background: transparent; text-decoration: none; }
-.session-log-page .session-log-toolbar-icon svg { display: block; width: 19px; height: 19px; }
+.session-log-page .session-log-toolbar-icon { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; flex: 0 0 30px; width: 30px; height: 30px; min-height: 30px; padding: 4px; border: 1px solid transparent; border-radius: 4px; color: #f1c58d; background: transparent; text-decoration: none; }
+.session-log-page .session-log-toolbar-icon svg { display: block; flex: none; width: 19px; height: 19px; margin: auto; }
 .session-log-page .session-log-toolbar-icon:hover { border-color: #82694b; background: #302418; }
 .session-log-page .session-log-toolbar-icon:disabled { opacity: .55; cursor: wait; }
 .session-log-page .session-log-reference-summary { margin: 12px 0 8px; padding: 10px 12px; border: 1px solid #534331; border-radius: 4px; background: #171918; overflow-wrap: anywhere; }
