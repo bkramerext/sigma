@@ -860,11 +860,12 @@ def execution_tool_fixture(python_available: bool):
     ]
 
 
-async def wait_for(path, session_id, terminal=True, *, timeout_seconds=3.0):
-    # A wall-clock deadline avoids treating a heavily scheduled CI event loop
-    # as an exact 300-iteration clock. Long protocol fixtures can opt in to a
-    # larger bound without weakening the fast default.
-    deadline = time.monotonic() + timeout_seconds
+async def wait_for(path, session_id, terminal=True, *, timeout_seconds=15.0):
+    # Check for inactivity, not a fixed end-to-end deadline: a deterministic
+    # 54-call fixture can legitimately need more than a few seconds under CI.
+    started_at = time.monotonic()
+    latest_progress_at = started_at
+    previous_progress = None
     while True:
         current = research_sessions.get_session(str(path), session_id)
         worker = research_sessions._tasks.get(session_id)
@@ -875,11 +876,19 @@ async def wait_for(path, session_id, terminal=True, *, timeout_seconds=3.0):
             else current["calls_used"]
         ):
             return current
-        if time.monotonic() >= deadline:
+        now = time.monotonic()
+        progress = (current["status"], current["calls_used"], len(current.get("steps", [])))
+        if progress != previous_progress:
+            latest_progress_at = now
+            previous_progress = progress
+        if (
+            now - latest_progress_at >= timeout_seconds
+            or now - started_at >= max(120.0, timeout_seconds * 6)
+        ):
             raise AssertionError(
                 "research worker did not make progress "
                 f"(status={current['status']}, calls_used={current['calls_used']}, "
-                f"worker_settled={settled})"
+                f"worker_settled={settled}, inactive_seconds={now - latest_progress_at:.1f})"
             )
         await asyncio.sleep(0.01)
 
