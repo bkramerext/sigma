@@ -252,6 +252,26 @@ _active_progress: dict[str, dict[str, Any]] = {}
 # Hold strong references to running authoring tasks independently of SSE clients.
 # Losing a browser connection must never cancel an already dispatched AI call.
 _generation_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+# Covers the tiny interval between the API accepting a request and
+# generate() registering its inner authoring task. Immediate Stop is reliable.
+_submission_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+
+
+def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
+    """Synchronously reserve a project submission before the API yields."""
+    key = str(project_path(path).resolve())
+    existing = _submission_tasks.get(key)
+    if existing is not None and not existing.done():
+        raise ProjectError("A paper generation is already active or queued for this project")
+    _submission_tasks[key] = task
+
+    def clear_submitted(completed: asyncio.Task[dict[str, Any]]) -> None:
+        if _submission_tasks.get(key) is completed:
+            _submission_tasks.pop(key, None)
+
+    task.add_done_callback(clear_submitted)
+
+
 _CITATION_LIKE = re.compile(
     r"\[[0-9]{1,3}\]|\b(?:doi\s*:|arxiv\s*:|https?://)|\([A-Z][A-Za-z-]+(?:\s+et\s+al\.)?,?\s+20[0-9]{2}[a-z]?\)"
 )
@@ -8603,7 +8623,13 @@ async def generate(
 async def cancel_generation(path: str) -> bool:
     """Explicitly cancel this project's active generation, not a disconnected viewer."""
     key = str(project_path(path).resolve())
-    task = _generation_tasks.get(key)
+    # The API submission task is registered before any await, while the
+    # inner generation task is registered only once that coroutine begins.
+    # Cancel the outer owner: awaiting it forwards cancellation to the inner
+    # task and runs its checkpoint and billing cleanup.
+    task = _submission_tasks.get(key)
+    if task is None or task.done():
+        task = _generation_tasks.get(key)
     if task is None or task.done():
         return False
     logging.getLogger("sigma.lifecycle").info("paper.stop_requested")
