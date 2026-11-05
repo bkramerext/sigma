@@ -46,8 +46,8 @@ def main() -> None:
         state.mkdir()
         logs = state / "auth" / "operational-logs"
         logs.mkdir(parents=True)
-        watchdog.STATE = state
-        watchdog.LOGS = logs
+        setattr(watchdog, "STATE", state)
+        setattr(watchdog, "LOGS", logs)
 
         calls: list[tuple[str, ...]] = []
         health = {"value": "healthy"}
@@ -91,7 +91,7 @@ def main() -> None:
                 assert watchdog.main() == 1  # cooldown prevents repeated restarts
                 assert len([c for c in calls if c[:2] == ("docker", "restart")]) == 1
 
-        cleanup.LOGS = logs
+        setattr(cleanup, "LOGS", logs)
         old = logs / "backend.log.2020-01-01"
         recent = logs / "backend.log.2026-11-05"
         active = logs / "backend.log"
@@ -106,7 +106,7 @@ def main() -> None:
 
     # Cgroup pressure is a fail-closed admission and cancellation threshold,
     # not a comparison against process RSS or the host's spare RAM.
-    base = {
+    base: dict[str, int | None] = {
         "cgroup_used_mib": 1000,
         "cgroup_limit_mib": 5000,
         "host_available_mib": 8000,
