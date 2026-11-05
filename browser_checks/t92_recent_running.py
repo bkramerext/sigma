@@ -264,14 +264,14 @@ with sync_playwright() as playwright:
 
     page.get_by_role("tab", name="Samples", exact=True).click()
     samples_panel = page.get_by_role("tabpanel", name="Samples")
-    sample_group = samples_panel.locator("details.sample-type-group").filter(
-        has_text="Mathematics"
-    )
+    sample_group = samples_panel.locator("details.sample-type-group").filter(has_text="Mathematics")
     if not sample_group.evaluate("group => group.open"):
         sample_group.locator("summary").click()
-    sample_button = samples_panel.locator("button.sample-open").filter(
-        has_text="Nonconsecutive Subset Sums Modulo 3"
-    ).first
+    sample_button = (
+        samples_panel.locator("button.sample-open")
+        .filter(has_text="Nonconsecutive Subset Sums Modulo 3")
+        .first
+    )
     sample_button.click()
     expect(sample_button).to_have_attribute("aria-busy", "true")
     expect(sample_button).to_be_disabled()
