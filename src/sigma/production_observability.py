@@ -79,6 +79,9 @@ def _sample(period_seconds: int) -> None:
             pct,
             stats["host_available_mib"],
         )
+        from sigma.memory_guard import poll
+
+        poll()
         # Event.wait avoids a busy loop and allows clean process exit.
         threading.Event().wait(period_seconds)
 
