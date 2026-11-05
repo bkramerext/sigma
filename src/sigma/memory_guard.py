@@ -4,15 +4,14 @@ Cgroup usage (not only Python RSS) is used because LaTeX, subprocesses and
 Docker cache count against the backend's container memory limit. No provider
 attempts are replayed after resource-triggered cancellation.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import threading
 import time
 from email.message import EmailMessage
-from pathlib import Path
 
 from sigma.production_observability import memory_snapshot
 
@@ -94,10 +93,13 @@ async def _cancel_active() -> None:
         # Do not await file operations or remote I/O here: task-owned finally/
         # cancellation handlers preserve workspace binding and billing holds.
         paper_tasks = [task for task in list(papers._generation_tasks.values()) if not task.done()]
-        session_tasks = [task for task in list(research_sessions._tasks.values()) if not task.done()]
+        session_tasks = [
+            task for task in list(research_sessions._tasks.values()) if not task.done()
+        ]
         LOG.error(
             "memory.stop_active sessions=%d papers=%d",
-            len(session_tasks), len(paper_tasks),
+            len(session_tasks),
+            len(paper_tasks),
         )
         for task in paper_tasks + session_tasks:
             task.cancel()
@@ -132,7 +134,9 @@ def poll() -> None:
     if critical and not previous:
         LOG.critical(
             "memory.critical cgroup_used_mib=%s cgroup_limit_mib=%s host_available_mib=%s",
-            used, limit, snapshot["host_available_mib"],
+            used,
+            limit,
+            snapshot["host_available_mib"],
         )
         threading.Thread(
             target=_notify_admin, args=(snapshot,), name="sigma-memory-alert", daemon=True
