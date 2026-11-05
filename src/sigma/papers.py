@@ -7204,7 +7204,12 @@ async def _generate_impl(
 
             def clear_active(completed_task: asyncio.Task[Any]) -> None:
                 if completed_task.cancelled():
-                    finish_progress(path, "cancelled")
+                    from sigma.memory_guard import MESSAGE, is_critical
+
+                    if is_critical():
+                        finish_progress(path, "failed", MESSAGE)
+                    else:
+                        finish_progress(path, "cancelled")
                 elif completed_task.exception() is not None:
                     finish_progress(path, "failed")
                 active = _active_progress.get(project_key)
