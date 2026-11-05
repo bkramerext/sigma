@@ -1881,7 +1881,6 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
-    <ProjectDiagnosticsPanel path={path} diagnostics={projectDiagnostics} status={diagnosticStatus}/>
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
@@ -1915,6 +1914,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     </div>
     {readError && <p className="error" role="alert">Unable to confirm session state. Last confirmed information is shown: {readError}</p>}
     {error && <p className="error" role="alert">{error}</p>}
+    <ProjectDiagnosticsPanel path={path} diagnostics={projectDiagnostics} status={diagnosticStatus}/>
     </div>
     <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
   </section>;
@@ -2651,7 +2651,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         path, long_form: 'false', expected_project_id: projectId, expected_binding: binding,
         mode, model, reasoning_effort: effort,
       });
-      const preflightResponse = await fetch(`/api/projects/papers/preflight?${preflightParams}`, { cache: 'no-store', signal: controller.signal });
+      const preflightResponse = await fetch(`/api/projects/papers/preflight?${preflightParams}`, { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
       const preflight = await preflightResponse.json();
       if (!preflightResponse.ok) throw new Error(preflight.error ?? 'Could not size the evidence snapshot.');
       if (preflight.checkpoint_exists && !preflight.resume_available) {
@@ -2664,7 +2664,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         : 'Compiling publication references…');
       requestDispatched = true;
       window.localStorage.setItem(paperRecoveryKey(projectId), '1');
-      const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+      const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
@@ -2714,7 +2714,6 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         // survives losing the stream; only the explicit Cancel action stops it.
         setError('Paper stream disconnected. Check current progress and saved versions.');
       }
-      else reportRequestFailure(errorMessage(cause));
       await refresh(selected?.paper_id);
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
@@ -2787,7 +2786,12 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)}{paperProgress.status === 'active' ? ` · ${paperTimingLabel(paperProgress, paperClock)}` : ''}</span>{paperProgress.stage === 'proofreading' && <span className="settings-hint">Checking and correcting typesetting issues.</span>}{paperProgress.stage === 'pdf_check' && <span className="settings-hint">{paperProgress.detail || 'Checking PDF output; the saved TeX remains authoritative and PDFs are not edited.'}</span>}{paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="settings-hint">{paperProgress.failure_reason}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningFallback ? 'Continue from saved evidence without repeating the failed planning request.' : planningRetry ? 'Retry or Start over to try a fresh approach.' : continuationAvailable ? 'Continue or Start over.' : checkpointMismatch ? 'Clear outdated paper work to generate again.' : 'Review the error before trying again.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && <div className="request-toast-stack ai-paper-toast-stack" aria-label="Paper generation errors">
+        <div className="request-toast-item"><div className="request-toast-item-inner"><div className="request-toast" role="alert">
+          <div className="request-toast-content"><strong>Request Failed</strong><p>{error}</p></div>
+          <button type="button" aria-label="Dismiss paper error" onClick={() => setError('')}>Dismiss</button>
+        </div></div></div>
+      </div>}
       {scoreError && <p role="alert" className="error">{scoreError} <button type="button" className="text-view-link" onClick={() => setScoreError('')}>Dismiss</button></p>}
       {loading && <p>Loading saved versions…</p>}
       {!loading && papers.length > 0 && <section className="saved-paper-library" aria-label="Saved AI papers"><h3>Saved versions</h3>{papers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
