@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
 """Restart only an unhealthy/exited SIGMA backend, after safety checks.
 
-Docker's restart policy alone cannot act on an unhealthy but running container.
+Docker"s restart policy alone cannot act on an unhealthy but running container.
 This script runs from a systemd timer; it never deletes application state.
 """
 from __future__ import annotations
 
 import fcntl
 import json
-import os
 import subprocess
 import sys
 import time
@@ -37,9 +35,11 @@ def note(message: str) -> None:
 
 
 def main() -> int:
-    if STATE.is_symlink() or not STATE.is_dir() or command(
-        "mountpoint", "-q", str(STATE)
-    ).returncode:
+    if (
+        STATE.is_symlink()
+        or not STATE.is_dir()
+        or command("mountpoint", "-q", str(STATE)).returncode
+    ):
         print("State disk not mounted; refusing backend restart", file=sys.stderr)
         return 1
     if command("systemctl", "is-active", "--quiet", "sigma.service").returncode:
@@ -54,9 +54,13 @@ def main() -> int:
         except BlockingIOError:
             return 0
         result = command(
-            "docker", "ps", "-aq",
-            "--filter", "label=com.docker.compose.project=sigma",
-            "--filter", "label=com.docker.compose.service=backend",
+            "docker",
+            "ps",
+            "-aq",
+            "--filter",
+            "label=com.docker.compose.project=sigma",
+            "--filter",
+            "label=com.docker.compose.service=backend",
         )
         if result.returncode:
             note("Cannot query Docker backend container; operator attention required")
@@ -85,19 +89,23 @@ def main() -> int:
             return 1
 
         # Limit flapping while an upstream dependency is unavailable.
-        stamp = Path('/run/sigma-backend-watchdog-last-restart')
+        stamp = Path("/run/sigma-backend-watchdog-last-restart")
         try:
-            last = float(stamp.read_text(encoding='ascii'))
+            last = float(stamp.read_text(encoding="ascii"))
         except (OSError, ValueError):
             last = 0.0
         if time.time() - last < 300:
-            note('Backend remains unhealthy; restart cooldown active (5 minutes)')
+            note("Backend remains unhealthy; restart cooldown active (5 minutes)")
             return 1
-        stamp.write_text(str(time.time()), encoding='ascii')
+        stamp.write_text(str(time.time()), encoding="ascii")
         # Persist the reason before attempting recovery.
-        note(f"Restarting backend container={container[:12]} running={running} health={status} oom_killed={oom}")
-        restarted = command("docker", "restart", "--time", "10", container) if running else command(
-            "docker", "start", container
+        note(
+            f"Restarting backend container={container[:12]} running={running} health={status} oom_killed={oom}"
+        )
+        restarted = (
+            command("docker", "restart", "--time", "10", container)
+            if running
+            else command("docker", "start", container)
         )
         if restarted.returncode:
             note("Backend restart failed; operator attention required")
