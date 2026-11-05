@@ -1,4 +1,5 @@
 """Low-cadence deletion of expired SIGMA operational logs only."""
+
 from __future__ import annotations
 
 import sys
