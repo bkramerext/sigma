@@ -3431,11 +3431,12 @@ def finish_progress(
     # potentially huge checkpoint while the container is close to OOM.
     critical = is_critical()
     work = None if critical else _load_work(path)
-    saved = (
-        _read_progress_status(path)
-        if critical
-        else work.get("progress") if work is not None else _read_progress_status(path)
-    )
+    if critical:
+        saved = _read_progress_status(path)
+    elif work is not None:
+        saved = work.get("progress")
+    else:
+        saved = _read_progress_status(path)
     state = active or saved
     if state is None:
         return
