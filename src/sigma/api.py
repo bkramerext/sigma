@@ -1914,7 +1914,6 @@ async def proposal_view(body: ProposalRequest, request: Request):
             expected_project_id=body.expected_project_id,
         )
     )
-    memory_guard.track_task(task)
     request_id = str(body.request_id) if body.request_id else None
     if request_id:
         try:
@@ -2057,6 +2056,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             body.qa_id,
         )
     )
+    memory_guard.track_task(task)
     connection = asyncio.create_task(disconnected())
     try:
         done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
