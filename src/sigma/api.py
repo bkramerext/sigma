@@ -1022,7 +1022,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             if type(provider_calls_attempted) is int:
                 event["provider_calls_attempted"] = provider_calls_attempted
             yield "data: " + json.dumps(event) + "\n\n"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - SSE must emit an error after HTTP 200
             # StreamingResponse already sent HTTP 200. Log only safe stack
             # locations and exception class: exception text may contain
             # private project or provider content on the persistent log disk.
