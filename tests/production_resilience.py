@@ -190,23 +190,23 @@ def main() -> None:
         async def paper(name: str) -> None:
             async with papers._paper_operation(name, generating=True):
                 order.append(name)
-                if name == "paper-first":
+                if name == "paper-first.sigma":
                     first_started.set()
                     await release_first.wait()
 
-        first = asyncio.create_task(paper("paper-first"))
+        first = asyncio.create_task(paper("paper-first.sigma"))
         await first_started.wait()
-        second = asyncio.create_task(paper("paper-second"))
-        third = asyncio.create_task(paper("paper-third"))
+        second = asyncio.create_task(paper("paper-second.sigma"))
+        third = asyncio.create_task(paper("paper-third.sigma"))
         await asyncio.sleep(0)
-        assert papers.activity_status("paper-first") == "active"
-        assert papers.activity_status("paper-second") == "queued"
-        assert papers.activity_status("paper-third") == "queued"
-        assert papers.progress_status("paper-second")["status"] == "queued"
-        assert "position 2" in papers.progress_status("paper-third")["detail"]
-        assert order == ["paper-first"], "Queued projects must not run concurrently"
+        assert papers.activity_status("paper-first.sigma") == "active"
+        assert papers.activity_status("paper-second.sigma") == "queued"
+        assert papers.activity_status("paper-third.sigma") == "queued"
+        assert papers.progress_status("paper-second.sigma")["status"] == "queued"
+        assert "position 2" in papers.progress_status("paper-third.sigma")["detail"]
+        assert order == ["paper-first.sigma"], "Queued projects must not run concurrently"
         try:
-            async with papers._paper_operation("paper-first", generating=True):
+            async with papers._paper_operation("paper-first.sigma", generating=True):
                 raise AssertionError("Duplicate paper project was admitted")
         except ProjectError as exc:
             assert "already active or queued" in str(exc)
@@ -214,11 +214,11 @@ def main() -> None:
         second.cancel()
         result = await asyncio.gather(second, return_exceptions=True)
         assert isinstance(result[0], asyncio.CancelledError)
-        assert papers.activity_status("paper-second") is None
+        assert papers.activity_status("paper-second.sigma") is None
         release_first.set()
         await asyncio.gather(first, third)
-        assert order == ["paper-first", "paper-third"]
-        assert papers.activity_status("paper-third") is None
+        assert order == ["paper-first.sigma", "paper-third.sigma"]
+        assert papers.activity_status("paper-third.sigma") is None
         assert not papers._paper_waiters
         assert not papers._generating_paper_projects
         assert not papers._busy_paper_projects
