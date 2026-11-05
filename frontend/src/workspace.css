@@ -429,8 +429,8 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   animation: paper-activity-pulse 1.25s ease-in-out infinite;
 }
 .paper-activity-indicator.paper-queued {
-  background: #ebbe4d;
-  box-shadow: 0 0 0 0 #ebbe4d66;
+  background: #ffff00;
+  box-shadow: 0 0 0 0 #ffff0066;
 }
 .paper-activity-indicator.paper-failed,
 .paper-activity-indicator.paper-cancelled,
