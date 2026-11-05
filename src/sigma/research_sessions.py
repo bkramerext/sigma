@@ -7,6 +7,7 @@ import base64
 import fcntl
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -4714,6 +4715,10 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                     branch["current_action"] = record["current_action"]
                     branch["reason"] = record["message"]
             _event(record, "interrupted", record["message"])
+            logging.getLogger("sigma.lifecycle").warning(
+                "session.recovered project_id=%s session_id=%s status=paused",
+                record.get("project_id"), record.get("id"),
+            )
             _save(record["project_path"], record)
             return record
     lock_path = _worker_lock_path(record["project_path"], record["id"])
@@ -4856,6 +4861,10 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 record["cost_status"] = "unavailable"
                 record["estimated_cost_usd"] = None
         _event(record, "interrupted", record["message"])
+        logging.getLogger("sigma.lifecycle").warning(
+            "session.recovered project_id=%s session_id=%s status=paused interrupted_calls=%d",
+            record.get("project_id"), record.get("id"), len(interrupted_steps),
+        )
         _save(record["project_path"], record)
         if cloud_research.billing_enabled():
             try:
@@ -6529,6 +6538,10 @@ async def start_session(
                 except cloud_research.CloudResearchUnavailable as exc:
                     raise ProjectError(str(exc)) from exc
             _save(view.path, record)
+            logging.getLogger("sigma.lifecycle").info(
+                "session.queued project_id=%s session_id=%s strategies=%d",
+                record["project_id"], record["id"], len(record["strategy_ids"]),
+            )
             event = asyncio.Event()
             _control[record["id"]] = event
             task = asyncio.create_task(_worker(record["id"], view.path))
@@ -6595,6 +6608,11 @@ async def control_session(
             _event(record, "stopped" if action == "stop" else "paused", record["message"])
             record["updated_at"] = _now()
             _save(record["project_path"], record)
+            logging.getLogger("sigma.lifecycle").info(
+                "session.%s project_id=%s session_id=%s calls_used=%s",
+                "stopped" if action == "stop" else "paused",
+                record.get("project_id"), session_id, record.get("calls_used"),
+            )
             event = _control.get(session_id)
             task = _tasks.get(session_id)
         if event:
@@ -13339,6 +13357,10 @@ async def _portfolio_strategy_pipeline(
             session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
         )
     except Exception as exc:  # noqa: BLE001 — preserve completed sibling outputs
+        logging.getLogger("sigma.lifecycle").error(
+            "session.strategy_exception session_id=%s strategy_id=%s role=%s error_type=%s",
+            session_id, strategy_id, role, type(exc).__name__,
+        )
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"stopped", "paused", "ended", "completed", "failed"}:
@@ -15143,6 +15165,8 @@ async def _worker(session_id: str, path: str) -> None:
     worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     role: str | None = None
+    started = datetime.now(UTC)
+    log = logging.getLogger("sigma.lifecycle")
     try:
         fcntl.flock(worker_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -15153,6 +15177,10 @@ async def _worker(session_id: str, path: str) -> None:
         return
     try:
         initial = _read(path, session_id)
+        log.info(
+            "session.worker_start project_id=%s session_id=%s calls_used=%s",
+            initial.get("project_id"), session_id, initial.get("calls_used"),
+        )
         async with _session_state_lock(session_id):
             initial = _read(path, session_id)
             if _pause_for_stop_advisory(initial, path):
@@ -15672,6 +15700,7 @@ async def _worker(session_id: str, path: str) -> None:
             if record["status"] == "ended":
                 return
     except asyncio.CancelledError:
+        log.info("session.worker_cancelled session_id=%s", session_id)
         try:
             record = _read(path, session_id)
             _record_worker_cancellation(record)
@@ -15681,6 +15710,7 @@ async def _worker(session_id: str, path: str) -> None:
             pass
         raise
     except (ProjectError, OSError, ValueError, TypeError, httpx.HTTPError, TimeoutError) as exc:
+        log.error("session.worker_exception session_id=%s error_type=%s", session_id, type(exc).__name__)
         try:
             record = _read(path, session_id)
             if record["status"] not in {"stopped", "paused"}:
@@ -15753,6 +15783,15 @@ async def _worker(session_id: str, path: str) -> None:
         except (ProjectError, OSError):
             pass
     finally:
+        try:
+            final = _read(path, session_id)
+            log.info(
+                "session.worker_end project_id=%s session_id=%s status=%s calls_used=%s elapsed_s=%.1f",
+                final.get("project_id"), session_id, final.get("status"),
+                final.get("calls_used"), (datetime.now(UTC) - started).total_seconds(),
+            )
+        except (OSError, ProjectError, ValueError):
+            log.warning("session.worker_end session_id=%s status=unavailable", session_id)
         if cloud_research.billing_enabled():
             try:
                 current = _read(path, session_id)
