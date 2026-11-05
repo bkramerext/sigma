@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import traceback
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
@@ -43,6 +44,12 @@ def _host_available_kib() -> int | None:
     except (OSError, ValueError, IndexError):
         pass
     return None
+
+
+def safe_exception_trace(error: BaseException) -> str:
+    """Stack locations only; never print exception messages or frame locals."""
+    frames = traceback.extract_tb(error.__traceback__)[-12:]
+    return " > ".join(f"{Path(frame.filename).name}:{frame.lineno}:{frame.name}" for frame in frames)
 
 
 def memory_snapshot() -> dict[str, int | None]:
