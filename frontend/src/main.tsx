@@ -2672,7 +2672,15 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
   }
 
   async function discardDraft() {
-    if (busy || paperProgress?.status === 'active' || request.current !== null || !binding) return;
+    if (busy || paperProgress?.status === 'active' || request.current !== null) return;
+    // A freshly confirmed New paper has no persisted checkpoint to delete.
+    if (!paperProgress && !restartableCheckpoint && !checkpointMismatch) {
+      setNewPaperRequested(false);
+      setConfirmDiscardDraft(false);
+      setResetConfirm(false);
+      return;
+    }
+    if (!binding) { setError('Connect an eligible AI provider before discarding saved unfinished paper work.'); return; }
     setBusy(true); setError('');
     try {
       const response = await fetch('/api/projects/papers/discard', {
