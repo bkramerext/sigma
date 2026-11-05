@@ -1022,13 +1022,17 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             if type(provider_calls_attempted) is int:
                 event["provider_calls_attempted"] = provider_calls_attempted
             yield "data: " + json.dumps(event) + "\n\n"
-        except Exception:
-            # StreamingResponse has already sent HTTP 200. An unexpected
-            # server error must still terminate with a well-formed SSE error,
-            # rather than dropping the socket and concealing the cause from
-            # the user. Keep the traceback in server logs only: it can
-            # contain project data or provider request details.
-            logging.getLogger(__name__).exception("Unexpected paper-generation failure")
+        except Exception as exc:
+            # StreamingResponse already sent HTTP 200. Log only safe stack
+            # locations and exception class: exception text may contain
+            # private project or provider content on the persistent log disk.
+            from sigma.production_observability import safe_exception_trace
+
+            logging.getLogger(__name__).error(
+                "Unexpected paper-generation failure type=%s frames=%s",
+                type(exc).__name__,
+                safe_exception_trace(exc),
+            )
             yield (
                 "data: "
                 + json.dumps(
