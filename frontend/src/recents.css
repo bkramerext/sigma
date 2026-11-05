@@ -480,16 +480,35 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   overflow-wrap: anywhere;
 }
 
-/* Keep ordinary link-style hand cursors while duplicate project opens are blocked.
-   Opening progress belongs beside the title, not on the pointer. */
-.home-page .home-catalog :is(.recent-open, .sample-open)[aria-busy="true"]:disabled {
+/* Preserve the regular hand cursor while displaying progress next to the title. */
+.home-page .home-catalog :is(.home-recents, .home-samples)[data-opening="true"] :is(.recent-open, .sample-open):disabled {
   cursor: pointer;
 }
-.home-page .home-catalog :is(.recent-open, .sample-open) .project-opening-status {
-  display: inline-flex; align-items: baseline; gap: 4px; margin-left: 7px;
-  color: #e0aa8b; font: inherit; white-space: nowrap;
+.home-page .home-catalog .project-opening-hourglass {
+  display: inline-flex; vertical-align: -2px; margin-left: 7px;
+  width: 15px; height: 15px; color: #e0aa8b;
 }
+.home-page .home-catalog .project-opening-hourglass svg { display: block; }
 .home-page .home-recents .recent-open[aria-busy="true"],
 .home-page .home-samples .sample-open[aria-busy="true"] {
   color: #e0aa8b; opacity: 1;
+}
+
+.home-page .home-catalog .project-opening-label { margin-left: 5px; color: #e0aa8b; font-size: .85em; font-weight: 400; white-space: nowrap; }
+
+/* The project list shows one heartbeat: green for active work, yellow only
+   when paper generation is waiting and no work is running. */
+.home-page .home-recents .research-running-indicator.paper-queued-indicator {
+  border-color: #eac16a; background: #e3b74d;
+  box-shadow: 0 0 0 0 #e3b74d80;
+  animation-name: paper-queued-heartbeat;
+}
+.home-page .home-recents .recent-running.recent-queued { color: #e3b74d; }
+@keyframes paper-queued-heartbeat {
+  0%, 42%, 100% { transform: scale(1); box-shadow: 0 0 0 0 #e3b74d00; }
+  12% { transform: scale(1.32); box-shadow: 0 0 0 3px #e3b74d80; }
+  32% { transform: scale(1.2); box-shadow: 0 0 0 2px #e3b74d50; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-page .home-recents .paper-queued-indicator { animation: none; }
 }

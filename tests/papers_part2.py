@@ -346,8 +346,8 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
     assert uncertain_state["plan"]
 
 
-def test_transient_paper_failures_retry_sections_without_rewriting_saved_work() -> None:
-    """Three attempts per failed section; resume only the missing section."""
+def test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallback() -> None:
+    """Exhausted retries preserve authored sections and publish a visible gap."""
     package, plan = fast_package(section_count=5)
     state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
     attempts: dict[int, int] = {}
@@ -373,40 +373,38 @@ def test_transient_paper_failures_retry_sections_without_rewriting_saved_work() 
         if stage == "retry" and detail:
             retry_details.append(detail)
 
-    async def fail_after_three() -> None:
+    async def generate() -> papers.PaperDraft:
         with patch.object(papers, "_provider_structured", new=provider):
-            try:
-                await papers._generate_long_draft(
-                    package,
-                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
-                    {"model": "fixture-model", "reasoning_effort": "high"},
-                    state,
-                    lambda _value: None,
-                    progress,
-                    structured_fast_path=True,
-                )
-            except papers.PaperTransientFailure:
-                pass
-            else:
-                raise AssertionError("Paper section must fail after three transient attempts")
+            result, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                progress,
+                structured_fast_path=True,
+            )
+        assert calls == 8 and batches == 0
+        return result
 
-    asyncio.run(fail_after_three())
+    result = asyncio.run(generate())
     assert attempts == {1: 3, 2: 1, 3: 1, 4: 1, 5: 1}
-    assert set(state["section_drafts"]) == {"2", "3", "4", "5"}
-    assert state["provider_calls_total"] == 8  # plan + 3 attempts + four siblings
-    assert any("Retrying section 1 (attempt 3 of 3)." in item for item in retry_details)
+    assert set(state["section_drafts"]) == {"1", "2", "3", "4", "5"}
+    assert "Editorial notice" in result.sections[0].paragraphs[0]
+    assert "Saved section 2." in result.sections[1].paragraphs
+    assert any("explicit editorial placeholders" in w for w in result.validation_warnings)
+    assert any("Paper section 1" in issue for issue in state["generation_issues"])
+    assert state["provider_calls_total"] == 8
+    assert any("Retrying section 1 (attempt 3 of 3)." in d for d in retry_details)
 
-    async def resumed_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
-        assert schema_name == "sigma_long_paper_section"
-        assert input_value["section_number"] == 1
-        attempts[1] += 1
-        return papers.LongSectionDraft(
-            paragraphs=["Recovered only the missing section."]
-        ), "fixture-model"
+    # A Continue must reuse all saved text, including the explicit gap,
+    # rather than silently spend another provider request.
+    async def no_repeat(*_args, **_kwargs):
+        raise AssertionError("All sections are checkpointed; no repeat provider call is allowed")
 
     async def resume() -> None:
-        with patch.object(papers, "_provider_structured", new=resumed_provider):
-            result, calls, _ = await papers._generate_long_draft(
+        with patch.object(papers, "_provider_structured", new=no_repeat):
+            resumed, calls, _ = await papers._generate_long_draft(
                 package,
                 {"identity": "fixture", "mode": "api_key", "token": "fixture"},
                 {"model": "fixture-model", "reasoning_effort": "high"},
@@ -414,12 +412,77 @@ def test_transient_paper_failures_retry_sections_without_rewriting_saved_work() 
                 lambda _value: None,
                 structured_fast_path=True,
             )
-        assert calls == 9
-        assert len(result.sections) == 5
+        assert calls == 8
+        assert resumed.sections[0].paragraphs == result.sections[0].paragraphs
 
     asyncio.run(resume())
-    assert attempts == {1: 4, 2: 1, 3: 1, 4: 1, 5: 1}
-    assert set(state["section_drafts"]) == {"1", "2", "3", "4", "5"}
+
+
+def test_paper_section_invalid_optional_table_is_dropped_without_losing_text() -> None:
+    package, plan = fast_package()
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        invalid_table = papers.PaperTable(
+            caption="Table with a link outside the section evidence index",
+            headers=["Name", "Value"],
+            rows=[["Source", "Observed"]],
+            evidence_refs=["unknown-source-reference"],
+            claim_ids=[plan.sections[number - 1].claim_ids[0]],
+        )
+        return papers.LongSectionDraft(
+            paragraphs=[f"Kept verified section {number} prose."], tables=[invalid_table]
+        ), "fixture-model"
+
+    async def generate() -> papers.PaperDraft:
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, _, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+                include_diagrams=True,
+            )
+        return result
+
+    result = asyncio.run(generate())
+    assert all(not section.tables for section in result.sections)
+    assert all("Kept verified section" in section.paragraphs[0] for section in result.sections)
+    assert any("invalid source or claim links" in issue for issue in state["generation_issues"])
+
+
+def test_paper_section_permanent_provider_rejection_does_not_publish_placeholder() -> None:
+    package, plan = fast_package()
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        raise ProjectError("Provider declined a long-paper stage")
+
+    async def generate() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+
+    try:
+        asyncio.run(generate())
+    except ProjectError as exc:
+        assert "Provider declined" in str(exc)
+    else:
+        raise AssertionError("A provider refusal must not be turned into authored content")
+    assert not state.get("section_drafts")
 
 
 def test_paper_transient_error_classification_excludes_permanent_rejections() -> None:
@@ -485,6 +548,104 @@ def test_paper_failure_reason_survives_reopen() -> None:
         saved_work = papers._load_work(str(path))
         assert saved_work is not None
         assert saved_work["progress"]["failure_reason"] == reason
+
+
+def test_active_paper_progress_poll_avoids_checkpoint_deserialization() -> None:
+    """High-frequency browser heartbeats must not reload large active drafts."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "active-progress.sigma"
+        initialize_project(
+            path, "Active paper", "A mathematical question", research_mode="mathematical"
+        )
+        key = str(papers.project_path(str(path)).resolve())
+        progress = {
+            "run_id": "d" * 32,
+            "status": "running",
+            "stage": "sections",
+            "current": 1,
+            "total": 5,
+            "started_at": papers._now(),
+            "updated_at": papers._now(),
+            "elapsed_seconds": 3,
+        }
+        with (
+            patch.dict(papers._active_progress, {key: progress}),
+            patch.object(
+                papers,
+                "_load_work",
+                side_effect=AssertionError("Do not read checkpoints during active polling"),
+            ),
+        ):
+            status = papers.progress_status(str(path))
+        assert status is not None
+        assert status["status"] == "active"
+        assert status["stage"] == "sections"
+        assert (status["current"], status["total"]) == (1, 5)
+
+
+def test_paper_browser_presence_gates_new_paid_attempts() -> None:
+    """No viewer means no new paid attempt, including transient retries."""
+    from sigma import research_preferences, research_presence
+
+    with (
+        patch.object(
+            research_preferences, "allow_unattended_background_execution", return_value=False
+        ),
+        patch.object(research_presence, "has_live_viewer", return_value=False) as viewer_check,
+    ):
+        # Programmatic callers must not inherit browser-only lease requirements.
+        papers._require_browser_presence("unrelated-project.sigma", False)
+        assert viewer_check.call_count == 0
+        try:
+            papers._require_browser_presence("unrelated-project.sigma", True)
+        except papers.PaperBrowserPaused:
+            pass
+        else:
+            raise AssertionError("Disconnected browser generation should pause")
+
+    with (
+        patch.object(
+            research_preferences, "allow_unattended_background_execution", return_value=True
+        ),
+        patch.object(
+            research_presence,
+            "has_live_viewer",
+            side_effect=AssertionError("Unattended-enabled runs need no active viewer"),
+        ),
+    ):
+        papers._require_browser_presence("unrelated-project.sigma", True)
+
+
+def test_paper_paused_progress_preserves_disconnect_reason() -> None:
+    """Browser disconnection pauses cleanly, not as a falsely reported restart."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "browser-paused.sigma"
+        view = initialize_project(
+            path, "Paused paper", "Persist a viewer-lease pause", research_mode="mathematical"
+        )
+        work = papers._new_work("a" * 64, view.project.id, "b" * 64, "fixture-model", "high")
+        work["progress"] = {
+            "run_id": "c" * 32,
+            "status": "running",
+            "stage": "planning",
+            "current": 1,
+            "total": 3,
+            "started_at": "2026-10-29T01:00:00+00:00",
+            "updated_at": "2026-10-29T01:01:00+00:00",
+            "elapsed_seconds": 60,
+        }
+        papers._save_work(str(path), work)
+        reason = "Paper generation paused because the browser disconnected."
+        papers.finish_progress(str(path), "paused", reason)
+        saved = papers.progress_status(str(path))
+        assert saved is not None
+        assert saved["status"] == "interrupted"
+        assert saved["stage"] == "planning"
+        assert saved["detail"] == reason
+        assert "restarted" not in saved["detail"]
+        saved_work = papers._load_work(str(path))
+        assert saved_work is not None
+        assert saved_work["progress"]["status"] == "paused"
 
 
 def test_paper_progress_counts_keep_generation_resumable() -> None:

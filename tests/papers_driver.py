@@ -97,7 +97,7 @@ def main_part1() -> None:
     test_paper_pdf_source_reader_accepts_only_substantial_extractable_text()
     test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
-    test_transient_paper_failures_retry_sections_without_rewriting_saved_work()
+    test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallback()
     test_paper_transient_error_classification_excludes_permanent_rejections()
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
     test_paper_failure_reason_survives_reopen()

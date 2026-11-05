@@ -469,13 +469,13 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             "header .header-controls button:visible, header .header-controls a:visible"
         )
         expect(controls).to_have_count(5)
-        papers_before_dialog = len(paper_requests)
-        page.get_by_role("button", name="LaTeX research paper").click()
-        tex_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
-        expect(tex_dialog).to_contain_text("Sign in to export your research as TeX.")
-        assert len(paper_requests) == papers_before_dialog, paper_requests
-        tex_dialog.get_by_role("button", name="Close").click()
-        play = page.get_by_role("button", name="Start a new research session", exact=True)
+        papers_before = len(paper_requests)
+        papers_pane = page.locator(".papers-pane")
+        expect(papers_pane.get_by_role("heading", name="Papers")).to_be_visible()
+        expect(papers_pane).to_contain_text("Sign in to export your research as TeX.")
+        expect(papers_pane.get_by_role("button", name="Generate paper")).to_have_count(0)
+        assert len(paper_requests) == papers_before, paper_requests
+        play = page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True)
         expect(play).to_be_enabled()
         mutations_before_play = len(mutation_requests)
         dispatches_before_play = len(research_dispatch_requests)
@@ -600,7 +600,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         if missing_type.is_visible():
             expect(missing_type).to_contain_text("complete saved settings")
             missing_type.get_by_role("button", name="Continue with saved settings").click()
-        expect(page.get_by_role("button", name="Start Session #1")).to_be_visible(timeout=15000)
+        expect(page.get_by_role("button", name="Start Session 1")).to_be_visible(timeout=15000)
         assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") is None
         resumed_mutations = len(mutation_requests)
         page.locator(".session-start-link").filter(has_text="Cancel").click()

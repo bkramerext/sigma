@@ -341,16 +341,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 content_type="application/json",
                 body='{"error":"Mock provider unavailable"}',
             )
-            latex_button = page.get_by_role("button", name="LaTeX research paper")
-            expect(latex_button).to_be_visible()
-            latex_button.hover()
-            latex_hover = latex_button.evaluate(
-                "el => ({width: el.getBoundingClientRect().width, "
-                "height: el.getBoundingClientRect().height, "
-                "backgroundImage: getComputedStyle(el).backgroundImage})"
-            )
-            assert latex_hover["width"] == 50 and latex_hover["height"] == 34, latex_hover
-            assert "gradient" in latex_hover["backgroundImage"], latex_hover
+            papers_pane = page.locator(".papers-pane")
+            expect(papers_pane.get_by_role("heading", name="Papers")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="Include")).to_be_visible()
+            papers_pane.get_by_role("button", name="New paper").click()
+            expect(papers_pane.get_by_role("button", name="Generate Paper 1")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="Stop Paper 1")).to_have_count(0)
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
             )
@@ -749,7 +746,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             diagnostic_disclosure = diagnostic_row.locator("button.session-row-disclosure")
             if diagnostic_disclosure.get_attribute("aria-expanded") != "true":
                 diagnostic_disclosure.click()
-            expect(diagnostic.get_by_role("alert").filter(has_text="Session #")).to_contain_text(
+            expect(diagnostic.get_by_role("alert").filter(has_text="Session 1")).to_contain_text(
                 "could not be displayed"
             )
             expect(diagnostic.get_by_role("heading", name="Strategies")).to_be_visible()

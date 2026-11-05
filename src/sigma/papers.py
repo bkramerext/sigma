@@ -2498,7 +2498,8 @@ def _allocate_paper_version(path: str) -> int:
 def paper_download_basename(path: str, paper_id: str) -> str:
     """Return the shared, stable human-readable basename for a saved version."""
     record = get_paper(path, paper_id)
-    slug = _paper_filename_slug(inspect_project(path).project.title)
+    project = inspect_project(path).project
+    slug = _paper_filename_slug(project.title)
     version = record.get("paper_version")
     if type(version) is not int or version < 1:
         version = next(
@@ -2752,10 +2753,16 @@ def _paper_progress_counts_valid(current: Any, total: Any) -> bool:
     return type(current) is int and type(total) is int and total >= 1 and 0 <= current <= total
 
 
-def _note_paper_progress_recovery(work: dict[str, Any]) -> None:
+def _record_paper_generation_issue(work: dict[str, Any], message: str) -> None:
+    """Persist bounded, user-visible recovery warnings without losing the draft."""
     issues = work.setdefault("generation_issues", [])
-    if _PAPER_PROGRESS_RECOVERY_ISSUE not in issues and len(issues) < 20:
-        issues.append(_PAPER_PROGRESS_RECOVERY_ISSUE)
+    sanitized = " ".join(message.split())[:300]
+    if sanitized and sanitized not in issues and len(issues) < 20:
+        issues.append(sanitized)
+
+
+def _note_paper_progress_recovery(work: dict[str, Any]) -> None:
+    _record_paper_generation_issue(work, _PAPER_PROGRESS_RECOVERY_ISSUE)
 
 
 def _load_work(path: str) -> dict[str, Any] | None:
@@ -6381,24 +6388,68 @@ or document markup."""
     saved_sections: dict[str, Any] = state.setdefault("section_drafts", {})
     original_records = _research_integrity_records(package) if fast_path else []
 
-    def validate_section_tables(section: LongSectionPlan, draft: LongSectionDraft) -> None:
+    def sanitize_section_tables(
+        section: LongSectionPlan, draft: LongSectionDraft
+    ) -> LongSectionDraft:
+        """Drop optional unsound tables without sacrificing paid section prose."""
         allowed_refs = set(section.evidence_refs)
         allowed_claims = set(section.claim_ids)
+        retained: list[PaperTable] = []
         for table in draft.tables:
-            if set(table.evidence_refs) - allowed_refs:
-                raise ProjectError(
-                    f"A table in {section.heading} cites evidence outside its section outline"
+            if set(table.evidence_refs) - allowed_refs or set(table.claim_ids) - allowed_claims:
+                _record_paper_generation_issue(
+                    state,
+                    f"A table in {section.heading} had invalid source or claim links and was omitted.",
                 )
-            if set(table.claim_ids) - allowed_claims:
-                raise ProjectError(
-                    f"A table in {section.heading} cites claims outside its section outline"
-                )
+                continue
+            retained.append(table)
+        return draft.model_copy(update={"tables": retained})
+
+    def recoverable_section_failure(exc: Exception) -> bool:
+        # Never paper over declined requests, account/quota failures, local
+        # safety caps, or an explicit cancellation. Only provider transport
+        # and malformed authoring content can produce a labeled placeholder.
+        if isinstance(exc, ChatGPTProviderRejection):
+            return False
+        if isinstance(exc, (PaperConnectionFailure, PaperTransientFailure, ValidationError)):
+            return True
+        if not isinstance(exc, ProjectError):
+            return False
+        return str(exc).startswith(
+            (
+                "Provider returned malformed long-paper stage content",
+                "Provider returned no single structured long-paper stage",
+                "Provider did not complete the selected long-paper stage",
+            )
+        )
+
+    def fallback_section(
+        section_number: int, section: LongSectionPlan, exc: Exception
+    ) -> LongSectionDraft:
+        _record_paper_generation_issue(
+            state,
+            f"Paper section {section_number} ({section.heading}) was incomplete after "
+            f"{type(exc).__name__}; a clearly labeled fallback was published.",
+        )
+        return LongSectionDraft(
+            paragraphs=[
+                (
+                    "Editorial notice: The writing for this section was interrupted or invalid. "
+                    "The missing analysis is not supplied by SIGMA, and no claim is "
+                    "established by this placeholder."
+                ),
+                "The intended subject of this section was: "
+                + section.purpose
+                + " The original saved evidence and claim register are retained "
+                "in the paper archive for independent inspection.",
+            ]
+        )
 
     async def write_section(section_number: int, section: LongSectionPlan) -> PaperSection:
         section_key = str(section_number)
         if section_key in saved_sections:
             section_draft = LongSectionDraft.model_validate(saved_sections[section_key])
-            validate_section_tables(section, section_draft)
+            section_draft = sanitize_section_tables(section, section_draft)
             return PaperSection(
                 heading=section.heading,
                 paragraphs=section_draft.paragraphs,
@@ -6448,22 +6499,38 @@ or document markup."""
                 section.heading + " " + section.purpose,
                 headroom,
             )
-        body, _ = await call_with_safe_retry(
-            section_input,
-            reserve=len(long_plan.sections) - len(saved_sections) - 1,
-            instructions=section_instructions,
-            schema_name="sigma_long_paper_section",
-            response_model=LongSectionDraft,
-            max_input_bytes=220_000,
-            legacy=not fast_path,
-        )
-        section_draft = LongSectionDraft.model_validate(body)
-        validate_section_tables(section, section_draft)
-        encoded_section = _json(section_draft.model_dump())
-        if len(encoded_section) > 250_000:
-            raise ProjectError(
-                f"Section {section.heading} exceeded the 250 KB section bound; no paper was published."
+        try:
+            body, _ = await call_with_safe_retry(
+                section_input,
+                reserve=len(long_plan.sections) - len(saved_sections) - 1,
+                instructions=section_instructions,
+                schema_name="sigma_long_paper_section",
+                response_model=LongSectionDraft,
+                max_input_bytes=220_000,
+                legacy=not fast_path,
             )
+            section_draft = sanitize_section_tables(section, LongSectionDraft.model_validate(body))
+            if len(_json(section_draft.model_dump())) > 250_000:
+                _record_paper_generation_issue(
+                    state,
+                    f"Section {section_number} exceeded the 250 KB content limit; "
+                    "oversized optional content was discarded.",
+                )
+                section_draft = section_draft.model_copy(
+                    update={
+                        "paragraphs": section_draft.paragraphs[:12],
+                        "tables": [],
+                        "examples": [],
+                    }
+                )
+            if len(_json(section_draft.model_dump())) > 250_000:
+                raise ProjectError(
+                    "Provider returned malformed long-paper stage content: section size"
+                )
+        except (ProjectError, ValidationError) as exc:
+            if not recoverable_section_failure(exc):
+                raise
+            section_draft = fallback_section(section_number, section, exc)
         # No await between registering a completed result and saving the
         # checkpoint: concurrent tasks cannot interleave and lose a section.
         saved_sections[section_key] = section_draft.model_dump()
@@ -6550,6 +6617,12 @@ or document markup."""
         ]
 
     warning_items = [*long_plan.validation_warnings[:8]]
+    if any(issue.startswith("Paper section ") for issue in state.get("generation_issues", [])):
+        warning_items.insert(
+            0,
+            "One or more paper sections could not be completed. They contain "
+            "explicit editorial placeholders, not scientific findings; review before publication.",
+        )
     if conflict_note_count:
         warning_items.append(
             f"Evidence indexing recorded {conflict_note_count} potential conflict or gap note(s); inspect the frozen source records directly."
@@ -8415,6 +8488,10 @@ async def _generate_impl(
             record["generation"]["publication_status"] = (
                 "needs_review"
                 if proofreading.get("status") == "fallback"
+                or any(
+                    issue.startswith("Paper section ")
+                    for issue in work.get("generation_issues", [])
+                )
                 else "proofreading_complete"
             )
             record["generation"]["provider_calls_attempted"] = (
@@ -9081,24 +9158,24 @@ def list_papers(path: str) -> list[dict[str, Any]]:
         )
         from sigma.projects import read_project_artifact
 
-        files = [(Path(name).name, read_project_artifact(target, name)) for name in names]
+        # Read only one paper at a time. A collection of 50 large paper
+        # artifacts must not be held in memory while building a small listing.
+        files = ((Path(name).name, read_project_artifact(target, name)) for name in names)
     else:
         directory = _paper_dir(path, create=False)
         if not directory.exists():
             return []
-        files = [
+        files = (
             (file, file.read_bytes())
             for file in directory.glob("*.json")
             if not file.is_symlink() and file.is_file() and file.stat().st_size <= MAX_PAPER_BYTES
-        ]
+        )
+    project = inspect_project(path).project
     records = []
     for file, contents in files:
         try:
             value = json.loads(contents)
-            if (
-                isinstance(value, dict)
-                and value.get("project_id") == inspect_project(path).project.id
-            ):
+            if isinstance(value, dict) and value.get("project_id") == project.id:
                 records.append(
                     {
                         "paper_id": value["paper_id"],
