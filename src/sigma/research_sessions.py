@@ -4717,7 +4717,8 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             _event(record, "interrupted", record["message"])
             logging.getLogger("sigma.lifecycle").warning(
                 "session.recovered project_id=%s session_id=%s status=paused",
-                record.get("project_id"), record.get("id"),
+                record.get("project_id"),
+                record.get("id"),
             )
             _save(record["project_path"], record)
             return record
@@ -4863,7 +4864,9 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         _event(record, "interrupted", record["message"])
         logging.getLogger("sigma.lifecycle").warning(
             "session.recovered project_id=%s session_id=%s status=paused interrupted_calls=%d",
-            record.get("project_id"), record.get("id"), len(interrupted_steps),
+            record.get("project_id"),
+            record.get("id"),
+            len(interrupted_steps),
         )
         _save(record["project_path"], record)
         if cloud_research.billing_enabled():
@@ -6540,7 +6543,9 @@ async def start_session(
             _save(view.path, record)
             logging.getLogger("sigma.lifecycle").info(
                 "session.queued project_id=%s session_id=%s strategies=%d",
-                record["project_id"], record["id"], len(record["strategy_ids"]),
+                record["project_id"],
+                record["id"],
+                len(record["strategy_ids"]),
             )
             event = asyncio.Event()
             _control[record["id"]] = event
@@ -6611,7 +6616,9 @@ async def control_session(
             logging.getLogger("sigma.lifecycle").info(
                 "session.%s project_id=%s session_id=%s calls_used=%s",
                 "stopped" if action == "stop" else "paused",
-                record.get("project_id"), session_id, record.get("calls_used"),
+                record.get("project_id"),
+                session_id,
+                record.get("calls_used"),
             )
             event = _control.get(session_id)
             task = _tasks.get(session_id)
@@ -13359,7 +13366,10 @@ async def _portfolio_strategy_pipeline(
     except Exception as exc:  # noqa: BLE001 — preserve completed sibling outputs
         logging.getLogger("sigma.lifecycle").error(
             "session.strategy_exception session_id=%s strategy_id=%s role=%s error_type=%s",
-            session_id, strategy_id, role, type(exc).__name__,
+            session_id,
+            strategy_id,
+            role,
+            type(exc).__name__,
         )
         async with state_lock:
             record = _read(path, session_id)
@@ -15179,7 +15189,9 @@ async def _worker(session_id: str, path: str) -> None:
         initial = _read(path, session_id)
         log.info(
             "session.worker_start project_id=%s session_id=%s calls_used=%s",
-            initial.get("project_id"), session_id, initial.get("calls_used"),
+            initial.get("project_id"),
+            session_id,
+            initial.get("calls_used"),
         )
         async with _session_state_lock(session_id):
             initial = _read(path, session_id)
@@ -15710,7 +15722,9 @@ async def _worker(session_id: str, path: str) -> None:
             pass
         raise
     except (ProjectError, OSError, ValueError, TypeError, httpx.HTTPError, TimeoutError) as exc:
-        log.error("session.worker_exception session_id=%s error_type=%s", session_id, type(exc).__name__)
+        log.error(
+            "session.worker_exception session_id=%s error_type=%s", session_id, type(exc).__name__
+        )
         try:
             record = _read(path, session_id)
             if record["status"] not in {"stopped", "paused"}:
@@ -15787,8 +15801,11 @@ async def _worker(session_id: str, path: str) -> None:
             final = _read(path, session_id)
             log.info(
                 "session.worker_end project_id=%s session_id=%s status=%s calls_used=%s elapsed_s=%.1f",
-                final.get("project_id"), session_id, final.get("status"),
-                final.get("calls_used"), (datetime.now(UTC) - started).total_seconds(),
+                final.get("project_id"),
+                session_id,
+                final.get("status"),
+                final.get("calls_used"),
+                (datetime.now(UTC) - started).total_seconds(),
             )
         except (OSError, ProjectError, ValueError):
             log.warning("session.worker_end session_id=%s status=unavailable", session_id)
