@@ -9,6 +9,7 @@ import tempfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 from sigma import memory_guard
@@ -208,14 +209,18 @@ def main() -> None:
             # queued attempt that never reached provider work.
             old_work = papers._new_work("1" * 64, "original", "2" * 64, "model", "high")
             papers._save_work(second_name, old_work)
+            saved_work = papers._load_work(second_name)
+            assert saved_work is not None
             second = asyncio.create_task(paper(second_name))
             third = asyncio.create_task(paper(third_name))
             await asyncio.sleep(0)
             assert papers.activity_status(first_name) == "active"
             assert papers.activity_status(second_name) == "queued"
             assert papers.activity_status(third_name) == "queued"
-            assert papers.progress_status(second_name)["status"] == "queued"
-            assert "position 2" in papers.progress_status(third_name)["detail"]
+            queued_progress = papers.progress_status(second_name)
+            assert queued_progress is not None and queued_progress["status"] == "queued"
+            third_progress = papers.progress_status(third_name)
+            assert third_progress is not None and "position 2" in third_progress["detail"]
             assert order == [first_name], "Queued projects must not run concurrently"
             try:
                 async with papers._paper_operation(first_name, generating=True):
@@ -236,8 +241,9 @@ def main() -> None:
             result = await asyncio.gather(second, return_exceptions=True)
             assert isinstance(result[0], asyncio.CancelledError)
             assert papers.activity_status(second_name) is None
-            assert papers.progress_status(second_name)["status"] == "cancelled"
-            assert papers._load_work(second_name) == old_work
+            cancelled_progress = papers.progress_status(second_name)
+            assert cancelled_progress is not None and cancelled_progress["status"] == "cancelled"
+            assert papers._load_work(second_name) == saved_work
             release_first.set()
             await asyncio.gather(first, third)
             assert order == [first_name, third_name]
@@ -273,7 +279,7 @@ def main() -> None:
             try:
                 papers.finish_progress(second_name, "failed", expected_run_id="old-run")
                 assert papers._active_progress[key] is later
-                assert papers._load_work(second_name) == old_work
+                assert papers._load_work(second_name) == saved_work
             finally:
                 papers._active_progress.pop(key, None)
 
@@ -307,7 +313,7 @@ def main() -> None:
             failed_status = papers.progress_status(second_name)
             assert failed_status is not None and failed_status["status"] == "failed"
             assert memory_guard.MESSAGE in failed_status["failure_reason"]
-            assert papers._load_work(second_name) == old_work
+            assert papers._load_work(second_name) == saved_work
             assert not papers._paper_waiters
             assert not papers._busy_paper_projects
 
@@ -328,18 +334,24 @@ def main() -> None:
 
             task = asyncio.create_task(would_dispatch())
             papers.register_submission(path, task)
-            assert papers._read_queue_status(path)["status"] == "queued"
+            receipt = papers._read_queue_status(path)
+            assert receipt is not None and receipt["status"] == "queued"
             assert await papers.cancel_generation(path)
             assert task.cancelled()
             assert provider_calls == 0
             await asyncio.sleep(0)
             assert papers._submission_tasks == {}
-            assert papers.progress_status(path)["status"] == "cancelled"
+            cancelled_status = papers.progress_status(path)
+            assert cancelled_status is not None and cancelled_status["status"] == "cancelled"
             assert await papers.cancel_generation(path) is False
 
-            pending = asyncio.create_task(asyncio.Event().wait())
+            async def unresolved_submission() -> dict[str, Any]:
+                await asyncio.Event().wait()
+                return {}
+
+            pending = asyncio.create_task(unresolved_submission())
             papers.register_submission(path, pending)
-            duplicate = asyncio.create_task(asyncio.Event().wait())
+            duplicate = asyncio.create_task(unresolved_submission())
             try:
                 papers.register_submission(path, duplicate)
             except ProjectError as exc:

@@ -164,13 +164,13 @@ async def _paper_operation(path: str, *, generating: bool):
     key = str(project_path(path).resolve())
     gate = _paper_gate()
     admitted = False
+    now = _now()
     async with gate:
         if key in _busy_paper_projects:
             raise ProjectError("A paper generation is already active or queued for this project")
         if generating and len(_paper_waiters) >= MAX_QUEUED_PAPER_GENERATIONS:
             raise ProjectError("Paper queue is full; retry after an existing paper finishes")
         if generating:
-            now = _now()
             # Commit a tiny, private queue receipt before acknowledging the
             # request. A backend crash must not silently erase a waiting job.
             _write_queue_status(path, "queued", now)
