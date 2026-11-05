@@ -997,6 +997,16 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 "Detached paper generation failed: %s", type(error).__name__
             )
 
+    try:
+        # Reserve synchronously before yielding a StreamingResponse. This
+        # closes the window where an immediate Stop could miss the job.
+        papers.register_submission(body.path, task)
+    except BaseException:
+        # Disk failure, duplicate submission, or any other admission error
+        # must never leave an unregistered provider task running.
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
     task.add_done_callback(observe_detached_result)
 
     async def stream():
@@ -1021,6 +1031,17 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 yield "data: " + json.dumps(update, separators=(",", ":")) + "\n\n"
             result = await task
             yield "data: " + json.dumps({"type": "complete", "result": result}) + "\n\n"
+        except asyncio.CancelledError:
+            # Differentiate cancellation of the job itself from teardown of
+            # this SSE viewer. Disconnects never cancel the backend paper.
+            if not task.cancelled():
+                raise
+            reason = (
+                memory_guard.MESSAGE
+                if memory_guard.is_critical()
+                else "Paper generation cancelled; saved work remains available."
+            )
+            yield "data: " + json.dumps({"type": "error", "error": reason}) + "\n\n"
         except ProjectError as exc:
             event: dict[str, str | int] = {"type": "error", "error": str(exc)}
             provider_calls_attempted = getattr(exc, "provider_calls_attempted", None)
@@ -1157,41 +1178,6 @@ def set_unattended_execution_preference(body: UnattendedExecutionPreference):
     return {
         "allow_unattended_background_execution": research_preferences.update_unattended_background_execution(
             body.allow_unattended_background_execution
-        )
-    }
-
-
-@app.get("/api/user-preferences/section-layout")
-def section_layout_preference():
-    from sigma import section_layout_preferences
-
-    principal = cloud_auth.current_principal()
-    if principal and principal.role == "guest":
-        raise HTTPException(403, "Guests cannot change section layout preferences")
-    return {
-        "expand_one_project_section_at_a_time": (
-            section_layout_preferences.expand_one_project_section_at_a_time()
-        )
-    }
-
-
-class SectionLayoutPreference(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    expand_one_project_section_at_a_time: bool
-
-
-@app.put("/api/user-preferences/section-layout")
-def set_section_layout_preference(body: SectionLayoutPreference):
-    from sigma import section_layout_preferences
-
-    principal = cloud_auth.current_principal()
-    if principal and principal.role == "guest":
-        raise HTTPException(403, "Guests cannot change section layout preferences")
-    return {
-        "expand_one_project_section_at_a_time": (
-            section_layout_preferences.update_expand_one_project_section_at_a_time(
-                body.expand_one_project_section_at_a_time
-            )
         )
     }
 

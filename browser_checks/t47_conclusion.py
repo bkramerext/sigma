@@ -369,7 +369,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 # stable click target. Dispatch directly and allow exit removal.
                 dismiss_errors.first.evaluate("button => button.click()")
                 page.wait_for_timeout(350)
-            expect(dismiss_errors).to_have_count(0, timeout=5000)
+            # A concurrent poll can introduce another transient toast while
+            # the loop dismisses earlier notices. It must not obscure the hint.
+            expect(simple_outcome).to_be_visible()
             simple_outcome.screenshot(path="/tmp/sigma-advanced-outcome-hint.png")
             preference_link = hint.get_by_role("button", name="Advanced Outcome")
             preference_link.focus()

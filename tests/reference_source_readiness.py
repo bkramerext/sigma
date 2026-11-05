@@ -194,6 +194,11 @@ async def verify_provider_free_admission() -> None:
                     expected_limits=limits,
                     strategy_ids=[strategy.id],
                 )
+                # The admission test owns the spawned worker until it exits;
+                # never remove the temporary workspace while it can still write.
+                await asyncio.gather(
+                    research_sessions._tasks[started["id"]], return_exceptions=True
+                )
             assert started["status"] == "queued"
             saved = research_sessions._read(str(path), started["id"])
             assert saved["research_method_sources"]["retrieval_summary"]["retrieved"] == 3
@@ -219,7 +224,14 @@ async def verify_provider_free_admission() -> None:
                     strategy_ids=[strategy.id],
                 )
             assert replay["id"] == started["id"]
-            assert research_sessions._read(str(path), started["id"]) == saved
+            resumed = research_sessions._read(str(path), started["id"])
+            # Admission is idempotent even if a completed background worker
+            # transitions its operational status during this same event loop.
+            assert resumed["id"] == saved["id"]
+            assert resumed["research_method_sources"] == saved["research_method_sources"]
+            assert resumed["reference_compilation"] == saved["reference_compilation"]
+            assert resumed["calls_used"] == saved["calls_used"]
+            assert resumed["steps"] == saved["steps"]
 
             # Simulate all compiler retries exhausted. The saved strict-policy
             # checkpoint must prevent the worker from starting research.
@@ -288,6 +300,11 @@ async def verify_empty_and_single_reference_sessions() -> None:
                     credential["identity"],
                     expected_limits=research_sessions.get_limits(str(path)),
                     strategy_ids=[strategy.id],
+                )
+                # The admission test owns the spawned worker until it exits;
+                # never remove the temporary workspace while it can still write.
+                await asyncio.gather(
+                    research_sessions._tasks[started["id"]], return_exceptions=True
                 )
             assert started["status"] == "queued"
             saved = research_sessions._read(str(path), started["id"])
@@ -362,6 +379,11 @@ async def verify_unavailable_reference_sessions() -> None:
                     credential["identity"],
                     expected_limits=research_sessions.get_limits(str(path)),
                     strategy_ids=[strategy.id],
+                )
+                # The admission test owns the spawned worker until it exits;
+                # never remove the temporary workspace while it can still write.
+                await asyncio.gather(
+                    research_sessions._tasks[started["id"]], return_exceptions=True
                 )
             assert started["status"] == "queued"
             saved = research_sessions._read(str(path), started["id"])

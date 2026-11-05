@@ -9,6 +9,7 @@ import tempfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 from sigma import memory_guard
@@ -177,6 +178,234 @@ def main() -> None:
         assert not memory_guard._SHUTDOWN_PENDING
 
     asyncio.run(test_other_activity_cancellation())
+
+    # FIFO paper queue: one running paper, two queued projects, and safe
+    # cancellation of a queued project without blocking the next request.
+    from sigma import papers
+
+    async def test_paper_queue() -> None:
+        with tempfile.TemporaryDirectory(prefix="sigma-paper-queue-") as temporary:
+            root = Path(temporary)
+            first_name, second_name, third_name, restarted_name = (
+                str(root / f"paper-{name}.sigma")
+                for name in ("first", "second", "third", "restarted")
+            )
+            for name in (first_name, second_name, third_name, restarted_name):
+                Path(name).mkdir(mode=0o700)
+            first_started = asyncio.Event()
+            release_first = asyncio.Event()
+            order: list[str] = []
+
+            async def paper(name: str) -> None:
+                async with papers._paper_operation(name, generating=True):
+                    order.append(name)
+                    if name == first_name:
+                        first_started.set()
+                        await release_first.wait()
+
+            first = asyncio.create_task(paper(first_name))
+            await first_started.wait()
+            # An existing paper checkpoint must survive cancellation of a
+            # queued attempt that never reached provider work.
+            old_work = papers._new_work("1" * 64, "original", "2" * 64, "model", "high")
+            papers._save_work(second_name, old_work)
+            saved_work = papers._load_work(second_name)
+            assert saved_work is not None
+            second = asyncio.create_task(paper(second_name))
+            third = asyncio.create_task(paper(third_name))
+            await asyncio.sleep(0)
+            assert papers.activity_status(first_name) == "active"
+            assert papers.activity_status(second_name) == "queued"
+            assert papers.activity_status(third_name) == "queued"
+            queued_progress = papers.progress_status(second_name)
+            assert queued_progress is not None and queued_progress["status"] == "queued"
+            third_progress = papers.progress_status(third_name)
+            assert third_progress is not None and "position 2" in third_progress["detail"]
+            assert order == [first_name], "Queued projects must not run concurrently"
+            try:
+                async with papers._paper_operation(first_name, generating=True):
+                    raise AssertionError("Duplicate paper project was admitted")
+            except ProjectError as exc:
+                assert "already active or queued" in str(exc)
+
+            # A bounded queue prevents arbitrary request bursts from
+            # pinning unbounded task/SSE memory on this single backend.
+            with patch.object(papers, "MAX_QUEUED_PAPER_GENERATIONS", 2):
+                try:
+                    async with papers._paper_operation(restarted_name, generating=True):
+                        raise AssertionError("A full queue admitted another job")
+                except ProjectError as exc:
+                    assert "queue is full" in str(exc)
+
+            second.cancel()
+            result = await asyncio.gather(second, return_exceptions=True)
+            assert isinstance(result[0], asyncio.CancelledError)
+            assert papers.activity_status(second_name) is None
+            cancelled_progress = papers.progress_status(second_name)
+            assert cancelled_progress is not None and cancelled_progress["status"] == "cancelled"
+            assert papers._load_work(second_name) == saved_work
+            release_first.set()
+            await asyncio.gather(first, third)
+            assert order == [first_name, third_name]
+            assert papers.activity_status(third_name) is None
+            assert not papers._paper_waiters
+            assert not papers._generating_paper_projects
+            assert not papers._busy_paper_projects
+
+            # A backend crash bypasses finally/cleanup. The durable receipt
+            # must report interruption, not pretend this job is still running
+            # or vanish entirely. No provider attempt began while queued.
+            papers._write_queue_status(restarted_name, "queued", papers._now())
+            recovery = papers.progress_status(restarted_name)
+            assert recovery and recovery["status"] == "interrupted"
+            assert recovery["stage"] == "queued"
+            assert "No AI call was started" in recovery["detail"]
+            assert papers.activity_status(restarted_name) == "interrupted"
+
+            # A callback from a previous attempt cannot corrupt a newer
+            # attempt's progress or overwrite previously saved evidence.
+            key = str(Path(second_name).resolve())
+            later = {
+                "run_id": "new-run",
+                "status": "running",
+                "stage": "writing",
+                "current": None,
+                "total": None,
+                "started_at": papers._now(),
+                "updated_at": papers._now(),
+                "elapsed_seconds": 0,
+            }
+            papers._active_progress[key] = later
+            try:
+                papers.finish_progress(second_name, "failed", expected_run_id="old-run")
+                assert papers._active_progress[key] is later
+                assert papers._load_work(second_name) == saved_work
+            finally:
+                papers._active_progress.pop(key, None)
+
+            # Memory pressure at queue handoff must fail without dispatching
+            # any provider work and leave an inspectable terminal record.
+            block = asyncio.Event()
+            underway = asyncio.Event()
+
+            async def active() -> None:
+                async with papers._paper_operation(first_name, generating=True):
+                    underway.set()
+                    await block.wait()
+
+            task = asyncio.create_task(active())
+            await underway.wait()
+            waiting = asyncio.create_task(paper(second_name))
+            await asyncio.sleep(0)
+            assert papers.activity_status(second_name) == "queued"
+            with (
+                patch.object(
+                    memory_guard,
+                    "require_capacity",
+                    side_effect=ProjectError(memory_guard.MESSAGE),
+                ),
+                patch.object(memory_guard, "is_critical", return_value=True),
+            ):
+                block.set()
+                await task
+                failed = await asyncio.gather(waiting, return_exceptions=True)
+            assert isinstance(failed[0], ProjectError)
+            failed_status = papers.progress_status(second_name)
+            assert failed_status is not None and failed_status["status"] == "failed"
+            assert memory_guard.MESSAGE in failed_status["failure_reason"]
+            assert papers._load_work(second_name) == saved_work
+            assert not papers._paper_waiters
+            assert not papers._busy_paper_projects
+
+    asyncio.run(test_paper_queue())
+
+    async def test_immediate_stop() -> None:
+        # A job accepted by the API must be cancellable before generate()
+        # even begins. No eventual provider call may escape this Stop.
+        with tempfile.TemporaryDirectory(prefix="sigma-paper-stop-") as temporary:
+            path = str(Path(temporary) / "immediate.sigma")
+            Path(path).mkdir()
+            provider_calls = 0
+
+            async def would_dispatch() -> dict[str, object]:
+                nonlocal provider_calls
+                provider_calls += 1
+                return {}
+
+            task = asyncio.create_task(would_dispatch())
+            papers.register_submission(path, task)
+            receipt = papers._read_queue_status(path)
+            assert receipt is not None and receipt["status"] == "queued"
+            assert await papers.cancel_generation(path)
+            assert task.cancelled()
+            assert provider_calls == 0
+            await asyncio.sleep(0)
+            assert papers._submission_tasks == {}
+            cancelled_status = papers.progress_status(path)
+            assert cancelled_status is not None and cancelled_status["status"] == "cancelled"
+            assert await papers.cancel_generation(path) is False
+
+            async def unresolved_submission() -> dict[str, Any]:
+                await asyncio.Event().wait()
+                return {}
+
+            pending = asyncio.create_task(unresolved_submission())
+            papers.register_submission(path, pending)
+            duplicate = asyncio.create_task(unresolved_submission())
+            try:
+                papers.register_submission(path, duplicate)
+            except ProjectError as exc:
+                assert "already active or queued" in str(exc)
+            else:
+                raise AssertionError("Duplicate API submission was admitted")
+            duplicate.cancel()
+            await asyncio.gather(duplicate, return_exceptions=True)
+            assert await papers.cancel_generation(path)
+            assert pending.cancelled()
+            await asyncio.sleep(0)
+            assert papers._submission_tasks == {}
+
+    asyncio.run(test_immediate_stop())
+
+    def test_bounded_progress_recovery() -> None:
+        with tempfile.TemporaryDirectory(prefix="sigma-paper-progress-") as temporary:
+            path = str(Path(temporary) / "checkpoint.sigma")
+            Path(path).mkdir()
+            work = papers._new_work("1" * 64, "original", "2" * 64, "model", "high")
+            work["progress"] = {
+                "run_id": "a" * 32,
+                "status": "running",
+                "stage": "sections",
+                "current": 1,
+                "total": 5,
+                "started_at": papers._now(),
+                "updated_at": papers._now(),
+                "elapsed_seconds": 6,
+            }
+            papers._save_work(path, work)
+            # Reading status must never need the entire saved evidence bundle.
+            with patch.object(papers, "_load_work", side_effect=AssertionError("large read")):
+                recovered = papers.progress_status(path)
+            assert recovered is not None and recovered["status"] == "interrupted"
+            assert recovered["current"] == 1
+            with (
+                patch.object(memory_guard, "is_critical", return_value=True),
+                patch.object(papers, "_load_work", side_effect=AssertionError("large read")),
+            ):
+                papers.finish_progress(path, "failed", memory_guard.MESSAGE)
+            failed = papers.progress_status(path)
+            assert failed is not None and failed["status"] == "failed"
+            assert failed["failure_reason"] == memory_guard.MESSAGE
+            # Emergency status only updates tiny sidecar, not the full
+            # checkpoint with provider-call accounting and frozen evidence.
+            saved_work = papers._load_work(path)
+            assert saved_work is not None
+            assert saved_work["progress"] == work["progress"]
+            assert saved_work["snapshot_sha256"] == work["snapshot_sha256"]
+            papers._clear_work(path)
+            assert papers.progress_status(path) is None
+
+    test_bounded_progress_recovery()
 
     print("SIGMA resilience offline checks passed.")
 

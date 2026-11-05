@@ -81,6 +81,7 @@ MAX_PAPER_BYTES = 100_000_000
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
 PaperProgressStage = Literal[
+    "queued",
     "snapshot",
     "source_material",
     "publication_compilation",
@@ -131,43 +132,177 @@ class PaperStageCallback(Protocol):
 CALL_SECONDS = 60 * 60
 PLANNING_CALL_SECONDS = 60 * 60
 MAX_PAPERS = 50
-MAX_CONCURRENT_PAPER_GENERATIONS = 3
-# The backend is deployed as a single Uvicorn process. Admission is atomic
-# under this short-lived lock; no AI await or TeX compilation holds it.
-_gate = asyncio.Lock()
+# Paper synthesis and TeX compilation can have large overlapping peaks.
+# Serialize generation on the single backend worker; requests wait in FIFO order.
+MAX_CONCURRENT_PAPER_GENERATIONS = 1
+MAX_QUEUED_PAPER_GENERATIONS = 32
+_gate = asyncio.Condition()
+_gate_loop: asyncio.AbstractEventLoop | None = None
 _busy_paper_projects: set[str] = set()
 _generating_paper_projects: set[str] = set()
+_paper_waiters: deque[str] = deque()
+_queued_progress: dict[str, dict[str, Any]] = {}
+# Tracks attempts that actually entered the provider/compilation lifecycle.
+# Cancelling a still-queued request must never rewrite an earlier checkpoint.
+_started_paper_attempts: set[str] = set()
+
+
+def _paper_gate() -> asyncio.Condition:
+    """Bind the gate to the running loop; CLI/tests may use successive loops."""
+    global _gate, _gate_loop
+    loop = asyncio.get_running_loop()
+    if _gate_loop is not loop:
+        if _busy_paper_projects:
+            raise RuntimeError("Paper generation cannot move between active event loops")
+        _gate = asyncio.Condition()
+        _gate_loop = loop
+    return _gate
 
 
 @asynccontextmanager
 async def _paper_operation(path: str, *, generating: bool):
     key = str(project_path(path).resolve())
-    async with _gate:
+    gate = _paper_gate()
+    admitted = False
+    now = _now()
+    async with gate:
         if key in _busy_paper_projects:
-            raise ProjectError("A paper generation is already active for this project")
-        if generating and len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS:
-            raise ProjectError("Paper generation capacity is full; please try again shortly")
+            raise ProjectError("A paper generation is already active or queued for this project")
+        if generating and len(_paper_waiters) >= MAX_QUEUED_PAPER_GENERATIONS:
+            raise ProjectError("Paper queue is full; retry after an existing paper finishes")
+        if generating:
+            # Commit a tiny, private queue receipt before acknowledging the
+            # request. A backend crash must not silently erase a waiting job.
+            _write_queue_status(path, "queued", now)
         _busy_paper_projects.add(key)
         if generating:
-            _generating_paper_projects.add(key)
+            _paper_waiters.append(key)
+            _queued_progress[key] = {
+                "status": "queued",
+                "stage": "queued",
+                "current": None,
+                "total": None,
+                "started_at": now,
+                "updated_at": now,
+                "elapsed_seconds": 0,
+            }
+            if (
+                len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS
+                or len(_paper_waiters) > 1
+            ):
+                logging.getLogger("sigma.lifecycle").info(
+                    "paper.queued position=%d", len(_paper_waiters)
+                )
     try:
+        if generating:
+            async with gate:
+                await gate.wait_for(
+                    lambda: (
+                        _paper_waiters[0] == key
+                        and len(_generating_paper_projects) < MAX_CONCURRENT_PAPER_GENERATIONS
+                    )
+                )
+                # Admission is rechecked after the previous paper releases
+                # memory; a failed check retains a durable, provider-free error.
+                from sigma.memory_guard import require_capacity
+
+                require_capacity()
+                # Never start provider work with a stale queued receipt.
+                _clear_queue_status(path)
+                _paper_waiters.popleft()
+                _queued_progress.pop(key, None)
+                _generating_paper_projects.add(key)
+                admitted = True
+                logging.getLogger("sigma.lifecycle").info("paper.dequeued")
         yield
     finally:
-        async with _gate:
+        async with gate:
             _busy_paper_projects.discard(key)
+            _queued_progress.pop(key, None)
             if generating:
-                _generating_paper_projects.discard(key)
+                if not admitted:
+                    try:
+                        _paper_waiters.remove(key)
+                    except ValueError:
+                        pass
+                    # No model call was dispatched. Keep an accurate terminal
+                    # state rather than damaging any older research checkpoint.
+                    from sigma.memory_guard import MESSAGE, is_critical
+
+                    critical = is_critical()
+                    try:
+                        _write_queue_status(
+                            path,
+                            "failed" if critical else "cancelled",
+                            now,
+                            MESSAGE
+                            if critical
+                            else "Cancelled before paper generation began; no provider calls were made.",
+                        )
+                    except (OSError, ProjectError):
+                        logging.getLogger("sigma.lifecycle").error(
+                            "paper.queue_status_write_failed"
+                        )
+                else:
+                    _generating_paper_projects.discard(key)
+            gate.notify_all()
 
 
 _active_progress: dict[str, dict[str, Any]] = {}
 # Hold strong references to running authoring tasks independently of SSE clients.
 # Losing a browser connection must never cancel an already dispatched AI call.
 _generation_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+# Covers the tiny interval between the API accepting a request and
+# generate() registering its inner authoring task. Immediate Stop is reliable.
+_submission_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 
 
-def has_active_generation(path: str) -> bool:
-    """Cheap activity flag for Home polling; never load large paper checkpoints."""
-    return str(project_path(path).resolve()) in _generating_paper_projects
+def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
+    """Reserve the job and fsync its receipt before the HTTP response begins."""
+    key = str(project_path(path).resolve())
+    existing = _submission_tasks.get(key)
+    if existing is not None and not existing.done():
+        raise ProjectError("A paper generation is already active or queued for this project")
+    started_at = _now()
+    # API task scheduling is deferred until the request yields; committing
+    # here guarantees an accepted submission survives a crash before it runs.
+    _write_queue_status(path, "queued", started_at)
+    _submission_tasks[key] = task
+
+    def clear_submitted(completed: asyncio.Task[dict[str, Any]]) -> None:
+        if _submission_tasks.get(key) is not completed:
+            return  # A newer request owns the receipt; never alter its state.
+        _submission_tasks.pop(key, None)
+        try:
+            receipt = _read_queue_status(path)
+            if receipt is None or receipt["status"] != "queued":
+                return
+            if not completed.cancelled() and completed.exception() is None:
+                # A successful submitted task must not leave a queued marker,
+                # including provider-free test adapters.
+                _clear_queue_status(path)
+                return
+            # This also handles cancellation before generate() ever entered
+            # _paper_operation; no checkpoint or provider work was touched.
+            from sigma.memory_guard import MESSAGE, is_critical
+
+            critical = is_critical()
+            if critical:
+                reason = MESSAGE
+            elif completed.cancelled():
+                reason = "Cancelled before paper generation began; no provider calls were made."
+            else:
+                reason = "Paper request ended before generation began; no provider calls were made."
+            _write_queue_status(
+                path,
+                "failed" if critical or not completed.cancelled() else "cancelled",
+                receipt["started_at"],
+                reason,
+            )
+        except (OSError, ProjectError):
+            logging.getLogger("sigma.lifecycle").error("paper.submission_receipt_recovery_failed")
+
+    task.add_done_callback(clear_submitted)
 
 
 _CITATION_LIKE = re.compile(
@@ -3003,8 +3138,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
             )
             or not isinstance(progress_state.get("run_id"), str)
             or not re.fullmatch(r"[0-9a-f]{32}", progress_state["run_id"])
-            or progress_state.get("status")
-            not in {"running", "failed", "cancelled", "complete", "paused"}
+            or progress_state.get("status") not in {"running", "failed", "cancelled", "complete"}
             or progress_state.get("stage")
             not in {
                 "snapshot",
@@ -3070,6 +3204,80 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
             os.close(fd)
     finally:
         staged.unlink(missing_ok=True)
+    if isinstance(state.get("progress"), dict):
+        _write_progress_status(path, state["progress"])
+
+
+def _progress_status_file(path: str, *, create: bool = False) -> Path:
+    return _work_file(path, create=create).with_name("progress-status.json")
+
+
+def _write_progress_status(path: str, state: dict[str, Any]) -> None:
+    """Keep a bounded progress sidecar; never deserialize 100 MB for polling."""
+    fields = (
+        "run_id",
+        "status",
+        "stage",
+        "current",
+        "total",
+        "started_at",
+        "updated_at",
+        "elapsed_seconds",
+        "detail",
+        "failure_reason",
+    )
+    record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
+    encoded = _json(record)
+    if len(encoded) > 4096:
+        raise ProjectError("Paper progress metadata exceeds its safety bound")
+    file = _progress_status_file(path, create=True)
+    staged = _stage(file.parent, encoded)
+    try:
+        os.replace(staged, file)
+        fd = os.open(file.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def _read_progress_status(path: str) -> dict[str, Any] | None:
+    file = _progress_status_file(path)
+    if not file.exists() and not file.is_symlink():
+        return None
+    if file.is_symlink() or not file.is_file() or file.stat().st_size > 4096:
+        raise ProjectError("Paper progress metadata is unsafe")
+    try:
+        record = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(record, dict) or record.get("schema_version") != 1:
+            raise ValueError("invalid version")
+        state = record.get("progress")
+        if (
+            not isinstance(state, dict)
+            or state.get("status") not in {"running", "failed", "cancelled", "paused", "complete"}
+            or not isinstance(state.get("stage"), str)
+            or not isinstance(state.get("started_at"), str)
+            or not isinstance(state.get("updated_at"), str)
+            or type(state.get("elapsed_seconds")) is not int
+        ):
+            raise ValueError("invalid progress metadata")
+        if (
+            datetime.fromisoformat(state["started_at"]).tzinfo is None
+            or datetime.fromisoformat(state["updated_at"]).tzinfo is None
+        ):
+            raise ValueError("progress timestamps require timezone")
+        return state
+    except (OSError, ValueError, TypeError) as exc:
+        raise ProjectError("Paper progress metadata is unreadable") from exc
+
+
+def _clear_progress_status(path: str) -> None:
+    file = _progress_status_file(path)
+    if file.is_symlink():
+        raise ProjectError("Paper progress metadata is unsafe")
+    file.unlink(missing_ok=True)
 
 
 def _clear_work(path: str) -> None:
@@ -3077,17 +3285,177 @@ def _clear_work(path: str) -> None:
     if file.is_symlink():
         raise ProjectError("Long-paper checkpoint is unsafe")
     file.unlink(missing_ok=True)
+    _clear_progress_status(path)
+
+
+def _queue_status_file(path: str, *, create: bool = False) -> Path:
+    """Queue receipts are small, private files alongside paper checkpoints."""
+    return _work_file(path, create=create).with_name("queue-status.json")
+
+
+def _write_queue_status(
+    path: str,
+    status: Literal["queued", "cancelled", "failed"],
+    started_at: str,
+    reason: str | None = None,
+) -> None:
+    file = _queue_status_file(path, create=True)
+    record: dict[str, Any] = {
+        "schema_version": 1,
+        "status": status,
+        "started_at": started_at,
+        "updated_at": _now(),
+    }
+    if reason:
+        record["detail"] = reason[:500]
+    staged = _stage(file.parent, _json(record))
+    try:
+        os.replace(staged, file)
+        fd = os.open(file.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def _clear_queue_status(path: str) -> None:
+    file = _queue_status_file(path)
+    if file.is_symlink():
+        raise ProjectError("Paper queue status is unsafe")
+    file.unlink(missing_ok=True)
+    # Do not dispatch a billable request until removal is durable. Otherwise,
+    # a crash could resurrect a stale "no provider call" queue receipt.
+    fd = os.open(file.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _read_queue_status(path: str) -> dict[str, Any] | None:
+    file = _queue_status_file(path)
+    if not file.exists() and not file.is_symlink():
+        return None
+    if file.is_symlink() or not file.is_file() or file.stat().st_size > 2048:
+        raise ProjectError("Paper queue status is unsafe")
+    try:
+        value = json.loads(file.read_text(encoding="utf-8"))
+        if (
+            not isinstance(value, dict)
+            or value.get("schema_version") != 1
+            or value.get("status") not in {"queued", "cancelled", "failed"}
+            or not isinstance(value.get("started_at"), str)
+            or not isinstance(value.get("updated_at"), str)
+            or (value.get("detail") is not None and not isinstance(value["detail"], str))
+        ):
+            raise ValueError("invalid queue status")
+        if (
+            datetime.fromisoformat(value["started_at"]).tzinfo is None
+            or datetime.fromisoformat(value["updated_at"]).tzinfo is None
+        ):
+            raise ValueError("queue status times must be timezone-aware")
+    except (OSError, ValueError, TypeError) as exc:
+        raise ProjectError("Paper queue status is unreadable") from exc
+    return value
+
+
+def activity_status(path: str) -> Literal["queued", "active", "interrupted", "failed"] | None:
+    """Bounded status for project lists, including post-restart warnings."""
+    key = str(project_path(path).resolve())
+    if key in _queued_progress:
+        return "queued"
+    if key in _generating_paper_projects:
+        return "active"
+    try:
+        receipt = _read_queue_status(path)
+        if receipt is not None:
+            if receipt["status"] == "queued":
+                return "interrupted"
+            if receipt["status"] == "failed":
+                return "failed"
+        saved = _read_progress_status(path)
+        if saved is not None:
+            if saved["status"] == "running":
+                return "interrupted"
+            if saved["status"] == "failed":
+                return "failed"
+    except (OSError, ProjectError) as exc:
+        # Advisory indicators must never make an otherwise valid project
+        # disappear from Saved Projects when a status sidecar is damaged.
+        logging.getLogger("sigma.lifecycle").warning(
+            "paper.activity_status_unavailable error_type=%s", type(exc).__name__
+        )
+    return None
 
 
 def progress_status(path: str) -> dict[str, Any] | None:
-    """Return only persisted stage metadata; never expose prompts or provider content."""
+    """Cheap, restart-aware status; don't load huge checkpoints on heartbeats."""
     key = str(project_path(path).resolve())
+    queued = _queued_progress.get(key)
+    waiters = tuple(_paper_waiters)
+    if queued is not None and key in waiters:
+        started = datetime.fromisoformat(queued["started_at"])
+        return {
+            **queued,
+            "elapsed_seconds": max(0, int((datetime.now(UTC) - started).total_seconds())),
+            "detail": f"Waiting for an available paper-generation slot (position {waiters.index(key) + 1}).",
+        }
     active = _active_progress.get(key)
-    # Polling and SSE heartbeats must not repeatedly deserialize a potentially
-    # large evidence/draft checkpoint while an in-memory run is active.
-    work = _load_work(path) if active is None else None
-    saved = work.get("progress") if work is not None else None
-    state = active or saved
+    if active is not None:
+        state = active
+    else:
+        receipt = _read_queue_status(path)
+        if receipt is not None:
+            elapsed = max(
+                0,
+                int(
+                    (
+                        datetime.now(UTC) - datetime.fromisoformat(receipt["started_at"])
+                    ).total_seconds()
+                ),
+            )
+            if receipt["status"] == "queued":
+                return {
+                    "status": "interrupted",
+                    "stage": "queued",
+                    "current": None,
+                    "total": None,
+                    "started_at": receipt["started_at"],
+                    "elapsed_seconds": elapsed,
+                    "detail": (
+                        "The backend restarted while this paper was queued. No AI call was "
+                        "started for this queued request. Use Continue or Generate to queue it "
+                        "again; any earlier paper checkpoint remains intact."
+                    ),
+                }
+            return {
+                "status": receipt["status"],
+                "stage": "queued",
+                "current": None,
+                "total": None,
+                "started_at": receipt["started_at"],
+                "elapsed_seconds": elapsed,
+                **(
+                    {"failure_reason": receipt["detail"]}
+                    if receipt["status"] == "failed" and receipt.get("detail")
+                    else {}
+                ),
+                **({"detail": receipt["detail"]} if receipt.get("detail") else {}),
+            }
+        state = _read_progress_status(path)
+        if state is None:
+            work = _load_work(path)
+            state = work.get("progress") if work is not None else None
+            if state is not None:
+                # Migrate pre-sidecar checkpoints once, preserving full work.
+                try:
+                    _write_progress_status(path, state)
+                except (OSError, ProjectError):
+                    logging.getLogger("sigma.lifecycle").warning(
+                        "paper.progress_sidecar_migration_failed"
+                    )
     if state is None:
         return None
     running_here = bool(active and active.get("run_id") == state.get("run_id"))
@@ -3115,7 +3483,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
                     "call might have been billed and will not be blindly repeated."
                 )
             }
-            if status == "interrupted" and state["status"] == "running"
+            if status == "interrupted"
             else ({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {})
         ),
         **(
@@ -3127,13 +3495,29 @@ def progress_status(path: str) -> dict[str, Any] | None:
 
 
 def finish_progress(
-    path: str, status: Literal["failed", "cancelled", "paused"], reason: str | None = None
+    path: str,
+    status: Literal["failed", "cancelled", "paused"],
+    reason: str | None = None,
+    *,
+    expected_run_id: str | None = None,
 ) -> None:
     """Freeze the latest checkpointed progress when generation exits abnormally."""
     key = str(project_path(path).resolve())
     active = _active_progress.get(key)
-    work = _load_work(path)
-    saved = work.get("progress") if work is not None else None
+    if expected_run_id is not None and (active is None or active.get("run_id") != expected_run_id):
+        return  # A stale task callback must never alter a newer attempt.
+    from sigma.memory_guard import is_critical
+
+    # The memory-pressure breaker must not deserialize and rewrite a
+    # potentially huge checkpoint while the container is close to OOM.
+    critical = is_critical()
+    work = None if critical else _load_work(path)
+    if critical:
+        saved = _read_progress_status(path)
+    elif work is not None:
+        saved = work.get("progress")
+    else:
+        saved = _read_progress_status(path)
     state = active or saved
     if state is None:
         return
@@ -3153,12 +3537,12 @@ def finish_progress(
     if reason and status == "failed":
         frozen["failure_reason"] = reason[:500]
     elif reason and status == "paused":
-        # Keep the reason for an intentional browser-presence pause distinct
-        # from an unplanned backend restart.
         frozen["detail"] = reason[:160]
     if work is not None:
         work["progress"] = frozen
         _save_work(path, work)
+    else:
+        _write_progress_status(path, frozen)
     if active and active.get("run_id") == state.get("run_id"):
         _active_progress.pop(key, None)
 
@@ -7303,6 +7687,10 @@ async def _generate_impl(
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
+        _started_paper_attempts.add(project_key)
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.start project_id=%s", expected_project_id or "unknown"
+        )
         run_id = uuid4().hex
         started_at = _now()
         elapsed_before = 0
@@ -7367,10 +7755,8 @@ async def _generate_impl(
                         "detail": detail,
                     }
                 )
-            # Respect the existing unattended-execution preference only for
-            # browser-originated work, and only before an expensive new stage.
-            # Never cancel an in-flight provider response merely because the
-            # browser connection ended: the response must be checkpointed.
+
+            # Browser-only lease: check at safe boundaries, not mid-response.
             if state == "milestone" or (stage == "publication_compilation" and not work):
                 _require_browser_presence(path, browser_presence_required)
 
@@ -7378,17 +7764,22 @@ async def _generate_impl(
         if task is not None:
 
             def clear_active(completed_task: asyncio.Task[Any]) -> None:
+                active = _active_progress.get(project_key)
+                if active is None or active.get("run_id") != run_id:
+                    return
                 if completed_task.cancelled():
                     from sigma.memory_guard import MESSAGE, is_critical
 
                     if is_critical():
-                        finish_progress(path, "failed", MESSAGE)
+                        finish_progress(path, "failed", MESSAGE, expected_run_id=run_id)
                     else:
-                        finish_progress(path, "cancelled")
+                        finish_progress(path, "cancelled", expected_run_id=run_id)
                 elif isinstance(completed_task.exception(), PaperBrowserPaused):
-                    finish_progress(path, "paused", str(completed_task.exception()))
+                    finish_progress(
+                        path, "paused", str(completed_task.exception()), expected_run_id=run_id
+                    )
                 elif completed_task.exception() is not None:
-                    finish_progress(path, "failed")
+                    finish_progress(path, "failed", expected_run_id=run_id)
                 active = _active_progress.get(project_key)
                 if active and active.get("run_id") == run_id:
                     _active_progress.pop(project_key, None)
@@ -7742,8 +8133,6 @@ async def _generate_impl(
                     "updated_at": _now(),
                     "elapsed_seconds": elapsed_before,
                 }
-                # Check viewer presence before recording a paid attempt. The
-                # browser might have left after the publication milestone.
                 _require_browser_presence(path, browser_presence_required)
                 # Persist a conservative attempted-call count BEFORE dispatch.
                 # An unsuccessful or interrupted response still may have used
@@ -7761,8 +8150,6 @@ async def _generate_impl(
                         # An in-flight request may have consumed allowance;
                         # record each authorized replay before dispatch.
                         await asyncio.sleep(0.4 * (attempt_number - 1))
-                        # A transient failure must not spend more allowance
-                        # after the final viewer leaves with unattended disabled.
                         _require_browser_presence(path, browser_presence_required)
                         work["provider_calls"] = int(work["provider_calls"]) + 1
                         work["provider_calls_total"] = int(work["provider_calls_total"]) + 1
@@ -8423,7 +8810,7 @@ async def generate(
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
 ) -> dict[str, Any]:
-    """Run independently of the stream; browser-bound work obeys user preference at safe boundaries."""
+    """Run independently of a browser stream, with explicit cancellation only."""
     from sigma.memory_guard import require_capacity
 
     require_capacity()
@@ -8453,7 +8840,7 @@ async def generate(
     started = monotonic()
     log = logging.getLogger("sigma.lifecycle")
     project_id = expected_project_id or "unknown"
-    log.info("paper.start project_id=%s long_form=%s", project_id, force_long_form)
+    log.info("paper.requested project_id=%s long_form=%s", project_id, force_long_form)
     try:
         result = await task
         log.info("paper.complete project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
@@ -8463,14 +8850,16 @@ async def generate(
         await asyncio.gather(task, return_exceptions=True)
         from sigma.memory_guard import MESSAGE, is_critical
 
-        if is_critical():
-            finish_progress(path, "failed", MESSAGE)
-        else:
-            finish_progress(path, "cancelled")
+        if key in _started_paper_attempts:
+            if is_critical():
+                finish_progress(path, "failed", MESSAGE)
+            else:
+                finish_progress(path, "cancelled")
         log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
     except PaperBrowserPaused as exc:
-        finish_progress(path, "paused", str(exc))
+        if key in _started_paper_attempts:
+            finish_progress(path, "paused", str(exc))
         log.info("paper.paused project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
     except Exception as exc:
@@ -8481,7 +8870,8 @@ async def generate(
             if isinstance(exc, ProjectError)
             else "Unexpected paper-generation error; review server logs."
         )
-        finish_progress(path, "failed", reason)
+        if key in _started_paper_attempts:
+            finish_progress(path, "failed", reason)
         from sigma.production_observability import safe_exception_trace
 
         log.error(
@@ -8493,6 +8883,7 @@ async def generate(
         )
         raise
     finally:
+        _started_paper_attempts.discard(key)
         if _generation_tasks.get(key) is task:
             _generation_tasks.pop(key, None)
 
@@ -8500,7 +8891,13 @@ async def generate(
 async def cancel_generation(path: str) -> bool:
     """Explicitly cancel this project's active generation, not a disconnected viewer."""
     key = str(project_path(path).resolve())
-    task = _generation_tasks.get(key)
+    # The API submission task is registered before any await, while the
+    # inner generation task is registered only once that coroutine begins.
+    # Cancel the outer owner: awaiting it forwards cancellation to the inner
+    # task and runs its checkpoint and billing cleanup.
+    task = _submission_tasks.get(key)
+    if task is None or task.done():
+        task = _generation_tasks.get(key)
     if task is None or task.done():
         return False
     logging.getLogger("sigma.lifecycle").info("paper.stop_requested")
