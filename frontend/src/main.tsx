@@ -2739,7 +2739,6 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     .filter(paper => paper.pdf_available && paper.score != null && paper.score.total >= 50)
     .sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0) || b.paper_version - a.paper_version)[0];
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading"
-    onKeyDownCapture={event => { if (event.key === 'Escape' && generating) { event.preventDefault(); event.stopPropagation(); } }}
     onCancel={event => { event.preventDefault(); onCancel(); }}>
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body" onScroll={() => { if (confirmDeleteId) setConfirmDeleteId(''); }}>
@@ -2747,7 +2746,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
       <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
       <p className="settings-hint ai-paper-model">Per project settings, AI model is <strong>{model || 'Loading…'}</strong> and thinking level is <strong>{effort || 'Loading…'}</strong>. TeX proofreading uses this model; PDF compilation does not use AI. Generation may consume provider allowance or incur charges.</p>
-      <p className="settings-hint">Paper generation may take ten minutes or longer. Keep this dialog open to follow its progress.</p>
+      <p className="settings-hint">Paper generation runs in the background, including while queued. You can close this panel and return to its progress later.</p>
       <fieldset className="ai-paper-includes">
         <legend>Include</legend>
         <div className="ai-paper-options">
