@@ -391,6 +391,18 @@ with sync_playwright() as playwright:
     browser_page.set_viewport_size({"width": 390, "height": 844})
     browser_page.screenshot(path=str(OUT / "research-qa-browser-mobile.png"), full_page=True)
     assert browser_page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    # A long standalone Q/A must scroll as an ordinary page, not inherit the
+    # fixed 100dvh/overflow:hidden workspace shell. Exercise actual wheel input
+    # on desktop and mobile, not just a full-page screenshot.
+    for width in (1280, 390):
+        browser_page.set_viewport_size({"width": width, "height": 320})
+        browser_page.wait_for_function("() => document.scrollingElement.scrollHeight > innerHeight")
+        browser_page.evaluate("window.scrollTo(0, 0)")
+        browser_page.mouse.move(170, 120)
+        browser_page.mouse.wheel(0, 900)
+        browser_page.wait_for_function("window.scrollY > 0")
+    browser_page.set_viewport_size({"width": 390, "height": 844})
+    browser_page.evaluate("window.scrollTo(0, 0)")
     # Navigate every kind of citation that was actually returned. In particular,
     # session-level links must open a highlighted session and its Outcome.
     for param in ("reveal_understanding", "reveal_strategy", "reveal_artifact", "reveal_session"):

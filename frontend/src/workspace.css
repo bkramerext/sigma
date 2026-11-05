@@ -351,7 +351,16 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .research-qa-version span { cursor: help; }
 .research-qa-technical { margin: 8px 0; font-size: 12px; overflow-wrap: anywhere; }
 .research-qa-technical > .text-copy-button { margin-top: 4px; }
-.research-qa-browser-page { box-sizing: border-box; min-height: 100vh; padding: 24px 16px; }
+/* A saved Q/A answer opens as a document, not a fixed-height workspace.
+   Let the page grow and the browser viewport scroll naturally. */
+.workspace-page.research-qa-browser-page {
+  box-sizing: border-box;
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+  overscroll-behavior: auto;
+  padding: 24px 16px;
+}
 .research-qa-browser-card { box-sizing: border-box; width: min(100%, 860px); margin: 0 auto; padding: clamp(18px, 4vw, 36px); border: 1px solid var(--workspace-border, #3d4852); border-radius: 10px; background: var(--workspace-panel, #1b2229); overflow-wrap: anywhere; }
 .research-qa-browser-card .outcome-markdown { max-width: 100%; overflow-wrap: anywhere; }
 .research-qa-browser-card .outcome-markdown img, .research-qa-browser-card .outcome-markdown table { max-width: 100%; }
