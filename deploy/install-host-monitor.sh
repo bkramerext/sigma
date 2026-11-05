@@ -14,7 +14,7 @@ systemctl daemon-reload
 systemd-analyze verify /etc/systemd/system/sigma-monitor.service /etc/systemd/system/sigma-monitor.timer /etc/systemd/system/sigma-monitor-failure.service
 systemctl enable --now sigma-monitor.timer
 # Install the repair watchdog and durable log-expiry timer alongside the monitor.
-"$repo/deploy/install-resilience.sh"
+bash "$repo/deploy/install-resilience.sh"
 if systemctl start sigma-monitor.service; then
   echo 'PASS: monitoring timer installed and initial checks passed.'
 else
