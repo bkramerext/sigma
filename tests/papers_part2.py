@@ -534,11 +534,13 @@ def test_paper_progress_counts_keep_generation_resumable() -> None:
             assert reopened is not None and reopened["generation_issues"] == recovered["generation_issues"]
             assert papers.progress_status(str(path))["current"] is None
 
-        tex = r"\\documentclass{article}" + "\\n" + r"\\begin{document}" + "\\n" + "Body" + "\\n" + r"\\end{document}"
+        tex = "\n".join(
+            [r"\documentclass{article}", r"\begin{document}", "Body", r"\end{document}"]
+        )
         appendix = papers._append_sigma_issues(tex, recovered["generation_issues"])
-        assert r"\\section{Issues and Bugs}" in appendix
+        assert r"\section{Issues and Bugs}" in appendix
         assert "recovered inconsistent paper-generation progress counters" in appendix
-        assert r"\\section{Issues and Bugs}" not in tex
+        assert r"\section{Issues and Bugs}" not in tex
 
 
 def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> None:
