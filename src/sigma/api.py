@@ -992,6 +992,14 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 "Detached paper generation failed: %s", type(error).__name__
             )
 
+    try:
+        # Reserve synchronously before yielding a StreamingResponse. This
+        # closes the window where an immediate Stop could miss the job.
+        papers.register_submission(body.path, task)
+    except ProjectError:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
     task.add_done_callback(observe_detached_result)
 
     async def stream():
