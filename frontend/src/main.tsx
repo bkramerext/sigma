@@ -3035,11 +3035,11 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
         </>}
       </article>}      {selected?.paper_id === paper.paper_id && (selected.generation.sigma_issues?.length ?? 0) > 0 && <details className="outcome-subsection paper-diagnostics-disclosure">
-        <summary><svg aria-hidden="true" className="disclosure-chevron" viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg><span>Diagnostics ({selected.generation.sigma_issues.length})</span></summary>
+        <summary><svg aria-hidden="true" className="disclosure-chevron" viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg><span>Diagnostics ({selected.generation.sigma_issues?.length ?? 0})</span></summary>
         <div className="paper-diagnostics-content">
           <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => { window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)); setIncludeSigmaIssues(event.target.checked); }}/>Include paper-generation diagnostics in the PDF</label>
           <p>Authoring, validation, and typesetting problems are kept in the saved paper record even when the optional diagnostic appendix is not included.</p>
-          <ol>{selected.generation.sigma_issues.map((issue, index) => <li key={index}>{issue}</li>)}</ol>
+          <ol>{selected.generation.sigma_issues?.map((issue, index) => <li key={index}>{issue}</li>)}</ol>
           {selected?.generation.sigma_issues_included && <p role="status">The saved PDF includes the optional diagnostics appendix.</p>}
           {paperProgress?.status === 'failed' && paperProgress.failure_reason && <p role="alert">{paperProgress.failure_reason}</p>}
         </div>
