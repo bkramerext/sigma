@@ -7775,7 +7775,9 @@ async def _generate_impl(
                     else:
                         finish_progress(path, "cancelled", expected_run_id=run_id)
                 elif isinstance(completed_task.exception(), PaperBrowserPaused):
-                    finish_progress(path, "paused", str(completed_task.exception()), expected_run_id=run_id)
+                    finish_progress(
+                        path, "paused", str(completed_task.exception()), expected_run_id=run_id
+                    )
                 elif completed_task.exception() is not None:
                     finish_progress(path, "failed", expected_run_id=run_id)
                 active = _active_progress.get(project_key)
