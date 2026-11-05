@@ -531,12 +531,16 @@ def test_paper_progress_counts_keep_generation_resumable() -> None:
             assert recovered["generation_issues"] == [papers._PAPER_PROGRESS_RECOVERY_ISSUE]
             papers._save_work(str(path), recovered)
             reopened = papers._load_work(str(path))
-            assert reopened is not None and reopened["generation_issues"] == recovered["generation_issues"]
+            assert (
+                reopened is not None
+                and reopened["generation_issues"] == recovered["generation_issues"]
+            )
             assert papers.progress_status(str(path))["current"] is None
 
-        tex = "\n".join(
-            [r"\documentclass{article}", r"\begin{document}", "Body", r"\end{document}"]
-        )
+        tex = r"""\documentclass{article}
+\begin{document}
+Body
+\end{document}"""
         appendix = papers._append_sigma_issues(tex, recovered["generation_issues"])
         assert r"\section{Issues and Bugs}" in appendix
         assert "recovered inconsistent paper-generation progress counters" in appendix
