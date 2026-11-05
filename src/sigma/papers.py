@@ -2356,7 +2356,7 @@ def _allocate_paper_version(path: str) -> int:
 def paper_download_basename(path: str, paper_id: str) -> str:
     """Return the shared, stable human-readable basename for a saved version."""
     record = get_paper(path, paper_id)
-    slug = _paper_filename_slug(inspect_project(path).project.title)
+    slug = _paper_filename_slug(project.title)
     version = record.get("paper_version")
     if type(version) is not int or version < 1:
         version = next(
@@ -8669,23 +8669,26 @@ def list_papers(path: str) -> list[dict[str, Any]]:
         )
         from sigma.projects import read_project_artifact
 
-        files = [(Path(name).name, read_project_artifact(target, name)) for name in names]
+        # Read only one paper at a time. A collection of 50 large paper
+        # artifacts must not be held in memory while building a small listing.
+        files = ((Path(name).name, read_project_artifact(target, name)) for name in names)
     else:
         directory = _paper_dir(path, create=False)
         if not directory.exists():
             return []
-        files = [
+        files = (
             (file, file.read_bytes())
             for file in directory.glob("*.json")
             if not file.is_symlink() and file.is_file() and file.stat().st_size <= MAX_PAPER_BYTES
-        ]
+        )
+    project = inspect_project(path).project
     records = []
     for file, contents in files:
         try:
             value = json.loads(contents)
             if (
                 isinstance(value, dict)
-                and value.get("project_id") == inspect_project(path).project.id
+                and value.get("project_id") == project.id
             ):
                 records.append(
                     {
