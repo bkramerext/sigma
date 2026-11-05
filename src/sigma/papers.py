@@ -3341,18 +3341,25 @@ def activity_status(path: str) -> Literal["queued", "active", "interrupted", "fa
         return "queued"
     if key in _generating_paper_projects:
         return "active"
-    receipt = _read_queue_status(path)
-    if receipt is not None:
-        if receipt["status"] == "queued":
-            return "interrupted"
-        if receipt["status"] == "failed":
-            return "failed"
-    saved = _read_progress_status(path)
-    if saved is not None:
-        if saved["status"] == "running":
-            return "interrupted"
-        if saved["status"] == "failed":
-            return "failed"
+    try:
+        receipt = _read_queue_status(path)
+        if receipt is not None:
+            if receipt["status"] == "queued":
+                return "interrupted"
+            if receipt["status"] == "failed":
+                return "failed"
+        saved = _read_progress_status(path)
+        if saved is not None:
+            if saved["status"] == "running":
+                return "interrupted"
+            if saved["status"] == "failed":
+                return "failed"
+    except (OSError, ProjectError) as exc:
+        # Advisory indicators must never make an otherwise valid project
+        # disappear from Saved Projects when a status sidecar is damaged.
+        logging.getLogger("sigma.lifecycle").warning(
+            "paper.activity_status_unavailable error_type=%s", type(exc).__name__
+        )
     return None
 
 
