@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
+import fcntl
 import time
-from email.message import EmailMessage
+from pathlib import Path
 
 from sigma.production_observability import memory_snapshot
 
@@ -50,6 +52,7 @@ def require_capacity() -> None:
 
 
 def _notify_admin(snapshot: dict[str, int | None]) -> None:
+    """One operator notification per 15 minutes, including across backend restarts."""
     global _LAST_ALERT
     now = time.time()
     with _LOCK:
@@ -59,27 +62,52 @@ def _notify_admin(snapshot: dict[str, int | None]) -> None:
 
     try:
         from sigma import cloud_auth
-        from sigma.mail_transport import send_message
 
         cfg = cloud_auth.config()
-        recipient = cfg.admin_contact_email
-        if not recipient:
-            LOG.error("memory.alert_no_admin_contact")
+        if not cfg.enabled:
+            LOG.error("memory.alert_cloud_auth_disabled")
             return
-        message = EmailMessage()
-        message["Subject"] = "URGENT: SIGMA backend memory pressure — work paused"
-        message.set_content(
-            "SIGMA has entered memory-protection mode. Active research sessions "
-            "and paper-generation tasks are being cancelled with recoverable "
-            "checkpoint errors. New work is blocked until memory recovers.\n\n"
-            f"Container memory: {snapshot['cgroup_used_mib']} MiB used / "
-            f"{snapshot['cgroup_limit_mib']} MiB limit.\n"
-            f"Host available: {snapshot['host_available_mib']} MiB.\n\n"
-            "Inspect the persistent backend log and watchdog logs on the SIGMA "
-            "state disk. Review OOM events and memory-intensive paper generation "
-            "before resuming work. No research content is included in this alert."
+        home = Path(os.environ.get("SIGMA_CLOUD_AUTH_HOME", "/var/lib/sigma-auth"))
+        directory = home / "operational-logs"
+        if directory.is_symlink() or not directory.is_dir():
+            LOG.error("memory.alert_log_directory_unavailable")
+            return
+        marker = directory / "memory-alert-cooldown"
+        fd = os.open(
+            marker, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
         )
-        send_message(message, recipients=[recipient])
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            last_bytes = os.read(fd, 48)
+            try:
+                last_sent = float(last_bytes.decode("ascii").strip())
+            except ValueError:
+                last_sent = 0.0
+            if now - last_sent < 900:
+                return
+            # Reserve before mail dispatch; the outcome may be unknown after
+            # SMTP DATA. Never risk resending an ambiguous notification.
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.ftruncate(fd, 0)
+            os.write(fd, f"{now:.3f}".encode("ascii"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+        cloud_auth._deliver_admin_notice(
+            "URGENT: SIGMA backend memory pressure — work paused",
+            (
+                "SIGMA has entered memory-protection mode. Active research sessions "
+                "and paper-generation tasks are being cancelled with recoverable "
+                "checkpoint errors. New work is blocked until memory recovers.\\n\\n"
+                f"Container memory: {snapshot['cgroup_used_mib']} MiB used / "
+                f"{snapshot['cgroup_limit_mib']} MiB limit.\\n"
+                f"Host available: {snapshot['host_available_mib']} MiB.\\n\\n"
+                "Inspect the persistent backend and watchdog logs on the SIGMA "
+                "state disk. Review OOM events and paper generation before "
+                "resuming work. No research content is included."
+            ),
+        )
         LOG.warning("memory.admin_alert_sent")
     except Exception as exc:  # noqa: BLE001 — alerting must never kill telemetry
         LOG.error("memory.admin_alert_failed error_type=%s", type(exc).__name__)
