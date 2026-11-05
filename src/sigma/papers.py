@@ -277,6 +277,11 @@ def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
             receipt = _read_queue_status(path)
             if receipt is None or receipt["status"] != "queued":
                 return
+            if not completed.cancelled() and completed.exception() is None:
+                # A successful submitted task must not leave a queued marker,
+                # including provider-free test adapters.
+                _clear_queue_status(path)
+                return
             # This also handles cancellation before generate() ever entered
             # _paper_operation; no checkpoint or provider work was touched.
             from sigma.memory_guard import MESSAGE, is_critical
