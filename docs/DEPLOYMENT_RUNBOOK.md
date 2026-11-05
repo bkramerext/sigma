@@ -197,6 +197,45 @@ record must include the fresh recovery point and restore evidence, exact image
 labels/IDs, deployment result, and smoke-test outcome. No v0.1.6 tag is
 authorized by this record.
 
+## v0.2.0 production deployment outcome — 2026-11-04
+
+The operator authorized Red in this conversation to remedy release blockers,
+deploy SIGMA v0.2.0 from approved `main`, and continue through production
+verification. The deployed target is
+`9d938907ffd02fb89c9d10545e8df61484310cbd`. Exact merged-SHA CI passed:
+[SIGMA tests](https://github.com/bkramerext/sigma/actions/runs/41977490940),
+[browser acceptance](https://github.com/bkramerext/sigma/actions/runs/41977490915),
+and [Ruff](https://github.com/bkramerext/sigma/actions/runs/41977490887).
+
+Before cutover, the application-consistent recovery point
+`sigma-state-v020-pre-20261104-1736` was created from `sigma-state` and reached
+READY. An isolated read-only clone restore passed three SQLite integrity
+checks, verified 3 identities/workspaces, 14 projects, 33 artifacts, terminal
+job history and 19 accounting rows, and preserved six reserved/unknown
+outcomes. The snapshot remains retained; the temporary VM and clone disk were
+removed and verified absent. No IAM grant was made.
+
+Red deployed using the documented guarded helper and the required verified
+backup/schema flags. The release record, protected release pin, checkout,
+running container labels and image IDs match the target. The systemd service
+and all three containers are healthy, the persistent state disk is mounted,
+maintenance is off, and the public HTTPS root returns HTTP 200. About reports
+`Version 0.2.0 · Build 9d93890` in production Chrome. See the detailed
+[operations outcome](OPERATION_RUNBOOK.md#sigma-v020-deployment-outcome-2026-11-04-pdt).
+
+**Deployment status: live and healthy; full production smoke acceptance is
+incomplete.** The available browser was unauthenticated. Login redirect to
+Google was observed without submitting credentials, and anonymous sample
+research/history display succeeded without initiating research. Positive
+authenticated login, project import/export, actual email delivery, bounded
+research execution, and saved-paper viewing remain unverified. No research or
+provider call was made. Do not report full smoke acceptance as passed.
+
+The release runbook correction in PR #549 removes the unsupported
+`--no-build` instruction: the guarded helper has no such flag and builds from
+the exact requested SHA before service stop/pin. This correction is included in
+the deployed target. PR #548 prepared the v0.2.0 version/build metadata.
+
 ## Authorization record — SIGMA v0.1.7 regular production deployment
 
 On 2026-10-30, the operator authorized Red to deploy the latest merged `main`,

@@ -1,5 +1,46 @@
 # SIGMA status
 
+## SIGMA v0.2.0 production deployment (2026-11-04 PDT)
+
+Production is running the approved `main` release at
+`9d938907ffd02fb89c9d10545e8df61484310cbd` (v0.2.0). The exact merged commit
+passed SIGMA test shards, Ruff, and browser acceptance in [SIGMA tests run
+41977490940](https://github.com/bkramerext/sigma/actions/runs/41977490940),
+[browser acceptance run
+41977490915](https://github.com/bkramerext/sigma/actions/runs/41977490915), and
+[Ruff run 41977490887](https://github.com/bkramerext/sigma/actions/runs/41977490887).
+The documented guarded release helper completed successfully. The release
+record, running image IDs, checkout, and protected release pin agree on this
+commit. Backend and frontend image IDs are
+`sha256:65572961183f12569854e5c0ee4c63744441dd616f1b37ed72caaa0490b7c750`
+and `sha256:f2cb44d69a8a2b82d0596eca59b5a8880f360840adb964b4812981ef96093a4e`.
+
+Before cutover, production was quiesced and the application-consistent recovery
+snapshot `sigma-state-v020-pre-20261104-1736` was created and reached READY.
+An isolated read-only restore drill passed three SQLite integrity checks,
+three identity/workspace mappings, 14 projects, 33 artifacts, and preserved
+job/accounting history; it found zero saved PDF/TeX pairs. The temporary clone
+disk and recovery VM were removed and verified absent. No production data,
+secrets, or configuration were changed, and no research/provider call was
+initiated.
+
+Production service and all three containers are healthy; the state disk is
+mounted, maintenance is off, public HTTPS returns HTTP 200, and unauthenticated
+API health returns the expected HTTP 401. Headless Chrome rendered the
+production app and read About as `Version 0.2.0 · Build 9d93890`. OAuth login
+redirected to Google without credentials being submitted. A public sample
+research project/history view loaded without starting research or calling a
+provider.
+
+**Deployment is live and healthy; full production smoke acceptance remains
+incomplete.** Positive authenticated login, project import/export, actual email
+delivery, bounded research execution, and viewing a saved paper were not
+verified because no authenticated production session was available. No research
+was run in order to honor the no-provider-call constraint. These checks remain
+outstanding and must not be reported as passed. Detailed evidence is in the
+[operations runbook](OPERATION_RUNBOOK.md#sigma-v020-deployment-outcome-2026-11-04-pdt)
+and [deployment runbook](DEPLOYMENT_RUNBOOK.md#v020-production-deployment-outcome--2026-11-04).
+
 ## Issue #458 — legacy Recent Projects pin migration (2026-11-01)
 
 Reproduced the Saved Projects failure against this Mac account's existing
