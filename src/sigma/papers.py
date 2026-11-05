@@ -316,6 +316,26 @@ class PaperSnapshotConflict(ProjectError):
     provider_calls_attempted = 0
 
 
+class PaperBrowserPaused(ProjectError):
+    """Browser-origin paper work stopped at a saved boundary without starting new calls."""
+
+
+def _require_browser_presence(path: str, required: bool) -> None:
+    """Prevent new browser-origin provider calls without an authorized viewer."""
+    if not required:
+        return
+    from sigma import research_preferences, research_presence
+
+    if (
+        not research_preferences.allow_unattended_background_execution()
+        and not research_presence.has_live_viewer(path)
+    ):
+        raise PaperBrowserPaused(
+            "Paper generation paused because the browser disconnected. "
+            "Saved work can be continued after reopening the project."
+        )
+
+
 class PaperConnectionFailure(ProjectError):
     """Provider connection failed before request delivery; safe for bounded retry."""
 
@@ -3236,7 +3256,7 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
         state = record.get("progress")
         if (
             not isinstance(state, dict)
-            or state.get("status") not in {"running", "failed", "cancelled", "complete"}
+            or state.get("status") not in {"running", "failed", "cancelled", "paused", "complete"}
             or not isinstance(state.get("stage"), str)
             or not isinstance(state.get("started_at"), str)
             or not isinstance(state.get("updated_at"), str)
@@ -3442,6 +3462,8 @@ def progress_status(path: str) -> dict[str, Any] | None:
     status = state["status"]
     if status == "running":
         status = "active" if running_here else "interrupted"
+    elif status == "paused":
+        status = "interrupted"
     elapsed = int(state["elapsed_seconds"])
     if running_here:
         updated_at = datetime.fromisoformat(state["updated_at"])
@@ -3474,7 +3496,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
 
 def finish_progress(
     path: str,
-    status: Literal["failed", "cancelled"],
+    status: Literal["failed", "cancelled", "paused"],
     reason: str | None = None,
     *,
     expected_run_id: str | None = None,
@@ -3514,6 +3536,8 @@ def finish_progress(
     }
     if reason and status == "failed":
         frozen["failure_reason"] = reason[:500]
+    elif reason and status == "paused":
+        frozen["detail"] = reason[:160]
     if work is not None:
         work["progress"] = frozen
         _save_work(path, work)
@@ -7659,6 +7683,7 @@ async def _generate_impl(
     include_diagrams: bool = True,
     frozen_snapshot: dict[str, Any] | None = None,
     include_sigma_issues: bool = False,
+    browser_presence_required: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -7731,6 +7756,10 @@ async def _generate_impl(
                     }
                 )
 
+            # Browser-only lease: check at safe boundaries, not mid-response.
+            if state == "milestone" or (stage == "publication_compilation" and not work):
+                _require_browser_presence(path, browser_presence_required)
+
         task = asyncio.current_task()
         if task is not None:
 
@@ -7745,6 +7774,8 @@ async def _generate_impl(
                         finish_progress(path, "failed", MESSAGE, expected_run_id=run_id)
                     else:
                         finish_progress(path, "cancelled", expected_run_id=run_id)
+                elif isinstance(completed_task.exception(), PaperBrowserPaused):
+                    finish_progress(path, "paused", str(completed_task.exception()), expected_run_id=run_id)
                 elif completed_task.exception() is not None:
                     finish_progress(path, "failed", expected_run_id=run_id)
                 active = _active_progress.get(project_key)
@@ -8100,6 +8131,7 @@ async def _generate_impl(
                     "updated_at": _now(),
                     "elapsed_seconds": elapsed_before,
                 }
+                _require_browser_presence(path, browser_presence_required)
                 # Persist a conservative attempted-call count BEFORE dispatch.
                 # An unsuccessful or interrupted response still may have used
                 # provider allowance. Clearing the explicit reset marker keeps
@@ -8116,6 +8148,7 @@ async def _generate_impl(
                         # An in-flight request may have consumed allowance;
                         # record each authorized replay before dispatch.
                         await asyncio.sleep(0.4 * (attempt_number - 1))
+                        _require_browser_presence(path, browser_presence_required)
                         work["provider_calls"] = int(work["provider_calls"]) + 1
                         work["provider_calls_total"] = int(work["provider_calls_total"]) + 1
                         _save_work(path, work)
@@ -8773,6 +8806,7 @@ async def generate(
     *,
     frozen_snapshot: dict[str, Any] | None = None,
     include_sigma_issues: bool = False,
+    browser_presence_required: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     from sigma.memory_guard import require_capacity
@@ -8797,6 +8831,7 @@ async def generate(
             include_diagrams,
             frozen_snapshot,
             include_sigma_issues,
+            browser_presence_required,
         )
     )
     _generation_tasks[key] = task
@@ -8819,6 +8854,11 @@ async def generate(
             else:
                 finish_progress(path, "cancelled")
         log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
+        raise
+    except PaperBrowserPaused as exc:
+        if key in _started_paper_attempts:
+            finish_progress(path, "paused", str(exc))
+        log.info("paper.paused project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
         raise
     except Exception as exc:
         # The SSE error can disappear on page reload; retain only the same

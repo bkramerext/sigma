@@ -671,6 +671,7 @@ class ResearchLimitsRequest(OpenRequest):
 
 
 class PaperGenerateRequest(OpenRequest):
+    browser_presence_required: bool = False
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -966,6 +967,9 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             updates.get_nowait()
         updates.put_nowait(dict(event))
 
+    presence_kwargs: dict[str, Any] = (
+        {"browser_presence_required": True} if body.browser_presence_required else {}
+    )
     task = asyncio.create_task(
         papers.generate(
             body.path,
@@ -980,6 +984,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             include_research_excerpts=body.include_research_excerpts,
             include_sigma_issues=body.include_sigma_issues,
             include_diagrams=body.include_diagrams,
+            **presence_kwargs,
         )
     )
 

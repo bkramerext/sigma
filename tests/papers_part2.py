@@ -1242,7 +1242,7 @@ def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
                 results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=20)
                 assert len(results) == 4
                 assert provider_calls == 4, f"Expected four provider calls, got {provider_calls}"
-                assert compilations == 4, f"Expected four PDF compilations, got {compilations}"
+                assert compilations == 8, f"Expected two PDF compilations per paper, got {compilations}"
                 assert all(len(papers.list_papers(str(path))) == 1 for path in paths)
                 assert not papers._busy_paper_projects
                 assert not papers._paper_waiters

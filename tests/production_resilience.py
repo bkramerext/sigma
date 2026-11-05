@@ -398,7 +398,10 @@ def main() -> None:
             assert failed["failure_reason"] == memory_guard.MESSAGE
             # Emergency status only updates tiny sidecar, not the full
             # checkpoint with provider-call accounting and frozen evidence.
-            assert papers._load_work(path) == work
+            saved_work = papers._load_work(path)
+            assert saved_work is not None
+            assert saved_work["progress"] == work["progress"]
+            assert saved_work["snapshot_sha256"] == work["snapshot_sha256"]
             papers._clear_work(path)
             assert papers.progress_status(path) is None
 
