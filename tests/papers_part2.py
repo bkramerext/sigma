@@ -487,6 +487,60 @@ def test_paper_failure_reason_survives_reopen() -> None:
         assert saved_work["progress"]["failure_reason"] == reason
 
 
+def test_paper_progress_counts_keep_generation_resumable() -> None:
+    """Zero sections is legitimate; bad display counts must not discard paid work."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "progress-recovery.sigma"
+        view = initialize_project(
+            path, "Paper progress", "A saved paper question", research_mode="mathematical"
+        )
+        package, fingerprint = papers._snapshot(str(path))
+        work = papers._new_work(fingerprint, view.project.id, "b" * 64, "fixture-model", "high")
+        work["frozen_package"] = package
+        work["provider_calls"] = 2
+        work["provider_calls_total"] = 2
+        work["progress"] = {
+            "run_id": "a" * 32,
+            "status": "running",
+            "stage": "sections",
+            "current": 0,
+            "total": 6,
+            "started_at": "2026-11-04T01:00:00+00:00",
+            "updated_at": "2026-11-04T01:00:00+00:00",
+            "elapsed_seconds": 10,
+        }
+        papers._save_work(str(path), work)
+        loaded = papers._load_work(str(path))
+        assert loaded is not None
+        assert (loaded["progress"]["current"], loaded["progress"]["total"]) == (0, 6)
+        assert loaded["provider_calls"] == loaded["provider_calls_total"] == 2
+        assert loaded.get("generation_issues") is None
+        status = papers.progress_status(str(path))
+        assert status is not None and status["current"] == 0 and status["total"] == 6
+
+        # Only progress-display metadata is recoverable; real accounting is unchanged.
+        for current, total in [(-1, 6), (7, 6), (0, 0), (None, 6), (True, 6)]:
+            work["progress"]["current"] = current
+            work["progress"]["total"] = total
+            papers._save_work(str(path), work)
+            recovered = papers._load_work(str(path))
+            assert recovered is not None
+            assert recovered["progress"]["current"] is None
+            assert recovered["progress"]["total"] is None
+            assert recovered["provider_calls"] == recovered["provider_calls_total"] == 2
+            assert recovered["generation_issues"] == [papers._PAPER_PROGRESS_RECOVERY_ISSUE]
+            papers._save_work(str(path), recovered)
+            reopened = papers._load_work(str(path))
+            assert reopened is not None and reopened["generation_issues"] == recovered["generation_issues"]
+            assert papers.progress_status(str(path))["current"] is None
+
+        tex = r"\\documentclass{article}" + "\\n" + r"\\begin{document}" + "\\n" + "Body" + "\\n" + r"\\end{document}"
+        appendix = papers._append_sigma_issues(tex, recovered["generation_issues"])
+        assert r"\\section{Issues and Bugs}" in appendix
+        assert "recovered inconsistent paper-generation progress counters" in appendix
+        assert r"\\section{Issues and Bugs}" not in tex
+
+
 def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> None:
     """A previously failed Tadpoles-shaped plan can resume with only section calls."""
     package, _ = fast_package()
