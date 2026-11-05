@@ -67,7 +67,8 @@ def cached(record: dict[str, Any]) -> str | None:
 
 
 def _save(path: str, paper_id: str, sha: str, markdown: str) -> str:
-    from sigma import papers
+    from sigma import memory_guard, papers
+    memory_guard.require_capacity()
 
     lock = papers._paper_version_lock(path)
     try:
@@ -195,6 +196,7 @@ async def explain(path: str, paper_id: str, expected_binding: str, expected_proj
                 return _save(path, paper_id, sha, Explanation.model_validate(result).markdown)
 
             task = asyncio.create_task(generate())
+            memory_guard.track_task(task)
             _tasks[key] = task
     try:
         return await asyncio.shield(task)
