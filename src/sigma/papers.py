@@ -3301,13 +3301,25 @@ def _read_queue_status(path: str) -> dict[str, Any] | None:
     return value
 
 
-def activity_status(path: str) -> Literal["queued", "active"] | None:
-    """Cheap in-process activity status for project and home-page indicators."""
+def activity_status(path: str) -> Literal["queued", "active", "interrupted", "failed"] | None:
+    """Bounded status for project lists, including post-restart warnings."""
     key = str(project_path(path).resolve())
     if key in _queued_progress:
         return "queued"
     if key in _generating_paper_projects:
         return "active"
+    receipt = _read_queue_status(path)
+    if receipt is not None:
+        if receipt["status"] == "queued":
+            return "interrupted"
+        if receipt["status"] == "failed":
+            return "failed"
+    saved = _read_progress_status(path)
+    if saved is not None:
+        if saved["status"] == "running":
+            return "interrupted"
+        if saved["status"] == "failed":
+            return "failed"
     return None
 
 
