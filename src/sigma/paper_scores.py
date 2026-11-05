@@ -390,6 +390,10 @@ async def score_paper(
             _tasks[key] = task
     try:
         return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if memory_guard.is_critical():
+            raise ProjectError(memory_guard.MESSAGE) from None
+        raise
     finally:
         if task.done():
             async with _lock:
