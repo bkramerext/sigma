@@ -15,6 +15,7 @@ from typing import Any, TypedDict
 import pypdfium2
 from pydantic import BaseModel, ConfigDict, Field
 
+from sigma import memory_guard
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 
 RUBRIC_ID = "sigma-paper-quality"
@@ -132,8 +133,7 @@ class ProjectPaperMetadata(TypedDict):
 
 def project_metadata(path: str) -> ProjectPaperMetadata:
     """One canonical aggregate for the project-list and TeX tooltip."""
-    from sigma import memory_guard, papers
-    memory_guard.require_capacity()
+    from sigma import papers
 
     available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
     return {"paper_count": len(available), "best_paper_score": best_score(available)}
@@ -355,6 +355,7 @@ async def score_paper(
     previous = cached_score(record)
     if previous is not None:
         return previous
+    memory_guard.require_capacity()
 
     auth = await auth_context()
     if auth["identity"] != expected_binding:
