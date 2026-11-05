@@ -3120,6 +3120,67 @@ def _clear_work(path: str) -> None:
     file.unlink(missing_ok=True)
 
 
+def _queue_status_file(path: str, *, create: bool = False) -> Path:
+    """Queue receipts are small, private files alongside paper checkpoints."""
+    return _work_file(path, create=create).with_name("queue-status.json")
+
+
+def _write_queue_status(
+    path: str, status: Literal["queued", "cancelled", "failed"], started_at: str,
+    reason: str | None = None,
+) -> None:
+    file = _queue_status_file(path, create=True)
+    record: dict[str, Any] = {
+        "schema_version": 1,
+        "status": status,
+        "started_at": started_at,
+        "updated_at": _now(),
+    }
+    if reason:
+        record["detail"] = reason[:500]
+    staged = _stage(file.parent, _json(record))
+    try:
+        os.replace(staged, file)
+        fd = os.open(file.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def _clear_queue_status(path: str) -> None:
+    file = _queue_status_file(path)
+    if file.is_symlink():
+        raise ProjectError("Paper queue status is unsafe")
+    file.unlink(missing_ok=True)
+
+
+def _read_queue_status(path: str) -> dict[str, Any] | None:
+    file = _queue_status_file(path)
+    if not file.exists() and not file.is_symlink():
+        return None
+    if file.is_symlink() or not file.is_file() or file.stat().st_size > 2048:
+        raise ProjectError("Paper queue status is unsafe")
+    try:
+        value = json.loads(file.read_text(encoding="utf-8"))
+        if (
+            not isinstance(value, dict)
+            or value.get("schema_version") != 1
+            or value.get("status") not in {"queued", "cancelled", "failed"}
+            or not isinstance(value.get("started_at"), str)
+            or not isinstance(value.get("updated_at"), str)
+            or (value.get("detail") is not None and not isinstance(value["detail"], str))
+        ):
+            raise ValueError("invalid queue status")
+        datetime.fromisoformat(value["started_at"])
+        datetime.fromisoformat(value["updated_at"])
+    except (OSError, ValueError, TypeError) as exc:
+        raise ProjectError("Paper queue status is unreadable") from exc
+    return value
+
+
 def activity_status(path: str) -> Literal["queued", "active"] | None:
     """Cheap in-process activity status for project and home-page indicators."""
     key = str(project_path(path).resolve())
@@ -3131,18 +3192,60 @@ def activity_status(path: str) -> Literal["queued", "active"] | None:
 
 
 def progress_status(path: str) -> dict[str, Any] | None:
-    """Return only persisted stage metadata; never expose prompts or provider content."""
+    """Cheap, restart-aware status; don't load huge checkpoints on heartbeats."""
     key = str(project_path(path).resolve())
     queued = _queued_progress.get(key)
-    if queued is not None:
+    waiters = tuple(_paper_waiters)
+    if queued is not None and key in waiters:
+        started = datetime.fromisoformat(queued["started_at"])
         return {
             **queued,
-            "detail": f"Waiting for an available paper-generation slot (position {list(_paper_waiters).index(key) + 1}).",
+            "elapsed_seconds": max(0, int((datetime.now(UTC) - started).total_seconds())),
+            "detail": f"Waiting for an available paper-generation slot (position {waiters.index(key) + 1}).",
         }
     active = _active_progress.get(key)
-    work = _load_work(path)
-    saved = work.get("progress") if work is not None else None
-    state = active or saved
+    if active is not None:
+        state = active
+    else:
+        receipt = _read_queue_status(path)
+        if receipt is not None:
+            elapsed = max(
+                0,
+                int(
+                    (datetime.now(UTC) - datetime.fromisoformat(receipt["started_at"]))
+                    .total_seconds()
+                ),
+            )
+            if receipt["status"] == "queued":
+                return {
+                    "status": "interrupted", "stage": "queued", "current": None,
+                    "total": None, "started_at": receipt["started_at"],
+                    "elapsed_seconds": elapsed,
+                    "detail": (
+                        "The backend restarted while this paper was queued. No AI call was "
+                        "started for this queued request. Select Generate to queue it again."
+                    ),
+                }
+            return {
+                "status": receipt["status"],
+                "stage": "queued",
+                "current": None,
+                "total": None,
+                "started_at": receipt["started_at"],
+                "elapsed_seconds": elapsed,
+                **(
+                    {"failure_reason": receipt["detail"]}
+                    if receipt["status"] == "failed" and receipt.get("detail")
+                    else {}
+                ),
+                **(
+                    {"detail": receipt["detail"]}
+                    if receipt.get("detail")
+                    else {}
+                ),
+            }
+        work = _load_work(path)
+        state = work.get("progress") if work is not None else None
     if state is None:
         return None
     running_here = bool(active and active.get("run_id") == state.get("run_id"))
