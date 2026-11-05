@@ -937,15 +937,19 @@ def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None
         paths = [Path(temporary) / f"paper-{index}.sigma" for index in range(4)]
         views = [
             initialize_project(
-                path, f"Paper project {index}", "Independent bounded research",
+                path,
+                f"Paper project {index}",
+                "Independent bounded research",
                 research_mode="mathematical",
             )
             for index, path in enumerate(paths)
         ]
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
         config = {
-            "available": True, "binding": credential["identity"],
-            "model": "fixture-model", "reasoning_effort": "high",
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
         }
         first_started = asyncio.Event()
         release = asyncio.Event()
@@ -986,7 +990,10 @@ def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None
                     assert len(papers._generating_paper_projects) == 1
                     assert len(papers._paper_waiters) == 3
                     assert [papers.activity_status(str(path)) for path in paths] == [
-                        "active", "queued", "queued", "queued"
+                        "active",
+                        "queued",
+                        "queued",
+                        "queued",
                     ]
                 finally:
                     release.set()
@@ -1006,15 +1013,19 @@ def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
         paths = [Path(temporary) / f"compile-{index}.sigma" for index in range(4)]
         views = [
             initialize_project(
-                path, f"Compile project {index}", "Compile independently",
+                path,
+                f"Compile project {index}",
+                "Compile independently",
                 research_mode="mathematical",
             )
             for index, path in enumerate(paths)
         ]
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
         config = {
-            "available": True, "binding": credential["identity"],
-            "model": "fixture-model", "reasoning_effort": "high",
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
         }
         first_compiling = threading.Event()
         finish_compiling = threading.Event()
