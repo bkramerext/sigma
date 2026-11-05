@@ -89,10 +89,10 @@ with sync_playwright() as playwright:
         page.evaluate("el => parseFloat(getComputedStyle(el).fontSize)", qa_button.element_handle())
         >= 16
     )
-    lean = page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
-    expect(lean).to_be_visible()
-    assert qa_button.bounding_box()["x"] < lean.bounding_box()["x"]
-    assert qa_button.bounding_box()["height"] == lean.bounding_box()["height"]
+    # The retired Lean action must not be reintroduced to the project header.
+    expect(
+        page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
+    ).to_have_count(0)
     expect(page.locator(".papers-pane").get_by_role("heading", name="Papers")).to_be_visible()
     page.screenshot(path=str(OUT / "research-qa-toolbar.png"), full_page=False)
     qa_button.click()
