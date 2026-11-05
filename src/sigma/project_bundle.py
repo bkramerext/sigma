@@ -14,6 +14,7 @@ import json
 import os
 import stat
 import tempfile
+from datetime import UTC, datetime
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -122,15 +123,48 @@ def bundle_project_document(bundle: dict[str, Any]) -> dict[str, Any]:
 
 
 def rename_bundle_project(bundle: dict[str, Any], title: str) -> dict[str, Any]:
-    """Return a portable copy of a bundle with only its project title changed."""
+    """Preserve the edit-history chain when importing under another title."""
+    from sigma.projects import ProjectError, _decode as validate_project
+
     members = _decode(bundle)
     try:
         document = json.loads(members["project.json"])
+        validate_project(document)
+        if document["title"] == title:
+            return portable_bundle(members)
+        if document["schema_version"] >= 6:
+            previous = {
+                "title": document["title"],
+                "problem": document["problem"],
+                "investigation_type": document.get(
+                    "investigation_type", document.get("research_mode", "default")
+                ),
+                "ai_model": document["ai_model"],
+                "reasoning_effort": document["reasoning_effort"],
+                "difficulty": document.get("difficulty"),
+                "show_advanced_outcome_details": document.get(
+                    "show_advanced_outcome_details", False
+                ),
+            }
+            latest = datetime.fromisoformat(document["events"][-1]["timestamp"])
+            stamp = max(datetime.now(UTC), latest).isoformat()
+            document["events"].append(
+                {
+                    "sequence": len(document["events"]) + 1,
+                    "kind": "project.updated",
+                    "timestamp": stamp,
+                    "project_change": {
+                        "previous": previous,
+                        "current": {**previous, "title": title},
+                    },
+                }
+            )
         document["title"] = title
+        validate_project(document)
         members["project.json"] = (
             json.dumps(document, ensure_ascii=False, indent=2) + "\n"
         ).encode("utf-8")
-    except (KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError, ProjectError) as exc:
         raise BundleError("Project bundle has no valid project document") from exc
     return portable_bundle(members)
 

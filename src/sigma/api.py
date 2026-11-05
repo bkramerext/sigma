@@ -1527,7 +1527,7 @@ def import_project_bundle(body: ImportBundleRequest):
                     version_number = int(version_match.group(1)) + number - 1
                     candidate = title[: version_match.start()] + f"v{version_number}"
                 else:
-                    suffix = " (imported)" if number == 2 else f" (imported {number - 1})"
+                    suffix = f" v{number - 1}"
                     candidate = title[: 200 - len(suffix)].rstrip() + suffix
                 _, name = _project_name(candidate)
                 destination = (root / name).with_suffix(".json")
