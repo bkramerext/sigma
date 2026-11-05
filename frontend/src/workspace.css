@@ -403,3 +403,20 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 /* Match Download and Email glyph sizes to neighboring project actions. */
 .workspace-page .project-pane-actions .project-download-button svg,
 .workspace-page .project-pane-actions .project-email-button svg { width: 27px; height: 27px; }
+
+/* Diagnostics stay last in Sessions and use the same quiet disclosure style. */
+.workspace-page .project-diagnostics-panel { margin: 16px 0 0; min-width: 0; }
+.workspace-page .project-diagnostics-disclosure > summary { color: var(--workspace-muted, #b9aa98); font-size: 13px; font-weight: 500; }
+.workspace-page .project-diagnostics-disclosure > summary:hover { color: #e4c39c; }
+.workspace-page .project-diagnostics-content { padding: 6px 14px 14px; color: var(--workspace-muted, #b9aa98); font-size: 12px; overflow-wrap: anywhere; }
+.workspace-page .project-diagnostics-content > p { margin: 8px 0; }
+.workspace-page .project-diagnostics-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 10px 0; }
+.workspace-page .project-diagnostics-content ol { margin: 8px 0 0; padding-left: 22px; }
+.workspace-page .project-diagnostics-content li { padding: 5px 0; }
+.workspace-page .project-diagnostics-content li small { display: block; color: #8998a7; }
+
+/* Keep Export project the same height as its neighboring icon buttons. */
+.workspace-page .project-pane-actions .project-download-button {
+  box-sizing: border-box; width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 3px;
+}
+.workspace-page .project-pane-actions .project-download-button svg { width: 22px; height: 22px; }
