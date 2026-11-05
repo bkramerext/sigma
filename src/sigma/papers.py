@@ -3075,6 +3075,16 @@ def _clear_work(path: str) -> None:
     file.unlink(missing_ok=True)
 
 
+def activity_status(path: str) -> Literal["queued", "active"] | None:
+    """Cheap in-process activity status for project and home-page indicators."""
+    key = str(project_path(path).resolve())
+    if key in _queued_progress:
+        return "queued"
+    if key in _generating_paper_projects:
+        return "active"
+    return None
+
+
 def progress_status(path: str) -> dict[str, Any] | None:
     """Return only persisted stage metadata; never expose prompts or provider content."""
     key = str(project_path(path).resolve())
@@ -7229,6 +7239,9 @@ async def _generate_impl(
     include_sigma_issues: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
+        from sigma.memory_guard import require_capacity
+
+        require_capacity()  # A queued job must pass admission again when its turn arrives.
         project_key = str(project_path(path).resolve())
         run_id = uuid4().hex
         started_at = _now()
