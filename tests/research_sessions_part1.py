@@ -3304,9 +3304,13 @@ def test_literature_research_prompts_use_interpretation_without_weakening_proven
         assert "never invent quotations" in prompt
         assert "Separate what a literary work depicts from documented history" in prompt
         assert "Keep evidence provenance auditable" in prompt
+        assert "Allow imaginative, tentative readings" in prompt
+        assert "without repeatedly announcing that an interpretation is speculative" in prompt
+        assert "do not" in prompt and "unsupported historical events" in prompt
         assert "methodology_source_material" in prompt
         if role == "skeptic":
             assert "probe selective quotation" in prompt
+            assert "rejecting a clearly qualified interpretation" in prompt
         else:
             assert "build an interpretive thesis" in prompt
 
