@@ -19,15 +19,24 @@ from sigma.production_observability import memory_snapshot
 
 LOG = logging.getLogger("sigma.memory_guard")
 MESSAGE = (
-    "SIGMA paused research and paper generation because backend memory is "
-    "nearly exhausted. Saved checkpoints remain available. Resume after "
-    "resource pressure clears; interrupted provider calls are not replayed."
+    "SIGMA stopped AI activity because backend memory is nearly exhausted. "
+    "Saved research and paper checkpoints remain available where supported. "
+    "Resume after resource pressure clears; interrupted provider calls are not replayed."
 )
 _LOCK = threading.Lock()
 _CRITICAL = False
 _LOOP: asyncio.AbstractEventLoop | None = None
 _SHUTDOWN_PENDING = False
 _LAST_ALERT = 0.0
+_ACTIVE_TASKS: set[asyncio.Task[object]] = set()
+
+
+def track_task(task: asyncio.Task[object]) -> None:
+    """Track non-session AI work so the pressure breaker can stop it too."""
+    require_capacity()
+    _ACTIVE_TASKS.add(task)
+    task.add_done_callback(_ACTIVE_TASKS.discard)
+
 
 
 def critical_snapshot(snapshot: dict[str, int | None]) -> bool:
@@ -122,16 +131,19 @@ async def _cancel_active() -> None:
         session_tasks = [
             task for task in list(research_sessions._tasks.values()) if not task.done()
         ]
+        other_tasks = [task for task in list(_ACTIVE_TASKS) if not task.done()]
+        all_tasks = list(set(paper_tasks + session_tasks + other_tasks))
         LOG.error(
-            "memory.stop_active sessions=%d papers=%d",
+            "memory.stop_active sessions=%d papers=%d other_ai=%d",
             len(session_tasks),
             len(paper_tasks),
+            len(other_tasks),
         )
-        for task in paper_tasks + session_tasks:
+        for task in all_tasks:
             task.cancel()
-        # Let each task's existing checkpoint/cancellation handling run.
-        if paper_tasks or session_tasks:
-            await asyncio.gather(*paper_tasks, *session_tasks, return_exceptions=True)
+        # Let task-owned checkpoint/cancellation handling run. Do not replay calls.
+        if all_tasks:
+            await asyncio.gather(*all_tasks, return_exceptions=True)
     finally:
         _SHUTDOWN_PENDING = False
 
