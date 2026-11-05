@@ -225,6 +225,35 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
             captured[0].get_payload(decode=True),
         )
 
+    def test_local_mail_failure_is_not_reported_as_sent(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                    "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                    "SIGMA_LOCAL_AUTO_ADMIN": "true",
+                },
+            ),
+            patch(
+                "sigma.mail_transport.send_message",
+                side_effect=RuntimeError("offline simulated failure"),
+            ),
+        ):
+            response = self.client.post(
+                "/api/cloud-auth/feedback",
+                json={"message": "Please show notification status accurately."},
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertIs(response.json()["email_notification_sent"], False)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                row = db.execute(
+                    "SELECT notification_error FROM feedback_requests WHERE id=?",
+                    (response.json()["id"],),
+                ).fetchone()
+            self.assertEqual(row["notification_error"], "delivery failed")
+
     def test_hosted_smtp_is_unchanged_by_local_gmail_grant(self):
         _save_grant(
             sender="admin@example.org",
@@ -319,7 +348,7 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
             self.assertEqual(cloud_auth.email_env("GMAIL_TOKEN_FILE"), "")
             self.assertEqual(cloud_auth.email_env("GMAIL_SENDER"), "")
 
-    def test_explicit_empty_settings_disable_local_grant_discovery(self):
+    def test_stale_local_gmail_setting_yields_to_verified_cli_grant(self):
         _save_grant(
             sender="admin@example.org",
             subject="google-sub-1",
@@ -333,10 +362,15 @@ class SharedLocalMailTransportTests(CloudAuthFixture):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
-                "SIGMA_EMAIL_GMAIL_TOKEN_FILE": "",
+                "SIGMA_EMAIL_GMAIL_TOKEN_FILE": "/missing/old-token.json",
+                "SIGMA_EMAIL_GMAIL_SENDER": "old@example.org",
             },
         ):
-            self.assertEqual(cloud_auth.email_env("GMAIL_TOKEN_FILE"), "")
+            self.assertEqual(
+                cloud_auth.email_env("GMAIL_TOKEN_FILE"),
+                str(self.root / "gmail-send-token.json"),
+            )
+            self.assertEqual(cloud_auth.email_env("GMAIL_SENDER"), "admin@example.org")
 
 
 if __name__ == "__main__":

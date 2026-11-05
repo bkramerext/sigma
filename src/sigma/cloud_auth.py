@@ -2030,9 +2030,16 @@ def denied_identity(request: Request):
 def email_env(suffix: str, default: str = "") -> str:
     """Resolve shared mail settings; only the local UI may reuse a CLI Gmail grant.
 
-    Explicit settings, including empty values, take priority. Hosted SIGMA
-    does not discover any operator-local OAuth credential files.
+    In local mode a verified CLI Gmail grant takes priority over stale
+    environment paths. Hosted SIGMA keeps explicit configured credentials.
     """
+    if suffix in {"GMAIL_TOKEN_FILE", "GMAIL_SENDER"} and config().local:
+        from sigma.local_gmail_cli_auth import existing_grant
+
+        grant = existing_grant()
+        if grant is not None:
+            path, sender = grant
+            return str(path) if suffix == "GMAIL_TOKEN_FILE" else sender
     if suffix.startswith("GMAIL_"):
         direct = os.environ.get(f"SIGMA_{suffix}")
         if direct is not None:
@@ -2043,13 +2050,6 @@ def email_env(suffix: str, default: str = "") -> str:
     legacy = os.environ.get(f"SIGMA_INVITATION_{suffix}")
     if legacy is not None:
         return legacy.strip()
-    if suffix in {"GMAIL_TOKEN_FILE", "GMAIL_SENDER"} and config().local:
-        from sigma.local_gmail_cli_auth import existing_grant
-
-        grant = existing_grant()
-        if grant is not None:
-            path, sender = grant
-            return str(path) if suffix == "GMAIL_TOKEN_FILE" else sender
     return default
 
 
@@ -2586,6 +2586,7 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
             **_cookie_options(cfg, FEEDBACK_RATE_COOKIE, max_age=FEEDBACK_RATE_SECONDS),
         )
     response.headers["Cache-Control"] = "no-store"
+    notification_sent = True
     try:
         _deliver_feedback(
             feedback_id,
@@ -2595,6 +2596,7 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
             contact_email=contact_email,
         )
     except RuntimeError:
+        notification_sent = False
         # Feedback is durable even if Gmail/SMTP is missing or temporarily
         # unavailable. The admin inbox still contains the message.
         with _db(cfg) as db:
@@ -2602,7 +2604,10 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
                 "UPDATE feedback_requests SET notification_error=? WHERE id=?",
                 ("delivery failed", feedback_id),
             )
-    return {"status": "received", "id": feedback_id}
+    result = {"status": "received", "id": feedback_id}
+    if cfg.local:
+        result["email_notification_sent"] = notification_sent
+    return result
 
 
 @router.get("/admin/feedback")

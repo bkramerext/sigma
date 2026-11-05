@@ -3476,6 +3476,7 @@ function FeedbackForm({ signedInEmail }: { signedInEmail: string | null }) {
   const [contactEmail, setContactEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [emailFailed, setEmailFailed] = useState(false);
   const [error, setError] = useState('');
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3487,13 +3488,15 @@ function FeedbackForm({ signedInEmail }: { signedInEmail: string | null }) {
         body: JSON.stringify({ message, contact_email: signedInEmail || contactEmail.trim() || null }),
       });
       if (!response.ok) throw await cloudFailure(response, 'Feedback could not be sent. Please try again.');
+      const result = await response.json();
+      setEmailFailed(result.email_notification_sent === false);
       setSent(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Feedback could not be sent. Please try again.');
     } finally { setBusy(false); }
   }
   return <>
-      {sent ? <p role="status">Thanks for your feedback. It has been sent for administrator review.</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
+      {sent ? <p role={emailFailed ? 'alert' : 'status'}>{emailFailed ? 'Feedback saved for administrator review, but the email notification failed. Check local mail authorization.' : 'Thanks for your feedback. It has been sent for administrator review.'}</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
         <label>Feedback<textarea required minLength={10} maxLength={4000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Share a suggestion or describe a problem."/></label>
         <button type="submit" className="admin-text-action about-feedback-send" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send Feedback'}</button>
         {signedInEmail ? <label><span className="about-contact-email-label">Contact email (Google account)</span><input type="email" value={signedInEmail} readOnly/></label> : <label><span className="about-contact-email-label">Contact email <span>(optional)</span></span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>}
