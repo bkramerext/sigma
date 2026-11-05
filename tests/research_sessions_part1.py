@@ -3290,6 +3290,33 @@ def test_project_compact_obligation_ids_preserve_legacy_references(path: Path):
         )
 
 
+def test_literature_research_prompts_use_interpretation_without_weakening_provenance() -> None:
+    """Literature's built-in lens reaches both roles without optional source guides."""
+    context = {
+        "investigation_type": "literature",
+        "research_method_version": "phase2-i2-v3",
+        "execution_tools": [],
+    }
+    for role in ("investigator", "skeptic"):
+        prompt = research_sessions._role_instructions(role, context)
+        assert "develop a defensible interpretation rather than a formal proof" in prompt
+        assert "Close-read the actual work" in prompt
+        assert "never invent quotations" in prompt
+        assert "Separate what a literary work depicts from documented history" in prompt
+        assert "Keep evidence provenance auditable" in prompt
+        assert "methodology_source_material" in prompt
+        if role == "skeptic":
+            assert "probe selective quotation" in prompt
+        else:
+            assert "build an interpretive thesis" in prompt
+
+    math_prompt = research_sessions._role_instructions(
+        "investigator", {**context, "investigation_type": "mathematical"}
+    )
+    assert "formalize exact objects" in math_prompt
+    assert "develop a defensible interpretation" not in math_prompt
+
+
 if __name__ == "__main__":
     from research_sessions_split_runner import run
 
