@@ -860,8 +860,12 @@ def execution_tool_fixture(python_available: bool):
     ]
 
 
-async def wait_for(path, session_id, terminal=True):
-    for _ in range(300):
+async def wait_for(path, session_id, terminal=True, *, timeout_seconds=3.0):
+    # A wall-clock deadline avoids treating a heavily scheduled CI event loop
+    # as an exact 300-iteration clock. Long protocol fixtures can opt in to a
+    # larger bound without weakening the fast default.
+    deadline = time.monotonic() + timeout_seconds
+    while True:
         current = research_sessions.get_session(str(path), session_id)
         worker = research_sessions._tasks.get(session_id)
         settled = worker is None or worker.done()
@@ -871,8 +875,13 @@ async def wait_for(path, session_id, terminal=True):
             else current["calls_used"]
         ):
             return current
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                "research worker did not make progress "
+                f"(status={current['status']}, calls_used={current['calls_used']}, "
+                f"worker_settled={settled})"
+            )
         await asyncio.sleep(0.01)
-    raise AssertionError("research worker did not make progress")
 
 
 async def setup(path: Path):

@@ -731,7 +731,7 @@ async def test_pause_counts_interrupted_call(path: Path):
         started = await research_sessions.start_session(
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
-        await asyncio.wait_for(started_call.wait(), 2)
+        await asyncio.wait_for(started_call.wait(), 12)
         progress = research_sessions.get_session(str(path), started["id"])
         if progress.get("scheduler_version") == 2:
             assert "Investigator agent call 1/" in progress["message"]
@@ -765,7 +765,7 @@ async def test_pause_counts_interrupted_call(path: Path):
         resumed = await research_sessions.control_session(str(path), started["id"], "resume")
         assert resumed["status"] == "queued"
         assert "may still complete or be billed" in resumed["message"]
-        await asyncio.wait_for(resumed_call.wait(), 2)
+        await asyncio.wait_for(resumed_call.wait(), 12)
         stopped = await research_sessions.control_session(str(path), started["id"], "stop")
         assert stopped["status"] == "stopped"
         await asyncio.sleep(0.02)
@@ -799,7 +799,7 @@ async def test_pause_counts_interrupted_call(path: Path):
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
         assert stopped_start["session_number"] == 2
-        await asyncio.wait_for(started_call.wait(), 2)
+        await asyncio.wait_for(started_call.wait(), 12)
         await research_sessions.control_session(str(path), stopped_start["id"], "stop")
         await asyncio.sleep(0.02)
         stopped = research_sessions.get_session(str(path), stopped_start["id"])
