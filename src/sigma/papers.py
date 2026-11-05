@@ -294,13 +294,16 @@ def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
             else:
                 reason = "Paper request ended before generation began; no provider calls were made."
             _write_queue_status(
-                path, "failed" if critical or not completed.cancelled() else "cancelled",
-                receipt["started_at"], reason,
+                path,
+                "failed" if critical or not completed.cancelled() else "cancelled",
+                receipt["started_at"],
+                reason,
             )
         except (OSError, ProjectError):
             logging.getLogger("sigma.lifecycle").error("paper.submission_receipt_recovery_failed")
 
     task.add_done_callback(clear_submitted)
+
 
 _CITATION_LIKE = re.compile(
     r"\[[0-9]{1,3}\]|\b(?:doi\s*:|arxiv\s*:|https?://)|\([A-Z][A-Za-z-]+(?:\s+et\s+al\.)?,?\s+20[0-9]{2}[a-z]?\)"
