@@ -134,6 +134,7 @@ async def stop_memory_protection() -> None:
 
     detach_loop()
 
+
 _research_qa_tasks: dict[
     tuple[str, str], tuple[tuple[str, str, str], asyncio.Task[dict[str, Any]]]
 ] = {}
