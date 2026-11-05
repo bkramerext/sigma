@@ -40,6 +40,9 @@ def track_task(task: asyncio.Task[object]) -> None:
 def critical_snapshot(snapshot: dict[str, int | None]) -> bool:
     used = snapshot["cgroup_used_mib"]
     limit = snapshot["cgroup_limit_mib"]
+    host_available = snapshot["host_available_mib"]
+    if host_available is not None and host_available <= 768:
+        return True
     if not limit or used is None or limit < 256:
         return False
     # Act before OOM: 85% of the container's limit OR <512 MiB headroom.
@@ -163,7 +166,9 @@ def poll() -> None:
     # Hysteresis reduces repeated alerts and premature re-admission.
     used = snapshot["cgroup_used_mib"]
     limit = snapshot["cgroup_limit_mib"]
-    if not critical and limit and used is not None and used * 100 <= limit * 75:
+    host_available = snapshot["host_available_mib"]
+    host_recovered = host_available is None or host_available >= 1280
+    if not critical and host_recovered and limit and used is not None and used * 100 <= limit * 75:
         _CRITICAL = False
     elif critical:
         _CRITICAL = True
