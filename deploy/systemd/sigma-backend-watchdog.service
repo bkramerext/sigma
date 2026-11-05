@@ -1,0 +1,16 @@
+[Unit]
+Description=SIGMA backend health watchdog and restart
+After=docker.service
+RequiresMountsFor=/srv/sigma-state
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/sigma/backend-watchdog.py
+User=root
+Group=root
+UMask=0077
+TimeoutStartSec=90s
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/sigma-state/auth/operational-logs /run
