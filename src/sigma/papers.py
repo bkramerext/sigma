@@ -2561,12 +2561,7 @@ def _paper_progress_counts_valid(current: Any, total: Any) -> bool:
     """Zero completed work is valid; a nonempty total is required for numbered stages."""
     if current is None or total is None:
         return current is None and total is None
-    return (
-        type(current) is int
-        and type(total) is int
-        and total >= 1
-        and 0 <= current <= total
-    )
+    return type(current) is int and type(total) is int and total >= 1 and 0 <= current <= total
 
 
 def _note_paper_progress_recovery(work: dict[str, Any]) -> None:
