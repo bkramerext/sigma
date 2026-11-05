@@ -231,6 +231,55 @@ with sync_playwright() as playwright:
     expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
     expect(pinned.get_by_role("button", name="Remove this project").first).to_be_visible()
     expect(pinned.locator("details.pinned-type-group")).to_have_count(0)
+
+    # Both Saved and Samples show the standard inline hourglass plus text
+    # while loading, without replacing the ordinary hand cursor. Hold the
+    # request locally so the pending state can be inspected deterministically.
+    page.evaluate(
+        """() => {
+          const originalFetch = window.fetch.bind(window);
+          window.fetch = (input, options) => {
+            const raw = typeof input === 'string' ? input : input.url;
+            const path = new URL(raw, location.href).pathname;
+            if (path === '/api/projects/open' || path === '/api/projects/samples/open') {
+              return new Promise(resolve => {
+                window.__finishProjectOpen = () => resolve(new Response(
+                  JSON.stringify({error: 'Simulated delayed project open'}),
+                  {status: 503, headers: {'Content-Type': 'application/json'}}
+                ));
+              });
+            }
+            return originalFetch(input, options);
+          };
+        }"""
+    )
+    saved_button = pinned.locator("button.recent-open").filter(has_text=project_title).first
+    saved_button.click()
+    expect(saved_button).to_have_attribute("aria-busy", "true")
+    expect(saved_button).to_be_disabled()
+    expect(saved_button.locator(".project-opening-status")).to_have_text("⌛ Opening...")
+    expect(saved_button).to_have_css("cursor", "pointer")
+    page.evaluate("window.__finishProjectOpen()")
+    expect(saved_button).to_have_attribute("aria-busy", "false")
+
+    page.get_by_role("tab", name="Samples", exact=True).click()
+    samples_panel = page.get_by_role("tabpanel", name="Samples")
+    sample_group = samples_panel.locator("details.sample-type-group").filter(
+        has_text="Mathematics"
+    )
+    if not sample_group.evaluate("group => group.open"):
+        sample_group.locator("summary").click()
+    sample_button = samples_panel.locator("button.sample-open").filter(
+        has_text="Nonconsecutive Subset Sums Modulo 3"
+    ).first
+    sample_button.click()
+    expect(sample_button).to_have_attribute("aria-busy", "true")
+    expect(sample_button).to_be_disabled()
+    expect(sample_button.locator(".project-opening-status")).to_have_text("⌛ Opening...")
+    expect(sample_button).to_have_css("cursor", "pointer")
+    page.evaluate("window.__finishProjectOpen()")
+    expect(sample_button).to_have_attribute("aria-busy", "false")
+
     assert not errors, errors
     browser.close()
     print(
