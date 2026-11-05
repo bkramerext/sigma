@@ -65,7 +65,12 @@
 .workspace-page .papers-pane .saved-paper-meta .text-view-link { color: #d9b17e; }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link { display: inline; width: auto; min-height: 0; padding: 0; margin-left: 7px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #d9b17e; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link:hover:not(:disabled) { color: #ffe1ad; background: transparent; }
-.workspace-page .papers-pane .saved-paper-confirm { margin: 10px 0 0 28px; padding: 10px 12px; }
+/* Match the anchored Session deletion confirmation and its copper text actions. */
+.workspace-page .papers-pane .paper-remove-anchor { position: relative; display: inline-flex; align-items: center; }
+.workspace-page .papers-pane .paper-remove-actions { position: absolute; z-index: 60; top: calc(100% + 5px); right: 0; width: min(280px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
+.workspace-page .papers-pane .paper-remove-actions .research-stop-confirm { width: 100%; margin: 0; padding: 12px 14px; box-sizing: border-box; box-shadow: 0 14px 35px #0009; }
+.workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button { color: #d9b17e; }
+.workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button:hover:not(:disabled) { color: #f3cd9e; }
 .workspace-page .papers-pane .saved-paper-card .ai-paper-preview { max-height: min(55dvh, 560px); overflow: auto; }
 .workspace-page .papers-pane .ai-paper-preview-title-copy { display: inline-flex; margin-left: 8px; vertical-align: middle; }
 .workspace-page .papers-pane .ai-paper-preview-title-copy .text-copy-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #c7a16d; }

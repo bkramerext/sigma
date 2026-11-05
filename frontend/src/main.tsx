@@ -2445,6 +2445,17 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
   const [eli5ErrorId, setEli5ErrorId] = useState('');
   const explainingRef = useRef(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
+  useEffect(() => {
+    if (!confirmDeleteId) return;
+    const cancelOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setConfirmDeleteId('');
+      }
+    };
+    document.addEventListener('keydown', cancelOnEscape);
+    return () => document.removeEventListener('keydown', cancelOnEscape);
+  }, [confirmDeleteId]);
   useEffect(() => { if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest, path]);
   useEffect(() => {
     if (!paperMenu) return;
@@ -2890,7 +2901,16 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
                 </span>
                 {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" aria-label="View PDF in a new browser tab" data-tooltip="View PDF in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
                 {!paper.score && <button type="button" className="text-view-link paper-score-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : 'Score'}</button>}
-                <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={() => confirmPaperRemoval(paper.paper_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
+                <span className="paper-remove-anchor">
+                  <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={() => confirmPaperRemoval(paper.paper_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
+                  {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
+                    <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
+                    <div className="session-remove-confirm-actions">
+                      <button type="button" className="text-view-link destructive-action" title={`Confirm removal of Paper ${paper.paper_version}`} disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
+                      <button type="button" className="text-view-link" title={`Keep Paper ${paper.paper_version}`} disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
+                    </div>
+                  </div></div>}
+                </span>
               </>}/>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100 <button type="button" className="text-view-link paper-score-link paper-see-scoring-link" disabled={busy || !!scoringId} onClick={() => void scorePaper(paper)}>See scoring</button></>}</p></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
@@ -2900,13 +2920,6 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onSection
           {copyError && <p className="error" role="alert">{copyError}</p>}
         </div>
         {eli5Error && eli5ErrorId === paper.paper_id && <p className="error" role="alert">{eli5Error}</p>}
-        {confirmDeleteId === paper.paper_id && <div className="research-stop-confirm saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
-          <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
-          <div className="session-remove-confirm-actions">
-            <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
-            <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
-          </div>
-        </div>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
           ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""} questionHeadingAction={<CopyToClipboardButton name="explaination" copied={copiedExplanationId === paper.paper_id} onCopy={() => void copyExplanation(paper.paper_id, selected.eli5?.markdown ?? '')}/>}/></Suspense></div>
