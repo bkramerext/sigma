@@ -932,34 +932,29 @@ def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
 
 
 def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None:
-    """AI latency in one user's paper must not block another project."""
+    """Paper generators queue FIFO instead of starting expensive work together."""
     with TemporaryDirectory() as temporary:
         paths = [Path(temporary) / f"paper-{index}.sigma" for index in range(4)]
         views = [
             initialize_project(
-                path,
-                f"Paper project {index}",
-                "Independent bounded research",
+                path, f"Paper project {index}", "Independent bounded research",
                 research_mode="mathematical",
             )
             for index, path in enumerate(paths)
         ]
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
         config = {
-            "available": True,
-            "binding": credential["identity"],
-            "model": "fixture-model",
-            "reasoning_effort": "high",
+            "available": True, "binding": credential["identity"],
+            "model": "fixture-model", "reasoning_effort": "high",
         }
-        three_started = asyncio.Event()
+        first_started = asyncio.Event()
         release = asyncio.Event()
         provider_calls = 0
 
         async def blocked_provider(context, *_args):
             nonlocal provider_calls
             provider_calls += 1
-            if provider_calls == 3:
-                three_started.set()
+            first_started.set()
             await release.wait()
             source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
             return draft(source), "fixture-model"
@@ -978,73 +973,60 @@ def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None
                 patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
                 mock_pdf_inspection(),
             ):
-                first, second, third = [
+                tasks = [
                     asyncio.create_task(
                         papers.generate(str(path), credential["identity"], view.project.id)
                     )
-                    for path, view in zip(paths[:3], views[:3])
+                    for path, view in zip(paths, views)
                 ]
                 try:
-                    await asyncio.wait_for(three_started.wait(), timeout=2)
-                    assert provider_calls == 3, "All three users should reach AI concurrently"
-                    assert len(papers._generating_paper_projects) == 3
-                    try:
-                        await papers.generate(
-                            str(paths[3]), credential["identity"], views[3].project.id
-                        )
-                    except ProjectError as exc:
-                        assert "capacity is full" in str(exc)
-                    else:
-                        raise AssertionError("Fourth paper must be rejected before provider I/O")
-                    assert provider_calls == 3
+                    await asyncio.wait_for(first_started.wait(), timeout=3)
+                    await asyncio.sleep(0.05)
+                    assert provider_calls == 1
+                    assert len(papers._generating_paper_projects) == 1
+                    assert len(papers._paper_waiters) == 3
+                    assert [papers.activity_status(str(path)) for path in paths] == [
+                        "active", "queued", "queued", "queued"
+                    ]
                 finally:
                     release.set()
-                results = await asyncio.wait_for(asyncio.gather(first, second, third), timeout=5)
-                assert len(results) == 3
-                assert len(papers.list_papers(str(paths[0]))) == 1
-                assert len(papers.list_papers(str(paths[1]))) == 1
-                assert len(papers.list_papers(str(paths[2]))) == 1
-                assert papers.list_papers(str(paths[3])) == []
+                results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=20)
+                assert len(results) == 4
+                assert provider_calls == 4
+                assert all(len(papers.list_papers(str(path))) == 1 for path in paths)
                 assert not papers._busy_paper_projects
+                assert not papers._paper_waiters
                 assert not papers._generating_paper_projects
 
         asyncio.run(check())
 
-
 def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
-    """Three admitted papers compile in parallel; a fourth cannot enter mid-compile."""
+    """The queue remains serial through PDF compilation, not just AI calls."""
     with TemporaryDirectory() as temporary:
         paths = [Path(temporary) / f"compile-{index}.sigma" for index in range(4)]
         views = [
             initialize_project(
-                path,
-                f"Compile project {index}",
-                "Compile independently",
+                path, f"Compile project {index}", "Compile independently",
                 research_mode="mathematical",
             )
             for index, path in enumerate(paths)
         ]
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
         config = {
-            "available": True,
-            "binding": credential["identity"],
-            "model": "fixture-model",
-            "reasoning_effort": "high",
+            "available": True, "binding": credential["identity"],
+            "model": "fixture-model", "reasoning_effort": "high",
         }
-        three_compiling = threading.Event()
+        first_compiling = threading.Event()
         finish_compiling = threading.Event()
-        count_lock = threading.Lock()
         compilations = 0
         provider_calls = 0
 
         def blocked_compiler(*_args, **_kwargs):
             nonlocal compilations
-            with count_lock:
-                compilations += 1
-                if compilations == 3:
-                    three_compiling.set()
+            compilations += 1
+            first_compiling.set()
             if not finish_compiling.wait(timeout=10):
-                raise AssertionError("An independent PDF compiler was serialized or stranded")
+                raise AssertionError("A PDF compiler remained blocked after release")
             return b"%PDF-fixture"
 
         async def provider(context, *_args):
@@ -1067,41 +1049,32 @@ def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
                 patch.object(papers, "_compile_pdf", new=blocked_compiler),
                 mock_pdf_inspection(),
             ):
-                first, second, third = [
+                tasks = [
                     asyncio.create_task(
                         papers.generate(str(path), credential["identity"], view.project.id)
                     )
-                    for path, view in zip(paths[:3], views[:3])
+                    for path, view in zip(paths, views)
                 ]
                 try:
                     assert await asyncio.wait_for(
-                        asyncio.to_thread(three_compiling.wait, 8), timeout=9
-                    ), "Not all three papers reached PDF compilation"
-                    assert compilations == 3
-                    assert len(papers._generating_paper_projects) == 3
-                    try:
-                        await papers.generate(
-                            str(paths[3]), credential["identity"], views[3].project.id
-                        )
-                    except ProjectError as exc:
-                        assert "capacity is full" in str(exc)
-                    else:
-                        raise AssertionError(
-                            "Fourth paper entered while three compilers were active"
-                        )
-                    assert provider_calls == 3
-                    assert compilations == 3
+                        asyncio.to_thread(first_compiling.wait, 8), timeout=9
+                    ), "The first paper did not reach PDF compilation"
+                    await asyncio.sleep(0.05)
+                    assert compilations == 1
+                    assert provider_calls == 1
+                    assert len(papers._generating_paper_projects) == 1
+                    assert len(papers._paper_waiters) == 3
                 finally:
                     finish_compiling.set()
-                results = await asyncio.wait_for(asyncio.gather(first, second, third), timeout=6)
-                assert len(results) == 3
-                assert all(len(papers.list_papers(str(path))) == 1 for path in paths[:3])
-                assert papers.list_papers(str(paths[3])) == []
+                results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=20)
+                assert len(results) == 4
+                assert provider_calls == compilations == 4
+                assert all(len(papers.list_papers(str(path))) == 1 for path in paths)
                 assert not papers._busy_paper_projects
+                assert not papers._paper_waiters
                 assert not papers._generating_paper_projects
 
         asyncio.run(check())
-
 
 def test_eight_research_sessions_overlap_three_paper_generators() -> None:
     """Cross-feature smoke: 8 live mock research calls + 3 paper model calls."""
@@ -1157,7 +1130,7 @@ def test_eight_research_sessions_overlap_three_paper_generators() -> None:
     async def paper_provider(context, *_args):
         nonlocal paper_count
         paper_count += 1
-        if paper_count == 3:
+        if paper_count == 1:
             paper_ready.set()
         await release.wait()
         source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
@@ -1227,9 +1200,10 @@ def test_eight_research_sessions_overlap_three_paper_generators() -> None:
                     for i, (path, view) in enumerate(paper_projects)
                 ]
                 await asyncio.wait_for(paper_ready.wait(), 15)
-                assert len(papers._generating_paper_projects) == 3
+                assert len(papers._generating_paper_projects) == 1
+                assert len(papers._paper_waiters) == 2
                 assert all(not research_sessions._tasks[row["id"]].done() for row in starts)
-                assert paper_count == 3
+                assert paper_count == 1
             finally:
                 release.set()
             await asyncio.wait_for(asyncio.gather(*paper_tasks), 15)
