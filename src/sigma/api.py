@@ -1865,7 +1865,9 @@ async def strategy_inference_view(body: ProposalRequest):
             pressure = memory_guard.is_critical()
             return JSONResponse(
                 {
-                    "error": memory_guard.MESSAGE if pressure else "Cancellation was requested. The provider outcome may be uncertain; this request will not be repeated.",
+                    "error": memory_guard.MESSAGE
+                    if pressure
+                    else "Cancellation was requested. The provider outcome may be uncertain; this request will not be repeated.",
                     "inference_status": proposals.inference_status(
                         body.path, body.expected_project_id, request_id
                     )["status"],
