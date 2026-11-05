@@ -202,6 +202,10 @@ async def explain(path: str, paper_id: str, expected_binding: str, expected_proj
             _tasks[key] = task
     try:
         return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if memory_guard.is_critical():
+            raise ProjectError(memory_guard.MESSAGE) from None
+        raise
     finally:
         if task.done():
             async with _lock:
