@@ -346,8 +346,8 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
     assert uncertain_state["plan"]
 
 
-def test_transient_paper_failures_retry_sections_without_rewriting_saved_work() -> None:
-    """Three attempts per failed section; resume only the missing section."""
+def test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallback() -> None:
+    """Exhausted retries preserve authored sections and publish a visible gap."""
     package, plan = fast_package(section_count=5)
     state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
     attempts: dict[int, int] = {}
@@ -373,40 +373,38 @@ def test_transient_paper_failures_retry_sections_without_rewriting_saved_work() 
         if stage == "retry" and detail:
             retry_details.append(detail)
 
-    async def fail_after_three() -> None:
+    async def generate() -> papers.PaperDraft:
         with patch.object(papers, "_provider_structured", new=provider):
-            try:
-                await papers._generate_long_draft(
-                    package,
-                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
-                    {"model": "fixture-model", "reasoning_effort": "high"},
-                    state,
-                    lambda _value: None,
-                    progress,
-                    structured_fast_path=True,
-                )
-            except papers.PaperTransientFailure:
-                pass
-            else:
-                raise AssertionError("Paper section must fail after three transient attempts")
+            result, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                progress,
+                structured_fast_path=True,
+            )
+        assert calls == 8 and batches == 0
+        return result
 
-    asyncio.run(fail_after_three())
+    result = asyncio.run(generate())
     assert attempts == {1: 3, 2: 1, 3: 1, 4: 1, 5: 1}
-    assert set(state["section_drafts"]) == {"2", "3", "4", "5"}
-    assert state["provider_calls_total"] == 8  # plan + 3 attempts + four siblings
-    assert any("Retrying section 1 (attempt 3 of 3)." in item for item in retry_details)
+    assert set(state["section_drafts"]) == {"1", "2", "3", "4", "5"}
+    assert "Editorial notice" in result.sections[0].paragraphs[0]
+    assert "Saved section 2." in result.sections[1].paragraphs
+    assert any("explicit editorial placeholders" in w for w in result.validation_warnings)
+    assert any("Paper section 1" in issue for issue in state["generation_issues"])
+    assert state["provider_calls_total"] == 8
+    assert any("Retrying section 1 (attempt 3 of 3)." in d for d in retry_details)
 
-    async def resumed_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
-        assert schema_name == "sigma_long_paper_section"
-        assert input_value["section_number"] == 1
-        attempts[1] += 1
-        return papers.LongSectionDraft(
-            paragraphs=["Recovered only the missing section."]
-        ), "fixture-model"
+    # A Continue must reuse all saved text, including the explicit gap,
+    # rather than silently spend another provider request.
+    async def no_repeat(*_args, **_kwargs):
+        raise AssertionError("All sections are checkpointed; no repeat provider call is allowed")
 
     async def resume() -> None:
-        with patch.object(papers, "_provider_structured", new=resumed_provider):
-            result, calls, _ = await papers._generate_long_draft(
+        with patch.object(papers, "_provider_structured", new=no_repeat):
+            resumed, calls, _ = await papers._generate_long_draft(
                 package,
                 {"identity": "fixture", "mode": "api_key", "token": "fixture"},
                 {"model": "fixture-model", "reasoning_effort": "high"},
@@ -414,12 +412,78 @@ def test_transient_paper_failures_retry_sections_without_rewriting_saved_work() 
                 lambda _value: None,
                 structured_fast_path=True,
             )
-        assert calls == 9
-        assert len(result.sections) == 5
+        assert calls == 8
+        assert resumed.sections[0].paragraphs == result.sections[0].paragraphs
 
     asyncio.run(resume())
-    assert attempts == {1: 4, 2: 1, 3: 1, 4: 1, 5: 1}
-    assert set(state["section_drafts"]) == {"1", "2", "3", "4", "5"}
+
+
+def test_paper_section_invalid_optional_table_is_dropped_without_losing_text() -> None:
+    package, plan = fast_package()
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        invalid_table = papers.PaperTable(
+            caption="Table with a link outside the section evidence index",
+            headers=["Name", "Value"],
+            rows=[["Source", "Observed"]],
+            evidence_refs=["unknown-source-reference"],
+            claim_ids=[plan.sections[number - 1].claim_ids[0]],
+        )
+        return papers.LongSectionDraft(
+            paragraphs=[f"Kept verified section {number} prose."], tables=[invalid_table]
+        ), "fixture-model"
+
+    async def generate() -> papers.PaperDraft:
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, _, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+                include_diagrams=True,
+            )
+        return result
+
+    result = asyncio.run(generate())
+    assert all(not section.tables for section in result.sections)
+    assert all("Kept verified section" in section.paragraphs[0] for section in result.sections)
+    assert any("invalid source or claim links" in issue for issue in state["generation_issues"])
+
+
+def test_paper_section_permanent_provider_rejection_does_not_publish_placeholder() -> None:
+    package, plan = fast_package()
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        raise ProjectError("Provider declined a long-paper stage")
+
+    async def generate() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+
+    try:
+        asyncio.run(generate())
+    except ProjectError as exc:
+        assert "Provider declined" in str(exc)
+    else:
+        raise AssertionError("A provider refusal must not be turned into authored content")
+    assert not state.get("section_drafts")
+
 
 
 def test_paper_transient_error_classification_excludes_permanent_rejections() -> None:
