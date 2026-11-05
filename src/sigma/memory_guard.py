@@ -103,14 +103,14 @@ def _notify_admin(snapshot: dict[str, int | None]) -> None:
             os.close(fd)
 
         cloud_auth._deliver_admin_notice(
-            "URGENT: SIGMA backend memory pressure — work paused",
+            "URGENT: SIGMA backend memory pressure — AI activity stopped",
             (
                 "SIGMA has entered memory-protection mode. Active research sessions "
                 "and paper-generation tasks are being cancelled with recoverable "
-                "checkpoint errors. New work is blocked until memory recovers.\\n\\n"
+                "checkpoint errors. New work is blocked until memory recovers.\n\n"
                 f"Container memory: {snapshot['cgroup_used_mib']} MiB used / "
-                f"{snapshot['cgroup_limit_mib']} MiB limit.\\n"
-                f"Host available: {snapshot['host_available_mib']} MiB.\\n\\n"
+                f"{snapshot['cgroup_limit_mib']} MiB limit.\n"
+                f"Host available: {snapshot['host_available_mib']} MiB.\n\n"
                 "Inspect the persistent backend and watchdog logs on the SIGMA "
                 "state disk. Review OOM events and paper generation before "
                 "resuming work. No research content is included."
