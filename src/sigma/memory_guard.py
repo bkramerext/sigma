@@ -33,7 +33,6 @@ _ACTIVE_TASKS: set[asyncio.Task[object]] = set()
 
 def track_task(task: asyncio.Task[object]) -> None:
     """Track non-session AI work so the pressure breaker can stop it too."""
-    require_capacity()
     _ACTIVE_TASKS.add(task)
     task.add_done_callback(_ACTIVE_TASKS.discard)
 
