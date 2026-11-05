@@ -3499,6 +3499,11 @@ def test_literature_paper_prompts_are_literary_and_preserve_citations() -> None:
     assert "Quote a literary passage only when its actual words are present" in instructions
     assert "structured\nclaim IDs, evidence references" in instructions
     assert "External scholarship is citable only when actually" in instructions
+    assert "Interpretive exploration is welcome" in instructions
+    assert "Make important conjectural leaps visible in natural prose" in instructions
+    assert 'repeatedly write "speculation" or "speculative"' in instructions
+    assert "Never present\nimagined authorial intentions" in instructions
+    assert "qualified, text-grounded" in style
     assert papers._subject_methodology("mathematical") == papers.MATHEMATICS_INSTRUCTIONS
     assert papers._subject_methodology("physics") == papers.PHYSICS_INSTRUCTIONS
     assert papers._subject_methodology("default") == ""
