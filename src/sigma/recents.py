@@ -399,6 +399,7 @@ class RecentProject:
     project_type_snapshot: dict | None = None
     paper_count: int = 0
     best_paper_score: int | None = None
+    paper_activity: str | None = None
 
 
 def recent_projects() -> dict:
@@ -433,7 +434,7 @@ def recent_projects() -> dict:
             view = inspect_project(entry["path"])
             if str(UUID(view.project.id)) != entry["id"]:
                 raise ProjectError("Project identity changed")
-            from sigma import paper_scores
+            from sigma import paper_scores, papers
 
             paper_metadata = paper_scores.project_metadata(view.path)
             recent.append(
@@ -446,6 +447,7 @@ def recent_projects() -> dict:
                         strategy_count=len(view.project.active_order),
                         paper_count=paper_metadata["paper_count"],
                         best_paper_score=paper_metadata["best_paper_score"],
+                        paper_activity=papers.activity_status(view.path),
                         difficulty=view.project.difficulty,
                         research_running=has_active_session(view.path),
                         available=True,
