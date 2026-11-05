@@ -70,8 +70,13 @@ def _sample(period_seconds: int) -> None:
             "memory rss_mib=%s rss_peak_mib=%s cgroup_used_mib=%s "
             "cgroup_limit_mib=%s cgroup_peak_mib=%s cgroup_pct=%s "
             "host_available_mib=%s",
-            stats["rss_mib"], stats["rss_peak_mib"], used, limit,
-            stats["cgroup_peak_mib"], pct, stats["host_available_mib"],
+            stats["rss_mib"],
+            stats["rss_peak_mib"],
+            used,
+            limit,
+            stats["cgroup_peak_mib"],
+            pct,
+            stats["host_available_mib"],
         )
         # Event.wait avoids a busy loop and allows clean process exit.
         threading.Event().wait(period_seconds)
@@ -100,10 +105,12 @@ def start() -> None:
                 utc=True,
                 encoding="utf-8",
             )
-            handler.setFormatter(logging.Formatter(
-                "%(asctime)sZ %(levelname)s %(name)s %(message)s",
-                datefmt="%Y-%m-%dT%H:%M:%S",
-            ))
+            handler.setFormatter(
+                logging.Formatter(
+                    "%(asctime)sZ %(levelname)s %(name)s %(message)s",
+                    datefmt="%Y-%m-%dT%H:%M:%S",
+                )
+            )
             for name in ("", "uvicorn.error", "uvicorn.access"):
                 logging.getLogger(name).addHandler(handler)
             logging.getLogger().setLevel(logging.INFO)
@@ -118,4 +125,6 @@ def start() -> None:
         threading.Thread(
             target=_sample, args=(interval,), name="sigma-memory-telemetry", daemon=True
         ).start()
-        _LOGGER.info("persistent logging enabled path=operational-logs/backend.log interval_s=%d", interval)
+        _LOGGER.info(
+            "persistent logging enabled path=operational-logs/backend.log interval_s=%d", interval
+        )
