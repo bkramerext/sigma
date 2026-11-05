@@ -63,9 +63,13 @@ smallest safe recovery path. Resume only after the owner reviews any new scope.
    a sandbox execution and writes evidence.
 5. Deploy only through the guarded GCE helper, with the exact selected SHA and
    required recovery/schema assertions. The guarded command's Boolean
-   assertions are operator attestations, not compatibility tests. Start with
-   `--no-build`, then verify service/container health, image IDs and labels,
-   public HTTPS, authentication, and persistence without paid provider calls.
+   assertions are operator attestations, not compatibility tests. The current
+   helper has no `--no-build` option: it checks out the selected SHA, loads that
+   commit's deployment tooling, and builds both images from its Git archive
+   before changing the production release pin or stopping the service. Do not
+   pass an unsupported flag or replace the guarded helper. Verify
+   service/container health, image IDs and labels, public HTTPS,
+   authentication, and persistence without paid provider calls.
 6. Record the actual cutover SHA, image IDs, downtime, health evidence, recovery
    point, and operator outcome in `OPERATION_RUNBOOK.md` and the committed PR
    handoff under `messages/`.
