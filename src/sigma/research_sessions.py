@@ -6070,6 +6070,9 @@ async def start_session(
     continue_using_saved_type_settings: bool = False,
     browser_presence_required: bool = False,
 ) -> dict[str, Any]:
+    from sigma.memory_guard import require_capacity
+
+    require_capacity()
     if type(browser_presence_required) is not bool:
         raise ProjectError("Browser execution origin must be a boolean")
     try:
@@ -6569,6 +6572,10 @@ async def control_session(
     # ordinary Resume. It is necessary when a stopped saved session has an
     # unknown-dispatch Investigator but no call-limit extension is required.
     # A role is replaced by a new request, never by replaying the old attempt.
+    if action in {"resume", "repair"}:
+        from sigma.memory_guard import require_capacity
+
+        require_capacity()
     explicit_protocol_recovery = action == "repair"
     if explicit_protocol_recovery:
         action = "resume"
@@ -15716,6 +15723,20 @@ async def _worker(session_id: str, path: str) -> None:
         try:
             record = _read(path, session_id)
             _record_worker_cancellation(record)
+            from sigma.memory_guard import MESSAGE, is_critical
+
+            if is_critical():
+                record["status"] = "paused"
+                record["message"] = MESSAGE
+                record["current_action"] = "Paused · memory pressure"
+                record["termination_reason_code"] = "backend_memory_pressure"
+                for step in record.get("steps", []):
+                    if step.get("status") == "interrupted" and step.get("interruption_reason") == "user_pause":
+                        step["interruption_reason"] = "backend_memory_pressure"
+                for branch in record.get("strategy_runs", []):
+                    if branch.get("status") == "paused":
+                        branch["reason"] = MESSAGE
+                _event(record, "memory.pressure", MESSAGE)
             record["updated_at"] = _now()
             _save(path, record)
         except (ProjectError, OSError):
