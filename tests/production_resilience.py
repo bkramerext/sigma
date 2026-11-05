@@ -223,6 +223,15 @@ def main() -> None:
             except ProjectError as exc:
                 assert "already active or queued" in str(exc)
 
+            # A bounded queue prevents arbitrary request bursts from
+            # pinning unbounded task/SSE memory on this single backend.
+            with patch.object(papers, "MAX_QUEUED_PAPER_GENERATIONS", 2):
+                try:
+                    async with papers._paper_operation(restarted_name, generating=True):
+                        raise AssertionError("A full queue admitted another job")
+                except ProjectError as exc:
+                    assert "queue is full" in str(exc)
+
             second.cancel()
             result = await asyncio.gather(second, return_exceptions=True)
             assert isinstance(result[0], asyncio.CancelledError)
@@ -246,6 +255,62 @@ def main() -> None:
             assert recovery["stage"] == "queued"
             assert "No AI call was started" in recovery["detail"]
             assert papers.activity_status(restarted_name) is None
+
+            # A callback from a previous attempt cannot corrupt a newer
+            # attempt's progress or overwrite previously saved evidence.
+            key = str(Path(second_name).resolve())
+            later = {
+                "run_id": "new-run",
+                "status": "running",
+                "stage": "writing",
+                "current": None,
+                "total": None,
+                "started_at": papers._now(),
+                "updated_at": papers._now(),
+                "elapsed_seconds": 0,
+            }
+            papers._active_progress[key] = later
+            try:
+                papers.finish_progress(
+                    second_name, "failed", expected_run_id="old-run"
+                )
+                assert papers._active_progress[key] is later
+                assert papers._load_work(second_name) == old_work
+            finally:
+                papers._active_progress.pop(key, None)
+
+            # Memory pressure at queue handoff must fail without dispatching
+            # any provider work and leave an inspectable terminal record.
+            block = asyncio.Event()
+            underway = asyncio.Event()
+
+            async def active() -> None:
+                async with papers._paper_operation(first_name, generating=True):
+                    underway.set()
+                    await block.wait()
+
+            task = asyncio.create_task(active())
+            await underway.wait()
+            waiting = asyncio.create_task(paper(second_name))
+            await asyncio.sleep(0)
+            assert papers.activity_status(second_name) == "queued"
+            with (
+                patch.object(
+                    memory_guard, "require_capacity",
+                    side_effect=ProjectError(memory_guard.MESSAGE),
+                ),
+                patch.object(memory_guard, "is_critical", return_value=True),
+            ):
+                block.set()
+                await task
+                failed = await asyncio.gather(waiting, return_exceptions=True)
+            assert isinstance(failed[0], ProjectError)
+            failed_status = papers.progress_status(second_name)
+            assert failed_status is not None and failed_status["status"] == "failed"
+            assert memory_guard.MESSAGE in failed_status["failure_reason"]
+            assert papers._load_work(second_name) == old_work
+            assert not papers._paper_waiters
+            assert not papers._busy_paper_projects
 
     asyncio.run(test_paper_queue())
 
