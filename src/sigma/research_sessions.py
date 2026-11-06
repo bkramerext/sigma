@@ -15888,6 +15888,9 @@ async def _worker(session_id: str, path: str) -> None:
                     "failed": "session_failed",
                     "paused": "session_paused",
                 }.get(final.get("status"))
+                # A deliberate Pause is not an unexpected interruption.
+                if event == "session_paused" and str(final.get("message", "")).startswith("Paused by user."):
+                    event = None
                 principal = cloud_auth.current_principal()
                 if event and principal:
                     project_title = inspect_project(path).project.title
