@@ -66,7 +66,7 @@ export default function SessionLogPage() {
       fetching = true;
       try {
         const query = new URLSearchParams({ path, after: String(cursor.current) });
-        const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin' });
+        const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin', headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session log.' : 'This session log is unavailable or access was denied.');
         const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; session: SessionState; reference_preparation?: ReferencePreparation };
         if (!alive) return;
