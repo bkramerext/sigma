@@ -2484,6 +2484,9 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; proofreading_status?: string; publication_status?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [restartingCheckpoint, setRestartingCheckpoint] = useState(false);
+  // A successful reset must not resurrect Start over from a stale terminal receipt.
+  // A new Play attempt makes Start over eligible again once work exists.
+  const [checkpointJustReset, setCheckpointJustReset] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
   const [paperClock, setPaperClock] = useState(() => Date.now());
@@ -2782,7 +2785,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     const stoppedWithoutCheckpoint = !restartSource?.checkpoint_can_restart &&
       ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? '');
     if (busy || !binding || (!restartSource?.checkpoint_can_restart && !stoppedWithoutCheckpoint)) return;
-    setBusy(true); setRestartingCheckpoint(true); setError(''); setSuccess(''); setPhase('Starting over');
+    setBusy(true); setRestartingCheckpoint(true); setError(''); setSuccess(''); setPhase('Paper generation starting over');
     try {
       const restartingSavedWork = Boolean(restartSource?.checkpoint_can_restart);
       const response = await fetch(
@@ -2810,6 +2813,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       setContinuationAvailable(false);
       setResumeDetails(null);
       setPaperProgress(null);
+      setCheckpointJustReset(true);
       setNewPaperRequested(true);
       setDraftPaperExpanded(true);
       // Reset is provider-free and NEVER plays automatically. Leave a fresh
@@ -2820,6 +2824,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   }
   async function generatePaper() {
     if (busy || !binding) return;
+    setCheckpointJustReset(false);
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess('');
@@ -2934,7 +2939,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       : !binding ? 'Connect an AI provider to generate a paper'
       : checkpointMismatch ? 'Start over to use the current settings'
       : continuationAvailable ? 'Resume paper generation' : 'Generate paper';
-  const canStartOver = !generationRunning &&
+  const canStartOver = !checkpointJustReset && !generationRunning &&
     (Boolean(checkpointMismatch?.checkpoint_can_restart || restartableCheckpoint?.checkpoint_can_restart) ||
      ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? ''));
   const draftVersion = Math.max(0, ...papers.map(paper => paper.paper_version)) + 1;
