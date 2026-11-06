@@ -10240,13 +10240,10 @@ def _cached_pdf_digest(
     """
     del signature  # Cache invalidation key; the caller already validated the stat.
     checksum = hashlib.sha256()
-    try:
-        with Path(filename).open("rb") as stored_pdf:
-            for chunk in iter(lambda: stored_pdf.read(1024 * 1024), b""):
-                checksum.update(chunk)
-        return checksum.hexdigest() == expected_sha256
-    except OSError:
-        return False
+    with Path(filename).open("rb") as stored_pdf:
+        for chunk in iter(lambda: stored_pdf.read(1024 * 1024), b""):
+            checksum.update(chunk)
+    return checksum.hexdigest() == expected_sha256
 
 
 def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
@@ -10279,6 +10276,7 @@ def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
         )
     except (OSError, ProjectError):
         return False
+
 
 def get_pdf(path: str, paper_id: str) -> bytes:
     record = get_paper(path, paper_id, include_tex=False)
