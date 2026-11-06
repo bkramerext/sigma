@@ -4932,7 +4932,12 @@ function RecentProjects({ onOpen, flat = false }: { onOpen: (view: ProjectView) 
     entry.research_running || entry.paper_generating || entry.paper_activity === 'active'
       ? 'running'
       : entry.paper_activity === 'queued' ? 'queued' : null;
-  const recentGroups = (flat ? visibleProjects.slice(0, 10) : visibleProjects).reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+  // Keep the ten newest projects plus every older running or queued project.
+  // Filtering in source order avoids duplicating an active project in the top ten.
+  const mostRecentProjects = flat
+    ? visibleProjects.filter((project, index) => index < 10 || paperActivity(project) !== null)
+    : visibleProjects;
+  const recentGroups = mostRecentProjects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
     if (flat) { if (!groups.length) groups.push({ type: 'default', projects: [] }); groups[0].projects.push(project); return groups; }
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);

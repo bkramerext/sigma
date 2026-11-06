@@ -17,6 +17,7 @@ REQUEST_ORIGIN = os.environ.get("SIGMA_BROWSER_REQUEST_ORIGIN", UI)
 running: set[str] = set()
 siblings = {"enabled": False, "project_id": "", "sibling_title": ""}
 unavailable_fixture = {"enabled": False}
+most_recent_activity = {"enabled": False, "active": True}
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -38,6 +39,24 @@ with sync_playwright() as playwright:
             data = response.json()
             for entry in data["projects"]:
                 entry["research_running"] = entry["id"] in running
+            if most_recent_activity["enabled"]:
+                # Ten ordinary recent projects plus two older active entries.
+                template = next(entry for entry in data["projects"] if entry["available"])
+                data["projects"] = [
+                    {
+                        **template,
+                        "id": f"00000000-0000-4000-8000-{index:012d}",
+                        "title": f"Most Recent Fixture {index}",
+                        "path": f"/fixture-{index}.sigma",
+                        "research_running": most_recent_activity["active"] and index == 11,
+                        "paper_activity": (
+                            "queued" if most_recent_activity["active"] and index == 12 else None
+                        ),
+                        "paper_generating": False,
+                        "pinned": False,
+                    }
+                    for index in range(1, 13)
+                ]
             if unavailable_fixture["enabled"]:
                 data["projects"].append(
                     {
@@ -299,6 +318,20 @@ with sync_playwright() as playwright:
     expect(sample_button).to_have_css("cursor", "pointer")
     page.evaluate("window.__finishProjectOpen()")
     expect(sample_button).to_have_attribute("aria-busy", "false")
+
+    most_recent_activity["enabled"] = True
+    page.get_by_role("tab", name="Most Recent", exact=True).click()
+    recent_flat = page.locator("#most-recent-panel")
+    expect(recent_flat.locator("li")).to_have_count(12, timeout=8000)
+    expect(recent_flat.get_by_text("Most Recent Fixture 11")).to_be_visible()
+    expect(recent_flat.get_by_text("Most Recent Fixture 12")).to_be_visible()
+    expect(recent_flat.locator(".recent-running")).to_have_count(2)
+    most_recent_activity["active"] = False
+    page.reload()
+    page.get_by_role("tab", name="Most Recent", exact=True).click()
+    expect(recent_flat.locator("li")).to_have_count(10, timeout=8000)
+    expect(recent_flat.get_by_text("Most Recent Fixture 11")).to_have_count(0)
+    expect(recent_flat.get_by_text("Most Recent Fixture 12")).to_have_count(0)
 
     assert not errors, errors
     browser.close()
