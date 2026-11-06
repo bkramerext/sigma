@@ -278,3 +278,11 @@
 .workspace-page .papers-pane .paper-draft-restart svg { width: 20px; height: 20px; }
 .workspace-page .papers-pane .paper-draft-restart:hover:not(:disabled) { color: #ffe1ad; background: #3b3029; }
 .workspace-page .papers-pane .paper-draft-restart:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Numbered paper hover uses underline only, matching numbered sessions. */
+.workspace-page .papers-pane .saved-paper-title-toggle:is(:hover,:focus-visible) { text-decoration: underline; text-underline-offset: 3px; color: inherit; background: transparent; }
+.workspace-page .papers-pane .paper-title-star { display: inline; margin-left: 7px; color: #e5ba69; font-size: .95em; cursor: default; }
+
+/* A wrapper owns the hint when browser-disabled Play cannot receive pointer events. */
+.workspace-page .papers-pane .paper-play-tooltip { display: inline-flex; align-items: center; }
+.workspace-page .papers-pane .paper-play-tooltip > button:disabled { pointer-events: none; }
