@@ -418,6 +418,100 @@ def test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallba
     asyncio.run(resume())
 
 
+def test_unreadable_authored_control_bytes_compile_with_visible_review_marks() -> None:
+    source = "\\documentclass{article}\\begin{document}$i=1,\x02ldots,n$ and $R\x1c1+\x1a_{k=1}^n k$\\end{document}"
+    repaired, codes = papers._visible_invalid_tex_controls(source)
+    assert codes == ["U+0002", "U+001A", "U+001C"]
+    assert "[U+0002]" in repaired and "[U+001C]" in repaired
+    assert "\x02" in source and "\x02" not in repaired
+    pdf = papers._compile_pdf(repaired)
+    assert pdf.startswith(b"%PDF-")
+
+
+def test_interrupted_section_checkpoint_never_replays_saved_or_ambiguous_work() -> None:
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved {input_value['section_number']}."]
+        ), "fixture-model"
+
+    async def first_run() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+
+    asyncio.run(first_run())
+    saved = copy.deepcopy(state["section_drafts"])
+    state["section_drafts"].pop("3")
+    state["progress"] = {"stage": "retry", "status": "cancelled"}
+    assert papers._interrupted_sections_need_fallback(state)
+    state["section_interruption_pending"] = True
+    calls_before = state["provider_calls"]
+
+    async def never_call(*_args, **_kwargs):
+        raise AssertionError("An interrupted provider call must not be replayed")
+
+    async def resume() -> papers.PaperDraft:
+        with patch.object(papers, "_provider_structured", new=never_call):
+            result, _, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+            return result
+
+    result = asyncio.run(resume())
+    assert state["provider_calls"] == calls_before
+    assert state["section_drafts"]["2"] == saved["2"]
+    assert "Editorial notice" in result.sections[2].paragraphs[0]
+    assert "section_interruption_pending" not in state
+
+
+def test_oversized_section_stream_publishes_labeled_fallback_without_retry() -> None:
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+    attempts: dict[int, int] = {}
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        attempts[number] = attempts.get(number, 0) + 1
+        if number == 3:
+            raise ProjectError("Provider generated text exceeds the bounded response capacity.")
+        return papers.LongSectionDraft(paragraphs=[f"Saved {number}."]), "fixture-model"
+
+    async def run() -> papers.PaperDraft:
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, _, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+            return result
+
+    result = asyncio.run(run())
+    assert attempts == {1: 1, 2: 1, 3: 1, 4: 1, 5: 1}
+    assert "Editorial notice" in result.sections[2].paragraphs[0]
+    assert len(state["section_drafts"]) == 5
+
+
 def test_paper_section_invalid_optional_table_is_dropped_without_losing_text() -> None:
     package, plan = fast_package()
     state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
@@ -649,6 +743,8 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
 
         # Explicit Stop preserves durable provider accounting as well.
         saved_work["progress"]["status"] = "running"
+        saved_work["progress"]["stage"] = "retry"
+        saved_work["progress"]["detail"] = "Retrying section 3 (attempt 2 of 3)."
         papers._save_work(str(path), saved_work)
         papers.finish_progress(str(path), "cancelled")
         cancelled = papers._load_work(str(path))
@@ -656,6 +752,7 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
         cancelled_progress = papers.progress_status(str(path))
         assert cancelled_progress is not None
         assert cancelled_progress["status"] == "cancelled"
+        assert "Retrying" not in cancelled_progress["detail"]
 
 
 def test_stopped_paper_checkpoint_remains_valid_on_resume() -> None:
@@ -3262,9 +3359,11 @@ def test_real_tadpole_onp_and_math_table_pdfs() -> None:
                 assert r"M(n)" in tex
                 assert r"\$0\$" not in tex
             if name == "Tadpoles":
-                assert r"Candidate stage\textendash{}time dependency map" in tex
+                assert r"Candidate stage\textendash{}\allowbreak{}time dependency map" in tex
                 assert r"\textendash{}" in tex
-                assert "Diagram (readable relationship list)." in tex
+                assert (
+                    "Diagram (readable relationship list)." in tex or r"\begin{tikzpicture}" in tex
+                )
                 for node in tadpole_diagram.nodes:
                     assert node.label in tex
                 for edge in tadpole_diagram.edges:

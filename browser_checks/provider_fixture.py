@@ -11,7 +11,9 @@ from typing import TypedDict
 import httpx
 
 os.environ["SIGMA_STATE_DIR"] = mkdtemp(prefix="sigma-browser-recents-")
-os.environ["SIGMA_PROJECTS_ROOT"] = mkdtemp(prefix="sigma-browser-managed-")
+os.environ["SIGMA_PROJECTS_ROOT"] = os.environ.get(
+    "SIGMA_BROWSER_FIXTURE_PROJECTS_ROOT"
+) or mkdtemp(prefix="sigma-browser-managed-")
 os.environ["SIGMA_AUTH_HOME"] = mkdtemp(prefix="sigma-browser-api-auth-")
 os.environ["OPENAI_API_KEY"] = "explicit-browser-test-fixture"
 os.environ["SIGMA_AI_MODEL"] = "gpt-4.1"
