@@ -9,8 +9,8 @@ import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
-from uuid import uuid4
 from unittest.mock import patch
+from uuid import uuid4
 
 from sigma import cloud_auth, progress_notifications
 
@@ -295,8 +295,7 @@ def main() -> None:
             )
             with cloud_auth._db(cfg) as db:
                 db.execute(
-                    "UPDATE progress_email_dispatches SET retry_after=0 "
-                    "WHERE event_hash IN (?,?)",
+                    "UPDATE progress_email_dispatches SET retry_after=0 WHERE event_hash IN (?,?)",
                     (
                         hashlib.sha256(first_id.encode()).hexdigest(),
                         hashlib.sha256(second_id.encode()).hexdigest(),
@@ -332,12 +331,12 @@ def main() -> None:
             # Transient read failures remain eligible; they are not proof of recovery.
             with patch("sigma.research_sessions._read", side_effect=OSError("transient")):
                 assert progress_notifications._pause_still_actionable(
-                    {
+                    cast(sqlite3.Row, {
                         "event": "session_paused",
                         "session_id": session_id,
                         "path": str(research_path),
                         "event_hash": hashlib.sha256(deleted_id.encode()).hexdigest(),
-                    }
+                    })
                 )
 
             # Opt-out before a queued send suppresses the existing event too.

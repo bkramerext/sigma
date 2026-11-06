@@ -274,9 +274,7 @@ def _pause_still_actionable(row: sqlite3.Row) -> bool:
                 f"session:{session['id']}:session_paused:"
                 f"{session.get('stopped_at') or session.get('updated_at')}"
             )
-            actionable = (
-                hashlib.sha256(event_id.encode("utf-8")).hexdigest() == row["event_hash"]
-            )
+            actionable = hashlib.sha256(event_id.encode("utf-8")).hexdigest() == row["event_hash"]
             if not actionable:
                 _LOG.info("progress_email.pause_suppressed reason=session_pause_superseded")
             return actionable
