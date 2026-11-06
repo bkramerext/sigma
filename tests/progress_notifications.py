@@ -125,9 +125,12 @@ def main() -> None:
             assert "resume_play" not in (
                 cloud_auth._safe_login_return_to(signed_out_return + "&resume_play=1") or ""
             )
-            assert cloud_auth._safe_login_return_to(
-                "/project?path=%2Ftmp%2Fmy+project.sigma&reveal_paper=draft"
-            ) is not None
+            assert (
+                cloud_auth._safe_login_return_to(
+                    "/project?path=%2Ftmp%2Fmy+project.sigma&reveal_paper=draft"
+                )
+                is not None
+            )
             cases: tuple[tuple[progress_notifications.Event, str], ...] = (
                 ("session_finished", "Session 3 completed"),
                 ("session_failed", "Session 3 failed"),
