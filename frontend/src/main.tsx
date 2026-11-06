@@ -2526,6 +2526,17 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     document.addEventListener('keydown', cancelOnEscape);
     return () => document.removeEventListener('keydown', cancelOnEscape);
   }, [confirmDeleteId, confirmDiscardDraft, confirmRestartDraft]);
+  useEffect(() => {
+    if (!confirmRestartDraft && !confirmDiscardDraft) return;
+    const dismissOutside = (event: PointerEvent) => {
+      if (event.target instanceof Element && !event.target.closest('.paper-remove-anchor')) {
+        setConfirmRestartDraft(false);
+        setConfirmDiscardDraft(false);
+      }
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, [confirmRestartDraft, confirmDiscardDraft]);
   useEffect(() => { if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest, path]);
   useEffect(() => {
     if (!paperMenu) return;
