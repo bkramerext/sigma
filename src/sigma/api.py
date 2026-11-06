@@ -1171,6 +1171,31 @@ async def research_presence_view(path: str):
     )
 
 
+class ProgressEmailPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    enabled: bool
+
+
+@app.get("/api/user-preferences/progress-email")
+def progress_email_preference():
+    from sigma import progress_notifications
+
+    return progress_notifications.preference(cloud_auth.current_principal())
+
+
+@app.put("/api/user-preferences/progress-email")
+def set_progress_email_preference(body: ProgressEmailPreference):
+    from sigma import progress_notifications
+
+    principal = cloud_auth.current_principal()
+    if principal is None or principal.role == "guest":
+        raise HTTPException(403, "Sign in with Google to change progress email notifications.")
+    try:
+        return progress_notifications.update_preference(principal, body.enabled)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.get("/api/user-preferences/unattended-execution")
 def unattended_execution_preference():
     from sigma import research_preferences
