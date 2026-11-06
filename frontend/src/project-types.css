@@ -1,4 +1,5 @@
 .project-types-dialog { box-sizing: border-box; display: flex; flex-direction: column; width: min(680px, calc(100vw - 32px)); max-height: min(690px, calc(100dvh - 32px)); margin: auto; padding: 0; overflow: hidden; border: 1px solid #a96548; border-radius: 8px; color: #d5dfe7; background: linear-gradient(145deg, #111a23, #07111e); box-shadow: 0 24px 65px #0009; }
+.project-types-dialog:not([open]) { display: none; }
 .project-types-dialog::backdrop { background: #01050bba; backdrop-filter: blur(3px); }
 .project-types-dialog > header { display: flex; flex: 0 0 auto; align-items: baseline; justify-content: flex-start; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #35404a; }
 .project-types-dialog > header h2 { margin: 0; color: #f4cc69; font: 400 25px/1.25 Georgia, serif; }

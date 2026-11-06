@@ -157,6 +157,7 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
 
 export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const explicitlyClosing = useRef(false);
   const first = useRef<HTMLButtonElement>(null);
   const initialCustomIds = useRef<string[]>([]);
   const [savedDrafts, setSavedDrafts] = useState<ProjectTypeRecord[] | null>(null);
@@ -186,6 +187,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const [urlValidation, setUrlValidation] = useState<Record<string, DomainStatus>>({});
 
   function close() {
+    explicitlyClosing.current = true;
     if (dialog.current?.open) dialog.current.close();
     onClose();
     requestAnimationFrame(() => { if (returnFocus.current?.isConnected) returnFocus.current.focus(); });
@@ -632,7 +634,20 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     [...item.research_standards_references, ...item.publication_standards_references].some(ref =>
       !!referenceUrlError(ref.url) || urlValidation[ref.url] === 'invalid')
   );
-  return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); }} onKeyDownCapture={event => {
+  return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title"
+    onCancel={event => { event.preventDefault(); }}
+    onClose={() => {
+      // Some browsers can still dispatch a native close despite a cancelled
+      // Escape. Only Close/Save may dismiss this dialog. Restore modal status
+      // rather than leaving its content laid out inside Home.
+      if (!explicitlyClosing.current && dialog.current?.isConnected && !dialog.current.open) {
+        dialog.current.showModal();
+      }
+    }}
+    onKeyDown={event => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
+    }}
+    onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
     const element = dialog.current;
     if (!element) return;

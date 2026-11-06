@@ -234,6 +234,9 @@ with sync_playwright() as playwright:
     page.screenshot(path=str(EVIDENCE / "types-mobile.png"), full_page=True)
     page.keyboard.press("Escape")
     expect(dialog).to_be_visible()
+    assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
+        "Escape must leave Project Types in the browser's modal top layer"
+    )
     page.mouse.click(1, 1)  # Clicking the backdrop must not close the dialog.
     expect(dialog).to_be_visible()
     dialog.locator("header").get_by_role("button", name="Close").click()
@@ -254,6 +257,9 @@ with sync_playwright() as playwright:
     expect(add_button).to_be_focused()
     page.keyboard.press("Escape")
     expect(dialog).to_be_visible()
+    assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
+        "Escape must not demote Project Types to an ordinary Home element"
+    )
     dialog.locator("header").get_by_role("button", name="Close").click()
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()
