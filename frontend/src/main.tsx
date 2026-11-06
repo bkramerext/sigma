@@ -2529,11 +2529,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   useEffect(() => {
     if (!confirmRestartDraft && !confirmDiscardDraft && !confirmPlayRestartDraft) return;
     const dismissOutside = (event: PointerEvent) => {
-      if (event.target instanceof Element && !event.target.closest('.paper-remove-anchor')) {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('.paper-remove-anchor')) {
         setConfirmRestartDraft(false);
         setConfirmDiscardDraft(false);
-        setConfirmPlayRestartDraft(false);
       }
+      // Play's confirmation closes when another paper action is chosen;
+      // Start over's existing confirmation remains completely unchanged.
+      if (!event.target.closest('.paper-play-tooltip')) setConfirmPlayRestartDraft(false);
     };
     document.addEventListener('pointerdown', dismissOutside);
     return () => document.removeEventListener('pointerdown', dismissOutside);
