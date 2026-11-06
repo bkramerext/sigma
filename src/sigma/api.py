@@ -9,6 +9,7 @@ import secrets
 import sqlite3
 from collections.abc import AsyncIterator
 from dataclasses import asdict
+from time import perf_counter
 from typing import Any, Literal
 from urllib.parse import quote, urlencode
 from uuid import UUID
@@ -2529,10 +2530,15 @@ async def auth_welcome():
 
 
 @app.get("/api/projects/recent")
-def recent_view():
+def recent_view(response: Response):
     from sigma.recents import home_projects
 
-    return home_projects()
+    started = perf_counter()
+    result = home_projects()
+    # Chrome DevTools can now distinguish backend listing time from browser
+    # rendering/network delay without logging sensitive project information.
+    response.headers["Server-Timing"] = f"saved-projects;dur={(perf_counter() - started) * 1000:.1f}"
+    return result
 
 
 @app.get("/api/projects/pinned")
