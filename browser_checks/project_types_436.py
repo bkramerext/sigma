@@ -1162,9 +1162,7 @@ with sync_playwright() as playwright:
             break
         page.wait_for_timeout(100)
     assert dispatched == ["POST", "POST"], dispatched
-    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(
-        timeout=10000
-    )
+    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     paper_fixture["reset_ready"] = False
     paper_fixture["checkpoint"] = True
     paper_fixture["stopped"] = True
