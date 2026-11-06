@@ -1145,6 +1145,34 @@ def current_understanding_view(path: str):
     return current_understanding(path)
 
 
+class WorkspacePresenceRequest(BaseModel):
+    viewer_id: str = Field(min_length=36, max_length=36)
+
+
+@app.post("/api/projects/research-presence/workspace")
+def research_workspace_presence_view(body: WorkspacePresenceRequest):
+    """Renew the authenticated workspace lease without a blocking SSE stream."""
+    from sigma import research_presence
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot keep paid research active")
+    research_presence.refresh_workspace_viewer(body.viewer_id)
+    return {"connected": True}
+
+
+@app.post("/api/projects/research-presence/auth-handoff")
+def research_presence_auth_handoff():
+    """Only explicit authenticated sign-out may start a bounded handoff."""
+    from sigma import research_presence
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot preserve paid work")
+    research_presence.begin_auth_handoff()
+    return {"ready": True}
+
+
 @app.get("/api/projects/research-presence")
 async def research_presence_view(path: str):
     """Project-scoped browser lease, independent of AI-account binding."""

@@ -57,6 +57,10 @@ def main(part: int = 1):
     import test_outcome_policy
 
     if part == 1:
+        from test_reauth_presence import test_workspace_presence_and_explicit_signout_handoff
+
+        test_workspace_presence_and_explicit_signout_handoff()
+        print("PASS reauthentication handoff and workspace isolation")
         for name, check in vars(test_outcome_policy).items():
             if name.startswith("test_") and callable(check):
                 check()
