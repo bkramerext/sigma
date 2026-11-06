@@ -261,3 +261,7 @@
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure { margin: 10px 0 0 28px; border: 0; background: transparent; }
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure > summary { padding: 4px 0; color: #b5a18c; font-size: 12px; }
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-content { padding: 4px 10px 8px; }
+
+/* Preserve breathing room between the writing-stage label and its detail. */
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Writing sections"] span { margin-left: 13px; }
+.workspace-page .papers-pane .paper-draft-title .paper-sections-remaining { display: block; margin-top: 3px; color: #9caeba; font-size: 12px; font-weight: 400; }
