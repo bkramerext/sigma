@@ -47,8 +47,8 @@ def test_cold_cache_collision_retries_once_without_provider_calls() -> None:
 def test_tectonic_failure_hides_raw_output_but_records_backend_diagnostics() -> None:
     """The UI sees a short error while the compiler cause stays in logs."""
     failure_output = (
-        b"warning: inputenc package ignored under XeTeX\\n"
-        b"! Missing $ inserted.\\nl.88 unexpected token\\nSECRET-TEX-DETAIL"
+        b"warning: inputenc package ignored under XeTeX\n"
+        b"! Missing $ inserted.\nl.88 unexpected token\nSECRET-TEX-DETAIL"
     )
     diagnostics: list[str] = []
     with (
@@ -472,6 +472,7 @@ def test_computation_provenance_precedes_authored_claims() -> None:
 
 def main() -> None:
     test_cold_cache_collision_retries_once_without_provider_calls()
+    test_tectonic_failure_hides_raw_output_but_records_backend_diagnostics()
     test_computation_provenance_precedes_authored_claims()
     test_verification_presentation()
     test_unequal_metric_groups()
