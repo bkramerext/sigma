@@ -2569,9 +2569,11 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         if (!generationRunning && preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
           setCheckpointMismatch(preflight);
         else setCheckpointMismatch(null);
+        // A compatible checkpoint can be resumed OR deliberately restarted.
+        // Never hide Start over merely because Continue is available.
         setRestartableCheckpoint(
           !generationRunning && preflightResponse.ok && preflight.checkpoint_exists &&
-          !preflight.resume_available && preflight.checkpoint_can_restart ? preflight : null
+          preflight.checkpoint_can_restart ? preflight : null
         );
       }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
@@ -2668,9 +2670,11 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     finally { explainingRef.current = false; setExplainingId(''); }
   }
   async function scorePaper(paper: PaperSummary) {
-    if (scoringRef.current) return;
     setScoreError('');
+    // Reading an existing score never depends on ongoing generation/scoring.
     if (paper.score) { setScoreDialog(paper.score); return; }
+    if (scoringRef.current) return;
+    if (!paper.pdf_available) { setScoreError('A saved PDF is required before this paper can be scored.'); return; }
     if (!binding) { setScoreError('Connect an eligible AI provider before scoring.'); return; }
     scoringRef.current = true;
     setScoringId(paper.paper_id);
@@ -2773,18 +2777,33 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
 
   async function restartCheckpoint() {
     const restartSource = checkpointMismatch ?? restartableCheckpoint;
-    if (busy || !restartSource?.checkpoint_can_restart || !binding) return;
-    setBusy(true); setRestartingCheckpoint(true); setError(''); setSuccess(''); setPhase('Paper generation starting over');
+    // Stopping a queued request can leave a terminal receipt without a
+    // checkpoint. Start over must still clear that receipt without AI calls.
+    const stoppedWithoutCheckpoint = !restartSource?.checkpoint_can_restart &&
+      ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? '');
+    if (busy || !binding || (!restartSource?.checkpoint_can_restart && !stoppedWithoutCheckpoint)) return;
+    setBusy(true); setRestartingCheckpoint(true); setError(''); setSuccess(''); setPhase('Starting over');
     try {
-      const response = await fetch('/api/projects/papers/restart', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({
-          path, expected_project_id: projectId, expected_binding: binding,
-          expected_snapshot_sha256: restartSource.snapshot_sha256, confirm_restart: true,
-        }),
-      });
+      const restartingSavedWork = Boolean(restartSource?.checkpoint_can_restart);
+      const response = await fetch(
+        restartingSavedWork ? '/api/projects/papers/restart' : '/api/projects/papers/discard',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: JSON.stringify(restartingSavedWork ? {
+            path, expected_project_id: projectId, expected_binding: binding,
+            expected_snapshot_sha256: restartSource.snapshot_sha256,
+            // Match Generate's automatic long-form choice rather than
+            // unconditionally forcing long-form on a restarted one-shot paper.
+            long_form: false, confirm_restart: true,
+          } : {
+            path, expected_project_id: projectId, expected_binding: binding,
+            confirm_discard: true,
+          }),
+        },
+      );
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
+      if (!response.ok) throw new Error(result.error ?? 'Could not reset the paper checkpoint.');
       setCheckpointMismatch(null);
       setRestartableCheckpoint(null);
       setResetConfirm(false);
@@ -2793,13 +2812,11 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       setPaperProgress(null);
       setNewPaperRequested(true);
       setDraftPaperExpanded(true);
-      // Restart only after a confirmed reset, without extending the reset handler
-      // through the entire paper-generation stream.
+      // Reset is provider-free and NEVER plays automatically. Leave a fresh
+      // Paper N with Play available after its snapshot has been refreshed.
       await refresh(selected?.paper_id, true);
-      // The new checkpoint is immediately resumable: leave Play as its only process action.
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRestartingCheckpoint(false); setBusy(false); }
-
   }
   async function generatePaper() {
     if (busy || !binding) return;
@@ -2902,6 +2919,24 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     (request.current !== null && !['cancelled', 'interrupted', 'failed', 'complete'].includes(paperProgress?.status ?? ''))
   );
   const generating = busy || generationRunning;
+  // The brief transition after Stop is not a second-paper conflict. A Play
+  // control can only advertise concurrency as its disabled reason when a
+  // still-active job really blocks dispatch.
+  const paperPlayBlocked = !generationRunning &&
+    ['active', 'queued'].includes(paperProgress?.status ?? '');
+  const paperPlayDisabled = generating || loading || !binding || !!checkpointMismatch || paperPlayBlocked;
+  const paperPlayTooltip = paperPlayBlocked
+    ? 'Only one paper at a time can be generated'
+    : busy
+      ? paperProgress?.status === 'cancelled' ? 'Finishing paper stop' :
+        request.current ? 'Starting paper generation' : 'Paper action in progress'
+      : loading ? 'Loading paper controls'
+      : !binding ? 'Connect an AI provider to generate a paper'
+      : checkpointMismatch ? 'Start over to use the current settings'
+      : continuationAvailable ? 'Resume paper generation' : 'Generate paper';
+  const canStartOver = !generationRunning &&
+    (Boolean(checkpointMismatch?.checkpoint_can_restart || restartableCheckpoint?.checkpoint_can_restart) ||
+     ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? ''));
   const draftVersion = Math.max(0, ...papers.map(paper => paper.paper_version)) + 1;
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
   const showDraftPaper = !guest && (newPaperRequested || generating || continuationAvailable || (paperProgress != null && paperProgress.status !== 'complete'));
@@ -2957,9 +2992,9 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
             <SavedPaperTitle title={`Paper ${draftVersion}`} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
-                {!generationRunning && <span className="paper-play-tooltip" data-tooltip={generating ? 'Only one paper at a time' : continuationAvailable ? 'Resume paper generation' : 'Generate paper'}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={generating || loading || !binding || !!checkpointMismatch} onClick={() => { setDraftPaperExpanded(true); void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
+                {!generationRunning && <span className="paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={() => { setDraftPaperExpanded(true); void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
                 {generationRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={`Stop Paper ${draftVersion}`} data-tooltip="Stop paper generation" disabled={!binding || loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
-                {!generationRunning && (restartableCheckpoint?.checkpoint_can_restart || checkpointMismatch?.checkpoint_can_restart) && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>}
+                {canStartOver && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>}
                 {!generationRunning && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove unfinished Paper ${draftVersion}`} data-tooltip={`Remove unfinished Paper ${draftVersion}`} disabled={busy || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
@@ -3022,7 +3057,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   </div></div>}
                 </span>
               </>}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>

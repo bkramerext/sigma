@@ -86,7 +86,7 @@
 .workspace-page .papers-pane .saved-paper-meta .text-view-link { color: #d9b17e; }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link { display: inline; width: auto; min-height: 0; padding: 0; margin-left: 7px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #d9b17e; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link:hover:not(:disabled) { color: #ffe1ad; background: transparent; }
-.workspace-page .papers-pane .saved-paper-meta .paper-meta-score-action { margin-left: auto; flex: 0 0 auto; }
+.workspace-page .papers-pane .saved-paper-meta .paper-meta-score-action { margin-left: 0; flex: 0 0 auto; }
 .workspace-page .papers-pane .saved-paper-meta p { min-width: 0; }
 /* Match the anchored Session deletion confirmation and its copper text actions. */
 .workspace-page .papers-pane .paper-remove-anchor { position: relative; display: inline-flex; align-items: center; }

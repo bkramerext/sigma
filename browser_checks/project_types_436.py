@@ -954,6 +954,211 @@ with sync_playwright() as playwright:
     assert cards_style["cardRadius"] >= 5, cards_style
     assert cards_style["cardBackground"] != "rgba(0, 0, 0, 0)", cards_style
 
+    # Stop -> Play: a compatible checkpoint must offer BOTH Resume and
+    # provider-free Start over. No tooltip should claim a generation conflict
+    # while Play is enabled. All paper endpoints below are local fixtures.
+    paper_fixture = {"checkpoint": True, "stopped": True, "pdf": True, "scored": False}
+    saved_paper = {
+        "paper_id": "fixture-paper-1",
+        "paper_version": 1,
+        "download_basename": "fixture-paper",
+        "title": "Saved fixture paper",
+        "created_at": "2026-11-05T01:00:00+00:00",
+        "snapshot_sha256": "a" * 64,
+        "validation_warnings": [],
+        "pdf_available": True,
+        "generation": {
+            "mode": "api_key",
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+            "call_limit": 1,
+            "publication_status": "proofreading_complete",
+        },
+    }
+    page.route(
+        "**/api/projects/proposals/config?*",
+        lambda route: route.fulfill(
+            json={
+                "available": True,
+                "binding": "fixture:account",
+                "mode": "api_key",
+                "model": "fixture-model",
+                "reasoning_effort": "high",
+            }
+        ),
+    )
+    page.route(
+        "**/api/projects/papers/preflight?*",
+        lambda route: route.fulfill(
+            json={
+                "checkpoint_exists": paper_fixture["checkpoint"],
+                "checkpoint_can_restart": paper_fixture["checkpoint"],
+                "resume_available": paper_fixture["checkpoint"],
+                "snapshot_sha256": "a" * 64,
+                "outline_complete": False,
+                "draft_recovery_available": False,
+                "completed_sections": 0,
+            }
+        ),
+    )
+    page.unroute("**/api/projects/papers/progress?*")
+
+    def stopped_progress(route):
+        route.fulfill(
+            json={
+                "progress": (
+                    {
+                        "status": "cancelled",
+                        "stage": "sections",
+                        "current": 1,
+                        "total": 3,
+                        "started_at": "2026-11-05T01:00:00+00:00",
+                        "elapsed_seconds": 93,
+                    }
+                    if paper_fixture["stopped"]
+                    else None
+                )
+            }
+        )
+
+    page.route("**/api/projects/papers/progress?*", stopped_progress)
+
+    def paper_list(route):
+        paper = {**saved_paper, "pdf_available": paper_fixture["pdf"]}
+        if paper_fixture["scored"]:
+            paper["score"] = {
+                "total": 82,
+                "rubric_id": "fixture",
+                "rubric_version": 3,
+                "pdf_sha256": "c" * 64,
+                "provisional": True,
+            }
+        route.fulfill(json={"papers": [paper], "paper_count": 1})
+
+    page.route("**/api/projects/papers?*", paper_list)
+    page.route(
+        "**/api/projects/papers/fixture-paper-1?*",
+        lambda route: route.fulfill(
+            json={
+                **saved_paper,
+                "pdf_sha256": "c" * 64,
+                "draft": {
+                    "title": "Saved fixture paper",
+                    "abstract": "Test document",
+                    "abstract_claim_ids": [],
+                    "problem_framing": [],
+                    "problem_framing_claim_ids": [],
+                    "methods": [],
+                    "methods_claim_ids": [],
+                    "claims": [],
+                    "sections": [],
+                    "limitations": [],
+                    "open_obligations": [],
+                    "conclusions": [],
+                    "conclusion_claim_ids": [],
+                },
+                "snapshot": {"sources": []},
+            }
+        ),
+    )
+    page.reload()
+    play = page.get_by_role("button", name="Resume Paper 2")
+    expect(play).to_be_enabled(timeout=10000)
+    assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
+    restart = page.get_by_role("button", name="Start over on paper generation")
+    expect(restart).to_be_enabled()
+
+    # Saved-paper score actions follow the metadata rather than floating
+    # right, and do not inherit the busy/generation disable state.
+    meta = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-meta')
+    score = meta.get_by_role("button", name="Score", exact=True)
+    expect(score).to_be_enabled()
+    score_position = meta.evaluate(
+        """node => {
+          const text = node.querySelector('p').getBoundingClientRect();
+          const button = node.querySelector('button').getBoundingClientRect();
+          return {gap: button.left - text.right, baseline: Math.abs(
+            button.bottom - text.bottom)};
+        }"""
+    )
+    assert 0 <= score_position["gap"] <= 30, score_position
+    assert score_position["baseline"] < 12, score_position
+
+    # Verify a real Play dispatch (locally intercepted, never sent to AI).
+    dispatched: list[str] = []
+
+    def simulate_generation(route):
+        dispatched.append(route.request.method)
+        route.fulfill(status=409, json={"error": "Fixture paper dispatch intercepted"})
+
+    page.route("**/api/projects/papers", simulate_generation)
+    play.click()
+    expect(page.get_by_role("button", name="Resume Paper 2")).to_be_enabled(timeout=10000)
+    assert dispatched == ["POST"], dispatched
+    assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
+
+    # Start over clears a resumable checkpoint without playing automatically.
+    reset_calls: list[str] = []
+
+    def simulate_restart(route):
+        reset_calls.append(route.request.method)
+        payload = route.request.post_data_json
+        assert payload["long_form"] is False, payload
+        paper_fixture["checkpoint"] = False
+        paper_fixture["stopped"] = False
+        route.fulfill(json={"snapshot_sha256": "a" * 64})
+
+    page.route("**/api/projects/papers/restart", simulate_restart)
+    restart.click()
+    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
+    assert reset_calls == ["POST"], reset_calls
+    assert dispatched == ["POST"], dispatched
+
+    # Queue cancellation may leave only a stopped receipt (no saved checkpoint).
+    # Start over must still clear it without sending another provider request.
+    paper_fixture["stopped"] = True
+    page.reload()
+    start_over = page.get_by_role("button", name="Start over on paper generation")
+    expect(start_over).to_be_enabled(timeout=10000)
+    discard_calls: list[str] = []
+
+    def simulate_discard(route):
+        discard_calls.append(route.request.method)
+        paper_fixture["stopped"] = False
+        route.fulfill(json={"discarded": True})
+
+    page.route("**/api/projects/papers/discard", simulate_discard)
+    start_over.click()
+    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
+    assert discard_calls == ["POST"], discard_calls
+    assert dispatched == ["POST"], dispatched
+
+    # Score stays clickable even when the PDF is unavailable; the user gets
+    # an actionable explanation instead of an inert control.
+    paper_fixture["pdf"] = False
+    page.reload()
+    score = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-meta').get_by_role(
+        "button", name="Score", exact=True
+    )
+    expect(score).to_be_enabled()
+    score.click()
+    expect(
+        page.locator(".papers-pane")
+        .get_by_role("alert")
+        .filter(has_text="A saved PDF is required before this paper can be scored.")
+    ).to_be_visible()
+
+    paper_fixture["pdf"] = True
+    paper_fixture["scored"] = True
+    page.reload()
+    scored = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-meta')
+    expect(scored.get_by_role("button", name="See score")).to_be_enabled()
+    scored_position = scored.evaluate(
+        """node => node.querySelector('button').getBoundingClientRect().left -
+          node.querySelector('p').getBoundingClientRect().right"""
+    )
+    assert 0 <= scored_position <= 30, scored_position
+
     assert not errors, errors
     browser.close()
 
