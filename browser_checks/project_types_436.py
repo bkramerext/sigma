@@ -1090,7 +1090,7 @@ with sync_playwright() as playwright:
     # Saved-paper score actions follow the metadata rather than floating
     # right, and do not inherit the busy/generation disable state.
     meta = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-meta')
-    score = meta.get_by_role("button", name="Score", exact=True)
+    score = meta.get_by_role("button", name="Score paper", exact=True)
     expect(score).to_be_enabled()
     score_position = meta.evaluate(
         """node => {
@@ -1246,7 +1246,7 @@ with sync_playwright() as playwright:
     paper_fixture["pdf"] = False
     page.reload()
     score = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-meta').get_by_role(
-        "button", name="Score", exact=True
+        "button", name="Score paper", exact=True
     )
     expect(score).to_be_enabled()
     score.click()

@@ -94,6 +94,8 @@ PaperProgressStage = Literal[
     "proofreading",
     "compile",
     "pdf_check",
+    "scoring",
+    "score_failed",
     "retry",
     "complete",
 ]
@@ -3256,6 +3258,7 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
     """Keep a bounded progress sidecar; never deserialize 100 MB for polling."""
     fields = (
         "run_id",
+        "paper_id",
         "status",
         "stage",
         "current",
@@ -3326,6 +3329,31 @@ def _clear_progress_status(path: str) -> None:
     if file.is_symlink():
         raise ProjectError("Paper progress metadata is unsafe")
     file.unlink(missing_ok=True)
+
+
+def mark_scored_progress(path: str, paper_id: str) -> None:
+    """Best-effort completion of the published paper's independent scoring step."""
+    try:
+        state = _read_progress_status(path)
+        if (
+            state is not None
+            and state.get("paper_id") == paper_id
+            and state.get("status") == "complete"
+            and state.get("stage") == "score_failed"
+        ):
+            _write_progress_status(path, {**state, "stage": "complete", "updated_at": _now()})
+    except (OSError, ProjectError):
+        logging.getLogger("sigma.lifecycle").warning("paper.score_progress_update_failed")
+
+
+def _clear_published_paper_progress(path: str, paper_id: str) -> None:
+    """Do not leave an obsolete scoring step after deleting its PDF."""
+    try:
+        state = _read_progress_status(path)
+        if state is not None and state.get("paper_id") == paper_id:
+            _clear_progress_status(path)
+    except (OSError, ProjectError):
+        logging.getLogger("sigma.lifecycle").warning("paper.score_progress_cleanup_failed")
 
 
 def _clear_work(path: str) -> None:
@@ -7965,6 +7993,10 @@ async def _generate_impl(
             if work:
                 work["progress"] = saved_progress
                 _save_work(path, work)
+            elif stage in {"scoring", "score_failed", "complete"}:
+                # Keep only bounded status after publication, not the draft checkpoint.
+                saved_progress["paper_id"] = record["paper_id"]
+                _write_progress_status(path, saved_progress)
             if progress:
                 await progress(
                     {
@@ -9060,7 +9092,31 @@ async def _generate_impl(
         record.pop("tex_source", None)
         record.pop("snapshot", None)
         del tex, pdf
-        await report("complete", None, None, "complete")
+        await report("scoring", None, None)
+        try:
+            if not expected_binding or not expected_project_id:
+                raise ProjectError("Automatic scoring requires an AI connection")
+            from sigma import paper_scores
+
+            await paper_scores.score_paper(
+                path, record["paper_id"], expected_binding, expected_project_id
+            )
+        except Exception as exc:  # noqa: BLE001 - never invalidate an already published PDF
+            logging.getLogger("sigma.lifecycle").warning(
+                "paper.score_failed project_id=%s paper_id=%s error_type=%s",
+                expected_project_id or "unknown",
+                record["paper_id"],
+                type(exc).__name__,
+            )
+            await report(
+                "score_failed",
+                None,
+                None,
+                "complete",
+                detail="PDF saved; scoring did not finish. Use Score paper to retry.",
+            )
+        else:
+            await report("complete", None, None, "complete")
         return {
             key: record[key]
             for key in (
@@ -9647,6 +9703,11 @@ def delete_paper(path: str, paper_id: str) -> None:
     identifier = _paper_id(paper_id)
     descriptor = _paper_version_lock(path)
     try:
+        # A completed paper may retain a bounded scoring-status receipt.
+        # Never leave a stale status pointing to a deleted paper.
+        status = _read_progress_status(path)
+        if status is not None and status.get("paper_id") == identifier:
+            _clear_progress_status(path)
         _persist_paper_versions(path, _paper_records(path))
         target = project_path(path)
         if target.suffix == ".json":
@@ -9660,6 +9721,7 @@ def delete_paper(path: str, paper_id: str) -> None:
                     f"artifacts/papers/{identifier}.tex": None,
                 },
             )
+            _clear_published_paper_progress(path, identifier)
             return
         directory = _paper_dir(path, create=False)
         for suffix in (".json", ".pdf", ".tex"):
@@ -9669,6 +9731,7 @@ def delete_paper(path: str, paper_id: str) -> None:
                     artifact.unlink()
             except FileNotFoundError:
                 pass
+        _clear_published_paper_progress(path, identifier)
     finally:
         fcntl.flock(descriptor, fcntl.LOCK_UN)
         os.close(descriptor)

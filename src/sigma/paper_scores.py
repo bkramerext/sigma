@@ -341,7 +341,12 @@ _lock = asyncio.Lock()
 
 
 async def score_paper(
-    path: str, paper_id: str, expected_binding: str, expected_project_id: str
+    path: str,
+    paper_id: str,
+    expected_binding: str,
+    expected_project_id: str,
+    *,
+    force: bool = False,
 ) -> dict[str, Any]:
     from sigma import papers
     from sigma.openai_connection import auth_context
@@ -353,7 +358,7 @@ async def score_paper(
     if not record["pdf_available"]:
         raise ProjectError("The saved paper PDF is missing or unsafe")
     previous = cached_score(record)
-    if previous is not None:
+    if previous is not None and not force:
         return previous
     memory_guard.require_capacity()
 

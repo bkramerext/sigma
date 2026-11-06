@@ -2766,7 +2766,11 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                 assert record["generation"]["provider_calls_lifetime_total"] == 3
                 assert papers._load_work(str(path)) is None
                 assert papers._read_reset_ledger(str(path)) is None
-                assert papers._read_progress_status(str(path)) is None
+                status = papers._read_progress_status(str(path))
+                assert status is not None
+                assert status["status"] == "complete"
+                assert status["stage"] == "score_failed"
+                assert papers.get_pdf(str(path), result["paper_id"]) == b"%PDF-fixture"
 
         asyncio.run(check())
 

@@ -242,6 +242,10 @@ def test_scoring_is_single_flight_and_cache_hit_avoids_provider() -> None:
                 )
                 assert third == first and calls == 1
                 assert papers.list_papers(str(path))[0]["score"] == first
+                rescored = await paper_scores.score_paper(
+                    str(path), paper_id, "test-binding", view.project.id, force=True
+                )
+                assert rescored == first and calls == 2
 
     asyncio.run(scenario())
 
