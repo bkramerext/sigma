@@ -37,6 +37,18 @@ def main() -> None:
             # Opening another project still uses the same signed-in subject.
             assert progress_notifications.preference(first)["enabled"] is True
             assert progress_notifications.preference(second)["enabled"] is False
+            assert progress_notifications.eligible_session_event({"status": "ended"}) == "session_finished"
+            assert progress_notifications.eligible_session_event({"status": "completed"}) == "session_finished"
+            assert progress_notifications.eligible_session_event({"status": "failed"}) == "session_failed"
+            assert progress_notifications.eligible_session_event({
+                "status": "paused", "message": "Paused · provider usage limit"
+            }) == "session_paused"
+            assert progress_notifications.eligible_session_event({
+                "status": "paused", "message": "Paused by user. A request may still finish."
+            }) is None
+            assert progress_notifications.eligible_session_event({
+                "status": "paused", "message": "Simulated research paused. No provider was called."
+            }) is None
             for invalid in ("true", 1, None):
                 try:
                     progress_notifications.update_preference(first, invalid)
