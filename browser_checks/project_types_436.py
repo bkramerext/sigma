@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -903,6 +904,7 @@ with sync_playwright() as playwright:
 
     # The same hanging indent applies to the live title button. In particular,
     # the pulsing dot must be vertically centered on the last wrapped line.
+    recent_output_at = datetime.now(UTC).isoformat()
     page.route(
         "**/api/projects/papers/progress?*",
         lambda route: route.fulfill(
@@ -914,6 +916,7 @@ with sync_playwright() as playwright:
                     "total": 3,
                     "started_at": "2026-11-05T01:00:00+00:00",
                     "elapsed_seconds": 90,
+                    "last_progress_at": recent_output_at,
                 }
             }
         ),
@@ -942,9 +945,11 @@ with sync_playwright() as playwright:
     # the heartbeat in the Paper N heading. The mocked active project remains
     # provider-free; refreshing tests durable progress exactly as a reconnect.
     step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
-    expect(step).to_have_text("Writing sections (1/3)", timeout=10000)
+    expect(step.locator("strong")).to_have_text("Writing sections (1/3)", timeout=10000)
+    expect(step.locator(".paper-activity-line")).to_have_text("Making progress · Just now")
     expect(page.locator(".paper-draft-card .paper-draft-pulse")).to_have_count(0)
     page.unroute("**/api/projects/papers/progress?*")
+    stale_output_at = (datetime.now(UTC) - timedelta(minutes=6)).isoformat()
     page.route(
         "**/api/projects/papers/progress?*",
         lambda route: route.fulfill(
@@ -957,13 +962,15 @@ with sync_playwright() as playwright:
                     "sections_total": 3,
                     "started_at": "2026-11-05T01:00:00+00:00",
                     "elapsed_seconds": 91,
+                    "last_progress_at": stale_output_at,
                 }
             }
         ),
     )
     page.reload()
     step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
-    expect(step).to_have_text("Writing sections (2/3)", timeout=10000)
+    expect(step.locator("strong")).to_have_text("Writing sections (2/3)", timeout=10000)
+    expect(step.locator(".paper-activity-line")).to_contain_text("No new progress for")
     page.unroute("**/api/projects/papers/progress?*")
     page.route(
         "**/api/projects/papers/progress?*",
@@ -983,7 +990,8 @@ with sync_playwright() as playwright:
     )
     page.reload()
     step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
-    expect(step).to_have_text("Wrote sections (3)", timeout=10000)
+    expect(step.locator("strong")).to_have_text("Wrote sections (3)", timeout=10000)
+    expect(step.locator(".paper-activity-line")).to_have_count(0)
 
     # The Papers list has individual session-style cards, not one shared
     # border with internal separators. The grid gap applies equally to all

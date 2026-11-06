@@ -297,3 +297,30 @@
 /* A wrapper owns the hint when browser-disabled Play cannot receive pointer events. */
 .workspace-page .papers-pane .paper-play-tooltip { display: inline-flex; align-items: center; }
 .workspace-page .papers-pane .paper-play-tooltip > button:disabled { pointer-events: none; }
+
+/* Observed paper output activity; one muted line beneath the active stage. */
+.workspace-page .papers-pane .paper-stage-list li.is-active:has(> .paper-activity-line) {
+  display: grid;
+  grid-template-columns: 8px max-content;
+  column-gap: 9px;
+  row-gap: 2px;
+  align-items: center;
+}
+.workspace-page .papers-pane .paper-stage-list li.is-active:has(> .paper-activity-line)::before {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+}
+.workspace-page .papers-pane .paper-stage-list li.is-active:has(> .paper-activity-line) > strong {
+  grid-column: 2;
+  grid-row: 1;
+}
+.workspace-page .papers-pane .paper-stage-list .paper-activity-line {
+  display: block;
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: #abbac8;
+}

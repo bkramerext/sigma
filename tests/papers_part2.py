@@ -567,7 +567,9 @@ def test_active_paper_progress_poll_avoids_checkpoint_deserialization() -> None:
             "started_at": papers._now(),
             "updated_at": papers._now(),
             "elapsed_seconds": 3,
+            "last_progress_at": papers._now(),
         }
+        papers._write_progress_status(str(path), progress)
         with (
             patch.dict(papers._active_progress, {key: progress}),
             patch.object(
@@ -581,6 +583,13 @@ def test_active_paper_progress_poll_avoids_checkpoint_deserialization() -> None:
         assert status["status"] == "active"
         assert status["stage"] == "sections"
         assert (status["current"], status["total"]) == (1, 5)
+        assert status["last_progress_at"] == progress["last_progress_at"]
+        # A backend restart cannot convert persisted output evidence into live
+        # generation. The snapshot remains visible but its state is interrupted.
+        recovered = papers.progress_status(str(path))
+        assert recovered is not None
+        assert recovered["status"] == "interrupted"
+        assert recovered["last_progress_at"] == progress["last_progress_at"]
 
 
 def test_paper_browser_presence_gates_new_paid_attempts() -> None:
