@@ -439,6 +439,179 @@ def manual_tectonic_control_byte_pdf_compilation() -> None:
     assert pdf.startswith(b"%PDF-")
 
 
+def test_paper_diagram_layout_selection_and_vector_rendering() -> None:
+    """Choose diagram semantics once, then render them without paid providers."""
+    nodes = [
+        papers.DiagramNode(id="source", label="Evidence collection"),
+        papers.DiagramNode(id="review", label="Independent review"),
+        papers.DiagramNode(id="result", label="Qualified conclusion"),
+    ]
+    steps = [
+        papers.DiagramEdge(source="source", target="review", label="precedes"),
+        papers.DiagramEdge(source="review", target="result", label="precedes"),
+    ]
+    base = papers.PaperDiagram(
+        caption="Evidence-based sequence from collection to qualified conclusion.",
+        nodes=nodes,
+        edges=steps,
+        claim_ids=["C1"],
+    )
+    # Legacy saved diagrams have no layout property; auto is backward-compatible.
+    assert (
+        papers.PaperDiagram.model_validate(
+            {key: value for key, value in base.model_dump().items() if key != "layout"}
+        ).layout
+        == "auto"
+    )
+    assert papers._diagram_selected_layout(base) == ("hierarchical", None)
+    assert (
+        "layout"
+        in papers._paper_response_schema(papers.PaperDraft, include_diagrams=True)["$defs"][
+            "PaperDiagram"
+        ]["properties"]
+    )
+
+    def render(diagram: papers.PaperDiagram) -> tuple[str, list[str]]:
+        warnings: list[str] = []
+        value = draft("project:pid").model_copy(update={"diagrams": [diagram]})
+        return papers._tex(value, warnings, "f" * 64), warnings
+
+    hierarchical, errors = render(base.model_copy(update={"layout": "hierarchical"}))
+    assert r"\begin{tikzpicture}" in hierarchical
+    assert "Diagram (readable relationship list)." not in hierarchical
+    assert not errors
+
+    timeline, errors = render(base.model_copy(update={"layout": "timeline"}))
+    assert r"\node[timeline node]" in timeline
+    assert timeline.count(r"\node[timeline marker]") == 3
+    assert timeline.count(r"\draw[->,thick,blue!65]") == 2
+    assert all(node.label in timeline for node in nodes)
+    assert all(edge.label in timeline for edge in steps)
+    assert not errors
+
+    # A timeline is a semantic authorial claim; branching is not chronology.
+    branching = base.model_copy(
+        update={
+            "edges": [
+                papers.DiagramEdge(source="source", target="review", label="supports"),
+                papers.DiagramEdge(source="source", target="result", label="supports"),
+            ],
+            "layout": "timeline",
+        }
+    )
+    assert papers._diagram_selected_layout(branching)[0] == "hierarchical"
+    _, errors = render(branching)
+    assert any("timeline" in warning for warning in errors)
+
+    cyclic = base.model_copy(
+        update={
+            "edges": [
+                *steps,
+                papers.DiagramEdge(source="result", target="source", label="feedback loop"),
+            ],
+            "layout": "auto",
+        }
+    )
+    assert papers._diagram_selected_layout(cyclic) == ("network", None)
+    network, errors = render(cyclic)
+    assert r"\node[network node]" in network
+    assert network.count(r"\draw[->,blue!65,thin]") == 3
+    assert "feedback loop" in network
+    assert "Diagram (readable relationship list)." not in network
+    assert not errors
+
+    forced_dag = cyclic.model_copy(update={"layout": "hierarchical"})
+    assert papers._diagram_selected_layout(forced_dag)[0] == "network"
+    _, errors = render(forced_dag)
+    assert any("cyclic" in warning for warning in errors)
+
+    boundary = papers.DiagramBoundary(label="Review authority", node_ids=["source", "review"])
+    architecture = base.model_copy(update={"layout": "architecture", "boundaries": [boundary]})
+    assert papers._diagram_selected_layout(architecture) == ("architecture", None)
+    block, errors = render(architecture)
+    assert r"\begin{tikzpicture}" in block
+    assert r"\node[boundary,fit=" in block
+    assert "Review authority" in block
+    assert all(node.label in block for node in nodes)
+    assert not errors
+
+    # Safety: a network cannot silently omit an authored trust boundary.
+    unsuitable = cyclic.model_copy(update={"layout": "network", "boundaries": [boundary]})
+    assert papers._diagram_selected_layout(unsuitable)[0] == "architecture"
+    _, errors = render(unsuitable)
+    assert any("trust boundaries" in warning for warning in errors)
+
+
+def test_graph_atlas_sample_has_four_exact_research_diagrams() -> None:
+    """The shipped CS sample is a real editable project with saved fixture evidence."""
+    from sigma import recents, research_sessions, samples
+
+    identifier = "graph-atlas-research-gateway"
+    raw, template = samples._load(identifier)
+    assert template.investigation_type == "computer_science"
+    assert template.title == "Graph Atlas: Four Views of a Computing System"
+    evidence = samples._sample_evidence(identifier)
+    assert len(evidence["research_sessions"]) == 1
+    session = evidence["research_sessions"][0]
+    assert session["status"] == "ended"
+    assert len(session["artifacts"]) == 4
+    assert "four" in raw["problem"].lower()
+    assert "independently validated" not in raw["problem"].lower()
+
+    expected = {"hierarchical", "architecture", "network", "timeline"}
+    specs = [artifact["diagram_spec"] for artifact in session["artifacts"]]
+    diagrams = [papers.PaperDiagram.model_validate(item) for item in specs]
+    assert {diagram.layout for diagram in diagrams} == expected
+    assert all(diagram.nodes and diagram.edges for diagram in diagrams)
+    assert all(diagram.caption and diagram.claim_ids for diagram in diagrams)
+    for diagram in diagrams:
+        selected, warning = papers._diagram_selected_layout(diagram)
+        assert (selected, warning) == (diagram.layout, None)
+    assert next(item for item in diagrams if item.layout == "architecture").boundaries
+    assert (
+        papers._diagram_is_acyclic(next(item for item in diagrams if item.layout == "network"))
+        is False
+    )
+
+    # Both one-shot and long-form authoring accept multiple useful figures.
+    one_shot = draft("project:pid")
+    papers.PaperDraft.model_validate(
+        {**one_shot.model_dump(), "diagrams": [item.model_dump() for item in diagrams]}
+    )
+    _, plan = fast_package()
+    papers.LongPaperPlan.model_validate(
+        {**plan.model_dump(), "diagrams": [item.model_dump() for item in diagrams]}
+    )
+    assert "proactively include" in papers.VISUAL_AUTHORING_INSTRUCTIONS
+    assert "actual findings" in papers.VISUAL_AUTHORING_INSTRUCTIONS
+
+    paper = draft("project:pid").model_copy(update={"diagrams": diagrams})
+    render_warnings: list[str] = []
+    tex = papers._tex(paper, render_warnings, "f" * 64)
+    assert tex.count(r"\begin{tikzpicture}") == 4
+    assert "step/.style" not in tex
+    assert "timeline marker/.style" in tex
+    assert "Diagram (readable relationship list)." not in tex
+    assert not render_warnings
+
+    # Open through the normal Samples copy path, including session re-binding.
+    with (
+        TemporaryDirectory() as temp,
+        patch.object(samples, "projects_root", return_value=Path(temp)),
+        patch.object(recents, "record_access"),
+    ):
+        view = samples.open_sample_project(identifier)
+        copies = research_sessions.list_sessions(view.path)
+        assert len(copies) == 1
+        assert copies[0]["project_id"] == view.project.id
+        assert copies[0]["status"] == "ended"
+        assert len(copies[0]["artifacts"]) == 4
+        assert all(item["project_id"] == view.project.id for item in copies[0]["artifacts"])
+        package, _ = papers._snapshot(view.path)
+        assert sum(item["kind"] == "artifact" for item in package["sources"]) == 4
+        assert papers._paper_long_form(package) is False
+
+
 def test_sov_ai_structured_graph_uses_vector_layout_not_relationship_list() -> None:
     """The eight-node campus policy DAG is visual, not a prose-only fallback."""
     nodes = [

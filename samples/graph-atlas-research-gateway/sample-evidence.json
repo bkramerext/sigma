@@ -1,0 +1,550 @@
+{
+  "schema_version": 1,
+  "agentic_runs": [],
+  "research_sessions": [
+    {
+      "schema_version": 1,
+      "id": "4c426e2c-2a30-47e8-bbda-38fdf4120541",
+      "session_number": 1,
+      "project_path": "$SIGMA_SAMPLE_PROJECT_PATH",
+      "project_id": "$SIGMA_SAMPLE_PROJECT_ID",
+      "strategy_id": "6a73cbfd-8268-4b3b-a0f2-aad5b97f241d",
+      "strategy_title": "Compare four complementary gateway diagrams",
+      "strategy_text": "Study four representations of the same hypothetical research-job gateway. Treat each saved, explicit diagram_spec as the primary constructed-design evidence. Compare (A) authorized decision flow, (B) system architecture and domain boundaries, (C) qualitative feedback cycle, and (D) ordered execution trace. Evaluate whether each view preserves its exact directed edges, edge labels, and node membership. Note that none of the representations constitutes a measured performance result or independently validated production system. The short paper should use four clearly captioned figures, one per view, with plain-English explanation.",
+      "strategy_ids": [
+        "6a73cbfd-8268-4b3b-a0f2-aad5b97f241d"
+      ],
+      "strategy_runs": [
+        {
+          "strategy_id": "6a73cbfd-8268-4b3b-a0f2-aad5b97f241d",
+          "strategy_title": "Compare four complementary gateway diagrams",
+          "strategy_text": "Study four representations of the same hypothetical research-job gateway. Treat each saved, explicit diagram_spec as the primary constructed-design evidence. Compare (A) authorized decision flow, (B) system architecture and domain boundaries, (C) qualitative feedback cycle, and (D) ordered execution trace. Evaluate whether each view preserves its exact directed edges, edge labels, and node membership. Note that none of the representations constitutes a measured performance result or independently validated production system. The short paper should use four clearly captioned figures, one per view, with plain-English explanation.",
+          "status": "ended",
+          "current_action": "Constructed data saved",
+          "cycle": 1,
+          "calls_used": 0,
+          "artifacts": [
+            "8d51bd7a-1644-4458-ad15-20d7e38c5f21",
+            "19a1053e-59f7-4b90-aed9-0cd54e124e98",
+            "48e7c9c7-d2dc-468f-b82f-72f624273121",
+            "26094311-bd13-43dd-8ebd-6e357a2d0eb1"
+          ],
+          "reason": "All four authored design diagrams are saved as fixture evidence."
+        }
+      ],
+      "strategy_snapshot": [
+        {
+          "id": "6a73cbfd-8268-4b3b-a0f2-aad5b97f241d",
+          "title": "Compare four complementary gateway diagrams",
+          "eligibility": "eligible"
+        }
+      ],
+      "problem": "How do four different, evidence-grounded diagram layouts explain distinct properties of one hypothetical campus research-job gateway? The study is a Computer Science publishing and diagram-readability exercise, not an evaluation of a deployed service. Its source of truth is the one saved constructed-design session, which contains four explicit diagram specifications. Compare exactly four views in a short paper, placing one diagram beside the explanation it supports: (1) a hierarchical decision flow, (2) a block architecture with trust boundaries, (3) a cyclic network describing qualitative congestion-control feedback, and (4) a sequential timeline of one authorized job. Preserve all nodes, directed edges, labels, and boundaries; set each diagram's layout to the corresponding explicit type instead of guessing. Use plain English for technical reasoning and avoid ornamental equations. Distinguish constructed behavior and hypothetical external connections from measurements. Do not claim that any observed throughput, availability, latency, or measured causal impact exists. No external source is required to describe this design fixture.\n\nThe four specified views follow. They are the research subject and desired visual content, not suggestions to invent or modify:\n\n1. ADMISSION DECISION FLOW (hierarchical). A request follows policy checks, with rejection and accepted dispatch as distinct branches. This is a dependency and decision view, not a timeline. Nodes: ingress=Receive research job; policy=Check identity and data policy; denied=Reject disallowed request; admitted=Admit authorized request; queue=Enqueue authorized job. Directed edges: ingress -> policy [request evaluated]; policy -> denied [disallowed]; policy -> admitted [allowed]; admitted -> queue [schedule admitted job].\n\n2. SYSTEM ARCHITECTURE AND TRUST BOUNDARIES (architecture). The origin campus controls authentication, policy and local execution; an external provider is hypothetical and requires separate authorization. Nodes: client=Campus research client; identity=Campus identity authority; policy=Policy enforcement gateway; scheduler=Job scheduler; local=Campus GPU worker; external=Optional approved external provider. Directed edges: client -> identity [authenticate user]; identity -> policy [assert campus identity]; policy -> scheduler [approved job only]; scheduler -> local [local dispatch]; scheduler -> external [only with separate approval]. Boundaries: Origin-campus authority boundary contains client, identity, policy, scheduler, local; External provider domain (hypothetical) contains external.\n\n3. CONGESTION FEEDBACK LOOP (network). Input load, queue depth, latency, and admission throttling form a cycle; feedback direction is part of the designed controller, not empirical causality. Nodes: arrival=Admitted arrival load; backlog=Queue backlog; delay=Observed queue delay; throttle=Admission throttle. Directed edges: arrival -> backlog [increases backlog]; backlog -> delay [increases delay]; delay -> throttle [triggers throttling]; throttle -> arrival [reduces admitted load].\n\n4. ORDERED EXECUTION TRACE (timeline). The planned trace consists of five ordered phases; this is event order, with no fabricated timestamps, durations, or performance measurements. Nodes: submit=Job submitted; authorize=Policy authorization recorded; enqueue=Job queued; execute=Worker executes job; audit=Result and audit record committed. Directed edges: submit -> authorize [precedes]; authorize -> enqueue [precedes]; enqueue -> execute [precedes]; execute -> audit [precedes].\n\nResearch outcome expected: explain why different diagram types expose distinct aspects of the same proposed system, which assumptions each reveals, and why an evidence-based renderer must not invent missing data. The paper should demonstrate all four figures if diagrams are enabled, while retaining the evidence-bound, skeptical status of this constructed fixture.",
+      "investigation_type": "computer_science",
+      "model": "fixture-deterministic",
+      "reasoning_effort": "none",
+      "mode": "fixture",
+      "status": "ended",
+      "created_at": "2026-11-06T21:00:00+00:00",
+      "updated_at": "2026-11-06T21:06:00+00:00",
+      "started_at": "2026-11-06T21:00:00+00:00",
+      "calls_used": 0,
+      "call_limit": 0,
+      "cycle_limit": 1,
+      "cycle": 1,
+      "steps": [],
+      "artifacts": [
+        {
+          "id": "8d51bd7a-1644-4458-ad15-20d7e38c5f21",
+          "project_id": "$SIGMA_SAMPLE_PROJECT_ID",
+          "session_id": "4c426e2c-2a30-47e8-bbda-38fdf4120541",
+          "strategy_id": "6a73cbfd-8268-4b3b-a0f2-aad5b97f241d",
+          "strategy_title": "Compare four complementary gateway diagrams",
+          "sequence": 1,
+          "strategy_cycle": 1,
+          "created_at": "2026-11-06T21:05:00+00:00",
+          "claim_or_question": "Constructed design outcome 1/4: Admission decision flow. A request follows policy checks, with rejection and accepted dispatch as distinct branches. This is a dependency and decision view, not a timeline.",
+          "method": "Authored deterministic diagram specification; no AI inference, experiments, benchmarks, or external observations.",
+          "assumptions": [
+            "All components, decisions, and protocols describe an invented illustrative computer system.",
+            "Every directed edge below has the literal qualitative relationship named by its label.",
+            "No performance numbers or independently verified operational claims are supplied."
+          ],
+          "evidence_status": "unverified",
+          "skeptic_response": "The diagram is internally specified as a hypothetical design. Its labels must not be treated as observed research results; preserve direction and boundaries exactly.",
+          "objections": [
+            "No production deployment or empirical observation confirms the proposed behavior."
+          ],
+          "open_obligations": [
+            "If presented as empirical system architecture or performance, independently validate with implementation and data."
+          ],
+          "investigator_output": {
+            "claim": "A request follows policy checks, with rejection and accepted dispatch as distinct branches. This is a dependency and decision view, not a timeline.",
+            "method": "Construct the graph exactly from the authored fixture",
+            "evidence_status": "unverified",
+            "result": "The node, edge, and domain membership records below are the complete designed-case inputs."
+          },
+          "skeptic_output": {
+            "response": "Internally reviewable as a design description only; do not invent nodes, edge directions, chronology, benchmarks, or evidence."
+          },
+          "reasoning_steps": [
+            "The hierarchical view answers a distinct question about the same gateway.",
+            "The fixture contains exactly 5 nodes and 4 directed edges.",
+            "The layout hierarchical expresses semantics without adding quantitative claims.",
+            "A request follows policy checks, with rejection and accepted dispatch as distinct branches. This is a dependency and decision view, not a timeline."
+          ],
+          "coordinator_decision": "save_evidence",
+          "next_question": "Compare the four figures and explain the limits of each representation.",
+          "note": "CONSTRUCTED COMPUTER-SCIENCE SAMPLE DATA, NOT AN AI RESEARCH RUN OR INDEPENDENT VALIDATION.",
+          "objective_review": {
+            "status": "partial",
+            "claim": "The constructed diagram specifications are complete as fixture inputs, not verified scientific outcomes.",
+            "argument_summary": "Every view is fully specified and may be rendered as an illustrative diagram; the hypothetical system has not been built or tested.",
+            "argument_steps": [],
+            "verification_status": "incomplete",
+            "unresolved_objections": [
+              "No deployment or external validation."
+            ],
+            "basis_artifact_ids": []
+          },
+          "strategy_review": {
+            "assessment": "productive",
+            "rationale": "Source data fully specifies a demonstrative graph, without asserting empirical validation.",
+            "basis_artifact_ids": []
+          },
+          "diagram_spec": {
+            "caption": "Hierarchical decision flow for one research job. Decision edges distinguish rejection from authorized scheduling; the graph is a designed workflow, not a measured deployment.",
+            "layout": "hierarchical",
+            "nodes": [
+              {
+                "id": "ingress",
+                "label": "Receive research job"
+              },
+              {
+                "id": "policy",
+                "label": "Check identity and data policy"
+              },
+              {
+                "id": "denied",
+                "label": "Reject disallowed request"
+              },
+              {
+                "id": "admitted",
+                "label": "Admit authorized request"
+              },
+              {
+                "id": "queue",
+                "label": "Enqueue authorized job"
+              }
+            ],
+            "edges": [
+              {
+                "source": "ingress",
+                "target": "policy",
+                "label": "request evaluated"
+              },
+              {
+                "source": "policy",
+                "target": "denied",
+                "label": "disallowed"
+              },
+              {
+                "source": "policy",
+                "target": "admitted",
+                "label": "allowed"
+              },
+              {
+                "source": "admitted",
+                "target": "queue",
+                "label": "schedule admitted job"
+              }
+            ],
+            "boundaries": [],
+            "claim_ids": [
+              "C1"
+            ],
+            "evidence_refs": [],
+            "placement_after_section": null
+          }
+        },
+        {
+          "id": "19a1053e-59f7-4b90-aed9-0cd54e124e98",
+          "project_id": "$SIGMA_SAMPLE_PROJECT_ID",
+          "session_id": "4c426e2c-2a30-47e8-bbda-38fdf4120541",
+          "strategy_id": "6a73cbfd-8268-4b3b-a0f2-aad5b97f241d",
+          "strategy_title": "Compare four complementary gateway diagrams",
+          "sequence": 2,
+          "strategy_cycle": 1,
+          "created_at": "2026-11-06T21:05:00+00:00",
+          "claim_or_question": "Constructed design outcome 2/4: System architecture and trust boundaries. The origin campus controls authentication, policy and local execution; an external provider is hypothetical and requires separate authorization.",
+          "method": "Authored deterministic diagram specification; no AI inference, experiments, benchmarks, or external observations.",
+          "assumptions": [
+            "All components, decisions, and protocols describe an invented illustrative computer system.",
+            "Every directed edge below has the literal qualitative relationship named by its label.",
+            "No performance numbers or independently verified operational claims are supplied."
+          ],
+          "evidence_status": "unverified",
+          "skeptic_response": "The diagram is internally specified as a hypothetical design. Its labels must not be treated as observed research results; preserve direction and boundaries exactly.",
+          "objections": [
+            "No production deployment or empirical observation confirms the proposed behavior."
+          ],
+          "open_obligations": [
+            "If presented as empirical system architecture or performance, independently validate with implementation and data."
+          ],
+          "investigator_output": {
+            "claim": "The origin campus controls authentication, policy and local execution; an external provider is hypothetical and requires separate authorization.",
+            "method": "Construct the graph exactly from the authored fixture",
+            "evidence_status": "unverified",
+            "result": "The node, edge, and domain membership records below are the complete designed-case inputs."
+          },
+          "skeptic_output": {
+            "response": "Internally reviewable as a design description only; do not invent nodes, edge directions, chronology, benchmarks, or evidence."
+          },
+          "reasoning_steps": [
+            "The architecture view answers a distinct question about the same gateway.",
+            "The fixture contains exactly 6 nodes and 5 directed edges.",
+            "The layout architecture expresses semantics without adding quantitative claims.",
+            "The origin campus controls authentication, policy and local execution; an external provider is hypothetical and requires separate authorization."
+          ],
+          "coordinator_decision": "save_evidence",
+          "next_question": "Compare the four figures and explain the limits of each representation.",
+          "note": "CONSTRUCTED COMPUTER-SCIENCE SAMPLE DATA, NOT AN AI RESEARCH RUN OR INDEPENDENT VALIDATION.",
+          "objective_review": {
+            "status": "partial",
+            "claim": "The constructed diagram specifications are complete as fixture inputs, not verified scientific outcomes.",
+            "argument_summary": "Every view is fully specified and may be rendered as an illustrative diagram; the hypothetical system has not been built or tested.",
+            "argument_steps": [],
+            "verification_status": "incomplete",
+            "unresolved_objections": [
+              "No deployment or external validation."
+            ],
+            "basis_artifact_ids": []
+          },
+          "strategy_review": {
+            "assessment": "productive",
+            "rationale": "Source data fully specifies a demonstrative graph, without asserting empirical validation.",
+            "basis_artifact_ids": []
+          },
+          "diagram_spec": {
+            "caption": "Block architecture of the hypothetical campus research gateway. The origin campus controls identity, policy, queue and local worker. External processing is a separate hypothetical trust domain.",
+            "layout": "architecture",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Campus research client"
+              },
+              {
+                "id": "identity",
+                "label": "Campus identity authority"
+              },
+              {
+                "id": "policy",
+                "label": "Policy enforcement gateway"
+              },
+              {
+                "id": "scheduler",
+                "label": "Job scheduler"
+              },
+              {
+                "id": "local",
+                "label": "Campus GPU worker"
+              },
+              {
+                "id": "external",
+                "label": "Optional approved external provider"
+              }
+            ],
+            "edges": [
+              {
+                "source": "client",
+                "target": "identity",
+                "label": "authenticate user"
+              },
+              {
+                "source": "identity",
+                "target": "policy",
+                "label": "assert campus identity"
+              },
+              {
+                "source": "policy",
+                "target": "scheduler",
+                "label": "approved job only"
+              },
+              {
+                "source": "scheduler",
+                "target": "local",
+                "label": "local dispatch"
+              },
+              {
+                "source": "scheduler",
+                "target": "external",
+                "label": "only with separate approval"
+              }
+            ],
+            "boundaries": [
+              {
+                "label": "Origin-campus authority boundary",
+                "node_ids": [
+                  "client",
+                  "identity",
+                  "policy",
+                  "scheduler",
+                  "local"
+                ]
+              },
+              {
+                "label": "External provider domain (hypothetical)",
+                "node_ids": [
+                  "external"
+                ]
+              }
+            ],
+            "claim_ids": [
+              "C2"
+            ],
+            "evidence_refs": [],
+            "placement_after_section": null
+          }
+        },
+        {
+          "id": "48e7c9c7-d2dc-468f-b82f-72f624273121",
+          "project_id": "$SIGMA_SAMPLE_PROJECT_ID",
+          "session_id": "4c426e2c-2a30-47e8-bbda-38fdf4120541",
+          "strategy_id": "6a73cbfd-8268-4b3b-a0f2-aad5b97f241d",
+          "strategy_title": "Compare four complementary gateway diagrams",
+          "sequence": 3,
+          "strategy_cycle": 1,
+          "created_at": "2026-11-06T21:05:00+00:00",
+          "claim_or_question": "Constructed design outcome 3/4: Congestion feedback loop. Input load, queue depth, latency, and admission throttling form a cycle; feedback direction is part of the designed controller, not empirical causality.",
+          "method": "Authored deterministic diagram specification; no AI inference, experiments, benchmarks, or external observations.",
+          "assumptions": [
+            "All components, decisions, and protocols describe an invented illustrative computer system.",
+            "Every directed edge below has the literal qualitative relationship named by its label.",
+            "No performance numbers or independently verified operational claims are supplied."
+          ],
+          "evidence_status": "unverified",
+          "skeptic_response": "The diagram is internally specified as a hypothetical design. Its labels must not be treated as observed research results; preserve direction and boundaries exactly.",
+          "objections": [
+            "No production deployment or empirical observation confirms the proposed behavior."
+          ],
+          "open_obligations": [
+            "If presented as empirical system architecture or performance, independently validate with implementation and data."
+          ],
+          "investigator_output": {
+            "claim": "Input load, queue depth, latency, and admission throttling form a cycle; feedback direction is part of the designed controller, not empirical causality.",
+            "method": "Construct the graph exactly from the authored fixture",
+            "evidence_status": "unverified",
+            "result": "The node, edge, and domain membership records below are the complete designed-case inputs."
+          },
+          "skeptic_output": {
+            "response": "Internally reviewable as a design description only; do not invent nodes, edge directions, chronology, benchmarks, or evidence."
+          },
+          "reasoning_steps": [
+            "The network view answers a distinct question about the same gateway.",
+            "The fixture contains exactly 4 nodes and 4 directed edges.",
+            "The layout network expresses semantics without adding quantitative claims.",
+            "Input load, queue depth, latency, and admission throttling form a cycle; feedback direction is part of the designed controller, not empirical causality."
+          ],
+          "coordinator_decision": "save_evidence",
+          "next_question": "Compare the four figures and explain the limits of each representation.",
+          "note": "CONSTRUCTED COMPUTER-SCIENCE SAMPLE DATA, NOT AN AI RESEARCH RUN OR INDEPENDENT VALIDATION.",
+          "objective_review": {
+            "status": "partial",
+            "claim": "The constructed diagram specifications are complete as fixture inputs, not verified scientific outcomes.",
+            "argument_summary": "Every view is fully specified and may be rendered as an illustrative diagram; the hypothetical system has not been built or tested.",
+            "argument_steps": [],
+            "verification_status": "incomplete",
+            "unresolved_objections": [
+              "No deployment or external validation."
+            ],
+            "basis_artifact_ids": []
+          },
+          "strategy_review": {
+            "assessment": "productive",
+            "rationale": "Source data fully specifies a demonstrative graph, without asserting empirical validation.",
+            "basis_artifact_ids": []
+          },
+          "diagram_spec": {
+            "caption": "Qualitative feedback network for the proposed gateway. Higher arrival load grows the queue; delay triggers throttling, which limits admitted load. No causal strength or numeric calibration is claimed.",
+            "layout": "network",
+            "nodes": [
+              {
+                "id": "arrival",
+                "label": "Admitted arrival load"
+              },
+              {
+                "id": "backlog",
+                "label": "Queue backlog"
+              },
+              {
+                "id": "delay",
+                "label": "Observed queue delay"
+              },
+              {
+                "id": "throttle",
+                "label": "Admission throttle"
+              }
+            ],
+            "edges": [
+              {
+                "source": "arrival",
+                "target": "backlog",
+                "label": "increases backlog"
+              },
+              {
+                "source": "backlog",
+                "target": "delay",
+                "label": "increases delay"
+              },
+              {
+                "source": "delay",
+                "target": "throttle",
+                "label": "triggers throttling"
+              },
+              {
+                "source": "throttle",
+                "target": "arrival",
+                "label": "reduces admitted load"
+              }
+            ],
+            "boundaries": [],
+            "claim_ids": [
+              "C3"
+            ],
+            "evidence_refs": [],
+            "placement_after_section": null
+          }
+        },
+        {
+          "id": "26094311-bd13-43dd-8ebd-6e357a2d0eb1",
+          "project_id": "$SIGMA_SAMPLE_PROJECT_ID",
+          "session_id": "4c426e2c-2a30-47e8-bbda-38fdf4120541",
+          "strategy_id": "6a73cbfd-8268-4b3b-a0f2-aad5b97f241d",
+          "strategy_title": "Compare four complementary gateway diagrams",
+          "sequence": 4,
+          "strategy_cycle": 1,
+          "created_at": "2026-11-06T21:05:00+00:00",
+          "claim_or_question": "Constructed design outcome 4/4: Ordered execution trace. The planned trace consists of five ordered phases; this is event order, with no fabricated timestamps, durations, or performance measurements.",
+          "method": "Authored deterministic diagram specification; no AI inference, experiments, benchmarks, or external observations.",
+          "assumptions": [
+            "All components, decisions, and protocols describe an invented illustrative computer system.",
+            "Every directed edge below has the literal qualitative relationship named by its label.",
+            "No performance numbers or independently verified operational claims are supplied."
+          ],
+          "evidence_status": "unverified",
+          "skeptic_response": "The diagram is internally specified as a hypothetical design. Its labels must not be treated as observed research results; preserve direction and boundaries exactly.",
+          "objections": [
+            "No production deployment or empirical observation confirms the proposed behavior."
+          ],
+          "open_obligations": [
+            "If presented as empirical system architecture or performance, independently validate with implementation and data."
+          ],
+          "investigator_output": {
+            "claim": "The planned trace consists of five ordered phases; this is event order, with no fabricated timestamps, durations, or performance measurements.",
+            "method": "Construct the graph exactly from the authored fixture",
+            "evidence_status": "unverified",
+            "result": "The node, edge, and domain membership records below are the complete designed-case inputs."
+          },
+          "skeptic_output": {
+            "response": "Internally reviewable as a design description only; do not invent nodes, edge directions, chronology, benchmarks, or evidence."
+          },
+          "reasoning_steps": [
+            "The timeline view answers a distinct question about the same gateway.",
+            "The fixture contains exactly 5 nodes and 4 directed edges.",
+            "The layout timeline expresses semantics without adding quantitative claims.",
+            "The planned trace consists of five ordered phases; this is event order, with no fabricated timestamps, durations, or performance measurements."
+          ],
+          "coordinator_decision": "save_evidence",
+          "next_question": "Compare the four figures and explain the limits of each representation.",
+          "note": "CONSTRUCTED COMPUTER-SCIENCE SAMPLE DATA, NOT AN AI RESEARCH RUN OR INDEPENDENT VALIDATION.",
+          "objective_review": {
+            "status": "partial",
+            "claim": "The constructed diagram specifications are complete as fixture inputs, not verified scientific outcomes.",
+            "argument_summary": "Every view is fully specified and may be rendered as an illustrative diagram; the hypothetical system has not been built or tested.",
+            "argument_steps": [],
+            "verification_status": "incomplete",
+            "unresolved_objections": [
+              "No deployment or external validation."
+            ],
+            "basis_artifact_ids": []
+          },
+          "strategy_review": {
+            "assessment": "productive",
+            "rationale": "Source data fully specifies a demonstrative graph, without asserting empirical validation.",
+            "basis_artifact_ids": []
+          },
+          "diagram_spec": {
+            "caption": "Sequential lifecycle of a single synthetic authorized job. Phases are ordered by the constructed protocol; no elapsed times, dates, or performance measurements are asserted.",
+            "layout": "timeline",
+            "nodes": [
+              {
+                "id": "submit",
+                "label": "Job submitted"
+              },
+              {
+                "id": "authorize",
+                "label": "Policy authorization recorded"
+              },
+              {
+                "id": "enqueue",
+                "label": "Job queued"
+              },
+              {
+                "id": "execute",
+                "label": "Worker executes job"
+              },
+              {
+                "id": "audit",
+                "label": "Result and audit record committed"
+              }
+            ],
+            "edges": [
+              {
+                "source": "submit",
+                "target": "authorize",
+                "label": "precedes"
+              },
+              {
+                "source": "authorize",
+                "target": "enqueue",
+                "label": "precedes"
+              },
+              {
+                "source": "enqueue",
+                "target": "execute",
+                "label": "precedes"
+              },
+              {
+                "source": "execute",
+                "target": "audit",
+                "label": "precedes"
+              }
+            ],
+            "boundaries": [],
+            "claim_ids": [
+              "C4"
+            ],
+            "evidence_refs": [],
+            "placement_after_section": null
+          }
+        }
+      ],
+      "strategy_assessments": [],
+      "interventions": [],
+      "message": "Four structured design views saved; no provider was called.",
+      "current_action": "Completed authored fixture",
+      "events": [
+        {
+          "sequence": 1,
+          "timestamp": "2026-11-06T21:00:00+00:00",
+          "kind": "fixture.created",
+          "role": null,
+          "message": "Four deterministic diagram specifications saved without research-agent calls."
+        }
+      ],
+      "simulated": true,
+      "fixture_kind": "authored_design",
+      "fixture_disclaimer": "Constructed educational architecture, not an empirical research finding or independent verification."
+    }
+  ]
+}
