@@ -6217,7 +6217,7 @@ function App() {
       const nodes = document.querySelectorAll<HTMLElement>(
         '.research-running-indicator, .session-running i, .paper-stage-list li.is-active, .paper-stage-list li.is-queued'
       );
-      for (const node of nodes) {
+      for (const node of Array.from(nodes)) {
         for (const animation of node.getAnimations()) {
           if ('animationName' in animation &&
             animation.animationName === 'research-running-heartbeat' &&

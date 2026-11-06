@@ -3342,7 +3342,10 @@ def mark_scored_progress(path: str, paper_id: str) -> None:
             and state.get("status") == "complete"
             and (
                 state.get("stage") == "score_failed"
-                or (state.get("stage") == "complete" and "scoring did not finish" in str(state.get("detail", "")))
+                or (
+                    state.get("stage") == "complete"
+                    and "scoring did not finish" in str(state.get("detail", ""))
+                )
             )
         ):
             _write_progress_status(

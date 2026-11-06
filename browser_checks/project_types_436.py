@@ -96,7 +96,10 @@ with sync_playwright() as playwright:
     assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
 
     # Green and yellow heartbeats use the same document-clock phase, even
-    # when inserted in different DOM updates.
+    # when inserted in different DOM updates. Saved must be visible so its
+    # CSS animations are active; the default Samples tab is hidden.
+    page.get_by_role("tab", name="Saved").click()
+    expect(page.locator("#recent-panel")).to_be_visible()
     page.evaluate("""() => {
         const home = document.querySelector('.home-recents');
         if (!home) throw Error('Saved project list missing');
@@ -125,6 +128,7 @@ with sync_playwright() as playwright:
         document.getElementById('pulse-sync-green')?.remove();
         document.getElementById('pulse-sync-yellow')?.remove();
     }""")
+    page.get_by_role("tab", name="Samples").click()
 
     # Project Types traps focus, ignores Escape/backdrop clicks, and only
     # dismisses via its Close button (or an explicit successful Save).
