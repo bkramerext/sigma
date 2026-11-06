@@ -1124,7 +1124,7 @@ with sync_playwright() as playwright:
     assert reset_calls == [], reset_calls
     restart.click()
     expect(restart_confirm).to_be_visible()
-    page.locator("#papers-heading").click()
+    page.locator("#paper-draft-content").click(position={"x": 5, "y": 5})
     expect(restart_confirm).to_have_count(0)
     assert reset_calls == [], reset_calls
     restart.click()
