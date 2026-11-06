@@ -3142,6 +3142,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
             not in {"running", "failed", "cancelled", "paused", "complete"}
             or progress_state.get("stage")
             not in {
+                "queued",
                 "snapshot",
                 "source_material",
                 "publication_compilation",

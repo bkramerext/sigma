@@ -70,7 +70,12 @@ export function installRequestErrorToasts() {
       const requestPath = new URL(url, window.location.href).pathname;
       const expectedSignedOutCheck = response.status === 401 && requestPath === '/api/ai/connection' &&
         (await response.clone().json().catch(() => null) as { error?: unknown } | null)?.error === 'Authentication required.';
-      if (isApi && !response.ok && !expectedSignedOutCheck && !handledLocally) reportRequestFailure(await responseError(response));
+      const requestMethod = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      const handledReadError = requestMethod === 'GET' && response.status >= 400 && response.status < 500
+        && response.status !== 401 && response.status !== 403;
+      // Read-only stale resources are reported by their owner, not globally.
+      if (isApi && !response.ok && !expectedSignedOutCheck && !handledLocally && !handledReadError)
+        reportRequestFailure(await responseError(response));
       return response;
     } catch (error) {
       const aborted = init?.signal?.aborted || (input instanceof Request && input.signal.aborted)

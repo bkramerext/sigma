@@ -2316,7 +2316,7 @@ function paperProgressOperation(progress: PaperProgress): string {
     case 'snapshot': return 'Preparing research evidence';
     case 'source_material': return milestone ? 'Writing references selected' : 'Selecting usable writing references';
     case 'publication_compilation': return progress.detail || (milestone ? 'Publication references ready' : 'Compiling publication references…');
-    case 'writing': return 'Writing the paper';
+    case 'writing': return 'Finishing paper';
     case 'evidence': return `${milestone ? 'Evidence extracted' : 'Extracting evidence'}${count}`;
     case 'consolidation': return 'Consolidating findings';
     case 'planning': return milestone ? 'Paper plan ready' : 'Planning the paper';
@@ -2348,8 +2348,8 @@ const PAPER_STAGES = [
 function PaperStageSteps({ progress }: { progress: PaperProgress }) {
   const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(progress.stage));
   return <ol className="session-strategy-live-status paper-stage-list" aria-label="Paper generation steps">
-    {PAPER_STAGES.map((group, step) => <li key={group.label} className={step === index ? (progress.status === 'active' ? 'is-active' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
-      <strong>{group.label}</strong>{step === index && <span>{paperProgressOperation(progress)}</span>}
+    {PAPER_STAGES.map((group, step) => <li key={group.label} data-paper-step={group.label} className={step === index ? (progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
+      <strong>{group.label}</strong>{step === index && progress.status !== 'queued' && <span>{paperProgressOperation(progress)}</span>}
     </li>)}
     {index < 0 && <li className={progress.status === 'active' ? 'is-active' : 'is-idle'}><strong>Retry</strong><span>{paperProgressOperation(progress)}</span></li>}
   </ol>;
@@ -2715,6 +2715,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       if (!response.ok) throw new Error(result.error ?? 'Could not cancel paper generation.');
       if (result.cancelled) {
         deliberatePaperStop.current = true;
+        setPaperProgress(current => current ? { ...current, status: 'cancelled' } : current);
         request.current?.abort();
         setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
       } else {
@@ -2748,6 +2749,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   }
 
   async function restartCheckpoint() {
+    let startAgain = false;
     const restartSource = checkpointMismatch ?? restartableCheckpoint;
     if (busy || !restartSource?.checkpoint_can_restart || !binding) return;
     setBusy(true); setError(''); setSuccess(''); setPhase('Clearing unfinished paper work…');
@@ -2769,13 +2771,16 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       setPaperProgress(null);
       setNewPaperRequested(true);
       setDraftPaperExpanded(true);
-      // Restart clears the checkpoint and immediately launches a new paper.
-      await generatePaper(true);
+      // Restart only after a confirmed reset, without extending the reset handler
+      // through the entire paper-generation stream.
+      await refresh(selected?.paper_id);
+      startAgain = true;
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
+    if (startAgain) void generatePaper();
   }
-  async function generatePaper(afterRestart = false) {
-    if ((busy && !afterRestart) || !binding) return;
+  async function generatePaper() {
+    if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess('');
@@ -2870,8 +2875,11 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const planningRetry = continuationAvailable && resumeDetails !== null &&
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
     !planningFallback;
-  const generating = busy || request.current !== null || paperProgress?.status === 'active' || paperProgress?.status === 'queued';
-  const generationRunning = request.current !== null || paperProgress?.status === 'active' || paperProgress?.status === 'queued';
+  const generationRunning = !deliberatePaperStop.current && (
+    paperProgress?.status === 'active' || paperProgress?.status === 'queued' ||
+    (request.current !== null && !['cancelled', 'interrupted', 'failed', 'complete'].includes(paperProgress?.status ?? ''))
+  );
+  const generating = busy || generationRunning;
   const draftVersion = Math.max(0, ...papers.map(paper => paper.paper_version)) + 1;
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
   const showDraftPaper = !guest && (newPaperRequested || generating || continuationAvailable || (paperProgress != null && paperProgress.status !== 'complete'));
@@ -2925,12 +2933,12 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={`Paper ${draftVersion}`} data-paper-version={draftVersion}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={`Paper ${draftVersion}`} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
-              beforeCopy={<><span className="paper-real-title paper-draft-title">{paperProgress?.status === 'queued' ? 'Waiting to generate' : paperProgress?.status === 'active' ? 'Generating paper' : paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>{paperProgress?.status === 'active' && paperProgress.stage === 'sections' && paperProgress.total !== null && paperProgress.current !== null && <span className="paper-sections-remaining">{Math.max(0, paperProgress.total - paperProgress.current)} sections remaining</span>}</>}
+              beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} data-tooltip={continuationAvailable ? 'Resume paper generation' : 'Generate paper'} disabled={generating || loading || !binding || !!checkpointMismatch} onClick={() => { setDraftPaperExpanded(true); void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
                 {generationRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={`Stop Paper ${draftVersion}`} data-tooltip="Stop paper generation" disabled={!binding || loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                 {generationRunning && <span className={`research-running-indicator-frame paper-draft-pulse${paperProgress?.status === "queued" ? " paper-queued-pulse" : ""}`} aria-label="Paper generation running" title="Paper generation running"><span className="research-running-indicator"/></span>}
-                {!generationRunning && restartableCheckpoint?.checkpoint_can_restart && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>}
+                {!generationRunning && (restartableCheckpoint?.checkpoint_can_restart || checkpointMismatch?.checkpoint_can_restart) && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>}
                 {!generationRunning && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove unfinished Paper ${draftVersion}`} data-tooltip={`Remove unfinished Paper ${draftVersion}`} disabled={busy || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
@@ -2952,6 +2960,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {paperProgress.status === 'active' || paperProgress.status === 'queued'
           ? <>
               <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>
+              {paperProgress.status === 'active' && paperProgress.stage === 'sections' && paperProgress.total !== null && paperProgress.current !== null && <span className="paper-sections-remaining">{Math.max(0, paperProgress.total - paperProgress.current)} section{Math.max(0, paperProgress.total - paperProgress.current) === 1 ? '' : 's'} remaining</span>}
               <PaperStageSteps progress={paperProgress}/>
             </>
           : <details className="paper-stage-history">
@@ -2982,7 +2991,6 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   </span>}
                 </span>
                 {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label="View PDF in a new browser tab" data-tooltip="View PDF in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
-                {!paper.score && <button type="button" className="text-view-link paper-score-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : 'Score'}</button>}
                 <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
@@ -2994,7 +3002,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   </div></div>}
                 </span>
               </>}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100 <button type="button" className="text-view-link paper-score-link paper-see-scoring-link" disabled={busy || !!scoringId} onClick={() => void scorePaper(paper)}>See scoring</button></>}</p></div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
@@ -4367,6 +4375,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   const [exclusiveSections, setExclusiveSections] = useState(false);
   const [savedExclusiveSections, setSavedExclusiveSections] = useState(false);
   const [exclusiveSectionsLoaded, setExclusiveSectionsLoaded] = useState(false);
+  const [sectionLayoutWarning, setSectionLayoutWarning] = useState('');
   const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : savedNewProjectValues() ?? { title: '', problem: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
@@ -4419,8 +4428,14 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
           setExclusiveSections(data.expand_one_project_section_at_a_time);
           setSavedExclusiveSections(data.expand_one_project_section_at_a_time);
           setExclusiveSectionsLoaded(true);
+          setSectionLayoutWarning('');
         }
-      }).catch(cause => { if (!controller.signal.aborted) { setExclusiveSectionsLoaded(true); setError(errorMessage(cause)); } });
+      }).catch(() => {
+        if (!controller.signal.aborted) {
+          setExclusiveSectionsLoaded(true);
+          setSectionLayoutWarning('Section layout preference unavailable. You may still change it and retry saving.');
+        }
+      });
     return () => controller.abort();
   }, [initial?.path]);
   useEffect(() => {
@@ -4579,6 +4594,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         <p className="settings-hint">When enabled, each saved outcome opens with its conclusion and provides expandable reasoning, evidence, metrics and session details. When disabled, SIGMA shows a concise result with its qualifications.</p>
         <label className="project-preference-checkbox" htmlFor="expand-one-project-section"><input id="expand-one-project-section" type="checkbox" checked={exclusiveSections} disabled={!exclusiveSectionsLoaded} onChange={event => setExclusiveSections(event.target.checked)}/>Expand one project section at a time</label>
         <p className="settings-hint">User-wide display preference for the Project, Strategies, Sessions and Papers sections. Opening one collapses the others.</p>
+        {sectionLayoutWarning && <p className="settings-hint" role="status">{sectionLayoutWarning}</p>}
         <label className="project-preference-checkbox" htmlFor="allow-unattended-background-execution"><input id="allow-unattended-background-execution" type="checkbox" checked={userUnattended} disabled={!userPreferenceLoaded} onChange={event => setUserUnattended(event.target.checked)}/>Allow unattended background execution</label>
         <p id="allow-unattended-background-execution-help" className="settings-hint">This user-wide setting applies across all your projects. When enabled, the backend can keep research and paper generation running after you close the browser page, potentially incurring AI-provider costs. When disabled, SIGMA stops new AI stages after the last viewer disconnects and preserves completed research or paper checkpoints for explicit continuation.</p>
       </fieldset>
@@ -5386,7 +5402,6 @@ function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
 function runningFavicon(color: 'green' | 'yellow' = 'green'): () => void {
   const existing = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
   const link = existing ?? document.createElement("link");
-  const priorHref = existing?.getAttribute("href");
   link.rel = "icon";
   link.type = "image/svg+xml";
   if (!existing) document.head.appendChild(link);
@@ -5411,10 +5426,8 @@ function runningFavicon(color: 'green' | 'yellow' = 'green'): () => void {
   const interval = motion ? window.setInterval(draw, 80) : undefined;
   return () => {
     if (interval !== undefined) window.clearInterval(interval);
-    if (existing) {
-      if (priorHref === null || priorHref === undefined) link.removeAttribute("href");
-      else link.setAttribute("href", priorHref);
-    } else link.remove();
+    // Never restore a stale pulsing frame after paper generation stops.
+    link.href = '/favicon.svg';
   };
 }
 
