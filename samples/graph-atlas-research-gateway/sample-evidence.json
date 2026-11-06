@@ -87,12 +87,7 @@
           "skeptic_output": {
             "response": "Internally reviewable as a design description only; do not invent nodes, edge directions, chronology, benchmarks, or evidence."
           },
-          "reasoning_steps": [
-            "The hierarchical view answers a distinct question about the same gateway.",
-            "The fixture contains exactly 5 nodes and 4 directed edges.",
-            "The layout hierarchical expresses semantics without adding quantitative claims.",
-            "A request follows policy checks, with rejection and accepted dispatch as distinct branches. This is a dependency and decision view, not a timeline."
-          ],
+          "reasoning_steps": [],
           "coordinator_decision": "save_evidence",
           "next_question": "Compare the four figures and explain the limits of each representation.",
           "note": "CONSTRUCTED COMPUTER-SCIENCE SAMPLE DATA, NOT AN AI RESEARCH RUN OR INDEPENDENT VALIDATION.",
@@ -165,7 +160,13 @@
             ],
             "evidence_refs": [],
             "placement_after_section": null
-          }
+          },
+          "design_notes": [
+            "The hierarchical view answers a distinct question about the same gateway.",
+            "The fixture contains exactly 5 nodes and 4 directed edges.",
+            "The layout hierarchical expresses semantics without adding quantitative claims.",
+            "A request follows policy checks, with rejection and accepted dispatch as distinct branches. This is a dependency and decision view, not a timeline."
+          ]
         },
         {
           "id": "19a1053e-59f7-4b90-aed9-0cd54e124e98",
@@ -200,12 +201,7 @@
           "skeptic_output": {
             "response": "Internally reviewable as a design description only; do not invent nodes, edge directions, chronology, benchmarks, or evidence."
           },
-          "reasoning_steps": [
-            "The architecture view answers a distinct question about the same gateway.",
-            "The fixture contains exactly 6 nodes and 5 directed edges.",
-            "The layout architecture expresses semantics without adding quantitative claims.",
-            "The origin campus controls authentication, policy and local execution; an external provider is hypothetical and requires separate authorization."
-          ],
+          "reasoning_steps": [],
           "coordinator_decision": "save_evidence",
           "next_question": "Compare the four figures and explain the limits of each representation.",
           "note": "CONSTRUCTED COMPUTER-SCIENCE SAMPLE DATA, NOT AN AI RESEARCH RUN OR INDEPENDENT VALIDATION.",
@@ -304,7 +300,13 @@
             ],
             "evidence_refs": [],
             "placement_after_section": null
-          }
+          },
+          "design_notes": [
+            "The architecture view answers a distinct question about the same gateway.",
+            "The fixture contains exactly 6 nodes and 5 directed edges.",
+            "The layout architecture expresses semantics without adding quantitative claims.",
+            "The origin campus controls authentication, policy and local execution; an external provider is hypothetical and requires separate authorization."
+          ]
         },
         {
           "id": "48e7c9c7-d2dc-468f-b82f-72f624273121",
@@ -339,12 +341,7 @@
           "skeptic_output": {
             "response": "Internally reviewable as a design description only; do not invent nodes, edge directions, chronology, benchmarks, or evidence."
           },
-          "reasoning_steps": [
-            "The network view answers a distinct question about the same gateway.",
-            "The fixture contains exactly 4 nodes and 4 directed edges.",
-            "The layout network expresses semantics without adding quantitative claims.",
-            "Input load, queue depth, latency, and admission throttling form a cycle; feedback direction is part of the designed controller, not empirical causality."
-          ],
+          "reasoning_steps": [],
           "coordinator_decision": "save_evidence",
           "next_question": "Compare the four figures and explain the limits of each representation.",
           "note": "CONSTRUCTED COMPUTER-SCIENCE SAMPLE DATA, NOT AN AI RESEARCH RUN OR INDEPENDENT VALIDATION.",
@@ -413,7 +410,13 @@
             ],
             "evidence_refs": [],
             "placement_after_section": null
-          }
+          },
+          "design_notes": [
+            "The network view answers a distinct question about the same gateway.",
+            "The fixture contains exactly 4 nodes and 4 directed edges.",
+            "The layout network expresses semantics without adding quantitative claims.",
+            "Input load, queue depth, latency, and admission throttling form a cycle; feedback direction is part of the designed controller, not empirical causality."
+          ]
         },
         {
           "id": "26094311-bd13-43dd-8ebd-6e357a2d0eb1",
@@ -448,12 +451,7 @@
           "skeptic_output": {
             "response": "Internally reviewable as a design description only; do not invent nodes, edge directions, chronology, benchmarks, or evidence."
           },
-          "reasoning_steps": [
-            "The timeline view answers a distinct question about the same gateway.",
-            "The fixture contains exactly 5 nodes and 4 directed edges.",
-            "The layout timeline expresses semantics without adding quantitative claims.",
-            "The planned trace consists of five ordered phases; this is event order, with no fabricated timestamps, durations, or performance measurements."
-          ],
+          "reasoning_steps": [],
           "coordinator_decision": "save_evidence",
           "next_question": "Compare the four figures and explain the limits of each representation.",
           "note": "CONSTRUCTED COMPUTER-SCIENCE SAMPLE DATA, NOT AN AI RESEARCH RUN OR INDEPENDENT VALIDATION.",
@@ -526,7 +524,13 @@
             ],
             "evidence_refs": [],
             "placement_after_section": null
-          }
+          },
+          "design_notes": [
+            "The timeline view answers a distinct question about the same gateway.",
+            "The fixture contains exactly 5 nodes and 4 directed edges.",
+            "The layout timeline expresses semantics without adding quantitative claims.",
+            "The planned trace consists of five ordered phases; this is event order, with no fabricated timestamps, durations, or performance measurements."
+          ]
         }
       ],
       "strategy_assessments": [],
