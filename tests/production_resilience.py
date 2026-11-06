@@ -171,7 +171,7 @@ def check_memory_sources() -> None:
     with (
         patch.dict(
             os.environ,
-            {"SIGMA_CLOUD_AUTH_ENABLED": "true", "SIGMA_STORAGE_BACKEND": "persistent_disk"},
+            {"SIGMA_MEMORY_REQUIRE_METRICS": "true"},
         ),
         patch.object(memory_guard, "memory_snapshot", return_value=stats),
         patch.object(memory_guard, "_CRITICAL", False),
