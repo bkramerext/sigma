@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import './request-toast.css';
 import { RequestToastStore } from './request-toast-store.js';
-import { isProviderUsageLimit, providerUsageLimitCopy } from './provider-usage-guidance';
+import { providerInterruptionCopy } from './provider-usage-guidance';
 
 const toastStore = new RequestToastStore();
 
@@ -95,7 +95,7 @@ export function RequestErrorToasts() {
     {failures.map(failure => <div className="request-toast-item" data-phase={failure.phase} key={failure.id}>
       <div className="request-toast-item-inner">
         <div className="request-toast" data-phase={failure.phase} role="alert">
-          <div className="request-toast-content"><strong>{isProviderUsageLimit(failure.message) ? providerUsageLimitCopy().title : 'Request Failed'}</strong><p>{isProviderUsageLimit(failure.message) ? `${providerUsageLimitCopy().description} ${providerUsageLimitCopy().next}` : failure.message}</p></div>
+          <div className="request-toast-content"><strong>{providerInterruptionCopy(failure.message)?.title ?? 'Request Failed'}</strong><p>{providerInterruptionCopy(failure.message) ? `${providerInterruptionCopy(failure.message)?.description} ${providerInterruptionCopy(failure.message)?.next}` : failure.message}</p></div>
           <button type="button" aria-label="Dismiss request error" onClick={() => toastStore.dismiss(failure.id)}>Dismiss</button>
         </div>
       </div>

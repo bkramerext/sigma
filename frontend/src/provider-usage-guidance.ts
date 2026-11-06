@@ -41,3 +41,24 @@ export function friendlyProviderUsageError(message: string, sponsored = sponsore
   const copy = providerUsageLimitCopy(sponsored);
   return `${copy.title}. ${copy.description} ${copy.next}`;
 }
+
+export function isSponsoredChatGPTUnavailable(message: string): boolean {
+  return /(?:SIGMA[- ]sponsored|sponsored) ChatGPT (?:is )?temporarily unavailable/i.test(message);
+}
+
+export function providerInterruptionCopy(
+  message: string, sponsored = sponsoredConnection,
+): { title: string; description: string; next: string } | null {
+  if (isProviderUsageLimit(message)) return providerUsageLimitCopy(sponsored);
+  if (isSponsoredChatGPTUnavailable(message)) return {
+    title: 'Sponsored ChatGPT unavailable',
+    description: 'The sponsored ChatGPT connection is temporarily unavailable. Saved work is unchanged.',
+    next: 'Try again in a few hours.',
+  };
+  return null;
+}
+
+export function friendlyProviderError(message: string, sponsored = sponsoredConnection): string {
+  const copy = providerInterruptionCopy(message, sponsored);
+  return copy ? `${copy.description} ${copy.next}` : message;
+}

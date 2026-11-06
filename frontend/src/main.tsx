@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
-import { friendlyProviderUsageError, providerUsageLimitCopy, setSponsoredUsageConnection } from './provider-usage-guidance';
+import { friendlyProviderError, friendlyProviderUsageError, providerInterruptionCopy, providerUsageLimitCopy, setSponsoredUsageConnection } from './provider-usage-guidance';
 import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
@@ -378,7 +378,7 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
   const guidance = stoppedSessionGuidance(session);
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
-  const title = 'Stopped';
+  const title = session.status === 'failed' ? 'Session failed' : 'Stopped';
   return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
     <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
     {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
@@ -797,16 +797,16 @@ function sessionNoticeKey(session: ResearchSession): string {
   return `${session.id}:${(hash >>> 0).toString(16)}`;
 }
 
-function SessionNoticeDismiss({ number, onDismiss }: { number: number; onDismiss: () => void }) {
-  return <button type="button" className="session-notice-dismiss" aria-label={`Dismiss notices for Session ${number}`}
-    title={`Dismiss Session ${number} notices`} onClick={onDismiss}>Dismiss</button>;
+function SessionNoticeDismiss({ number, onDismiss, label }: { number: number; onDismiss: () => void; label?: string }) {
+  return <button type="button" className="session-notice-dismiss" aria-label={label ?? `Dismiss notices for Session ${number}`}
+    title={label ?? `Dismiss Session ${number} notices`} onClick={onDismiss}>Dismiss</button>;
 }
 
 // An in-flow exit slot: the notice slides through its own bottom edge
 // as that slot collapses, instead of flying toward the viewport footer.
 // Dismissal is a presentation-only operation; saved research is unchanged.
-function SessionNotice({ number, onDismiss, title, kind, ariaLabel, children }: {
-  number: number; onDismiss: () => void; title: string; kind: string; ariaLabel: string; children: ReactNode;
+function SessionNotice({ number, onDismiss, title, kind, ariaLabel, dismissLabel, children }: {
+  number: number; onDismiss: () => void; title: string; kind: string; ariaLabel: string; dismissLabel?: string; children: ReactNode;
 }) {
   const [exiting, setExiting] = useState(false);
   const timer = useRef<number | null>(null);
@@ -820,10 +820,10 @@ function SessionNotice({ number, onDismiss, title, kind, ariaLabel, children }: 
   };
   return <div className={`session-notice-exit-slot${exiting ? ' is-exiting' : ''}`}>
     <div className="session-notice-exit-inner">
-      <div className={kind} role={kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
+      <div className={kind} role={kind.includes('paper-contextual-error') ? 'alert' : kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
         <div className="session-notice-header">
           <strong className="session-notice-title">{title}</strong>
-          <SessionNoticeDismiss number={number} onDismiss={dismiss}/>
+          <SessionNoticeDismiss number={number} onDismiss={dismiss} label={dismissLabel}/>
         </div>
         {children}
       </div>
@@ -1026,7 +1026,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
               target: 'markdown', expected_digest: expectedDigest,
               expected_binding: settings.binding, expected_project_id: session.project_id,
             },
-            controller.signal,
+            controller.signal, true,
           );
           if (converted.source_digest !== expectedDigest)
             throw new Error('Research text changed while formatting. The saved source is unchanged.');
@@ -1035,7 +1035,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           setConvertedBlocks(next);
         } catch (cause) {
           if (!controller.signal.aborted) {
-            setConversionError(`Markdown formatting paused: ${friendlyProviderUsageError(errorMessage(cause))}. Saved research remains unchanged; Markdown rendering stays available.`);
+            setConversionError(`Markdown formatting paused: ${friendlyProviderError(errorMessage(cause))}. Saved research remains unchanged; Markdown rendering stays available.`);
             conversionQueue.current = [];
           }
         } finally {
@@ -1437,6 +1437,10 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const continueWithSavedType = useRef(false);
   const missingTypeDialog = useRef<HTMLDialogElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
+  // Contextual failures belong to the affected session, not the global toast.
+  // A dismissed failure remains suppressed until the user tries Resume again.
+  const [sessionControlFailures, setSessionControlFailures] = useState<Record<string, { message: string; serial: number; dismissed: boolean }>>({});
+  const sessionControlSerial = useRef(0);
   const [resumeAuthorization, setResumeAuthorization] = useState<ResumeAuthorization | null>(null);
   const resumeApprovalResolver = useRef<((approved: boolean) => void) | null>(null);
   const resumePlayAnchor = useRef<HTMLButtonElement | null>(null);
@@ -1510,7 +1514,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     setProjectDiagnostics(result.diagnostics);
   }, [path]);
   useEffect(() => { void reloadDiagnostics().catch(() => setDiagnosticStatus('Project diagnostics unavailable; previous errors may not be shown.')); }, [reloadDiagnostics]);
-  const recordClientError = async (message: string, stage: string) => {
+  const recordClientError = async (message: string, stage: string, sessionId?: string) => {
     const result = await reportProjectDiagnostic(path, message, stage, crypto.randomUUID());
     setDiagnosticStatus(result.status);
     if (result.recorded) {
@@ -1518,7 +1522,13 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       // diagnostic in the UI instead of showing a different raw value.
       if (result.message && result.message !== message) {
         if (stage === 'session_read') setReadError(result.message);
-        else setError(result.message);
+        else if ((stage === 'session_control' || stage === 'session_failure') && sessionId) {
+          setSessionControlFailures(current => {
+            const prior = current[sessionId];
+            if (!prior) return current;
+            return { ...current, [sessionId]: { ...prior, message: result.message } };
+          });
+        } else setError(result.message);
       }
       void reloadDiagnostics().catch(() => {});
     }
@@ -1544,7 +1554,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
-    const response = await fetch(`/api/projects/research-sessions?${query}`, { signal });
+    const response = await fetch(`/api/projects/research-sessions?${query}`, { signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
     if (!Array.isArray(data.sessions)) throw new Error('Research sessions response is missing its sessions array');
@@ -1592,9 +1602,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     if (chosen) {
       const transition = `${chosen.id}:${chosen.status}:${chosen.current_action}`;
       if (chosen.status === 'failed' && lastAnnouncement.current.startsWith(`${chosen.id}:`) && /:(queued|running):/.test(lastAnnouncement.current)) {
-        setError(chosen.message);
-        reportRequestFailure(chosen.message);
-        void recordClientError(chosen.message, 'session_failure');
+        // The failed session's in-flow card is the sole visible notice.
+        void recordClientError(chosen.message, 'session_failure', chosen.id);
       }
       if (lastAnnouncement.current && transition !== lastAnnouncement.current) {
         setAnnouncement(`Research session ${chosen.session_number}: ${chosen.status}. ${chosen.current_action}.`);
@@ -1608,7 +1617,6 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     const message = errorMessage(cause);
     setReadError(message);
     if (!readErrorReported.current) {
-      reportRequestFailure(message);
       void recordClientError(message, 'session_read');
     }
     readErrorReported.current = true;
@@ -1708,6 +1716,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
     if (!target) return;
     setBusy(true); setError('');
+    setSessionControlFailures(current => {
+      if (!current[target.id]) return current;
+      const next = { ...current };
+      delete next[target.id];
+      return next;
+    });
     try {
       let recoveryAction: 'pause' | 'resume' | 'stop' | 'repair' = action;
       let authorizedCalls = 0;
@@ -1745,13 +1759,28 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           throw cause;
         }
       }
+      if (action === 'resume') {
+        // A new accepted Resume deserves a fresh saved-status notice if it
+        // quickly stops again, even when the previous notice was dismissed.
+        const key = sessionNoticeKey(target);
+        setDismissedNoticeKeys(current => {
+          if (!current.has(key)) return current;
+          const next = new Set(current);
+          next.delete(key);
+          try { window.localStorage.setItem(noticeStorageKey, JSON.stringify([...next])); } catch { /* Presentation only. */ }
+          return next;
+        });
+      }
       await load(target.id);
     }
     catch (cause) {
       await load(target.id).catch(() => {});
       const message = errorMessage(cause);
-      setError(message); reportRequestFailure(message);
-      void recordClientError(message, 'session_control');
+      setSessionControlFailures(current => ({
+        ...current,
+        [target.id]: { message, serial: ++sessionControlSerial.current, dismissed: false },
+      }));
+      void recordClientError(message, 'session_control', target.id);
     }
     finally { setBusy(false); }
   }
@@ -1955,7 +1984,19 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {!['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
+                {sessionControlFailures[item.id]
+                  ? (!sessionControlFailures[item.id].dismissed && <SessionNotice key={`${item.id}:control:${sessionControlFailures[item.id].serial}`}
+                      number={item.session_number}
+                      title={providerInterruptionCopy(sessionControlFailures[item.id].message, item.cloud_sponsored === true || sponsoredSession)?.title ?? 'Resume could not start'}
+                      kind="stopped-session-guidance"
+                      ariaLabel={`Session ${item.session_number} Resume feedback`}
+                      onDismiss={() => setSessionControlFailures(current => ({
+                        ...current, [item.id]: { ...current[item.id], dismissed: true },
+                      }))}>
+                      <p>{friendlyProviderError(sessionControlFailures[item.id].message, item.cloud_sponsored === true || sponsoredSession)}</p>
+                    </SessionNotice>)
+                  : (['paused', 'stopped', 'failed'].includes(item.status) || (item.provider_usage_limited && item.status === 'ended'))
+                    && <SessionRenderBoundary key={`${item.id}:notice:${sessionNoticeKey(item)}`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} status notice could not be displayed; its saved record remains in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
                 {(['ended', 'completed', 'failed'].includes(item.status)) && <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>}
                 <small className="session-progress-inline">Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</small>
                 {strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
@@ -2405,7 +2446,7 @@ function paperProgressOperation(progress: PaperProgress): string {
 
 function paperErrorSummary(message: string): string {
   const value = message.trim();
-  if (friendlyProviderUsageError(value) !== value) return friendlyProviderUsageError(value);
+  if (friendlyProviderError(value) !== value) return friendlyProviderError(value);
   if (/Tectonic could not compile|No PDF was downloaded|PDF compilation failed/i.test(value)) {
     return 'PDF compilation failed. The paper draft is saved; use Resume to retry without rewriting it.';
   }
@@ -2562,6 +2603,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [restartingCheckpoint, setRestartingCheckpoint] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
+  const [dismissedPaperNoticeKey, setDismissedPaperNoticeKey] = useState('');
   const initialPaperActivityReported = useRef(false);
   const [paperClock, setPaperClock] = useState(() => Date.now());
   const [error, setError] = useState('');
@@ -2623,10 +2665,12 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     return () => document.removeEventListener('pointerdown', dismiss);
   }, [paperMenu]);
   useEffect(() => {
-    if (!error && !scoreError && !eli5Error && !copyError && !success) return;
-    const timer = window.setTimeout(() => { setError(''); setScoreError(''); setEli5Error(''); setCopyError(''); setSuccess(''); }, 8000);
+    // Contextual paper failures remain visible until Dismiss; lightweight
+    // secondary feedback still expires automatically.
+    if (!scoreError && !eli5Error && !copyError && !success) return;
+    const timer = window.setTimeout(() => { setScoreError(''); setEli5Error(''); setCopyError(''); setSuccess(''); }, 8000);
     return () => window.clearTimeout(timer);
-  }, [error, scoreError, eli5Error, copyError, success]);
+  }, [scoreError, eli5Error, copyError, success]);
   useEffect(() => {
     if (!busy && !['active', 'queued'].includes(paperProgress?.status ?? '')) return;
     const timer = window.setInterval(() => setPaperClock(Date.now()), 1000);
@@ -2953,7 +2997,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess('');
+    setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
     let requestDispatched = false;
@@ -3095,6 +3139,17 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
      ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? ''));
   const draftVersion = Math.max(0, ...papers.map(paper => paper.paper_version)) + 1;
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
+  const paperProgressFailure = paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? ''
+    : paperProgress?.status === 'interrupted' ? paperProgress.detail ?? '' : '';
+  const paperNoticeMessage = error || paperProgressFailure;
+  const paperNoticeKey = [
+    paperProgress?.started_at ?? '',
+    paperProgress?.status ?? '',
+    paperProgress?.failure_reason ?? '',
+    paperProgress?.detail ?? '',
+  ].join('|');
+  const paperNoticeCopy = providerInterruptionCopy(paperNoticeMessage);
+  const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
   const showDraftPaper = !guest && (newPaperRequested || generating || restartReady || continuationAvailable || (paperProgress != null && paperProgress.status !== 'complete'));
   useEffect(() => { onRunningChange(generationRunning && paperProgress?.status !== 'queued'); return () => onRunningChange(false); }, [generationRunning, paperProgress?.status, onRunningChange]);
   useEffect(() => { onQueuedChange(paperProgress?.status === 'queued'); return () => onQueuedChange(false); }, [paperProgress?.status, onQueuedChange]);
@@ -3129,12 +3184,15 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
 
-    {error && <div className="request-toast-stack ai-paper-toast-stack" aria-label="Paper generation errors">
-      <div className="request-toast-item"><div className="request-toast-item-inner"><div className="request-toast" role="alert">
-        <div className="request-toast-content"><strong>Paper generation</strong><p>{paperErrorSummary(error)}</p></div>
-        <button type="button" aria-label="Dismiss paper error" onClick={() => setError('')}>Dismiss</button>
-      </div></div></div>
-    </div>}
+    {showPaperNotice && <SessionNotice key={paperNoticeKey} number={draftVersion}
+      title={paperNoticeCopy?.title ?? 'Paper generation stopped'}
+      kind="research-pause-guidance paper-contextual-error"
+      ariaLabel="Paper generation feedback"
+      dismissLabel="Dismiss paper generation notice"
+      onDismiss={() => { setDismissedPaperNoticeKey(paperNoticeKey); setError(''); }}>
+      <p>{paperNoticeCopy ? paperNoticeCopy.description : paperErrorSummary(paperNoticeMessage)}</p>
+      {paperNoticeCopy && <p><strong>Next:</strong> {paperNoticeCopy.next}</p>}
+    </SessionNotice>}
     <div id="papers-pane-content" hidden={!expanded} className="papers-pane-content">
       <div className="ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
@@ -3197,8 +3255,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
               <summary>Last stage: {paperProgressOperation(paperProgress)} · View steps</summary>
               <PaperStageSteps progress={paperProgress}/>
             </details>}
-        {paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="paper-progress-error">{paperErrorSummary(paperProgress.failure_reason)}</span>}
-        {paperProgress.status === 'interrupted' && paperProgress.detail && <span className="paper-progress-error" role="alert">{friendlyProviderUsageError(paperProgress.detail)}</span>}
+        {/* Failure details are presented once in the contextual, dismissible paper card above. */}
       </div>}
 
 
