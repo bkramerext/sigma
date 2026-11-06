@@ -345,14 +345,21 @@ def test_paper_sse_accepts_standard_line_endings_across_byte_chunks() -> None:
             if last_separator:
                 stream_text += separator
             content = stream_text.encode("utf-8")
+            observed_output: list[str] = []
+
+            async def saw_output() -> None:
+                observed_output.append("delta")
+
             result = asyncio.run(
                 completed(
                     cast(httpx.Response, BytewiseStream(content)),
                     max_stream_bytes=None,
                     max_event_chars=4_000_000,
                     max_text_bytes=papers.MAX_RESPONSE_BYTES,
+                    on_output_delta=saw_output,
                 )
             )
+            assert observed_output == ["delta"]
             assert result["status"] == "completed"
             assert result["output"][0]["content"][0]["text"] == "café"
 
