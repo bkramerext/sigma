@@ -15,7 +15,12 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import research_preferences, research_presence, research_sessions, section_layout_preferences
+from sigma import (
+    research_preferences,
+    research_presence,
+    research_sessions,
+    section_layout_preferences,
+)
 from sigma.api import app, research_presence_view
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
@@ -41,12 +46,15 @@ def check_section_layout_preference(root: Path) -> None:
             assert client.get(uri).status_code == 200
             assert client.get(uri).json() == {"expand_one_project_section_at_a_time": False}
             for invalid in ("true", 1, None):
-                assert client.put(
-                    uri, json={"expand_one_project_section_at_a_time": invalid}
-                ).status_code == 422
-            assert client.put(
-                uri, json={"expand_one_project_section_at_a_time": True}
-            ).json() == {"expand_one_project_section_at_a_time": True}
+                assert (
+                    client.put(
+                        uri, json={"expand_one_project_section_at_a_time": invalid}
+                    ).status_code
+                    == 422
+                )
+            assert client.put(uri, json={"expand_one_project_section_at_a_time": True}).json() == {
+                "expand_one_project_section_at_a_time": True
+            }
             assert client.get(uri).json() == {"expand_one_project_section_at_a_time": True}
             with (
                 TemporaryDirectory() as unrelated,
@@ -54,9 +62,10 @@ def check_section_layout_preference(root: Path) -> None:
             ):
                 assert client.get(uri).json() == {"expand_one_project_section_at_a_time": False}
             assert client.get(uri).json() == {"expand_one_project_section_at_a_time": True}
-            assert client.put(
-                uri, json={"expand_one_project_section_at_a_time": False}
-            ).status_code == 200
+            assert (
+                client.put(uri, json={"expand_one_project_section_at_a_time": False}).status_code
+                == 200
+            )
 
 
 def rejects(action):
