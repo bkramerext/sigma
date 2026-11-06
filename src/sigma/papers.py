@@ -5173,17 +5173,14 @@ def _tex(
             # Restrict this to source-ordered DAGs with contiguous, disjoint
             # boundaries so the drawing cannot misrepresent membership.
             order = {node.id: index for index, node in enumerate(diagram.nodes)}
-            forward = all(
-                order[edge.source] < order[edge.target] for edge in diagram.edges
-            )
+            forward = all(order[edge.source] < order[edge.target] for edge in diagram.edges)
             used_boundary_nodes: set[str] = set()
             contiguous_boundaries = True
             for boundary in diagram.boundaries:
                 indices = sorted(order[node_id] for node_id in boundary.node_ids)
-                if (
-                    indices != list(range(indices[0], indices[-1] + 1))
-                    or used_boundary_nodes.intersection(boundary.node_ids)
-                ):
+                if indices != list(
+                    range(indices[0], indices[-1] + 1)
+                ) or used_boundary_nodes.intersection(boundary.node_ids):
                     contiguous_boundaries = False
                     break
                 used_boundary_nodes.update(boundary.node_ids)
@@ -5191,12 +5188,12 @@ def _tex(
                 result = [
                     r"\begin{figure}[!htbp]",
                     r"\centering",
-                    r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
+                    (r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
                     r"main node/.style={draw=blue!65,rounded corners,align=center,"
                     r"text width=7.5cm,font=\footnotesize,fill=blue!5,inner sep=5pt},"
                     r"edge badge/.style={circle,draw=blue!60,fill=white,"
                     r"inner sep=1pt,font=\tiny},"
-                    r"boundary/.style={draw,dashed,rounded corners,inner sep=8pt}]",
+                    r"boundary/.style={draw,dashed,rounded corners,inner sep=8pt}]"),
                 ]
                 for index, node in enumerate(diagram.nodes):
                     result.append(
@@ -5249,9 +5246,7 @@ def _tex(
                     description = f"{labels[edge.source]} to {labels[edge.target]}"
                     if edge.label:
                         description += ": " + edge.label
-                    result.append(
-                        r"\item[\textbf{" + str(index) + ".}] " + prose_text(description)
-                    )
+                    result.append(r"\item[\textbf{" + str(index) + ".}] " + prose_text(description))
                 result.append(r"\end{description}")
                 return result
 
