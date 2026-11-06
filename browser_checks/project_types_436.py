@@ -1123,6 +1123,11 @@ with sync_playwright() as playwright:
     expect(restart_confirm).to_have_count(0)
     assert reset_calls == [], reset_calls
     restart.click()
+    expect(restart_confirm).to_be_visible()
+    page.locator("#papers-heading").click()
+    expect(restart_confirm).to_have_count(0)
+    assert reset_calls == [], reset_calls
+    restart.click()
     restart_confirm.get_by_role("button", name="Confirm").click()
     expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     assert reset_calls == ["POST"], reset_calls
