@@ -840,23 +840,27 @@ with sync_playwright() as playwright:
         }"""
     )
     assert len(geometry["lines"]) >= 2, geometry
-    assert all(abs(line["x"] - geometry["lines"][0]["x"]) < 3 for line in geometry["lines"]), geometry
+    assert all(abs(line["x"] - geometry["lines"][0]["x"]) < 3 for line in geometry["lines"]), (
+        geometry
+    )
     assert geometry["lines"][0]["x"] > geometry["iconRight"], geometry
 
     # The same hanging indent applies to the live title button. In particular,
     # the pulsing dot must be vertically centered on the last wrapped line.
     page.route(
         "**/api/projects/papers/progress?*",
-        lambda route: route.fulfill(json={
-            "progress": {
-                "status": "active",
-                "stage": "sections",
-                "current": 1,
-                "total": 3,
-                "started_at": "2026-11-05T01:00:00+00:00",
-                "elapsed_seconds": 90,
+        lambda route: route.fulfill(
+            json={
+                "progress": {
+                    "status": "active",
+                    "stage": "sections",
+                    "current": 1,
+                    "total": 3,
+                    "started_at": "2026-11-05T01:00:00+00:00",
+                    "elapsed_seconds": 90,
+                }
             }
-        }),
+        ),
     )
     page.reload()
     active_title = page.locator(".project-header-title-action")
@@ -873,7 +877,9 @@ with sync_playwright() as playwright:
         }"""
     )
     assert len(active_geometry["lines"]) >= 2, active_geometry
-    assert all(abs(line["x"] - active_geometry["lines"][0]["x"]) < 3 for line in active_geometry["lines"])
+    assert all(
+        abs(line["x"] - active_geometry["lines"][0]["x"]) < 3 for line in active_geometry["lines"]
+    )
     assert abs(active_geometry["lines"][-1]["midY"] - active_geometry["dotMidY"]) < 9
 
     assert not errors, errors

@@ -653,7 +653,9 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
         papers.finish_progress(str(path), "cancelled")
         cancelled = papers._load_work(str(path))
         assert cancelled is not None and cancelled["progress"]["status"] == "cancelled"
-        assert papers.progress_status(str(path))["status"] == "cancelled"
+        cancelled_progress = papers.progress_status(str(path))
+        assert cancelled_progress is not None
+        assert cancelled_progress["status"] == "cancelled"
 
 
 def test_stopped_paper_checkpoint_remains_valid_on_resume() -> None:
@@ -682,13 +684,17 @@ def test_stopped_paper_checkpoint_remains_valid_on_resume() -> None:
         assert loaded is not None
         assert loaded["progress"]["status"] == "paused"
         assert loaded["provider_calls"] == loaded["provider_calls_total"] == 1
-        assert papers.progress_status(str(path))["status"] == "interrupted"
+        paused_progress = papers.progress_status(str(path))
+        assert paused_progress is not None
+        assert paused_progress["status"] == "interrupted"
         # The same validation must accept a queued checkpoint that was stopped
         # before an AI stage started, without changing its provider accounting.
         loaded["progress"]["stage"] = "queued"
         loaded["progress"]["status"] = "cancelled"
         papers._save_work(str(path), loaded)
-        assert papers._load_work(str(path))["progress"]["status"] == "cancelled"
+        queued_work = papers._load_work(str(path))
+        assert queued_work is not None
+        assert queued_work["progress"]["status"] == "cancelled"
 
 
 def test_paper_progress_counts_keep_generation_resumable() -> None:
