@@ -37,6 +37,7 @@ def check_memory_telemetry() -> None:
     loggers = [
         logging.getLogger(),
         logging.getLogger("sigma.production"),
+        logging.getLogger("sigma.memory_guard"),
         logging.getLogger("uvicorn.error"),
         logging.getLogger("uvicorn.access"),
     ]
@@ -112,8 +113,84 @@ def check_memory_telemetry() -> None:
         log.setLevel(before_level)
 
 
+def check_memory_sources() -> None:
+    """Unavailable kernel files are diagnosed, and cgroup v1 remains measurable."""
+    from sigma import production_observability as telemetry
+
+    fake = {
+        "/proc/self/status": "VmRSS:\\t40960 kB\\nVmHWM:\\t51200 kB\\n",
+        "/proc/meminfo": "MemAvailable: 2097152 kB\\n",
+        "/sys/fs/cgroup/memory/memory.usage_in_bytes": str(3 * 1024**3),
+        "/sys/fs/cgroup/memory/memory.limit_in_bytes": str(8 * 1024**3),
+        "/sys/fs/cgroup/memory/memory.max_usage_in_bytes": str(4 * 1024**3),
+    }
+
+    def read(path: Path, encoding: str = "ascii") -> str:
+        assert encoding == "ascii"
+        if str(path) not in fake:
+            raise FileNotFoundError(2, "not found", str(path))
+        return fake[str(path)].replace("\\t", "\t").replace("\\n", "\n")
+
+    with (
+        patch.object(telemetry.Path, "read_text", autospec=True, side_effect=read),
+        patch.object(telemetry._LOGGER, "warning") as warning,
+    ):
+        stats = telemetry.memory_snapshot()
+    assert stats["rss_mib"] == 40
+    assert stats["rss_peak_mib"] == 50
+    assert stats["cgroup_used_mib"] == 3072
+    assert stats["cgroup_limit_mib"] == 8192
+    assert stats["cgroup_peak_mib"] == 4096
+    assert stats["host_available_mib"] == 2048
+    assert warning.called, "Unavailable v2 counters must be reported, not silently swallowed"
+
+    # When both procfs and cgroupfs are unreadable, peak RSS still has a
+    # standard-library fallback and the new-work admission gate fails closed.
+    with (
+        patch.object(
+            telemetry.Path,
+            "read_text",
+            autospec=True,
+            side_effect=PermissionError(13, "permission denied"),
+        ),
+        patch.object(telemetry._LOGGER, "warning") as warning,
+    ):
+        stats = telemetry.memory_snapshot()
+    assert stats["rss_peak_mib"] is not None
+    assert stats["cgroup_used_mib"] is None
+    assert stats["cgroup_limit_mib"] is None
+    assert warning.called
+
+    assert not memory_guard.capacity_verified(stats)
+    with (
+        patch.object(memory_guard, "memory_snapshot", return_value=stats),
+        patch.object(memory_guard, "_CRITICAL", False),
+    ):
+        try:
+            memory_guard.require_capacity()
+        except ProjectError as exc:
+            assert "cannot be verified" in str(exc)
+        else:
+            raise AssertionError("Unverifiable memory admitted new inference")
+
+    # Missing telemetry itself does not cancel sessions already in progress.
+    with (
+        patch.object(memory_guard, "memory_snapshot", return_value=stats),
+        patch.object(memory_guard, "_CRITICAL", False),
+        patch.object(memory_guard, "_TELEMETRY_DEGRADED", False),
+        patch.object(memory_guard, "_LOOP", None),
+        patch.object(memory_guard.LOG, "error") as log_error,
+    ):
+        memory_guard.poll()
+        memory_guard.poll()
+        assert log_error.call_count == 1
+        assert "memory.telemetry_degraded" in log_error.call_args.args[0]
+        assert not memory_guard._CRITICAL
+
+
 def main() -> None:
     check_memory_telemetry()
+    check_memory_sources()
     stats = memory_snapshot()
     assert {
         "rss_mib",
