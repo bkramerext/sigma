@@ -1194,6 +1194,41 @@ def set_unattended_execution_preference(body: UnattendedExecutionPreference):
     }
 
 
+@app.get("/api/user-preferences/section-layout")
+def section_layout_preference():
+    from sigma import section_layout_preferences
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot change section layout preferences")
+    return {
+        "expand_one_project_section_at_a_time": (
+            section_layout_preferences.expand_one_project_section_at_a_time()
+        )
+    }
+
+
+class SectionLayoutPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expand_one_project_section_at_a_time: bool
+
+
+@app.put("/api/user-preferences/section-layout")
+def set_section_layout_preference(body: SectionLayoutPreference):
+    from sigma import section_layout_preferences
+
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot change section layout preferences")
+    return {
+        "expand_one_project_section_at_a_time": (
+            section_layout_preferences.update_expand_one_project_section_at_a_time(
+                body.expand_one_project_section_at_a_time
+            )
+        )
+    }
+
+
 @app.get("/api/projects/research-sessions")
 async def research_sessions_view(path: str):
     principal = cloud_auth.current_principal()
