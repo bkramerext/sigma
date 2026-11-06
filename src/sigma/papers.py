@@ -3153,7 +3153,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
             or not required_progress_keys.issubset(progress_state)
             or bool(
                 set(progress_state)
-                - (required_progress_keys | {"failure_reason", "detail", "sections_total"})
+                - (required_progress_keys | {"failure_reason", "detail", "sections_total", "last_progress_at", "writing_started_at"})
             )
             or (
                 "sections_total" in progress_state
@@ -3210,8 +3210,10 @@ def _load_work(path: str) -> dict[str, Any] | None:
             _note_paper_progress_recovery(value)
             progress_state["current"] = None
             progress_state["total"] = None
-        for key in ("started_at", "updated_at"):
+        for key in ("started_at", "updated_at", "last_progress_at", "writing_started_at"):
             timestamp = progress_state.get(key)
+            if timestamp is None and key in {"last_progress_at", "writing_started_at"}:
+                continue
             if not isinstance(timestamp, str):
                 raise ProjectError("Paper progress timestamp is invalid")
             try:
@@ -3269,6 +3271,8 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "detail",
         "failure_reason",
         "sections_total",
+        "last_progress_at",
+        "writing_started_at",
     )
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
@@ -3314,9 +3318,10 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
             )
         ):
             raise ValueError("invalid progress metadata")
-        if (
-            datetime.fromisoformat(state["started_at"]).tzinfo is None
-            or datetime.fromisoformat(state["updated_at"]).tzinfo is None
+        if any(
+            datetime.fromisoformat(state[key]).tzinfo is None
+            for key in ("started_at", "updated_at", "last_progress_at", "writing_started_at")
+            if key in state
         ):
             raise ValueError("progress timestamps require timezone")
         return state
@@ -3646,6 +3651,8 @@ def progress_status(path: str) -> dict[str, Any] | None:
             if type(state.get("sections_total")) is int and 1 <= state["sections_total"] <= 100
             else {}
         ),
+        **({"last_progress_at": state["last_progress_at"]} if state.get("last_progress_at") else {}),
+        **({"writing_started_at": state["writing_started_at"]} if state.get("writing_started_at") else {}),
     }
 
 
@@ -7981,6 +7988,26 @@ async def _generate_impl(
             }
             if detail:
                 saved_progress["detail"] = detail[:160]
+            previous_activity = _active_progress.get(project_key)
+            if not previous_activity or previous_activity.get("run_id") != run_id:
+                previous_activity = work.get("progress") if work else None
+            writing_stages = {"writing", "sections", "retry"}
+            if stage in writing_stages:
+                if (
+                    isinstance(previous_activity, dict)
+                    and previous_activity.get("run_id") == run_id
+                    and previous_activity.get("stage") in writing_stages
+                ):
+                    saved_progress["writing_started_at"] = previous_activity.get(
+                        "writing_started_at", now
+                    )
+                    if previous_activity.get("last_progress_at"):
+                        saved_progress["last_progress_at"] = previous_activity["last_progress_at"]
+                else:
+                    saved_progress["writing_started_at"] = now
+                # Only a saved section/draft advances durable progress.
+                if state == "milestone" and stage == "sections":
+                    saved_progress["last_progress_at"] = now
             sections_total = total if stage == "sections" else None
             if sections_total is None and work:
                 for source_key in ("plan", "one_shot_draft"):
@@ -8026,12 +8053,38 @@ async def _generate_impl(
                         "elapsed_seconds": elapsed,
                         "detail": detail,
                         "sections_total": saved_progress.get("sections_total"),
+                        "last_progress_at": saved_progress.get("last_progress_at"),
+                        "writing_started_at": saved_progress.get("writing_started_at"),
                     }
                 )
 
             # Browser-only lease: check at safe boundaries, not mid-response.
             if state == "milestone" or (stage == "publication_compilation" and not work):
                 _require_browser_presence(path, browser_presence_required)
+
+        last_observation_flush = 0.0
+
+        async def observe_paper_output() -> None:
+            """Checkpoint only the time of real output; never persist streamed content."""
+            nonlocal last_observation_flush
+            current = _active_progress.get(project_key)
+            observed_now = monotonic()
+            if (
+                current is None
+                or current.get("run_id") != run_id
+                or current.get("stage") not in {"writing", "sections", "retry"}
+                or observed_now - last_observation_flush < 3.0
+            ):
+                return
+            last_observation_flush = observed_now
+            current["last_progress_at"] = _now()
+            try:
+                _write_progress_status(path, current)
+            except (OSError, ProjectError) as exc:
+                # Advisory activity must not discard paid provider output.
+                logging.getLogger("sigma.lifecycle").warning(
+                    "paper.activity_sidecar_write_failed error_type=%s", type(exc).__name__
+                )
 
         task = asyncio.current_task()
         if task is not None:
