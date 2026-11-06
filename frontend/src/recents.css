@@ -9,15 +9,6 @@
   border: 0; border-radius: 0; background: transparent; box-shadow: none;
   color: #e0aa8b; text-align: left; font: 400 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
 }
-/* A trailing activity indicator belongs to its title line, not the baseline. */
-.home-page .home-recents .recent-open > .research-running-indicator {
-  vertical-align: middle;
-}
-.home-page .home-recents .recent-open strong {
-  display: inline; font: inherit; color: inherit; overflow-wrap: anywhere;
-}
-.home-page .home-recents .recent-open strong.is-current-project,
-.home-page .home-recents .recent-open strong.is-most-recent-project { font-weight: 700; }
 .home-page .home-recents .recent-meta-row { position: relative; display: flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; margin-top: 2px; }
 .home-page .home-recents .recent-meta-row > small { display: inline-flex; align-items: center; gap: 6px; margin-top: 0; color: #b6c2ce; font-size: 11px; font-weight: 400; }
 .home-page .home-recents .recent-open:hover:not(:disabled) {
@@ -201,10 +192,10 @@
 .home-page .home-projects { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .home-page .home-catalog { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .home-page .catalog-tabs { flex: 0 0 auto; }
-.home-page #samples-panel, .home-page #recent-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
-.home-page #samples-panel[hidden], .home-page #recent-panel[hidden] { display: none; }
+.home-page #samples-panel, .home-page #recent-panel, .home-page #most-recent-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
+.home-page #samples-panel[hidden], .home-page #recent-panel[hidden], .home-page #most-recent-panel[hidden] { display: none; }
 .home-page #recent-panel > .guest-recent-message { display: flex; flex-direction: column; margin: 18px 4px; color: #e6af92; font: 400 18px/1.45 Georgia, serif; letter-spacing: 0; }
-.home-page #samples-panel > .home-samples, .home-page #recent-panel > .home-recents { flex: 1 1 auto; height: 100%; min-height: 0; max-height: none; margin: 0; padding: 8px 4px 44px 0; box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
+.home-page #samples-panel > .home-samples, .home-page #recent-panel > .home-recents, .home-page #most-recent-panel > .home-recents { flex: 1 1 auto; height: 100%; min-height: 0; max-height: none; margin: 0; padding: 8px 4px 44px 0; box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
 .home-page .home-samples .sample-type-group ul { margin: 0 0 0 20px; }
 .home-page .home-samples .sample-type-group li:last-child { border-bottom: 0; }
 .home-page .home-samples .sample-type-group li { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -215,7 +206,7 @@
 .home-page .home-recents .recent-type-group[open] > summary::before { transform: rotate(90deg); }
 .home-page .home-recents .recent-type-group > summary .research-type-icon { display: block; flex: 0 0 16px; width: 16px; height: 16px; margin: 0; color: #d6a36f; }
 .home-page .home-recents .recent-type-group > summary span { color: #e0aa8b; }
-.home-page .home-recents .recent-type-group > summary .research-running-indicator { position: relative; top: -2px; }
+.home-page .home-recents .recent-type-group > summary .research-running-indicator { position: relative; top: -2px; margin-left: 6px; vertical-align: middle; }
 .home-page .home-recents .recent-type-group > summary small { display: block; margin: 0; color: #aeb9c4; font-size: 11px; }
 .home-page .home-recents .recent-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
 .home-page .home-recents .recent-type-group > ul { margin: 0 0 0 20px; padding: 0; }
@@ -516,3 +507,13 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 @media (prefers-reduced-motion: reduce) {
   .home-page .home-recents .paper-queued-indicator { animation: none; }
 }
+
+/* The Most Recent tab reuses Saved project rows without type accordions. */
+.home-page .home-recents .recent-flat-group > summary { display: none; }
+.home-page .home-recents .recent-flat-group > ul { margin-left: 0; }
+
+/* Keep project-type headings compact and pulses alongside their counts. */
+.home-page .home-recents .recent-type-group > summary { min-height: 0; padding-block: 6px; }
+.home-page .home-recents .recent-type-group > summary small { display: inline-flex; align-items: center; gap: 4px; }
+.home-page .home-recents .recent-type-group > ul { margin-top: 2px; }
+.home-page .home-recents .recent-meta-row .research-running-indicator { display: inline-block; vertical-align: middle; margin-left: 6px; }

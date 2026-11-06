@@ -4832,10 +4832,11 @@ function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
 
-function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+function RecentProjects({ onOpen, flat = false }: { onOpen: (view: ProjectView) => void; flat?: boolean }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState('');
+  const [removing, setRemoving] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [saveAsEntry, setSaveAsEntry] = useState<RecentProject | null>(null);
   const [confirmRemovePlacement, setConfirmRemovePlacement] = useState<'above' | 'below'>('below');
@@ -4884,10 +4885,10 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     finally { pending.current = false; setOpening(''); }
   }
   async function forget(entry: RecentProject) {
-    if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
+    if (pending.current) return; pending.current = true; setRemoving(entry.id); setError('');
     try { await post(`recent/forget?path=${encodeURIComponent(entry.path)}`, { project_id: entry.id }); setConfirmRemoveId(''); await load(); }
     catch (error) { setError(errorMessage(error)); }
-    finally { pending.current = false; setOpening(''); }
+    finally { pending.current = false; setRemoving(''); }
   }
   async function openTopPaper(entry: RecentProject) {
     if (pending.current) return;
@@ -4923,21 +4924,23 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     const family = recentProjectFamilyKey(project);
     familyCounts.set(family, (familyCounts.get(family) ?? 0) + 1);
   }
-  const visibleProjects = visibleRecentProjects(projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable')));
+  const eligibleProjects = projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable'));
+  const visibleProjects = flat ? eligibleProjects : visibleRecentProjects(eligibleProjects);
   // Running work takes precedence over a queued paper on the same project.
   // The queue API exposes paper_activity when the queued-generation feature lands.
   const paperActivity = (entry: RecentProject): 'running' | 'queued' | null =>
     entry.research_running || entry.paper_generating || entry.paper_activity === 'active'
       ? 'running'
       : entry.paper_activity === 'queued' ? 'queued' : null;
-  const recentGroups = visibleProjects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+  const recentGroups = (flat ? visibleProjects.slice(0, 10) : visibleProjects).reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+    if (flat) { if (!groups.length) groups.push({ type: 'default', projects: [] }); groups[0].projects.push(project); return groups; }
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
     else groups.push({ type, projects: [project] });
     return groups;
-  }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
-  return <div className="empty home-empty home-recents" data-opening={!!opening}>
+  }, []).sort((a, b) => flat ? 0 : researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
+  return <div className="empty home-empty home-recents" data-opening={!!opening || !!removing}>
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
@@ -4946,19 +4949,20 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         ? (group.projects.some(entry => paperActivity(entry) === 'running') ? 'running'
           : group.projects.some(entry => paperActivity(entry) === 'queued') ? 'queued' : null)
         : null;
-      return <details className="recent-type-group" key={groupKey} open={groupExpanded} onToggle={event => {
+      return <details className={`recent-type-group${flat ? ' recent-flat-group' : ''}`} key={groupKey} open={flat || groupExpanded} onToggle={event => {
+        if (flat) return;
         const isOpen = event.currentTarget.open;
         try { window.localStorage.setItem(`sigma.home.recentGroup:${groupKey}`, String(isOpen)); } catch { /* Preserve state when storage is available. */ }
         setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
       }}>
-      <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}{hiddenGroupActivity && <><span className={`research-running-indicator${hiddenGroupActivity === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/><span className="sr-only">{hiddenGroupActivity === 'queued' ? 'Paper generation queued in this category' : 'Activity running in this category'}</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
+      <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}{hiddenGroupActivity && <><span className={`research-running-indicator${hiddenGroupActivity === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/><span className="sr-only">{hiddenGroupActivity === 'queued' ? 'Paper generation queued in this category' : 'Activity running in this category'}</span></>}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
             {entry.best_paper_score != null && entry.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
-            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : undefined} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{opening === entry.id && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" title={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} </button>
+            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(opening === entry.id || removing === entry.id) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>} </button>
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{(familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}<button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" title={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{!flat && (familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}<button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
             onClick={() => { setConfirmRemoveId(''); setSaveAsEntry(entry); }}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
@@ -5032,35 +5036,42 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
     : !cloud?.target || cloud.target === 'local'
       ? 'In local mode, all signed-in accounts share this project list.'
       : 'Show saved projects. Click again to collapse or expand all.';
-  const [tab, setTab] = useState<'recent' | 'samples'>(() =>
-    guest ? 'samples' : window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
+  const [tab, setTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
+    if (guest) return 'samples';
+    const saved = window.localStorage.getItem('sigma.homeCatalogTab');
+    return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
+  });
   const recent = useRef<HTMLButtonElement>(null);
+  const mostRecent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
   const recentPanel = useRef<HTMLDivElement>(null);
+  const mostRecentPanel = useRef<HTMLDivElement>(null);
   const samplesPanel = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [guest, tab]);
-  function switchTab(next: 'recent' | 'samples') {
+  function switchTab(next: 'recent' | 'samples' | 'most-recent') {
     if (next === tab) {
-      const panel = next === 'samples' ? samplesPanel.current : recentPanel.current;
+      const panel = next === 'samples' ? samplesPanel.current : next === 'recent' ? recentPanel.current : mostRecentPanel.current;
       if (panel) {
-        const selector = next === 'samples' ? '.sample-type-group' : '.recent-type-group';
-        const groups = Array.from(panel.querySelectorAll<HTMLDetailsElement>(selector));
+        const selector = next === 'samples' ? '.sample-type-group' : next === 'recent' ? '.recent-type-group' : '';
+        const groups = selector ? Array.from(panel.querySelectorAll<HTMLDetailsElement>(selector)) : [];
         const expandAll = groups.length > 0 && groups.every(group => !group.open);
         groups.forEach(group => { group.open = expandAll; });
       }
       return;
     }
-    setTab(next); (next === 'recent' ? recent : samples).current?.focus();
+    setTab(next); (next === 'recent' ? recent : next === 'most-recent' ? mostRecent : samples).current?.focus();
   }
   return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'samples' ? 'recent' : 'samples'); }
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const tabs = ['samples', 'recent', 'most-recent'] as const; switchTab(tabs[(tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]); }
     if (event.key === 'Home') { event.preventDefault(); switchTab('samples'); }
-    if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
+    if (event.key === 'End') { event.preventDefault(); switchTab('most-recent'); }
   }}>
     <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Selecting a sample copies into a new project." onClick={() => switchTab('samples')}>Samples</button>
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>Saved</button>
+    <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
     <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen}/>}</div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat/>}</div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
   </div>;
 }
