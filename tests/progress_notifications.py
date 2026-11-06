@@ -37,6 +37,12 @@ def _event_state(cfg: cloud_auth.Config, event_id: str) -> sqlite3.Row:
 
 
 def main() -> None:
+    # SMTP credentials alone must never enable progress mail.
+    with patch("sigma.cloud_auth.email_env", return_value=None):
+        assert progress_notifications._configured() is False
+    with patch("sigma.cloud_auth.email_env", return_value="/tmp/gmail-token.json"):
+        assert progress_notifications._configured() is True
+
     first = cloud_auth.Principal("google-subject-a", "first@example.org", "member")
     second = cloud_auth.Principal("google-subject-b", "second@example.org", "member")
     origin = "http://localhost:5173"
