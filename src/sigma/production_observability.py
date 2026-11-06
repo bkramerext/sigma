@@ -163,8 +163,8 @@ def _memory_changed(
     """Only emit a sample for meaningful changes from the last *logged* sample."""
     if previous is None:
         return True
-    for key in current:
-        before, after = previous.get(key), current[key]
+    for key, after in current.items():
+        before = previous.get(key)
         if (before is None) != (after is None):
             return True
         if before is None or after is None:

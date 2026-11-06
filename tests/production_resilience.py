@@ -123,7 +123,7 @@ def check_memory_change_logging() -> None:
     """Suppress tiny and unavailable-only fluctuations, but retain meaningful deltas."""
     from sigma.production_observability import _memory_changed
 
-    empty = dict.fromkeys(
+    empty: dict[str, int | float | None] = dict.fromkeys(
         (
             "rss_mib",
             "rss_peak_mib",
