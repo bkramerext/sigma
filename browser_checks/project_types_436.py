@@ -1110,6 +1110,20 @@ with sync_playwright() as playwright:
 
     page.route("**/api/projects/papers/restart", simulate_restart)
     restart.click()
+    restart_confirm = page.get_by_role("group", name="Confirm start over on paper generation")
+    expect(restart_confirm).to_be_visible()
+    assert reset_calls == [], reset_calls
+    # Cancel and Escape must not discard anything or auto-play.
+    restart_confirm.get_by_role("button", name="Cancel").click()
+    expect(restart_confirm).to_have_count(0)
+    assert reset_calls == [], reset_calls
+    restart.click()
+    expect(restart_confirm).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(restart_confirm).to_have_count(0)
+    assert reset_calls == [], reset_calls
+    restart.click()
+    restart_confirm.get_by_role("button", name="Confirm").click()
     expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     assert reset_calls == ["POST"], reset_calls
     assert dispatched == ["POST"], dispatched
@@ -1144,6 +1158,9 @@ with sync_playwright() as playwright:
 
     page.route("**/api/projects/papers/discard", simulate_discard)
     start_over.click()
+    expect(page.get_by_role("group", name="Confirm start over on paper generation")).to_be_visible()
+    assert discard_calls == [], discard_calls
+    page.get_by_role("group", name="Confirm start over on paper generation").get_by_role("button", name="Confirm").click()
     expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     assert discard_calls == ["POST"], discard_calls
     assert dispatched == ["POST", "POST"], dispatched
