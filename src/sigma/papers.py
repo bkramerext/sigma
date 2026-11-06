@@ -7982,7 +7982,13 @@ async def _generate_impl(
             _active_progress[project_key] = updated
             if work:
                 work["progress"] = updated
-            _write_progress_status(path, updated)
+            try:
+                _write_progress_status(path, updated)
+            except (OSError, ProjectError) as exc:
+                # Progress metadata is advisory; it must never fail a paid provider call.
+                logging.getLogger("sigma.lifecycle").warning(
+                    "paper.output_activity_write_failed error_type=%s", type(exc).__name__
+                )
 
         async def report(
             stage: PaperProgressStage,
