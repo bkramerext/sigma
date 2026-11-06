@@ -6579,6 +6579,9 @@ async def start_session(
                 except cloud_research.CloudResearchUnavailable as exc:
                     raise ProjectError(str(exc)) from exc
             _save(view.path, record)
+            from sigma import cloud_auth, progress_notifications
+
+            progress_notifications.bind_job(cloud_auth.current_principal(), record["id"])
             logging.getLogger("sigma.lifecycle").info(
                 "session.queued project_id=%s session_id=%s strategies=%d",
                 record["project_id"],
@@ -15876,6 +15879,30 @@ async def _worker(session_id: str, path: str) -> None:
             )
         except (OSError, ProjectError, ValueError):
             log.warning("session.worker_end session_id=%s status=unavailable", session_id)
+        else:
+            # Send only after a durable final worker state. No notifications
+            # for intermediate retries or a deliberate user Stop.
+            try:
+                from sigma import progress_notifications
+
+                event = progress_notifications.eligible_session_event(final)
+                if event:
+                    project_title = inspect_project(path).project.title
+                    progress_notifications.schedule(
+                        session_id,
+                        event,
+                        event_id=(
+                            f"session:{final['id']}:{event}:"
+                            f"{final.get('stopped_at') or final.get('updated_at')}"
+                        ),
+                        project_title=project_title,
+                        number=final["session_number"],
+                        path=path,
+                        session_id=session_id,
+                        incomplete=final.get("status") == "ended",
+                    )
+            except (OSError, ProjectError, ValueError, KeyError, TypeError) as exc:
+                log.warning("session.progress_email_skipped error_type=%s", type(exc).__name__)
         if cloud_research.billing_enabled():
             try:
                 current = _read(path, session_id)

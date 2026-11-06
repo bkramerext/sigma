@@ -2645,6 +2645,30 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     const timer = window.setInterval(() => void poll(), 1000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [path, paperProgress?.status]);
+  // Notification deep links expand the exact saved paper (or the paused
+  // draft) after initial hydration. Do not repeat this scroll on polling.
+  const paperDeepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (loading || paperDeepLinkHandled.current) return;
+    const requested = new URLSearchParams(window.location.search).get('reveal_paper');
+    if (!requested) return;
+    paperDeepLinkHandled.current = true;
+    onSectionOpened();
+    setExpanded(true);
+    window.localStorage.setItem(`sigma.papersPane:${path}`, 'true');
+    if (requested === 'draft') setDraftPaperExpanded(true);
+    else if (papers.some(paper => paper.paper_id === requested)) {
+      setExpandedPaperId(requested);
+      void openPaper(requested);
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const element = requested === 'draft'
+        ? document.querySelector<HTMLElement>('.paper-draft-card')
+        : Array.from(document.querySelectorAll<HTMLElement>('[data-paper-id]'))
+            .find(item => item.dataset.paperId === requested);
+      (element ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
+    }));
+  }, [loading, papers, path, onSectionOpened]);
   async function openPaper(id: string) {
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
@@ -4517,6 +4541,10 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   const [userUnattended, setUserUnattended] = useState(false);
   const [savedUserUnattended, setSavedUserUnattended] = useState(false);
   const [userPreferenceLoaded, setUserPreferenceLoaded] = useState(false);
+  const [progressEmail, setProgressEmail] = useState(false);
+  const [savedProgressEmail, setSavedProgressEmail] = useState(false);
+  const [progressEmailAvailable, setProgressEmailAvailable] = useState(false);
+  const [progressEmailLoaded, setProgressEmailLoaded] = useState(false);
   const [exclusiveSections, setExclusiveSections] = useState(false);
   const [savedExclusiveSections, setSavedExclusiveSections] = useState(false);
   const [exclusiveSectionsLoaded, setExclusiveSectionsLoaded] = useState(false);
@@ -4559,6 +4587,25 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
           setUserPreferenceLoaded(true);
         }
       }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
+    return () => controller.abort();
+  }, [initial?.path]);
+  useEffect(() => {
+    if (!initial) return;
+    const controller = new AbortController();
+    fetch("/api/user-preferences/progress-email", {
+      signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' },
+    }).then(async response => {
+      const data = await response.json();
+      if (!response.ok || typeof data.enabled !== 'boolean' || typeof data.available !== 'boolean')
+        throw new Error('Progress email preference could not be loaded.');
+      if (controller.signal.aborted) return;
+      setProgressEmail(data.enabled);
+      setSavedProgressEmail(data.enabled);
+      setProgressEmailAvailable(data.available);
+      setProgressEmailLoaded(true);
+    }).catch(() => {
+      if (!controller.signal.aborted) { setProgressEmailAvailable(false); setProgressEmailLoaded(true); }
+    });
     return () => controller.abort();
   }, [initial?.path]);
   useEffect(() => {
@@ -4657,6 +4704,16 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
           throw new Error(data.error ?? "User background execution preference was not saved.");
         setSavedUserUnattended(userUnattended);
       }
+      if (initial && progressEmailLoaded && (progressEmailAvailable || !progressEmail) && progressEmail !== savedProgressEmail) {
+        const response = await fetch('/api/user-preferences/progress-email', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: JSON.stringify({ enabled: progressEmail }),
+        });
+        const data = await response.json();
+        if (!response.ok || data.enabled !== progressEmail)
+          throw new Error(data.detail ?? data.error ?? 'Progress email preference was not saved.');
+        setSavedProgressEmail(progressEmail);
+      }
       if (initial && exclusiveSectionsLoaded && exclusiveSections !== savedExclusiveSections) {
         const response = await fetch("/api/user-preferences/section-layout", {
           method: "PUT", headers: { "Content-Type": "application/json", "X-Sigma-Error-Handled": "true" },
@@ -4740,6 +4797,9 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         <label className="project-preference-checkbox" htmlFor="expand-one-project-section"><input id="expand-one-project-section" type="checkbox" checked={exclusiveSections} disabled={!exclusiveSectionsLoaded} onChange={event => setExclusiveSections(event.target.checked)}/>Expand one project section at a time</label>
         <p className="settings-hint">User-wide display preference for the Project, Strategies, Sessions and Papers sections. Opening one collapses the others.</p>
         {sectionLayoutWarning && <p className="settings-hint" role="status">{sectionLayoutWarning}</p>}
+        <label className="project-preference-checkbox" htmlFor="notify-progress-email"><input id="notify-progress-email" type="checkbox" checked={progressEmail} disabled={!progressEmailLoaded || (!progressEmailAvailable && !progressEmail)} onChange={event => setProgressEmail(event.target.checked)}/>Notify me by email on progress</label>
+        <p id="notify-progress-email-help" className="settings-hint">Receive emails when research sessions or paper generation finish, fail, or pause unexpectedly. Applies to all your projects.</p>
+        {progressEmailLoaded && !progressEmailAvailable && <p className="settings-hint" role="status">Google sign-in and configured email delivery are required to enable notifications.</p>}
         <label className="project-preference-checkbox" htmlFor="allow-unattended-background-execution"><input id="allow-unattended-background-execution" type="checkbox" checked={userUnattended} disabled={!userPreferenceLoaded} onChange={event => setUserUnattended(event.target.checked)}/>Allow unattended background execution</label>
         <p id="allow-unattended-background-execution-help" className="settings-hint">This user-wide setting applies across all your projects. When enabled, the backend can keep research and paper generation running after you close the browser page, potentially incurring AI-provider costs. When disabled, SIGMA stops new AI stages after the last viewer disconnects and preserves completed research or paper checkpoints for explicit continuation.</p>
       </fieldset>
@@ -5612,7 +5672,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     autoRevealed.current = true;
     const params = new URLSearchParams(window.location.search);
     // A citation/deep link takes precedence over automatic activity navigation.
-    if (params.has('reveal_session') || params.has('reveal_strategy') || params.has('reveal_project')) return;
+    if (params.has('reveal_session') || params.has('reveal_paper') || params.has('reveal_strategy') || params.has('reveal_project')) return;
     const eventName = initialResearchActivity ? 'sigma-reveal-running-session'
       : initialPaperActivity ? 'sigma-reveal-papers' : null;
     if (!eventName) return;
@@ -5699,7 +5759,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         setExclusiveSections(data.expand_one_project_section_at_a_time);
         if (data.expand_one_project_section_at_a_time) {
           const params = new URLSearchParams(window.location.search);
-          const initialSection = params.has('reveal_session') || params.has('reveal_understanding') ? 'sessions' : params.has('reveal_strategy') ? 'strategies' : 'project';
+          const initialSection = params.has('reveal_session') || params.has('reveal_understanding') ? 'sessions' : params.has('reveal_paper') ? 'papers' : params.has('reveal_strategy') ? 'strategies' : 'project';
           window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: initialSection }));
         }
       }).catch(cause => { if (!controller.signal.aborted) console.warn('Section layout preference unavailable', errorMessage(cause)); });
@@ -5723,6 +5783,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlPlayIntent = params.get('resume_play') === '1';
+    // Following a progress email is view-only, even if another tab previously
+    // left a guest Play intent in session storage.
+    if (params.has('reveal_session') || params.has('reveal_paper')) return;
     if (
       resumedPlay.current
       || !view
@@ -6352,8 +6415,13 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     && !invitationRequestOpen
     && !invitationRecorded;
   const currentProjectPath = new URLSearchParams(window.location.search).get('path');
+  const notificationLink = new URLSearchParams(window.location.search);
+  const fromProgressEmail = notificationLink.has('reveal_session') || notificationLink.has('reveal_paper');
+  const signInDestination = fromProgressEmail
+    ? `/project?${notificationLink.toString()}`
+    : `/project?path=${currentProjectPath}&resume_play=1`;
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
-    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}&resume_play=1` })}`
+    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: signInDestination })}`
     : '/api/cloud-auth/login';
   useEffect(() => {
     setInvitationRecorded(invitationRequestOpen);

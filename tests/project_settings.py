@@ -665,6 +665,9 @@ def main():
         )
         check_unattended_execution(root, path, Path(sibling.path))
         check_section_layout_preference(root, path, Path(sibling.path))
+        from progress_notifications import main as check_progress_notifications
+
+        check_progress_notifications()
 
 
 if __name__ == "__main__":

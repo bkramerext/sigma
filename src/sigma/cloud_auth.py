@@ -337,6 +337,30 @@ def _initialize(path: Path) -> None:
                 window_started_at INTEGER NOT NULL,
                 request_count INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS progress_email_preferences (
+                subject TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1))
+            );
+            CREATE TABLE IF NOT EXISTS progress_email_jobs (
+                job_id TEXT PRIMARY KEY,
+                subject TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS progress_email_dispatches (
+                subject TEXT NOT NULL,
+                event_hash TEXT NOT NULL,
+                state TEXT NOT NULL
+                    CHECK(state IN ('pending','sending','sent','unknown','failed','cancelled')),
+                event TEXT NOT NULL,
+                project_title TEXT NOT NULL,
+                number INTEGER NOT NULL,
+                path TEXT NOT NULL,
+                session_id TEXT,
+                paper_id TEXT,
+                incomplete INTEGER NOT NULL DEFAULT 0,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                retry_after INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(subject, event_hash)
+            );
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY,
                 actor TEXT NOT NULL,
@@ -1548,10 +1572,22 @@ def _safe_login_return_to(value: str) -> str | None:
     paths = query.get("path", [])
     if len(paths) != 1 or not paths[0] or len(paths[0]) > 2048:
         return None
-    resume_play = query.get("resume_play", [])
-    return "/project?" + urlencode(
-        {"path": paths[0], **({"resume_play": "1"} if resume_play == ["1"] else {})}
-    )
+    target = {"path": paths[0]}
+    for key in ("reveal_session", "reveal_paper"):
+        values = query.get(key, [])
+        if values:
+            if (
+                len(values) != 1
+                or not 1 <= len(values[0]) <= 128
+                or re.fullmatch(r"[A-Za-z0-9_-]+", values[0]) is None
+            ):
+                return None
+            target[key] = values[0]
+    if not any(key in target for key in ("reveal_session", "reveal_paper")) and query.get(
+        "resume_play", []
+    ) == ["1"]:
+        target["resume_play"] = "1"
+    return "/project?" + urlencode(target)
 
 
 @router.get("/login")

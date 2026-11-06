@@ -128,6 +128,9 @@ async def start_memory_protection() -> None:
     from sigma.memory_guard import attach_loop
 
     attach_loop(asyncio.get_running_loop())
+    from sigma import progress_notifications
+
+    progress_notifications.start_outbox()
 
 
 @app.on_event("shutdown")
@@ -135,6 +138,9 @@ async def stop_memory_protection() -> None:
     from sigma.memory_guard import detach_loop
 
     detach_loop()
+    from sigma import progress_notifications
+
+    progress_notifications.stop_outbox()
 
 
 _research_qa_tasks: dict[
@@ -1197,6 +1203,31 @@ async def research_presence_view(path: str):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
     )
+
+
+class ProgressEmailPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    enabled: bool
+
+
+@app.get("/api/user-preferences/progress-email")
+def progress_email_preference():
+    from sigma import progress_notifications
+
+    return progress_notifications.preference(cloud_auth.current_principal())
+
+
+@app.put("/api/user-preferences/progress-email")
+def set_progress_email_preference(body: ProgressEmailPreference):
+    from sigma import progress_notifications
+
+    principal = cloud_auth.current_principal()
+    if principal is None or principal.role == "guest":
+        raise HTTPException(403, "Sign in with Google to change progress email notifications.")
+    try:
+        return progress_notifications.update_preference(principal, body.enabled)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.get("/api/user-preferences/unattended-execution")

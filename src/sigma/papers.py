@@ -7930,6 +7930,9 @@ async def _generate_impl(
             "paper.start project_id=%s", expected_project_id or "unknown"
         )
         run_id = uuid4().hex
+        from sigma import cloud_auth, progress_notifications
+
+        progress_notifications.bind_job(cloud_auth.current_principal(), f"paper:{run_id}")
         started_at = _now()
         elapsed_before = 0
         work: dict[str, Any] = {}
@@ -9132,6 +9135,41 @@ async def _generate_impl(
         } | {"title": draft.title}
 
 
+def _schedule_progress_email(
+    path: str,
+    event: Literal["paper_finished", "paper_failed", "paper_paused"],
+    paper_id: str | None = None,
+) -> None:
+    """Enqueue from a small durable receipt; no expensive paper scan on the loop."""
+    try:
+        from sigma import progress_notifications
+
+        # The progress sidecar survives a paper failure and records the exact
+        # run even if a different Google account reopens the project later.
+        status = _read_progress_status(path)
+        if not status or not isinstance(status.get("run_id"), str):
+            return
+        number = _read_version_sequence(path)
+        if not paper_id:
+            number += 1
+        if number < 1:
+            return
+        project = inspect_project(path).project
+        progress_notifications.schedule(
+            f"paper:{status['run_id']}",
+            event,
+            event_id=f"paper:{project.id}:{status['run_id']}:{event}",
+            project_title=project.title,
+            number=number,
+            path=path,
+            paper_id=paper_id or "draft",
+        )
+    except (ProjectError, OSError, ValueError, TypeError, KeyError) as exc:
+        logging.getLogger("sigma.lifecycle").warning(
+            "paper.progress_email_skipped error_type=%s", type(exc).__name__
+        )
+
+
 async def generate(
     path: str,
     expected_binding: str | None = None,
@@ -9183,6 +9221,7 @@ async def generate(
     try:
         result = await task
         log.info("paper.complete project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
+        _schedule_progress_email(path, "paper_finished", result.get("paper_id"))
         return result
     except asyncio.CancelledError:
         task.cancel()
@@ -9192,6 +9231,7 @@ async def generate(
         if key in _started_paper_attempts:
             if is_critical():
                 finish_progress(path, "failed", MESSAGE)
+                _schedule_progress_email(path, "paper_failed")
             else:
                 finish_progress(path, "cancelled")
         log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
@@ -9200,6 +9240,8 @@ async def generate(
         if key in _started_paper_attempts:
             finish_progress(path, "paused", str(exc))
         log.info("paper.paused project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
+        if key in _started_paper_attempts:
+            _schedule_progress_email(path, "paper_paused")
         raise
     except Exception as exc:
         # The SSE error can disappear on page reload; retain only the same
@@ -9211,6 +9253,8 @@ async def generate(
         )
         if key in _started_paper_attempts:
             finish_progress(path, "failed", reason)
+        if key in _started_paper_attempts:
+            _schedule_progress_email(path, "paper_failed")
         from sigma.production_observability import safe_exception_trace
 
         log.error(
