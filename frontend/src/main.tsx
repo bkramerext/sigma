@@ -6365,7 +6365,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const fromProgressEmail = notificationLink.has('reveal_session') || notificationLink.has('reveal_paper');
   const signInDestination = fromProgressEmail
     ? `/project?${notificationLink.toString()}`
-    : `/project?${new URLSearchParams({ path: currentProjectPath ?? '', resume_play: '1' })}`;
+    : `/project?path=${currentProjectPath}&resume_play=1`;
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
     ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: signInDestination })}`
     : '/api/cloud-auth/login';

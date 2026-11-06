@@ -66,22 +66,35 @@ def main() -> None:
         ):
             _insert_user(cfg, first)
             _insert_user(cfg, second)
-            assert progress_notifications.preference(first) == {
-                "enabled": False, "available": True
-            }
+            assert progress_notifications.preference(first) == {"enabled": False, "available": True}
             assert progress_notifications.preference(second)["enabled"] is False
             assert progress_notifications.update_preference(first, True)["enabled"]
             assert progress_notifications.preference(second)["enabled"] is False
             assert progress_notifications.preference(first)["enabled"] is True
-            assert progress_notifications.eligible_session_event({"status": "ended"}) == "session_finished"
-            assert progress_notifications.eligible_session_event({"status": "completed"}) == "session_finished"
-            assert progress_notifications.eligible_session_event({"status": "failed"}) == "session_failed"
-            assert progress_notifications.eligible_session_event({
-                "status": "paused", "message": "Paused · provider usage limit"
-            }) == "session_paused"
-            assert progress_notifications.eligible_session_event({
-                "status": "paused", "message": "Paused by user. A request may still finish."
-            }) is None
+            assert (
+                progress_notifications.eligible_session_event({"status": "ended"})
+                == "session_finished"
+            )
+            assert (
+                progress_notifications.eligible_session_event({"status": "completed"})
+                == "session_finished"
+            )
+            assert (
+                progress_notifications.eligible_session_event({"status": "failed"})
+                == "session_failed"
+            )
+            assert (
+                progress_notifications.eligible_session_event(
+                    {"status": "paused", "message": "Paused · provider usage limit"}
+                )
+                == "session_paused"
+            )
+            assert (
+                progress_notifications.eligible_session_event(
+                    {"status": "paused", "message": "Paused by user. A request may still finish."}
+                )
+                is None
+            )
 
             for invalid in ("true", 1, None):
                 try:
@@ -101,6 +114,14 @@ def main() -> None:
             )
             assert hosted.startswith("https://sigma.example.org/project?")
             assert "reveal_paper=paper-123" in hosted
+            signed_out_return = "/project?path=%2Ftmp%2Fmy+project.sigma&reveal_session=session-123"
+            assert cloud_auth._safe_login_return_to(signed_out_return) == signed_out_return
+            assert "resume_play" not in (
+                cloud_auth._safe_login_return_to(signed_out_return + "&resume_play=1") or ""
+            )
+            assert cloud_auth._safe_login_return_to(
+                "/project?path=%2Ftmp%2Fmy+project.sigma&reveal_paper=draft"
+            ) is not None
             cases: tuple[tuple[progress_notifications.Event, str], ...] = (
                 ("session_finished", "Session 3 completed"),
                 ("session_failed", "Session 3 failed"),
@@ -125,14 +146,22 @@ def main() -> None:
             progress_notifications.bind_job(first, "session:123")
             progress_notifications.bind_job(second, "session:123")
             progress_notifications.enqueue(
-                "session:123", "session_finished",
-                event_id="event:one", project_title="Project Alpha",
-                number=3, path="/tmp/my project.sigma", session_id="session-123",
+                "session:123",
+                "session_finished",
+                event_id="event:one",
+                project_title="Project Alpha",
+                number=3,
+                path="/tmp/my project.sigma",
+                session_id="session-123",
             )
             progress_notifications.enqueue(
-                "session:123", "session_finished",
-                event_id="event:one", project_title="Project Alpha",
-                number=3, path="/tmp/my project.sigma", session_id="session-123",
+                "session:123",
+                "session_finished",
+                event_id="event:one",
+                project_title="Project Alpha",
+                number=3,
+                path="/tmp/my project.sigma",
+                session_id="session-123",
             )
             progress_notifications._deliver_pending()
             progress_notifications._deliver_pending()
@@ -144,9 +173,13 @@ def main() -> None:
             # A known pre-delivery SMTP failure is retried from persisted rows.
             progress_notifications.bind_job(first, "paper:retry")
             progress_notifications.enqueue(
-                "paper:retry", "paper_paused",
-                event_id="event:retry", project_title="Project Alpha",
-                number=4, path="/tmp/my project.sigma", paper_id="draft",
+                "paper:retry",
+                "paper_paused",
+                event_id="event:retry",
+                project_title="Project Alpha",
+                number=4,
+                path="/tmp/my project.sigma",
+                paper_id="draft",
             )
             with patch(
                 "sigma.mail_transport.send_message",
@@ -165,9 +198,13 @@ def main() -> None:
 
             # An ambiguous provider response is never automatically replayed.
             progress_notifications.enqueue(
-                "paper:retry", "paper_failed",
-                event_id="event:unknown", project_title="Project Alpha",
-                number=4, path="/tmp/my project.sigma", paper_id="draft",
+                "paper:retry",
+                "paper_failed",
+                event_id="event:unknown",
+                project_title="Project Alpha",
+                number=4,
+                path="/tmp/my project.sigma",
+                paper_id="draft",
             )
             with patch("sigma.mail_transport.send_message", side_effect=RuntimeError("unknown")):
                 progress_notifications._deliver_pending()
@@ -178,9 +215,13 @@ def main() -> None:
             # Signed-in account scope is independent of what a second user prefers.
             progress_notifications.bind_job(second, "other-job")
             progress_notifications.enqueue(
-                "other-job", "session_failed",
-                event_id="other-event", project_title="Project Alpha",
-                number=5, path="/tmp/my project.sigma", session_id="session-456",
+                "other-job",
+                "session_failed",
+                event_id="other-event",
+                project_title="Project Alpha",
+                number=5,
+                path="/tmp/my project.sigma",
+                session_id="session-456",
             )
             with cloud_auth._db(cfg) as db:
                 row = db.execute(
@@ -189,9 +230,13 @@ def main() -> None:
             assert row is not None and row["total"] == 0
             # Opt-out before a queued send suppresses the existing event too.
             progress_notifications.enqueue(
-                "session:123", "session_paused",
-                event_id="event:optout", project_title="Project Alpha",
-                number=3, path="/tmp/my project.sigma", session_id="session-123",
+                "session:123",
+                "session_paused",
+                event_id="event:optout",
+                project_title="Project Alpha",
+                number=3,
+                path="/tmp/my project.sigma",
+                session_id="session-123",
             )
             progress_notifications.update_preference(first, False)
             progress_notifications._deliver_pending()
@@ -199,9 +244,7 @@ def main() -> None:
             assert len(sent) == 2
 
         with patch("sigma.cloud_auth.config", return_value=cfg):
-            assert progress_notifications.preference(None) == {
-                "enabled": False, "available": False
-            }
+            assert progress_notifications.preference(None) == {"enabled": False, "available": False}
             try:
                 progress_notifications.update_preference(
                     cloud_auth.Principal("guest", "guest@example.org", "guest"), True

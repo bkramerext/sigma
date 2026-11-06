@@ -115,20 +115,26 @@ def bind_job(principal: cloud_auth.Principal | None, job_id: str) -> None:
 _COPY: dict[Event, tuple[str, str, str]] = {
     "session_finished": (
         "Session {number} completed",
-        ("Research session {number} completed successfully.\n"
-         "Review the findings, outcome, and remaining questions."),
+        (
+            "Research session {number} completed successfully.\n"
+            "Review the findings, outcome, and remaining questions."
+        ),
         "View session",
     ),
     "session_failed": (
         "Session {number} failed",
-        ("Research session {number} stopped because of an error.\n"
-         "Open the session to review the problem and any saved progress."),
+        (
+            "Research session {number} stopped because of an error.\n"
+            "Open the session to review the problem and any saved progress."
+        ),
         "View session",
     ),
     "session_paused": (
         "Session {number} paused",
-        ("Research session {number} was paused because SIGMA could not continue automatically.\n"
-         "Your research progress has been preserved. Open the session to review its status."),
+        (
+            "Research session {number} was paused because SIGMA could not continue automatically.\n"
+            "Your research progress has been preserved. Open the session to review its status."
+        ),
         "View session",
     ),
     "paper_finished": (
@@ -138,14 +144,18 @@ _COPY: dict[Event, tuple[str, str, str]] = {
     ),
     "paper_failed": (
         "Paper {number} failed",
-        ("Paper generation stopped because of an error.\n"
-         "Open the project to review the problem and any saved work."),
+        (
+            "Paper generation stopped because of an error.\n"
+            "Open the project to review the problem and any saved work."
+        ),
         "View paper",
     ),
     "paper_paused": (
         "Paper {number} paused",
-        ("Paper generation has been paused.\nYour completed work has been preserved. "
-         "Open the paper to review its status and resume when possible."),
+        (
+            "Paper generation has been paused.\nYour completed work has been preserved. "
+            "Open the paper to review its status and resume when possible."
+        ),
         "View paper",
     ),
 }
@@ -229,8 +239,15 @@ def enqueue(
                 JOIN progress_email_preferences AS prefs ON prefs.subject=jobs.subject
                 WHERE jobs.job_id=? AND prefs.enabled=1""",
                 (
-                    digest, event, project_title[:160], number, path,
-                    session_id, paper_id, int(incomplete), job_id,
+                    digest,
+                    event,
+                    project_title[:160],
+                    number,
+                    path,
+                    session_id,
+                    paper_id,
+                    int(incomplete),
+                    job_id,
                 ),
             )
     except (ValueError, OSError, RuntimeError, sqlite3.Error) as exc:
@@ -276,11 +293,16 @@ def _deliver_pending() -> None:
 
                     recipient = cloud_auth._normalize_email(row["verified_email"])
                     link = deep_link(
-                        cfg.origin, row["path"],
-                        session_id=row["session_id"], paper_id=row["paper_id"],
+                        cfg.origin,
+                        row["path"],
+                        session_id=row["session_id"],
+                        paper_id=row["paper_id"],
                     )
                     message = message_for(
-                        row["event"], row["project_title"], row["number"], link,
+                        row["event"],
+                        row["project_title"],
+                        row["number"],
+                        link,
                         incomplete=bool(row["incomplete"]),
                     )
                     send_message(message, recipients=[recipient])
@@ -323,8 +345,13 @@ async def _run_outbox() -> None:
 
 
 def start_outbox() -> None:
-    """Called once from backend startup; replays durable pending rows."""
+    """Replay the outbox only when email delivery and authentication are configured."""
     global _PUMP
+    if not _configured():
+        return
+    cfg = cloud_auth.config()
+    if not cfg.enabled or cfg.error or cfg.database is None:
+        return
     if _PUMP is None or _PUMP.done():
         _PUMP = asyncio.create_task(_run_outbox())
 
@@ -350,8 +377,14 @@ def schedule(
 ) -> None:
     """Persist the event and kick an asynchronous transport without blocking research."""
     enqueue(
-        job_id, event, event_id=event_id, project_title=project_title,
-        number=number, path=path, session_id=session_id, paper_id=paper_id,
+        job_id,
+        event,
+        event_id=event_id,
+        project_title=project_title,
+        number=number,
+        path=path,
+        session_id=session_id,
+        paper_id=paper_id,
         incomplete=incomplete,
     )
     try:

@@ -1572,10 +1572,21 @@ def _safe_login_return_to(value: str) -> str | None:
     paths = query.get("path", [])
     if len(paths) != 1 or not paths[0] or len(paths[0]) > 2048:
         return None
-    resume_play = query.get("resume_play", [])
-    return "/project?" + urlencode(
-        {"path": paths[0], **({"resume_play": "1"} if resume_play == ["1"] else {})}
-    )
+    target = {"path": paths[0]}
+    for key in ("reveal_session", "reveal_paper"):
+        values = query.get(key, [])
+        if values:
+            if (
+                len(values) != 1
+                or not 1 <= len(values[0]) <= 128
+                or re.fullmatch(r"[A-Za-z0-9_-]+", values[0]) is None
+            ):
+                return None
+            target[key] = values[0]
+    if not any(key in target for key in ("reveal_session", "reveal_paper")):
+        if query.get("resume_play", []) == ["1"]:
+            target["resume_play"] = "1"
+    return "/project?" + urlencode(target)
 
 
 @router.get("/login")

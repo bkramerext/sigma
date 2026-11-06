@@ -7932,9 +7932,7 @@ async def _generate_impl(
         run_id = uuid4().hex
         from sigma import cloud_auth, progress_notifications
 
-        progress_notifications.bind_job(
-            cloud_auth.current_principal(), f"paper:{run_id}"
-        )
+        progress_notifications.bind_job(cloud_auth.current_principal(), f"paper:{run_id}")
         started_at = _now()
         elapsed_before = 0
         work: dict[str, Any] = {}
@@ -9170,6 +9168,7 @@ def _schedule_progress_email(
         logging.getLogger("sigma.lifecycle").warning(
             "paper.progress_email_skipped error_type=%s", type(exc).__name__
         )
+
 
 async def generate(
     path: str,
