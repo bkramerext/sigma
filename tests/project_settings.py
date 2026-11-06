@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import research_preferences, research_presence, research_sessions
+from sigma import research_preferences, research_presence, research_sessions, section_layout_preferences
 from sigma.api import app, research_presence_view
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
@@ -30,6 +30,33 @@ from sigma.projects import (
     remove_strategy,
     update_project,
 )
+
+
+def check_section_layout_preference(root: Path) -> None:
+    """The section display setting is user-wide, strict, and not a project field."""
+    with patch("sigma.research_preferences.projects_root", return_value=root):
+        assert section_layout_preferences.expand_one_project_section_at_a_time() is False
+        with TestClient(app) as client:
+            uri = "/api/user-preferences/section-layout"
+            assert client.get(uri).status_code == 200
+            assert client.get(uri).json() == {"expand_one_project_section_at_a_time": False}
+            for invalid in ("true", 1, None):
+                assert client.put(
+                    uri, json={"expand_one_project_section_at_a_time": invalid}
+                ).status_code == 422
+            assert client.put(
+                uri, json={"expand_one_project_section_at_a_time": True}
+            ).json() == {"expand_one_project_section_at_a_time": True}
+            assert client.get(uri).json() == {"expand_one_project_section_at_a_time": True}
+            with (
+                TemporaryDirectory() as unrelated,
+                patch("sigma.research_preferences.projects_root", return_value=Path(unrelated)),
+            ):
+                assert client.get(uri).json() == {"expand_one_project_section_at_a_time": False}
+            assert client.get(uri).json() == {"expand_one_project_section_at_a_time": True}
+            assert client.put(
+                uri, json={"expand_one_project_section_at_a_time": False}
+            ).status_code == 200
 
 
 def rejects(action):
@@ -577,6 +604,7 @@ def main():
             "PASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior"
         )
         check_unattended_execution(root, path, Path(sibling.path))
+        check_section_layout_preference(root)
 
 
 if __name__ == "__main__":
