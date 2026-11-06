@@ -119,6 +119,37 @@ def check_memory_telemetry() -> None:
                 handler.close()
 
 
+def check_memory_change_logging() -> None:
+    """Suppress tiny and unavailable-only fluctuations, but retain meaningful deltas."""
+    from sigma.production_observability import _memory_changed
+
+    empty = dict.fromkeys(
+        (
+            "rss_mib",
+            "rss_peak_mib",
+            "cgroup_used_mib",
+            "cgroup_limit_mib",
+            "cgroup_peak_mib",
+            "cgroup_pct",
+            "host_available_mib",
+            "host_free_mib",
+        )
+    )
+    assert _memory_changed(None, empty)
+    assert not _memory_changed(empty, dict(empty))  # Repeated all-None snapshots.
+    start = {**empty, "rss_mib": 1000, "rss_peak_mib": 1200, "cgroup_pct": 30.0}
+    assert _memory_changed(empty, start)  # An unavailable metric becomes readable.
+    assert not _memory_changed(
+        start, {**start, "rss_mib": 1063, "rss_peak_mib": 1250, "cgroup_pct": 34.9}
+    )
+    assert _memory_changed(start, {**start, "rss_mib": 1064})
+    assert _memory_changed(start, {**start, "rss_mib": 936})
+    assert _memory_changed(start, {**start, "cgroup_pct": 35.0})
+    assert _memory_changed(start, {**start, "rss_mib": None})
+    # Compare to the last *emitted* sample, not the previous 30-second reading.
+    assert _memory_changed(start, {**start, "rss_mib": 1070})
+
+
 def check_memory_sources() -> None:
     """Unavailable kernel files are diagnosed, and cgroup v1 remains measurable."""
     from sigma import production_observability as telemetry
@@ -200,6 +231,7 @@ def check_memory_sources() -> None:
 
 def main() -> None:
     check_memory_telemetry()
+    check_memory_change_logging()
     check_memory_sources()
     stats = memory_snapshot()
     assert {
