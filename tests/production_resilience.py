@@ -87,7 +87,15 @@ def check_memory_telemetry() -> None:
     before_level = log.level
     try:
         with (
-            patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "true"}),
+            tempfile.TemporaryDirectory(prefix="sigma-memory-file-failure-") as home,
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                    "SIGMA_CLOUD_AUTH_HOME": home,
+                    "SIGMA_MEMORY_LOG_INTERVAL_SECONDS": "30",
+                },
+            ),
             patch("sys.stderr", stderr),
             patch.object(production_observability, "_STARTED", False),
             patch.object(production_observability, "TimedRotatingFileHandler", side_effect=OSError),
