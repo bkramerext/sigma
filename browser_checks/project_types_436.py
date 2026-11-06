@@ -712,6 +712,16 @@ with sync_playwright() as playwright:
     assert reference_link.evaluate("el => getComputedStyle(el).fontSize") == hint.evaluate(
         "el => getComputedStyle(el).fontSize"
     )
+    # This preference previously had a frontend checkbox but no backend route;
+    # the checkbox must be usable without creating global request-error toasts.
+    exclusive = settings.get_by_role("checkbox", name="Expand one project section at a time")
+    expect(exclusive).to_be_enabled(timeout=10000)
+    initially_checked = exclusive.is_checked()
+    exclusive.set_checked(not initially_checked)
+    assert exclusive.is_checked() != initially_checked
+    exclusive.set_checked(initially_checked)
+    expect(page.locator(".request-toast-stack .request-toast")).to_have_count(0)
+
     # An unsaved change must survive a round trip through Project Types.
     advanced = settings.get_by_role("checkbox", name="Show advanced Outcome details")
     advanced.set_checked(not advanced.is_checked())
@@ -806,6 +816,32 @@ with sync_playwright() as playwright:
         restored_common.locator(".pt-reference-toggle").filter(has_text="Disable")
     ).to_have_count(3)
     restored_types.locator("header").get_by_role("button", name="Close", exact=True).click()
+
+    # Long project titles must align every wrapped line after the independent
+    # discipline icon track, not restart subsequent lines beneath that icon.
+    long_name = (
+        "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? "
+        "A Long-Running Investigation of Stage-Dependent Recovery v1 (continued)"
+    )
+    long_project = project(page, long_name, "mathematical")
+    open_project(page, long_project["path"])
+    title_row = page.locator(".project-header-title-row")
+    title = title_row.locator(".project-header-title")
+    expect(title).to_have_text(long_name)
+    geometry = title_row.evaluate(
+        """row => {
+          const title = row.querySelector('.project-header-title');
+          const range = document.createRange();
+          range.selectNodeContents(title);
+          const lines = [...range.getClientRects()].filter(rect => rect.width > 25)
+            .map(rect => ({x: rect.x, y: rect.y}));
+          const icon = row.querySelector('.research-type-icon').getBoundingClientRect();
+          return {lines, iconRight: icon.right};
+        }"""
+    )
+    assert len(geometry["lines"]) == 2, geometry
+    assert abs(geometry["lines"][0]["x"] - geometry["lines"][1]["x"]) < 3, geometry
+    assert geometry["lines"][0]["x"] > geometry["iconRight"], geometry
 
     assert not errors, errors
     browser.close()
