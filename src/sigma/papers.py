@@ -2823,14 +2823,18 @@ def _visible_invalid_tex_controls(tex: str) -> tuple[str, list[str]]:
     )
 
 
-def _interrupted_sections_need_fallback(work: dict[str, Any]) -> bool:
+def _legacy_ambiguous_sections(work: dict[str, Any]) -> set[str]:
+    """Recover a known retry target from checkpoints predating dispatch records.
+
+    Other old interrupted checkpoints have no reliable per-section dispatch
+    history. Their missing sections cannot safely be classified for replay.
+    """
     prior = work.get("progress") or {}
-    plan = work.get("plan") or {}
-    return bool(
-        prior.get("stage") in {"sections", "retry"}
-        and prior.get("status") in {"cancelled", "running"}
-        and len(work.get("section_drafts", {})) < len(plan.get("sections", []))
-    )
+    if prior.get("stage") not in {"sections", "retry"}:
+        return set()
+    detail = prior.get("detail", "")
+    match = re.match(r"Retrying section (\d+)\b", detail) if isinstance(detail, str) else None
+    return {match.group(1)} if match else set()
 
 
 def _note_paper_progress_recovery(work: dict[str, Any]) -> None:
@@ -2890,7 +2894,8 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "progress",
         "explicit_restart_pending",
         "planning_fallback_pending",
-        "section_interruption_pending",
+        "section_dispatches",
+        "legacy_ambiguous_sections",
         "include_diagrams",
         "proofreading",
         "proofreading_calls_prior",
@@ -3071,11 +3076,36 @@ def _load_work(path: str) -> dict[str, Any] | None:
         if not key.isdigit() or not 1 <= int(key) <= MAX_LONG_PAPER_SECTIONS:
             raise ProjectError("Long-paper checkpoint section identity is invalid")
         LongSectionDraft.model_validate(section)
+    dispatches = value.get("section_dispatches")
+    if dispatches is not None:
+        if not isinstance(dispatches, dict) or len(dispatches) > MAX_LONG_PAPER_SECTIONS:
+            raise ProjectError("Long-paper section dispatch records are invalid")
+        for key, attempts in dispatches.items():
+            if (
+                not isinstance(key, str)
+                or not key.isdigit()
+                or not 1 <= int(key) <= MAX_LONG_PAPER_SECTIONS
+                or not isinstance(attempts, list)
+                or not 1 <= len(attempts) <= 3
+                or any(
+                    type(index) is not int or not 1 <= index <= value["provider_calls_total"]
+                    for index in attempts
+                )
+            ):
+                raise ProjectError("Long-paper section dispatch records are invalid")
+    legacy_sections = value.get("legacy_ambiguous_sections", [])
     if (
-        "section_interruption_pending" in value
-        and type(value["section_interruption_pending"]) is not bool
+        not isinstance(legacy_sections, list)
+        or len(legacy_sections) > MAX_LONG_PAPER_SECTIONS
+        or any(
+            not isinstance(key, str)
+            or not key.isdigit()
+            or not 1 <= int(key) <= MAX_LONG_PAPER_SECTIONS
+            for key in legacy_sections
+        )
+        or len(set(legacy_sections)) != len(legacy_sections)
     ):
-        raise ProjectError("Long-paper section recovery marker is invalid")
+        raise ProjectError("Legacy section recovery record is invalid")
     if value.get("plan") is not None:
         LongPaperPlan.model_validate(value["plan"])
     if value["one_shot_draft"] is not None:
@@ -3654,7 +3684,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
     if status == "cancelled" and isinstance(detail, str) and detail.startswith("Retrying "):
         detail = (
             "Paper generation stopped. Saved sections and provider-call accounting remain "
-            "available; Continue uses a labeled gap for any interrupted section."
+            "available; Resume uses a labeled gap for any interrupted section."
         )
     return {
         "status": status,
@@ -3734,7 +3764,7 @@ def finish_progress(
     elif status == "cancelled":
         frozen["detail"] = (
             "Paper generation stopped. Saved sections and provider-call accounting remain "
-            "available; Continue uses a labeled gap for any interrupted section."
+            "available; Resume uses a labeled gap for any interrupted section."
         )
     if work is not None:
         work["progress"] = frozen
@@ -3775,6 +3805,7 @@ def _new_work(
         "conflict_notes": [],
         "conflict_note_count": 0,
         "section_drafts": {},
+        "section_dispatches": {},
         "one_shot_draft": None,
         "publication_compiler_calls": 0,
     }
@@ -6197,6 +6228,18 @@ async def _generate_long_draft(
         calls += 1
         state["provider_calls"] = calls
         state["provider_calls_total"] = int(state.get("provider_calls_total", calls - 1)) + 1
+        if schema_name == "sigma_long_paper_section":
+            section_number = (
+                input_value.get("section_number") if isinstance(input_value, dict) else None
+            )
+            if (
+                type(section_number) is not int
+                or not 1 <= section_number <= MAX_LONG_PAPER_SECTIONS
+            ):
+                raise ProjectError("Long-paper section dispatch identity is invalid")
+            state.setdefault("section_dispatches", {}).setdefault(str(section_number), []).append(
+                state["provider_calls_total"]
+            )
         save_state(state)
 
     async def call_with_safe_retry(
@@ -6886,7 +6929,7 @@ or document markup."""
         save_state(state)
         if progress:
             # Count persisted completions, not the author's section number.
-            # Independent section jobs can finish in any order and Continue
+            # Independent section jobs can finish in any order and Resume
             # may resume with sections already present in the checkpoint.
             await progress("sections", len(saved_sections), len(long_plan.sections), "milestone")
         if calls > MAX_LONG_PAPER_CALLS:
@@ -6899,15 +6942,32 @@ or document markup."""
             examples=section_draft.examples,
         )
 
-    if state.get("section_interruption_pending"):
-        for number, section in enumerate(long_plan.sections, start=1):
-            if str(number) not in saved_sections:
-                saved_sections[str(number)] = fallback_section(
-                    number,
-                    section,
-                    ProjectError("An earlier section call was interrupted after dispatch"),
-                ).model_dump()
-        state.pop("section_interruption_pending", None)
+    dispatches = state.get("section_dispatches")
+    if dispatches is None:
+        legacy_ambiguous = set(
+            state.get("legacy_ambiguous_sections", [])
+        ) or _legacy_ambiguous_sections(state)
+        missing = {str(number) for number in range(1, len(long_plan.sections) + 1)} - set(
+            saved_sections
+        )
+        if state.get("progress", {}).get("stage") in {"sections", "retry"} and (
+            missing - legacy_ambiguous
+        ):
+            raise ProjectError(
+                "This older paper checkpoint lacks section dispatch records for unsaved "
+                "sections. Their paid-call state is uncertain; inspect the checkpoint before Resume."
+            )
+        dispatches = {key: [] for key in legacy_ambiguous}
+    for number, section in enumerate(long_plan.sections, start=1):
+        key = str(number)
+        if key not in saved_sections and key in dispatches:
+            saved_sections[key] = fallback_section(
+                number,
+                section,
+                ProjectError("An earlier section call was interrupted after dispatch"),
+            ).model_dump()
+    if any(key in saved_sections for key in dispatches):
+        state.pop("legacy_ambiguous_sections", None)
         save_state(state)
 
     if fast_path:
@@ -8237,18 +8297,21 @@ async def _generate_impl(
             }:
                 work["planning_fallback_pending"] = True
                 _save_work(path, work)
-        if (
-            long_form
-            and checkpoint is not None
-            and compatible
-            and work.get("plan")
-            and _interrupted_sections_need_fallback(work)
-        ):
-            # Concurrent calls can be in flight even when the display
-            # names only one section. Preserve every saved result and do
-            # not replay an ambiguous paid request after interruption.
-            work["section_interruption_pending"] = True
-            _save_work(path, work)
+        if long_form and checkpoint is not None and compatible and work.get("plan"):
+            prior = work.get("progress") or {}
+            if "section_dispatches" not in work and prior.get("stage") in {"sections", "retry"}:
+                inferred = _legacy_ambiguous_sections(work)
+                missing = {
+                    str(number) for number in range(1, len(work["plan"]["sections"]) + 1)
+                } - set(work.get("section_drafts", {}))
+                if missing - inferred:
+                    raise ProjectError(
+                        "This older paper checkpoint lacks section dispatch records for "
+                        "unsaved sections. Their paid-call state is uncertain; inspect the "
+                        "checkpoint before Resume."
+                    )
+                work["legacy_ambiguous_sections"] = sorted(inferred)
+                _save_work(path, work)
         # A new run must have a fully formed, durable paper checkpoint before
         # reference selection can populate it or the compiler can dispatch.
         # Otherwise a restart sees an incomplete work record and loses the
