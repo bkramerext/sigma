@@ -193,6 +193,7 @@ if __package__:
         test_terminal_protocol_completion_allows_known_invalid_response_replacement as test_terminal_protocol_completion_allows_known_invalid_response_replacement,
         test_terminal_protocol_completion_plan_preserves_attempt_history as test_terminal_protocol_completion_plan_preserves_attempt_history,
         test_terminal_protocol_resume_extends_only_exact_shortfall as test_terminal_protocol_resume_extends_only_exact_shortfall,
+        test_resume_37_pending_turns_uses_actual_remaining_session_time as test_resume_37_pending_turns_uses_actual_remaining_session_time,
         test_unknown_provider_attempt_keeps_held_session_cost as test_unknown_provider_attempt_keeps_held_session_cost,
     )
 else:
@@ -378,6 +379,7 @@ else:
         test_terminal_protocol_completion_allows_known_invalid_response_replacement as test_terminal_protocol_completion_allows_known_invalid_response_replacement,
         test_terminal_protocol_completion_plan_preserves_attempt_history as test_terminal_protocol_completion_plan_preserves_attempt_history,
         test_terminal_protocol_resume_extends_only_exact_shortfall as test_terminal_protocol_resume_extends_only_exact_shortfall,
+        test_resume_37_pending_turns_uses_actual_remaining_session_time as test_resume_37_pending_turns_uses_actual_remaining_session_time,
         test_unknown_provider_attempt_keeps_held_session_cost as test_unknown_provider_attempt_keeps_held_session_cost,
     )
 
