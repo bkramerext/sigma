@@ -6233,7 +6233,11 @@ async def _generate_long_draft(
                     response_model=response_model,
                     max_input_bytes=max_input_bytes,
                     on_output_delta=(
-                        (lambda number=input_value["section_number"]: section_output_observed(number))
+                        (
+                            lambda number=input_value["section_number"]: section_output_observed(
+                                number
+                            )
+                        )
                         if on_output_delta is not None
                         and schema_name == "sigma_long_paper_section"
                         and isinstance(input_value, dict)
@@ -8550,9 +8554,7 @@ async def _generate_impl(
                             3,
                             detail=f"Retrying paper writing (attempt {attempt_number} of 3).",
                         )
-                    observer_token = _paper_output_observer.set(
-                        lambda: report_activity("writing")
-                    )
+                    observer_token = _paper_output_observer.set(lambda: report_activity("writing"))
                     try:
                         draft, model = await _provider(
                             {
