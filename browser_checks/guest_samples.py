@@ -313,7 +313,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         # session cookie, working project, provider connection or research run.
         scored_group.evaluate("element => { element.open = false; }")
         page.get_by_role("tab", name="Saved").click()
-        message = page.locator(".guest-recent-message")
+        message = page.locator("#recent-panel .guest-recent-message")
         expect(message.locator("span").nth(0)).to_have_text("Sign in to create and")
         expect(message.locator("span").nth(1)).to_have_text("save your own projects.")
         typography = message.evaluate("element => getComputedStyle(element)")

@@ -206,7 +206,7 @@
 .home-page .home-recents .recent-type-group[open] > summary::before { transform: rotate(90deg); }
 .home-page .home-recents .recent-type-group > summary .research-type-icon { display: block; flex: 0 0 16px; width: 16px; height: 16px; margin: 0; color: #d6a36f; }
 .home-page .home-recents .recent-type-group > summary span { color: #e0aa8b; }
-.home-page .home-recents .recent-type-group > summary .research-running-indicator { margin-left: 6px; vertical-align: middle; }
+.home-page .home-recents .recent-type-group > summary .research-running-indicator { position: relative; top: -2px; margin-left: 6px; vertical-align: middle; }
 .home-page .home-recents .recent-type-group > summary small { display: block; margin: 0; color: #aeb9c4; font-size: 11px; }
 .home-page .home-recents .recent-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
 .home-page .home-recents .recent-type-group > ul { margin: 0 0 0 20px; padding: 0; }
