@@ -4815,7 +4815,7 @@ function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
 
-function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+function RecentProjects({ onOpen, flat = false }: { onOpen: (view: ProjectView) => void; flat?: boolean }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState('');
@@ -4913,13 +4913,14 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     entry.research_running || entry.paper_generating || entry.paper_activity === 'active'
       ? 'running'
       : entry.paper_activity === 'queued' ? 'queued' : null;
-  const recentGroups = visibleProjects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+  const recentGroups = (flat ? visibleProjects.slice(0, 10) : visibleProjects).reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+    if (flat) { if (!groups.length) groups.push({ type: 'default', projects: [] }); groups[0].projects.push(project); return groups; }
     const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
     else groups.push({ type, projects: [project] });
     return groups;
-  }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
+  }, []).sort((a, b) => flat ? 0 : researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents" data-opening={!!opening}>
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
     {recentGroups.map(group => {
@@ -4929,7 +4930,8 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         ? (group.projects.some(entry => paperActivity(entry) === 'running') ? 'running'
           : group.projects.some(entry => paperActivity(entry) === 'queued') ? 'queued' : null)
         : null;
-      return <details className="recent-type-group" key={groupKey} open={groupExpanded} onToggle={event => {
+      return <details className={`recent-type-group${flat ? ' recent-flat-group' : ''}`} key={groupKey} open={flat || groupExpanded} onToggle={event => {
+        if (flat) return;
         const isOpen = event.currentTarget.open;
         try { window.localStorage.setItem(`sigma.home.recentGroup:${groupKey}`, String(isOpen)); } catch { /* Preserve state when storage is available. */ }
         setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
@@ -5015,35 +5017,42 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
     : !cloud?.target || cloud.target === 'local'
       ? 'In local mode, all signed-in accounts share this project list.'
       : 'Show saved projects. Click again to collapse or expand all.';
-  const [tab, setTab] = useState<'recent' | 'samples'>(() =>
-    guest ? 'samples' : window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
+  const [tab, setTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
+    if (guest) return 'samples';
+    const saved = window.localStorage.getItem('sigma.homeCatalogTab');
+    return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
+  });
   const recent = useRef<HTMLButtonElement>(null);
+  const mostRecent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
   const recentPanel = useRef<HTMLDivElement>(null);
+  const mostRecentPanel = useRef<HTMLDivElement>(null);
   const samplesPanel = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [guest, tab]);
-  function switchTab(next: 'recent' | 'samples') {
+  function switchTab(next: 'recent' | 'samples' | 'most-recent') {
     if (next === tab) {
-      const panel = next === 'samples' ? samplesPanel.current : recentPanel.current;
+      const panel = next === 'samples' ? samplesPanel.current : next === 'recent' ? recentPanel.current : mostRecentPanel.current;
       if (panel) {
-        const selector = next === 'samples' ? '.sample-type-group' : '.recent-type-group';
-        const groups = Array.from(panel.querySelectorAll<HTMLDetailsElement>(selector));
+        const selector = next === 'samples' ? '.sample-type-group' : next === 'recent' ? '.recent-type-group' : '';
+        const groups = selector ? Array.from(panel.querySelectorAll<HTMLDetailsElement>(selector)) : [];
         const expandAll = groups.length > 0 && groups.every(group => !group.open);
         groups.forEach(group => { group.open = expandAll; });
       }
       return;
     }
-    setTab(next); (next === 'recent' ? recent : samples).current?.focus();
+    setTab(next); (next === 'recent' ? recent : next === 'most-recent' ? mostRecent : samples).current?.focus();
   }
   return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'samples' ? 'recent' : 'samples'); }
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const tabs = ['samples', 'recent', 'most-recent'] as const; switchTab(tabs[(tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]); }
     if (event.key === 'Home') { event.preventDefault(); switchTab('samples'); }
-    if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
+    if (event.key === 'End') { event.preventDefault(); switchTab('most-recent'); }
   }}>
     <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Selecting a sample copies into a new project." onClick={() => switchTab('samples')}>Samples</button>
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>Saved</button>
+    <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
     <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen}/>}</div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat/>}</div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
   </div>;
 }
