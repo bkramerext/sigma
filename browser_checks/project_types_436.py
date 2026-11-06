@@ -1208,9 +1208,7 @@ with sync_playwright() as playwright:
     fresh_play = page.get_by_role("button", name="Generate Paper 2")
     expect(fresh_play).to_be_enabled(timeout=10000)
     expect(page.get_by_role("button", name="Start over on paper generation")).to_be_enabled()
-    assert "confirmation required" in fresh_play.locator("xpath=..").get_attribute(
-        "data-tooltip"
-    )
+    assert "confirmation required" in fresh_play.locator("xpath=..").get_attribute("data-tooltip")
     fresh_play.click()
     play_confirm = page.get_by_role("group", name="Confirm new paper generation attempt")
     expect(play_confirm).to_be_visible()
@@ -1230,9 +1228,7 @@ with sync_playwright() as playwright:
         page.wait_for_timeout(100)
     assert reset_calls == ["POST", "POST"], reset_calls
     assert dispatched == ["POST", "POST", "POST"], dispatched
-    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(
-        timeout=10000
-    )
+    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
 
     # Score stays clickable even when the PDF is unavailable; the user gets
