@@ -656,6 +656,41 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
         assert papers.progress_status(str(path))["status"] == "cancelled"
 
 
+def test_stopped_paper_checkpoint_remains_valid_on_resume() -> None:
+    """A stopped new paper is resumable; progress presentation cannot invalidate it."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "stopped-progress.sigma"
+        view = initialize_project(
+            path, "Paper stop", "Resume a paper after Stop", research_mode="mathematical"
+        )
+        work = papers._new_work("a" * 64, view.project.id, "b" * 64, "fixture-model", "high")
+        work["provider_calls"] = 1
+        work["provider_calls_total"] = 1
+        work["progress"] = {
+            "run_id": "c" * 32,
+            "status": "running",
+            "stage": "writing",
+            "current": None,
+            "total": None,
+            "started_at": "2026-11-05T01:00:00+00:00",
+            "updated_at": "2026-11-05T01:01:00+00:00",
+            "elapsed_seconds": 60,
+        }
+        papers._save_work(str(path), work)
+        papers.finish_progress(str(path), "paused", "Paper stopped; saved work remains.")
+        loaded = papers._load_work(str(path))
+        assert loaded is not None
+        assert loaded["progress"]["status"] == "paused"
+        assert loaded["provider_calls"] == loaded["provider_calls_total"] == 1
+        assert papers.progress_status(str(path))["status"] == "interrupted"
+        # The same validation must accept a queued checkpoint that was stopped
+        # before an AI stage started, without changing its provider accounting.
+        loaded["progress"]["stage"] = "queued"
+        loaded["progress"]["status"] = "cancelled"
+        papers._save_work(str(path), loaded)
+        assert papers._load_work(str(path))["progress"]["status"] == "cancelled"
+
+
 def test_paper_progress_counts_keep_generation_resumable() -> None:
     """Zero sections is legitimate; bad display counts must not discard paid work."""
     with TemporaryDirectory() as directory:
