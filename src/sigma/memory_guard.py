@@ -66,8 +66,10 @@ def require_capacity() -> None:
     from sigma.projects import ProjectError
 
     snapshot = memory_snapshot()
-    if os.getenv("SIGMA_CLOUD_AUTH_ENABLED", "").lower() == "true" and not capacity_verified(
-        snapshot
+    if (
+        os.getenv("SIGMA_CLOUD_AUTH_ENABLED", "").lower() == "true"
+        and os.getenv("SIGMA_STORAGE_BACKEND") == "persistent_disk"
+        and not capacity_verified(snapshot)
     ):
         # Do not cancel active work just because metrics are unavailable, but
         # do not admit another hosted job without an OOM boundary. Local
