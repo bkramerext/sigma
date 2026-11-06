@@ -853,7 +853,9 @@ async def papers_restart_view(body: PaperRestartRequest):
 
 @app.get("/api/projects/papers/{paper_id}")
 def paper_view(paper_id: str, path: str):
-    return papers.get_paper(path, paper_id)
+    # The TeX download has its own endpoint; do not hydrate large TeX text
+    # into the interactive paper metadata response.
+    return papers.get_paper(path, paper_id, include_tex=False)
 
 
 class PaperScoreRequest(OpenRequest):

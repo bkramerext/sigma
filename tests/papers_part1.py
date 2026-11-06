@@ -2339,18 +2339,19 @@ def test_restart_uses_current_evidence_and_is_idempotent() -> None:
                     assert result["provider_calls_previous_runs"] == 3
                     assert result["provider_calls_attempted"] == 0
 
-                    reset = papers._load_work(str(path))
+                    assert papers._load_work(str(path)) is None
+                    reset = papers._read_reset_ledger(str(path))
                     assert reset is not None
                     assert reset["snapshot_sha256"] == current_snapshot_sha256
-                    assert reset["explicit_restart_pending"] is True
-                    assert reset["provider_calls"] == 0
+                    assert reset["attempt_started"] is False
                     assert reset["provider_calls_total"] == 3
                     assert len(reset["prior_runs"]) == 2
 
                     repeated = await client.post("/api/projects/papers/restart", json=body)
                     assert repeated.status_code == 200, repeated.text
                     assert repeated.json()["provider_calls_previous_runs"] == 3
-                    reset_again = papers._load_work(str(path))
+                    assert papers._load_work(str(path)) is None
+                    reset_again = papers._read_reset_ledger(str(path))
                     assert reset_again is not None
                     assert len(reset_again["prior_runs"]) == 2
                     assert reset_again["provider_calls_total"] == 3
@@ -2366,7 +2367,9 @@ def test_restart_uses_current_evidence_and_is_idempotent() -> None:
                         model=config["model"],
                         reasoning_effort=config["reasoning_effort"],
                     )
-                    assert preflight["resume_available"] is True
+                    assert preflight["resume_available"] is False
+                    assert preflight["checkpoint_exists"] is False
+                    assert preflight["restart_ready"] is True
                     assert preflight["provider_calls_attempted"] == 0
 
         asyncio.run(check())
@@ -3096,7 +3099,9 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
                 model=config["model"],
                 reasoning_effort=config["reasoning_effort"],
             )
-            assert reset_preflight["resume_available"] is True
+            assert reset_preflight["resume_available"] is False
+            assert reset_preflight["checkpoint_exists"] is False
+            assert reset_preflight["restart_ready"] is True
             assert reset_preflight["provider_calls_attempted"] == 0
             assert reset_preflight["provider_calls_previous_runs"] == papers.MAX_LONG_PAPER_CALLS
             calls_at_restart = provider_calls

@@ -851,7 +851,13 @@ def main() -> None:
                     f"/api/projects/papers/{saved_papers[0]['paper_id']}",
                     params={"path": paper_path},
                 ).json()
-                assert saved_paper["tex_source"].startswith("\\documentclass")
+                assert "tex_source" not in saved_paper
+                saved_tex = client.get(
+                    f"/api/projects/papers/{saved_papers[0]['paper_id']}/tex",
+                    params={"path": paper_path},
+                )
+                assert saved_tex.status_code == 200, saved_tex.text
+                assert saved_tex.text.startswith("\\documentclass")
                 db = cloud_research._connect()
                 paper_audit = db.execute(
                     "SELECT COUNT(*) FROM calls c JOIN jobs j USING(session_id) WHERE j.project_id=? AND c.status='usage_estimated'",

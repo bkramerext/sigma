@@ -2478,6 +2478,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [includeDiagramsAndTables, setIncludeDiagramsAndTables] = useState(() => window.localStorage.getItem('sigma.paper.diagrams:' + projectId) !== 'false');
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
+  const [restartReady, setRestartReady] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
   const [confirmRestartDraft, setConfirmRestartDraft] = useState(false);
@@ -2567,7 +2568,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setRestartableCheckpoint(null); setResetConfirm(false); setContinuationAvailable(false); setResumeDetails(null); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setRestartableCheckpoint(null); setRestartReady(false); setResetConfirm(false); setContinuationAvailable(false); setResumeDetails(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
@@ -2577,6 +2578,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const preflight = await preflightResponse.json();
         const resumable = Boolean(preflightResponse.ok && preflight.checkpoint_exists && preflight.resume_available);
+        setRestartReady(Boolean(preflightResponse.ok && preflight.restart_ready && !generationRunning));
         setContinuationAvailable(resumable);
         setResumeDetails(resumable ? preflight : null);
         if (!generationRunning && preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
@@ -2819,6 +2821,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       if (!response.ok) throw new Error(result.error ?? 'Could not reset the paper checkpoint.');
       setCheckpointMismatch(null);
       setRestartableCheckpoint(null);
+      setRestartReady(true);
       setResetConfirm(false);
       setConfirmRestartDraft(false);
       setContinuationAvailable(false);
@@ -2948,12 +2951,12 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       : !binding ? 'Connect an AI provider to generate a paper'
       : checkpointMismatch ? 'Start over to use the current settings'
       : continuationAvailable ? 'Resume paper generation' : 'Generate paper';
-  const canStartOver = !generationRunning &&
+  const canStartOver = !restartReady && !generationRunning &&
     (Boolean(checkpointMismatch?.checkpoint_can_restart || restartableCheckpoint?.checkpoint_can_restart) ||
      ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? ''));
   const draftVersion = Math.max(0, ...papers.map(paper => paper.paper_version)) + 1;
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
-  const showDraftPaper = !guest && (newPaperRequested || generating || continuationAvailable || (paperProgress != null && paperProgress.status !== 'complete'));
+  const showDraftPaper = !guest && (newPaperRequested || generating || restartReady || continuationAvailable || (paperProgress != null && paperProgress.status !== 'complete'));
   useEffect(() => { onRunningChange(generationRunning && paperProgress?.status !== 'queued'); return () => onRunningChange(false); }, [generationRunning, paperProgress?.status, onRunningChange]);
   useEffect(() => { onQueuedChange(paperProgress?.status === 'queued'); return () => onQueuedChange(false); }, [paperProgress?.status, onQueuedChange]);
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
