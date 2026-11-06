@@ -147,6 +147,7 @@ def memory_snapshot() -> dict[str, int | None]:
         "host_free_mib": _to_mib(_host_free_kib(), kib=True),
     }
 
+
 def _to_mib(value: int | None, *, kib: bool = False) -> int | None:
     return None if value is None else round(value / (1024 if kib else 1024 * 1024))
 
