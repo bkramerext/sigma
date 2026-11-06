@@ -630,6 +630,18 @@ def main_part2() -> None:
         assert record["tex_source"].startswith(r"\documentclass")
         assert r"\end{document}" in record["tex_source"]
         assert papers.paper_tex(str(path), first["paper_id"]) == record["tex_source"]
+        # Final TeX and PDF are persistent independent files; lightweight
+        # metadata responses need not hydrate the full TeX into memory.
+        paper_root = path.parent / "papers"
+        raw_metadata = (paper_root / f"{first['paper_id']}.json").read_text()
+        assert '"tex_source"' not in raw_metadata
+        assert (paper_root / f"{first['paper_id']}.tex").read_text() == record["tex_source"]
+        assert (paper_root / f"{first['paper_id']}.pdf").is_file()
+        lightweight = papers.get_paper(str(path), first["paper_id"], include_tex=False)
+        assert "tex_source" not in lightweight
+        assert lightweight["tex_sha256"] == papers.hashlib.sha256(
+            record["tex_source"].encode()
+        ).hexdigest()
         # Default publication mode omits opt-in research-system frontmatter.
         assert r"\section*{About this paper}" not in record["tex_source"]
         assert "AI-generated research synthesis" not in record["tex_source"]
@@ -648,6 +660,9 @@ def main_part2() -> None:
         assert [item["paper_id"] for item in papers.list_papers(str(path))] == [second["paper_id"]]
         assert not (path.parent / "papers" / f"{first['paper_id']}.json").exists()
         assert not (path.parent / "papers" / f"{first['paper_id']}.pdf").exists()
+        assert not (path.parent / "papers" / f"{first['paper_id']}.tex").exists()
+        assert papers._load_work(str(path)) is None
+        assert papers._read_progress_status(str(path)) is None
         assert len(inspect_project(path).project.events) == 1
 
         exploratory_path = Path(temporary) / "unresolved.sigma"
