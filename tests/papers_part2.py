@@ -418,6 +418,196 @@ def test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallba
     asyncio.run(resume())
 
 
+def test_unreadable_authored_control_bytes_compile_with_visible_review_marks() -> None:
+    source = "\\documentclass{article}\\begin{document}$i=1,\x02ldots,n$ and $R\x1c1+\x1a_{k=1}^n k$\\end{document}"
+    repaired, codes = papers._visible_invalid_tex_controls(source)
+    assert codes == ["U+0002", "U+001A", "U+001C"]
+    assert "[U+0002]" in repaired and "[U+001C]" in repaired
+    assert "\x02" in source and "\x02" not in repaired
+
+
+def manual_tectonic_control_byte_pdf_compilation() -> None:
+    """Optional Tectonic integration check; deliberately not in the routine test driver."""
+    source = (
+        "\\documentclass{article}\\begin{document}"
+        "$i=1,\x02ldots,n$ and $R\x1c1+\x1a_{k=1}^n k$"
+        "\\end{document}"
+    )
+    repaired, codes = papers._visible_invalid_tex_controls(source)
+    assert codes == ["U+0002", "U+001A", "U+001C"]
+    pdf = papers._compile_pdf(repaired)
+    assert pdf.startswith(b"%PDF-")
+
+
+def test_interrupted_section_dispatch_records_only_protect_sent_work() -> None:
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved {input_value['section_number']}."]
+        ), "fixture-model"
+
+    async def first_run() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+
+    asyncio.run(first_run())
+    original = copy.deepcopy(state)
+    for prior_status in ("cancelled", "failed", "paused", "running"):
+        resumed = copy.deepcopy(original)
+        saved = copy.deepcopy(resumed["section_drafts"])
+        resumed["section_drafts"].pop("3")
+        resumed["section_drafts"].pop("5")
+        # Section 3 was dispatched but its result is uncertain. Section 5
+        # waited behind concurrency and was never sent.
+        resumed["section_dispatches"].pop("5")
+        resumed["progress"] = {"stage": "retry", "status": prior_status}
+        calls_before = resumed["provider_calls"]
+        resumed_calls = []
+
+        async def only_unsent(
+            input_value, _binding, _config, *, schema_name, observed=resumed_calls, **_kwargs
+        ):
+            assert schema_name == "sigma_long_paper_section"
+            observed.append(input_value["section_number"])
+            return papers.LongSectionDraft(paragraphs=["New section 5."]), "fixture-model"
+
+        async def resume(checkpoint=resumed) -> papers.PaperDraft:
+            with patch.object(papers, "_provider_structured", new=only_unsent):
+                result, _, _ = await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    checkpoint,
+                    lambda _value: None,
+                    structured_fast_path=True,
+                )
+                return result
+
+        result = asyncio.run(resume())
+        assert resumed_calls == [5]
+        assert resumed["provider_calls"] == calls_before + 1
+        assert resumed["section_drafts"]["2"] == saved["2"]
+        assert "Editorial notice" in result.sections[2].paragraphs[0]
+        assert result.sections[4].paragraphs == ["New section 5."]
+
+
+def test_legacy_retry_checkpoint_identifies_only_the_logged_section() -> None:
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+    state["plan"] = plan.model_dump()
+    state["evidence_indexed"] = True
+    state["evidence_strategy"] = "structured_v1"
+    state["section_drafts"] = {
+        str(number): papers.LongSectionDraft(paragraphs=[f"Saved {number}."]).model_dump()
+        for number in (1, 2, 4, 5)
+    }
+    state.pop("section_dispatches")
+    state["progress"] = {
+        "stage": "retry",
+        "status": "failed",
+        "detail": "Retrying section 3 (attempt 2 of 3).",
+    }
+    assert papers._legacy_ambiguous_sections(state) == {"3"}
+    state["legacy_ambiguous_sections"] = ["3"]
+    state["progress"] = {"stage": "publication_compilation", "status": "running"}
+
+    async def never_call(*_args, **_kwargs):
+        raise AssertionError("Legacy retry section must not be replayed")
+
+    async def resume() -> papers.PaperDraft:
+        with patch.object(papers, "_provider_structured", new=never_call):
+            result, _, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+            return result
+
+    result = asyncio.run(resume())
+    assert "Editorial notice" in result.sections[2].paragraphs[0]
+    assert len(state["section_drafts"]) == 5
+
+
+def test_legacy_unknown_section_dispatch_stops_before_paid_replay() -> None:
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+    state["plan"] = plan.model_dump()
+    state["evidence_indexed"] = True
+    state["evidence_strategy"] = "structured_v1"
+    state["section_drafts"] = {"1": papers.LongSectionDraft(paragraphs=["Saved 1."]).model_dump()}
+    state.pop("section_dispatches")
+    state["progress"] = {"stage": "sections", "status": "paused"}
+
+    async def never_call(*_args, **_kwargs):
+        raise AssertionError("Unknown legacy dispatch must not be replayed")
+
+    async def resume() -> None:
+        with patch.object(papers, "_provider_structured", new=never_call):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda _value: None,
+                    structured_fast_path=True,
+                )
+            except ProjectError as exc:
+                assert "lacks section dispatch records" in str(exc)
+            else:
+                raise AssertionError("Unknown legacy dispatch should stop before a provider call")
+
+    asyncio.run(resume())
+    assert set(state["section_drafts"]) == {"1"}
+    assert state["provider_calls"] == 0
+
+
+def test_oversized_section_stream_publishes_labeled_fallback_without_retry() -> None:
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+    attempts: dict[int, int] = {}
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        attempts[number] = attempts.get(number, 0) + 1
+        if number == 3:
+            raise ProjectError("Provider generated text exceeds the bounded response capacity.")
+        return papers.LongSectionDraft(paragraphs=[f"Saved {number}."]), "fixture-model"
+
+    async def run() -> papers.PaperDraft:
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, _, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+            return result
+
+    result = asyncio.run(run())
+    assert attempts == {1: 1, 2: 1, 3: 1, 4: 1, 5: 1}
+    assert "Editorial notice" in result.sections[2].paragraphs[0]
+    assert len(state["section_drafts"]) == 5
+
+
 def test_paper_section_invalid_optional_table_is_dropped_without_losing_text() -> None:
     package, plan = fast_package()
     state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
@@ -658,6 +848,8 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
 
         # Explicit Stop preserves durable provider accounting as well.
         saved_work["progress"]["status"] = "running"
+        saved_work["progress"]["stage"] = "retry"
+        saved_work["progress"]["detail"] = "Retrying section 3 (attempt 2 of 3)."
         papers._save_work(str(path), saved_work)
         papers.finish_progress(str(path), "cancelled")
         cancelled = papers._load_work(str(path))
@@ -665,6 +857,7 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
         cancelled_progress = papers.progress_status(str(path))
         assert cancelled_progress is not None
         assert cancelled_progress["status"] == "cancelled"
+        assert "Retrying" not in cancelled_progress["detail"]
 
 
 def test_stopped_paper_checkpoint_remains_valid_on_resume() -> None:
@@ -969,7 +1162,7 @@ def test_parallel_section_failure_drains_dispatched_siblings() -> None:
     async def resume_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
         assert schema_name == "sigma_long_paper_section"
         number = input_value["section_number"]
-        assert number in {1, 5}, "Saved siblings must not be regenerated"
+        assert number == 5, "Dispatched or saved sections must not be regenerated"
         dispatched.append(number)
         return papers.LongSectionDraft(paragraphs=[f"Recovered section {number}."]), "fixture-model"
 
@@ -983,15 +1176,16 @@ def test_parallel_section_failure_drains_dispatched_siblings() -> None:
                 lambda value: saves.append(set(value.get("section_drafts", {}))),
                 structured_fast_path=True,
             )
-        assert calls == 7  # two further, explicitly resumed section calls
+        assert calls == 6  # only the never-dispatched section is written
         assert len(result.sections) == 5
+        assert "Editorial notice" in result.sections[0].paragraphs[0]
 
     asyncio.run(resume())
     assert set(state["section_drafts"]) == {"1", "2", "3", "4", "5"}
     assert dispatched.count(2) == dispatched.count(3) == dispatched.count(4) == 1
 
 
-def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
+def test_fast_checkpoint_resume_preserves_ambiguous_section_without_replay() -> None:
     package, plan = fast_package(section_count=2)
     project_ref = "project:fast-fixture"
     saved_table = papers.PaperTable(
@@ -1052,19 +1246,8 @@ def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
     assert attempts.count(("sigma_long_paper_section", 1)) == 1
     assert attempts.count(("sigma_long_paper_section", 2)) == 1
 
-    async def resume_provider(input_value, _binding, _config, *, schema_name, **kwargs):
-        number = input_value.get("section_number")
-        assert schema_name == "sigma_long_paper_section" and number == 2
-        assert kwargs["include_diagrams"] is False
-        schema = papers._paper_response_schema(
-            kwargs["response_model"], include_diagrams=kwargs["include_diagrams"]
-        )
-        assert "tables" not in schema["properties"]
-        assert "TABLES:" not in kwargs["instructions"]
-        attempts.append((schema_name, number))
-        return papers.LongSectionDraft(
-            paragraphs=["Only the incomplete section is retried."], tables=[saved_table]
-        ), "fixture-model"
+    async def resume_provider(*_args, **_kwargs):
+        raise AssertionError("An ambiguous paid section call must not be replayed")
 
     async def resume() -> None:
         with patch.object(papers, "_provider_structured", new=resume_provider):
@@ -1077,11 +1260,9 @@ def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
                 structured_fast_path=True,
                 include_diagrams=False,
             )
-        assert [section.paragraphs[0] for section in result.sections] == [
-            "This completed section is durable.",
-            "Only the incomplete section is retried.",
-        ]
-        assert calls == 4  # outline, completed section, uncertain failure, continuation
+        assert result.sections[0].paragraphs == ["This completed section is durable."]
+        assert "Editorial notice" in result.sections[1].paragraphs[0]
+        assert calls == 3  # outline, completed section, uncertain failure
         assert batches == 0
         assert result.diagrams == []
         assert all(not section.tables for section in result.sections)
@@ -1089,10 +1270,11 @@ def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
     asyncio.run(resume())
     assert attempts.count(("sigma_long_paper_plan", None)) == 1
     assert attempts.count(("sigma_long_paper_section", 1)) == 1
-    assert attempts.count(("sigma_long_paper_section", 2)) == 2
+    assert attempts.count(("sigma_long_paper_section", 2)) == 1
     assert set(state["section_drafts"]) == {"1", "2"}
     assert state["plan"]["diagrams"]  # saved paid output stays available for recovery
-    assert all(state["section_drafts"][key]["tables"] for key in ("1", "2"))
+    assert state["section_drafts"]["1"]["tables"]
+    assert not state["section_drafts"]["2"]["tables"]
 
 
 def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
@@ -3272,9 +3454,11 @@ def test_real_tadpole_onp_and_math_table_pdfs() -> None:
                 assert r"M(n)" in tex
                 assert r"\$0\$" not in tex
             if name == "Tadpoles":
-                assert r"Candidate stage\textendash{}time dependency map" in tex
+                assert r"Candidate stage\textendash{}\allowbreak{}time dependency map" in tex
                 assert r"\textendash{}" in tex
-                assert "Diagram (readable relationship list)." in tex
+                assert (
+                    "Diagram (readable relationship list)." in tex or r"\begin{tikzpicture}" in tex
+                )
                 for node in tadpole_diagram.nodes:
                     assert node.label in tex
                 for edge in tadpole_diagram.edges:
