@@ -225,8 +225,25 @@ from sigma.api import app
                 page.wait_for_function(
                     "getComputedStyle(document.querySelector('.current-understanding > summary .disclosure-chevron')).transform === 'none'"
                 )
+                storage_key = f"sigma.currentUnderstanding:{active_project_id}"
+                page.wait_for_function(
+                    "key => localStorage.getItem(key) === 'false'", arg=storage_key
+                )
+                # Leaving and reopening this project must not expand the section.
+                page.goto(ui_url + "/")
+                page.get_by_role("button", name="Open", exact=True).click()
+                dialog = page.get_by_role("dialog", name="Open Project")
+                dialog.get_by_label("Project directory").fill(path)
+                dialog.get_by_role("button", name="Open Project", exact=True).click()
+                expect(summary).not_to_have_attribute("open", "")
                 title.click()
-                assert summary.get_attribute("open") == ""
+                expect(summary).to_have_attribute("open", "")
+                page.wait_for_function(
+                    "key => localStorage.getItem(key) === 'true'", arg=storage_key
+                )
+                # A full reload also restores the user's expanded choice.
+                page.reload()
+                expect(summary).to_have_attribute("open", "")
                 page.wait_for_function(
                     "getComputedStyle(document.querySelector('.current-understanding > summary .disclosure-chevron')).transform !== 'none'"
                 )
