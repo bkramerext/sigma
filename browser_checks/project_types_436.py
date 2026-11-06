@@ -1113,6 +1113,21 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     assert reset_calls == ["POST"], reset_calls
     assert dispatched == ["POST"], dispatched
+    # Once Start over succeeds, it is no longer an available action.
+    expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
+    expect(page.locator("#paper-draft-content")).to_be_visible()
+
+    # Playing creates a new generation attempt. After it is stopped, the
+    # user can Start over again; reset suppression must not be permanent.
+    play = page.get_by_role("button", name="Generate Paper 2")
+    play.click()
+    assert dispatched == ["POST", "POST"], dispatched
+    paper_fixture["checkpoint"] = True
+    paper_fixture["stopped"] = True
+    page.reload()
+    expect(page.get_by_role("button", name="Start over on paper generation")).to_be_enabled(timeout=10000)
+    # Restore a clean reset state for the queued/no-checkpoint scenario.
+    paper_fixture["checkpoint"] = False
 
     # Queue cancellation may leave only a stopped receipt (no saved checkpoint).
     # Start over must still clear it without sending another provider request.
@@ -1131,7 +1146,8 @@ with sync_playwright() as playwright:
     start_over.click()
     expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     assert discard_calls == ["POST"], discard_calls
-    assert dispatched == ["POST"], dispatched
+    assert dispatched == ["POST", "POST"], dispatched
+    expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
 
     # Score stays clickable even when the PDF is unavailable; the user gets
     # an actionable explanation instead of an inert control.
