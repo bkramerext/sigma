@@ -112,6 +112,11 @@ def main(part: int = 1):
             )
         )
         asyncio.run(
+            test_resume_37_pending_turns_uses_actual_remaining_session_time(
+                Path(temporary) / "sovereign-37-pending-active-time.sigma"
+            )
+        )
+        asyncio.run(
             test_terminal_time_expiry_requires_separate_confirmation(
                 Path(temporary) / "expired-session-consent.sigma"
             )
