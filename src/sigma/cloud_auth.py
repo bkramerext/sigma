@@ -337,6 +337,16 @@ def _initialize(path: Path) -> None:
                 window_started_at INTEGER NOT NULL,
                 request_count INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS progress_email_preferences (
+                subject TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1))
+            );
+            CREATE TABLE IF NOT EXISTS progress_email_dispatches (
+                subject TEXT NOT NULL,
+                event_hash TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('sending','sent','unknown')),
+                PRIMARY KEY(subject, event_hash)
+            );
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY,
                 actor TEXT NOT NULL,
