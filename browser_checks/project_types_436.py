@@ -879,7 +879,7 @@ with sync_playwright() as playwright:
     assert len(active_geometry["lines"]) >= 2, active_geometry
     assert all(
         abs(line["x"] - active_geometry["lines"][0]["x"]) < 3 for line in active_geometry["lines"]
-    )
+    ), active_geometry
     assert abs(active_geometry["lines"][-1]["midY"] - active_geometry["dotMidY"]) < 9
 
     assert not errors, errors
