@@ -22,6 +22,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
@@ -5195,24 +5196,93 @@ def control_mock_session(path: str, session_id: str, action: str) -> dict[str, A
     return _public(record)
 
 
-def has_active_session(path: str) -> bool:
-    """Read-only Home status: never restart a worker or rewrite research history.
+@lru_cache(maxsize=4096)
+def _recent_session_status(
+    filename: str,
+    project_path: str,
+    project_id: str,
+    signature: tuple[int, int, int, int],
+) -> tuple[str, str] | None:
+    """Cache only Home status, not massive session histories or worker liveness.
 
-    A persisted running state without an active worker is stale after a crash.
-    An advisory worker lock identifies live local jobs. Cloud queued jobs are
-    durable and remain eligible for dispatch after reconnect.
+    The per-file inode, size, mtime and ctime signature changes on atomic
+    replacement and in-place writes. Project identity is part of the key so
+    another user's records can never supply a status. Active worker locks
+    are always checked live, regardless of this metadata cache.
     """
-    records, _unavailable = read_session_snapshot(path)
-    for record in records:
-        status = record.get("status")
+    del signature  # Included solely for precise cache invalidation.
+    file = Path(filename)
+    try:
+        raw = json.loads(file.read_text(encoding="utf-8"))
+        UUID(file.stem)
+        if (
+            not isinstance(raw, dict)
+            or raw.get("id") != file.stem
+            or raw.get("project_id") != project_id
+            or raw.get("project_path") != project_path
+        ):
+            return None
+        return file.stem, raw.get("status") if isinstance(raw.get("status"), str) else ""
+    except (OSError, ValueError, TypeError, UnicodeDecodeError):
+        return None
+
+
+def has_active_session(path: str, *, project_id: str | None = None) -> bool:
+    """Cheap, read-only Home status; never restart/rewrite research history.
+
+    Cached file status is invalidated by durable record changes. A persisted
+    running state without an active worker is stale after a crash; the
+    advisory worker lock is checked on every request. Cloud queued jobs remain
+    eligible for dispatch after reconnect.
+    """
+    target = project_path(path)
+    if target.suffix == ".json":
+        # A portable bundle has no individual session files to stat; retain
+        # the validated full-record implementation for this legacy format.
+        records, _unavailable = read_session_snapshot(path)
+        statuses = [
+            (record.get("id"), record.get("status"))
+            for record in records
+        ]
+    else:
+        if project_id is None:
+            project_id = inspect_project(target).project.id
+        directory = target / "research-sessions"
+        if directory.is_symlink():
+            raise ProjectError("Research session directory must not be a symbolic link")
+        if not directory.exists():
+            return False
+        if not directory.is_dir():
+            raise ProjectError("Research session history is not a directory")
+        statuses = []
+        for file in directory.glob("*.json"):
+            if file.name in {"limits.json", "sequence.json", "obligation-ids.json"}:
+                continue
+            try:
+                if file.is_symlink() or not file.is_file():
+                    continue
+                info = file.stat()
+                if info.st_size > MAX_RECORD:
+                    continue
+            except OSError:
+                continue
+            status = _recent_session_status(
+                str(file),
+                str(target),
+                project_id,
+                (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns),
+            )
+            if status is not None:
+                statuses.append(status)
+    for session_id, status in statuses:
         if status not in {"queued", "running"}:
             continue
-        task = _tasks.get(record["id"])
+        task = _tasks.get(session_id)
         if task is not None and not task.done():
             return True
         if status == "queued" and cloud_research.billing_enabled():
             return True
-        lock_path = _worker_lock_path(path, record["id"])
+        lock_path = _worker_lock_path(path, session_id)
         try:
             fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
         except OSError:
@@ -5227,7 +5297,6 @@ def has_active_session(path: str) -> bool:
         finally:
             os.close(fd)
     return False
-
 
 async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
