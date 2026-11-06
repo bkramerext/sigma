@@ -255,13 +255,10 @@ def main() -> None:
             )
             with cloud_auth._db(cfg) as db:
                 db.execute(
-                    "UPDATE progress_email_dispatches SET retry_after=0 "
-                    "WHERE event_hash=?",
+                    "UPDATE progress_email_dispatches SET retry_after=0 WHERE event_hash=?",
                     (hashlib.sha256(b"event:recovered").hexdigest(),),
                 )
-            with patch(
-                "sigma.progress_notifications._pause_still_actionable", return_value=False
-            ):
+            with patch("sigma.progress_notifications._pause_still_actionable", return_value=False):
                 progress_notifications._deliver_pending()
             assert _event_state(cfg, "event:recovered")["state"] == "cancelled"
             assert len(sent) == 2
@@ -279,8 +276,7 @@ def main() -> None:
             progress_notifications.update_preference(first, False)
             with cloud_auth._db(cfg) as db:
                 db.execute(
-                    "UPDATE progress_email_dispatches SET retry_after=0 "
-                    "WHERE state='pending'"
+                    "UPDATE progress_email_dispatches SET retry_after=0 WHERE state='pending'"
                 )
             progress_notifications._deliver_pending()
             assert _event_state(cfg, "event:optout")["state"] == "cancelled"
