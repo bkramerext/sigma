@@ -5188,12 +5188,14 @@ def _tex(
                 result = [
                     r"\begin{figure}[!htbp]",
                     r"\centering",
-                    (r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
-                    r"main node/.style={draw=blue!65,rounded corners,align=center,"
-                    r"text width=7.5cm,font=\footnotesize,fill=blue!5,inner sep=5pt},"
-                    r"edge badge/.style={circle,draw=blue!60,fill=white,"
-                    r"inner sep=1pt,font=\tiny},"
-                    r"boundary/.style={draw,dashed,rounded corners,inner sep=8pt}]"),
+                    (
+                        r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
+                        r"main node/.style={draw=blue!65,rounded corners,align=center,"
+                        r"text width=7.5cm,font=\footnotesize,fill=blue!5,inner sep=5pt},"
+                        r"edge badge/.style={circle,draw=blue!60,fill=white,"
+                        r"inner sep=1pt,font=\tiny},"
+                        r"boundary/.style={draw,dashed,rounded corners,inner sep=8pt}]"
+                    ),
                 ]
                 for index, node in enumerate(diagram.nodes):
                     result.append(
