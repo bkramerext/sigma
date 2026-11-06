@@ -33,14 +33,9 @@ _PUMP: asyncio.Task[None] | None = None
 
 
 def _configured() -> bool:
-    if cloud_auth.email_env("GMAIL_TOKEN_FILE"):
-        return True
-    if not cloud_auth.email_env("SMTP_USERNAME"):
-        return False
-    try:
-        return bool(cloud_auth.email_secret("SMTP_PASSWORD"))
-    except (OSError, RuntimeError, ValueError):
-        return False
+    # Progress notifications use the existing Gmail API sender exclusively.
+    # Do not silently fall back to SMTP when its credentials happen to exist.
+    return bool(cloud_auth.email_env("GMAIL_TOKEN_FILE"))
 
 
 def eligible_session_event(record: dict) -> Event | None:
