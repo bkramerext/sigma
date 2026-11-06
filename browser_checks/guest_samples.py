@@ -277,9 +277,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(page.get_by_role("tab", name="Saved")).to_be_enabled()
         # Idle browser tabs have an explicit favicon, so the temporary
         # running/queued heartbeat cannot remain cached after work completes.
-        expect(page.locator('link[rel="icon"]')).to_have_attribute(
-            "href", "/favicon.svg"
-        )
+        expect(page.locator('link[rel="icon"]')).to_have_attribute("href", "/favicon.svg")
         expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         expect(page.locator("details.sample-type-group").first).to_be_visible()
         assert page.locator("details.sample-type-group[open]").count() == 0
