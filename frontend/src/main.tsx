@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
+import { friendlyProviderUsageError, providerUsageLimitCopy, setSponsoredUsageConnection } from './provider-usage-guidance';
 import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
@@ -153,7 +154,7 @@ type ResearchSourceMaterial = { version: string; status: string; mode: string; b
 type ExecutionProvenance = { records: { id: string; runtime: string; statuses: string[]; artifact_ids: string[]; step_ids: string[]; source_recorded: boolean; output_recorded: boolean }[]; unidentified_count: number; completed_count: number; completed_without_recorded_io_count?: number; other_count: number; note: string };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; source_material?: ResearchSourceMaterial; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { investigation_type?: string; provider_usage_limited?: boolean; research_method_sources?: { advisory?: string | null; sources?: unknown[] }; approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; backend_build_commit?: string | null; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; scheduler_version?: number; turns_per_round?: number; research_round?: number; research_round_limit?: number; paired_turn_in_round?: number; configured_duration_limit_minutes?: number | null; duration_limit_minutes?: number | null; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; protocol_completed_calls?: number; protocol_target_calls?: number; provider_limit_continuation?: { eligible: boolean; missing_calls: number; reason?: string | null }; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { investigation_type?: string; provider_usage_limited?: boolean; cloud_sponsored?: boolean; research_method_sources?: { advisory?: string | null; sources?: unknown[] }; approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; backend_build_commit?: string | null; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; scheduler_version?: number; turns_per_round?: number; research_round?: number; research_round_limit?: number; paired_turn_in_round?: number; configured_duration_limit_minutes?: number | null; duration_limit_minutes?: number | null; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; protocol_completed_calls?: number; protocol_target_calls?: number; provider_limit_continuation?: { eligible: boolean; missing_calls: number; reason?: string | null }; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 
 
 /**
@@ -362,14 +363,16 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
 function StoppedSessionNotice({ session, dismissed, onDismiss }: {
   session: ResearchSession; dismissed: boolean; onDismiss: () => void;
 }) {
+  const cloud = useCloudIdentity();
   if (dismissed) return null;
   if (session.provider_usage_limited && ['paused', 'stopped', 'ended', 'failed'].includes(session.status)) {
-    const chatgpt = session.mode === 'chatgpt';
+    const sponsored = session.cloud_sponsored === true || cloud?.funding.selectedConnection === 'sponsored' || cloud?.target === 'hosted';
+    const copy = providerUsageLimitCopy(sponsored, session.mode === 'chatgpt');
     return <SessionNotice number={session.session_number} onDismiss={onDismiss}
-      title={chatgpt ? 'ChatGPT usage limit reached' : 'AI usage limit reached'}
+      title={copy.title}
       kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
-      <p>Your research is saved. Check {chatgpt ? 'ChatGPT → Settings → Usage' : "your provider's usage dashboard"} to see when your allowance resets.</p>
-      <p><strong>Next:</strong> Resume when usage is available again.</p>
+      <p>{copy.description}</p>
+      <p><strong>Next:</strong> {sponsored ? 'Try Resume again in a few hours.' : copy.next}</p>
     </SessionNotice>;
   }
   const guidance = stoppedSessionGuidance(session);
@@ -852,6 +855,12 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   onInterventionSaved: (sessionId: string) => Promise<void>;
   dismissedStatusNotice: boolean; onDismissStatusNotice: () => void;
 }) {
+  const cloud = useCloudIdentity();
+  const usageCopy = providerUsageLimitCopy(
+    session.cloud_sponsored === true || cloud?.funding.selectedConnection === 'sponsored' || cloud?.target === 'hosted',
+    session.mode === 'chatgpt',
+  );
+  const usageSponsored = session.cloud_sponsored === true || cloud?.funding.selectedConnection === 'sponsored' || cloud?.target === 'hosted';
   const [markdownSections, setMarkdownSections] = useState<OutcomeMarkdownSection[]>(() =>
     containsMathNotation(session.outcome.conclusion || '') ? ['conclusion'] : []);
   const [convertedBlocks, setConvertedBlocks] = useState<Record<string, FormattedOutcomeBlock>>({});
@@ -925,19 +934,19 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   // Display one primary stop cause; leave per-strategy failures in the Session Log.
   // This also corrects historical sessions whose saved message used legacy v1
   // cycle terminology despite running under the v2 scheduler.
-  const usageLimitStopMessage = session.mode === 'chatgpt'
-    ? 'ChatGPT reached its account usage limit.'
-    : 'The AI provider reached its account usage limit.';
-  const usageLimitImpact = `Research paused with ${session.protocol_completed_calls ?? 0} of ${session.protocol_target_calls ?? session.call_limit} Investigator/Skeptic calls completed; ${session.artifacts.length} findings were preserved. Accepted work will not be repeated.`;
+  const usageLimitStopMessage = usageCopy.description;
+  const usageLimitImpact = `${session.protocol_completed_calls ?? 0} of ${session.protocol_target_calls ?? session.call_limit} research calls completed; ${session.artifacts.length} findings saved.`;
   const separateFailureNote = independentFailure
     ? 'Other earlier research failures are recorded separately in the Session Log.'
     : '';
-  const statusHeading = accountUsageLimited ? 'Provider usage limit reached' : budgetDenied
+  const statusHeading = accountUsageLimited ? usageCopy.title : budgetDenied
     ? session.calls_used === 0 ? 'Insufficient research funds' : 'Research funding limit reached'
     : session.status === 'paused' ? 'Paused'
       : session.status === 'stopped' ? 'Stopped'
         : session.status === 'failed' ? 'Error' : 'Ended';
-  const statusNextStep = session.next_step_guidance
+  const statusNextStep = accountUsageLimited
+    ? (usageSponsored ? 'Try Resume again in a few hours.' : usageCopy.next)
+    : session.next_step_guidance
     || (session.termination_reason_code === 'research_completed_early' ? 'Review the saved findings and rationale; the configured turn count was an upper limit, not a target.'
       : budgetDenied ? 'Review the available research allowance before starting another session.'
         : 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
@@ -1026,7 +1035,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           setConvertedBlocks(next);
         } catch (cause) {
           if (!controller.signal.aborted) {
-            setConversionError(`Markdown formatting paused: ${errorMessage(cause)}. Saved research remains unchanged; Markdown rendering stays available.`);
+            setConversionError(`Markdown formatting paused: ${friendlyProviderUsageError(errorMessage(cause))}. Saved research remains unchanged; Markdown rendering stays available.`);
             conversionQueue.current = [];
           }
         } finally {
@@ -2395,6 +2404,7 @@ function paperProgressOperation(progress: PaperProgress): string {
 
 function paperErrorSummary(message: string): string {
   const value = message.trim();
+  if (friendlyProviderUsageError(value) !== value) return friendlyProviderUsageError(value);
   if (/Tectonic could not compile|No PDF was downloaded|PDF compilation failed/i.test(value)) {
     return 'PDF compilation failed. The paper draft is saved; use Resume to retry without rewriting it.';
   }
@@ -3187,7 +3197,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
               <PaperStageSteps progress={paperProgress}/>
             </details>}
         {paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="paper-progress-error">{paperErrorSummary(paperProgress.failure_reason)}</span>}
-        {paperProgress.status === 'interrupted' && paperProgress.detail && <span className="paper-progress-error" role="alert">{paperProgress.detail}</span>}
+        {paperProgress.status === 'interrupted' && paperProgress.detail && <span className="paper-progress-error" role="alert">{friendlyProviderUsageError(paperProgress.detail)}</span>}
       </div>}
 
 
@@ -3267,7 +3277,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
           <p>Authoring, validation, and typesetting problems are kept in the saved paper record even when the optional diagnostic appendix is not included.</p>
           <ol>{selected.generation.sigma_issues?.map((issue, index) => <li key={index}>{issue}</li>)}</ol>
           {selected?.generation.sigma_issues_included && <p role="status">The saved PDF includes the optional diagnostics appendix.</p>}
-          {paperProgress?.status === 'failed' && paperProgress.failure_reason && <p role="alert">{paperProgress.failure_reason}</p>}
+          {paperProgress?.status === 'failed' && paperProgress.failure_reason && <p role="alert">{paperErrorSummary(paperProgress.failure_reason)}</p>}
         </div>
       </details>}</div>
       </article>)}
@@ -7229,6 +7239,9 @@ function CloudAuthGate() {
     setProviderStatus({ status: next, guidance: 'Simulated local provider status.' });
   }, [providerStatus?.status]);
   const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
+  useEffect(() => {
+    setSponsoredUsageConnection(funding.target === 'hosted' || funding.selectedConnection === 'sponsored');
+  }, [funding.target, funding.selectedConnection]);
   const context: CloudIdentityState | null = status ? { ...status, deniedIdentityAvailable, deniedInvitationStatus, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = !!status?.account?.invitation_welcome_pending
