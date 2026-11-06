@@ -2723,7 +2723,7 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
             raise ProjectError("This project has reached the 50 paper version limit")
         from sigma.projects import save_project_artifacts
 
-        artifacts = {json_name: json_bytes, pdf_name: pdf}
+        artifacts: dict[str, bytes | None] = {json_name: json_bytes, pdf_name: pdf}
         if tex_bytes:
             artifacts[tex_name] = tex_bytes
         save_project_artifacts(target, artifacts)
@@ -9633,8 +9633,11 @@ def paper_text(path: str, paper_id: str) -> str:
 
 def paper_tex(path: str, paper_id: str) -> str:
     """Return the exact TeX source compiled into this saved version's PDF."""
-    record = get_paper(path, paper_id, include_tex=False)
-    return _paper_tex_source(path, paper_id, record)
+    record = get_paper(path, paper_id)
+    source = record.get("tex_source")
+    if not isinstance(source, str) or not source:
+        raise ProjectError("The TeX source for this saved paper is unavailable.")
+    return source
 
 
 def delete_paper(path: str, paper_id: str) -> None:

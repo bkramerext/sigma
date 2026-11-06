@@ -967,7 +967,13 @@ with sync_playwright() as playwright:
     # Stop -> Play: a compatible checkpoint must offer BOTH Resume and
     # provider-free Start over. No tooltip should claim a generation conflict
     # while Play is enabled. All paper endpoints below are local fixtures.
-    paper_fixture = {"checkpoint": True, "stopped": True, "reset_ready": False, "pdf": True, "scored": False}
+    paper_fixture = {
+        "checkpoint": True,
+        "stopped": True,
+        "reset_ready": False,
+        "pdf": True,
+        "scored": False,
+    }
     saved_paper = {
         "paper_id": "fixture-paper-1",
         "paper_version": 1,
@@ -1149,12 +1155,23 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
     # Play and subsequent Stop can create new discardable work.
     page.get_by_role("button", name="Generate Paper 2").click()
+    # The frontend refreshes preflight before dispatch; wait for the
+    # intercepted request rather than racing React's async handler.
+    for _ in range(50):
+        if len(dispatched) == 2:
+            break
+        page.wait_for_timeout(100)
     assert dispatched == ["POST", "POST"], dispatched
+    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(
+        timeout=10000
+    )
     paper_fixture["reset_ready"] = False
     paper_fixture["checkpoint"] = True
     paper_fixture["stopped"] = True
     page.reload()
-    expect(page.get_by_role("button", name="Start over on paper generation")).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Start over on paper generation")).to_be_enabled(
+        timeout=10000
+    )
     paper_fixture["checkpoint"] = False
 
     # Queue cancellation may leave only a stopped receipt (no saved checkpoint).
