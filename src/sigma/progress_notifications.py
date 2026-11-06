@@ -115,20 +115,20 @@ def bind_job(principal: cloud_auth.Principal | None, job_id: str) -> None:
 _COPY: dict[Event, tuple[str, str, str]] = {
     "session_finished": (
         "Session {number} completed",
-        "Research session {number} completed successfully.\n"
-        "Review the findings, outcome, and remaining questions.",
+        ("Research session {number} completed successfully.\n"
+         "Review the findings, outcome, and remaining questions."),
         "View session",
     ),
     "session_failed": (
         "Session {number} failed",
-        "Research session {number} stopped because of an error.\n"
-        "Open the session to review the problem and any saved progress.",
+        ("Research session {number} stopped because of an error.\n"
+         "Open the session to review the problem and any saved progress."),
         "View session",
     ),
     "session_paused": (
         "Session {number} paused",
-        "Research session {number} was paused because SIGMA could not continue automatically.\n"
-        "Your research progress has been preserved. Open the session to review its status.",
+        ("Research session {number} was paused because SIGMA could not continue automatically.\n"
+         "Your research progress has been preserved. Open the session to review its status."),
         "View session",
     ),
     "paper_finished": (
@@ -138,14 +138,14 @@ _COPY: dict[Event, tuple[str, str, str]] = {
     ),
     "paper_failed": (
         "Paper {number} failed",
-        "Paper generation stopped because of an error.\n"
-        "Open the project to review the problem and any saved work.",
+        ("Paper generation stopped because of an error.\n"
+         "Open the project to review the problem and any saved work."),
         "View paper",
     ),
     "paper_paused": (
         "Paper {number} paused",
-        "Paper generation has been paused.\nYour completed work has been preserved. "
-        "Open the paper to review its status and resume when possible.",
+        ("Paper generation has been paused.\nYour completed work has been preserved. "
+         "Open the paper to review its status and resume when possible."),
         "View paper",
     ),
 }
@@ -214,7 +214,7 @@ def enqueue(
         return
     try:
         cfg = cloud_auth.config()
-        if not cfg.enabled or cfg.error or not cfg.origin or not _configured():
+        if not cfg.enabled or cfg.error or not cfg.origin:
             return
         # Validate the final link before inserting work into the queue.
         deep_link(cfg.origin, path, session_id=session_id, paper_id=paper_id)
@@ -336,9 +336,24 @@ def stop_outbox() -> None:
         _PUMP = None
 
 
-def schedule(job_id: str, event: Event, **kwargs: object) -> None:
-    """Small durable enqueue, then best-effort immediate nonblocking delivery."""
-    enqueue(job_id, event, **kwargs)  # type: ignore[arg-type]
+def schedule(
+    job_id: str,
+    event: Event,
+    *,
+    event_id: str,
+    project_title: str,
+    number: int,
+    path: str,
+    session_id: str | None = None,
+    paper_id: str | None = None,
+    incomplete: bool = False,
+) -> None:
+    """Persist the event and kick an asynchronous transport without blocking research."""
+    enqueue(
+        job_id, event, event_id=event_id, project_title=project_title,
+        number=number, path=path, session_id=session_id, paper_id=paper_id,
+        incomplete=incomplete,
+    )
     try:
         task = asyncio.create_task(asyncio.to_thread(_deliver_pending))
         task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
