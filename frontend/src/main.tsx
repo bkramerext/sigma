@@ -1520,15 +1520,16 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     if (result.recorded) {
       // If the server redacted the message, render that same sanitized
       // diagnostic in the UI instead of showing a different raw value.
-      if (result.message && result.message !== message) {
-        if (stage === 'session_read') setReadError(result.message);
+      const sanitizedMessage = result.message;
+      if (sanitizedMessage && sanitizedMessage !== message) {
+        if (stage === 'session_read') setReadError(sanitizedMessage);
         else if ((stage === 'session_control' || stage === 'session_failure') && sessionId) {
           setSessionControlFailures(current => {
             const prior = current[sessionId];
             if (!prior) return current;
-            return { ...current, [sessionId]: { ...prior, message: result.message } };
+            return { ...current, [sessionId]: { ...prior, message: sanitizedMessage } };
           });
-        } else setError(result.message);
+        } else setError(sanitizedMessage);
       }
       void reloadDiagnostics().catch(() => {});
     }
