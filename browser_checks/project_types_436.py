@@ -971,6 +971,7 @@ with sync_playwright() as playwright:
         "checkpoint": True,
         "stopped": True,
         "reset_ready": False,
+        "resume": True,
         "pdf": True,
         "scored": False,
     }
@@ -1010,7 +1011,8 @@ with sync_playwright() as playwright:
                 "checkpoint_exists": paper_fixture["checkpoint"],
                 "checkpoint_can_restart": paper_fixture["checkpoint"],
                 "restart_ready": paper_fixture["reset_ready"],
-                "resume_available": paper_fixture["checkpoint"],
+                "resume_available": paper_fixture["checkpoint"] and paper_fixture["resume"],
+                "incomplete_one_shot": paper_fixture["checkpoint"] and not paper_fixture["resume"],
                 "snapshot_sha256": "a" * 64,
                 "outline_complete": False,
                 "draft_recovery_available": False,
@@ -1194,6 +1196,44 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     assert discard_calls == ["POST"], discard_calls
     assert dispatched == ["POST", "POST"], dispatched
+
+    # A stopped paid one-shot call with no saved draft cannot resume. Play
+    # remains enabled but requires confirmation before restarting and making
+    # another potentially billable provider request. Start over is unchanged.
+    paper_fixture["checkpoint"] = True
+    paper_fixture["resume"] = False
+    paper_fixture["stopped"] = True
+    paper_fixture["reset_ready"] = False
+    page.reload()
+    fresh_play = page.get_by_role("button", name="Generate Paper 2")
+    expect(fresh_play).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Start over on paper generation")).to_be_enabled()
+    assert "confirmation required" in fresh_play.locator("xpath=..").get_attribute(
+        "data-tooltip"
+    )
+    fresh_play.click()
+    play_confirm = page.get_by_role("group", name="Confirm new paper generation attempt")
+    expect(play_confirm).to_be_visible()
+    assert reset_calls == ["POST"], reset_calls
+    assert dispatched == ["POST", "POST"], dispatched
+    play_confirm.get_by_role("button", name="Cancel").click()
+    expect(play_confirm).to_have_count(0)
+    fresh_play.click()
+    page.keyboard.press("Escape")
+    expect(play_confirm).to_have_count(0)
+    assert reset_calls == ["POST"], reset_calls
+    fresh_play.click()
+    play_confirm.get_by_role("button", name="Confirm and play").click()
+    for _ in range(80):
+        if len(dispatched) == 3:
+            break
+        page.wait_for_timeout(100)
+    assert reset_calls == ["POST", "POST"], reset_calls
+    assert dispatched == ["POST", "POST", "POST"], dispatched
+    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(
+        timeout=10000
+    )
+    expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
 
     # Score stays clickable even when the PDF is unavailable; the user gets
     # an actionable explanation instead of an inert control.
