@@ -46,6 +46,56 @@ def main() -> None:
     with patch("sigma.cloud_auth.email_env", return_value="/tmp/gmail-token.json"):
         assert progress_notifications._configured() is True
 
+    link = "https://sigma.example.org/project?path=%2Ftmp%2Fpaper&reveal_paper=paper123"
+    completed = progress_notifications.message_for("paper_finished", "A < B", 3, link)
+    plain_part = completed.get_body(preferencelist=("plain",))
+    html_part = completed.get_body(preferencelist=("html",))
+    assert plain_part is not None and html_part is not None
+    assert f"View paper: {link}" in plain_part.get_content()
+    assert f'<a href="{link}">View paper</a>' in html_part.get_content()
+    assert "A < B" not in html_part.get_content()
+
+    session = progress_notifications.message_for(
+        "session_paused", "Project", 2, "https://sigma.example.org/project?reveal_session=xyz"
+    )
+    session_html = session.get_body(preferencelist=("html",))
+    assert session_html is not None
+    assert ">View session</a>" in session_html.get_content()
+
+    sample_pdf = b"%PDF-1.4\\nSIGMA attachment test"
+    with (
+        patch("sigma.papers.get_paper", return_value={"pdf_size_bytes": len(sample_pdf)}),
+        patch("sigma.papers.get_pdf", return_value=sample_pdf),
+    ):
+        progress_notifications._attach_completed_paper(completed, "/tmp/paper", "paper123", 3)
+    attached = list(completed.iter_attachments())
+    assert len(attached) == 1
+    assert attached[0].get_content_type() == "application/pdf"
+    assert attached[0].get_filename() == "SIGMA-Paper-3.pdf"
+    assert attached[0].get_payload(decode=True) == sample_pdf
+    completed_plain = completed.get_body(preferencelist=("plain",))
+    completed_html = completed.get_body(preferencelist=("html",))
+    assert completed_plain is not None and completed_html is not None
+    assert "A PDF copy of your paper is attached." in completed_plain.get_content()
+    assert "A PDF copy of your paper is attached." in completed_html.get_content()
+    assert "View paper</a>" in completed_html.get_content()
+
+    for fake_record, expected in (
+        ({"pdf_size_bytes": 16 * 1024 * 1024}, "too large"),
+        ({"pdf_size_bytes": 12}, "could not be attached"),
+    ):
+        email = progress_notifications.message_for("paper_finished", "Project", 3, link)
+        with patch("sigma.papers.get_paper", return_value=fake_record):
+            with patch("sigma.papers.get_pdf", side_effect=FileNotFoundError):
+                progress_notifications._attach_completed_paper(email, "/tmp/paper", "paper123", 3)
+        assert not list(email.iter_attachments())
+        fallback_plain = email.get_body(preferencelist=("plain",))
+        fallback_html = email.get_body(preferencelist=("html",))
+        assert fallback_plain is not None and fallback_html is not None
+        assert expected in fallback_plain.get_content()
+        assert expected in fallback_html.get_content()
+        assert "View paper</a>" in fallback_html.get_content()
+
     first = cloud_auth.Principal("google-subject-a", "first@example.org", "member")
     second = cloud_auth.Principal("google-subject-b", "second@example.org", "member")
     origin = "http://localhost:5173"
@@ -68,7 +118,9 @@ def main() -> None:
 
         def deliver(message: Any, *, recipients: list[str], reply_to: str | None = None) -> None:
             assert reply_to is None
-            sent.append((recipients[0], str(message["Subject"]), str(message.get_content())))
+            body_part = message.get_body(preferencelist=("plain",))
+            assert body_part is not None
+            sent.append((recipients[0], str(message["Subject"]), str(body_part.get_content())))
 
         with (
             patch("sigma.cloud_auth.config", return_value=cfg),
