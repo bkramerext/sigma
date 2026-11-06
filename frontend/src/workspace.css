@@ -53,7 +53,7 @@
 .workspace-page .project-art-header .header-controls :is(button, a, select, summary, [role="button"]) { pointer-events: auto; }
 .workspace-page .project-art-header .about-action { grid-area: about; }
 .workspace-page .project-art-header .project-types-action { grid-area: auto; }
-.workspace-page .project-art-header .about-action { display: inline-flex; align-items: center; justify-content: center; justify-self: start; box-sizing: border-box; flex: 0 0 auto; width: auto; min-width: 0; height: 34px; min-height: 34px; padding: 0 12px; border-color: #a9654875; background: #07111ef2; box-shadow: none; color: #e0d0c8; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
+.workspace-page .project-art-header .about-action { display: inline-flex; align-items: center; justify-content: center; justify-self: stretch; box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; height: 34px; min-height: 34px; padding: 0 12px; border-color: #a9654875; background: #07111ef2; box-shadow: none; color: #e0d0c8; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
 .workspace-page .project-art-header .about-action:hover:not(:disabled) { border-color: #cd9270; background: #172536fa; box-shadow: none; color: #fff2e9; }
 .workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; grid-area: chatgpt; }
 .workspace-page .project-identity-pill-stack { grid-area: identity; align-self: start; }
@@ -505,3 +505,11 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 }
 .workspace-page .project-header-title-action .research-running-indicator-frame { display: inline-flex; width: 20px; height: 1em; vertical-align: -0.12em; margin-left: 3px; }
 @media (max-width:700px) { .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0,1fr); gap: 5px; } }
+
+
+/* Hover numbered session titles without recoloring the entire disclosure. */
+.workspace-page .session-row-disclosure:hover, .workspace-page .session-row-disclosure:focus-visible { background: transparent; color: inherit; }
+.workspace-page .session-row-disclosure:is(:hover,:focus-visible) .session-row-title { text-decoration: underline; text-underline-offset: 3px; }
+
+.session-resume-tooltip { display: inline-flex; align-items: center; }
+.session-resume-tooltip > button:disabled { pointer-events: none; }

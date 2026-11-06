@@ -275,6 +275,11 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         expect(page.get_by_role("tab", name="Saved")).to_be_enabled()
+        # Idle browser tabs have an explicit favicon, so the temporary
+        # running/queued heartbeat cannot remain cached after work completes.
+        expect(page.locator('link[rel="icon"]')).to_have_attribute(
+            "href", "/favicon.svg"
+        )
         expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         expect(page.locator("details.sample-type-group").first).to_be_visible()
         assert page.locator("details.sample-type-group[open]").count() == 0
@@ -283,8 +288,9 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         )
         expect(scored_group).to_be_visible()
         scored_group.evaluate("element => { element.open = true; }")
-        star = scored_group.get_by_role("link", name="Top scoring paper, click to view (75/100)")
+        star = scored_group.get_by_role("link", name="View high scoring paper (75/100)")
         expect(star).to_be_visible()
+        expect(star).to_have_attribute("data-tooltip", "Marked as a high scoring paper (>70)")
         expect(star).to_have_attribute("target", "_blank")
         expect(star).to_have_attribute("rel", "noopener noreferrer")
         expect(scored_group).to_contain_text("Best score 75/100")
