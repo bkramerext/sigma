@@ -29,6 +29,7 @@ Event = Literal[
 ]
 _LOG = logging.getLogger("sigma.lifecycle")
 _MAX_ATTEMPTS = 3
+_PAUSE_SETTLE_SECONDS = 60
 _PUMP: asyncio.Task[None] | None = None
 
 
@@ -228,8 +229,8 @@ def enqueue(
             db.execute(
                 """INSERT OR IGNORE INTO progress_email_dispatches
                 (subject,event_hash,state,event,project_title,number,path,session_id,
-                 paper_id,incomplete,attempts,retry_after)
-                SELECT jobs.subject,?,'pending',?,?,?,?,?,?,?,0,0
+                 paper_id,incomplete,attempts,retry_after,job_id)
+                SELECT jobs.subject,?,'pending',?,?,?,?,?,?,?,0,?,?
                 FROM progress_email_jobs AS jobs
                 JOIN progress_email_preferences AS prefs ON prefs.subject=jobs.subject
                 WHERE jobs.job_id=? AND prefs.enabled=1""",
@@ -242,11 +243,40 @@ def enqueue(
                     session_id,
                     paper_id,
                     int(incomplete),
+                    int(time.time()) + _PAUSE_SETTLE_SECONDS if event.endswith("_paused") else 0,
+                    job_id,
                     job_id,
                 ),
             )
     except (ValueError, OSError, RuntimeError, sqlite3.Error) as exc:
         _LOG.warning("progress_email.enqueue_unavailable error_type=%s", type(exc).__name__)
+
+
+def _pause_still_actionable(row: sqlite3.Row) -> bool:
+    """Suppress a queued pause if its exact job already resumed or settled.
+
+    Missing/unreadable state is not proof of recovery; prefer delivering a
+    potentially important notification over silently losing it.
+    """
+    try:
+        if row["event"] == "session_paused" and row["session_id"]:
+            from sigma import research_sessions
+
+            session = research_sessions._read(row["path"], row["session_id"])
+            return eligible_session_event(session) == "session_paused"
+        if row["event"] == "paper_paused" and row["paper_id"]:
+            from sigma import papers
+
+            progress = papers._read_progress_status(row["path"])
+            if progress is None:
+                return True
+            return (
+                progress.get("status") == "paused"
+                and f"paper:{progress.get('run_id')}" == row["job_id"]
+            )
+    except Exception as exc:  # noqa: BLE001 - missing state must not drop an important email
+        _LOG.warning("progress_email.pause_state_unavailable error_type=%s", type(exc).__name__)
+    return True
 
 
 def _deliver_pending() -> None:
@@ -280,6 +310,8 @@ def _deliver_pending() -> None:
                 continue
             key = (row["subject"], row["event_hash"])
             if not row["access_active"] or not row["opted_in"] or row["role"] == "guest":
+                state = "cancelled"
+            elif row["event"] in {"session_paused", "paper_paused"} and not _pause_still_actionable(row):
                 state = "cancelled"
             else:
                 state = "unknown"
