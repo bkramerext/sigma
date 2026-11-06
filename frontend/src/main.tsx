@@ -4704,7 +4704,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
           throw new Error(data.error ?? "User background execution preference was not saved.");
         setSavedUserUnattended(userUnattended);
       }
-      if (initial && progressEmailLoaded && progressEmailAvailable && progressEmail !== savedProgressEmail) {
+      if (initial && progressEmailLoaded && (progressEmailAvailable || !progressEmail) && progressEmail !== savedProgressEmail) {
         const response = await fetch('/api/user-preferences/progress-email', {
           method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
           body: JSON.stringify({ enabled: progressEmail }),
@@ -4797,9 +4797,9 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         <label className="project-preference-checkbox" htmlFor="expand-one-project-section"><input id="expand-one-project-section" type="checkbox" checked={exclusiveSections} disabled={!exclusiveSectionsLoaded} onChange={event => setExclusiveSections(event.target.checked)}/>Expand one project section at a time</label>
         <p className="settings-hint">User-wide display preference for the Project, Strategies, Sessions and Papers sections. Opening one collapses the others.</p>
         {sectionLayoutWarning && <p className="settings-hint" role="status">{sectionLayoutWarning}</p>}
-        <label className="project-preference-checkbox" htmlFor="notify-progress-email"><input id="notify-progress-email" type="checkbox" checked={progressEmail} disabled={!progressEmailLoaded || !progressEmailAvailable} onChange={event => setProgressEmail(event.target.checked)}/>Notify me by email on progress</label>
+        <label className="project-preference-checkbox" htmlFor="notify-progress-email"><input id="notify-progress-email" type="checkbox" checked={progressEmail} disabled={!progressEmailLoaded || (!progressEmailAvailable && !progressEmail)} onChange={event => setProgressEmail(event.target.checked)}/>Notify me by email on progress</label>
         <p id="notify-progress-email-help" className="settings-hint">Receive emails when research sessions or paper generation finish, fail, or pause unexpectedly. Applies to all your projects.</p>
-        {progressEmailLoaded && !progressEmailAvailable && <p className="settings-hint" role="status">Google sign-in and configured email delivery are required.</p>}
+        {progressEmailLoaded && !progressEmailAvailable && <p className="settings-hint" role="status">Google sign-in and configured email delivery are required to enable notifications.</p>}
         <label className="project-preference-checkbox" htmlFor="allow-unattended-background-execution"><input id="allow-unattended-background-execution" type="checkbox" checked={userUnattended} disabled={!userPreferenceLoaded} onChange={event => setUserUnattended(event.target.checked)}/>Allow unattended background execution</label>
         <p id="allow-unattended-background-execution-help" className="settings-hint">This user-wide setting applies across all your projects. When enabled, the backend can keep research and paper generation running after you close the browser page, potentially incurring AI-provider costs. When disabled, SIGMA stops new AI stages after the last viewer disconnects and preserves completed research or paper checkpoints for explicit continuation.</p>
       </fieldset>
