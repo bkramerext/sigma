@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import research_preferences, research_presence, research_sessions
+from sigma import research_preferences, research_presence, research_sessions, section_layout_preferences
 from sigma.api import app, research_presence_view
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
@@ -44,6 +44,52 @@ def edit(path, values, prior):
     normalized = dict(values)
     normalized["research_mode"] = normalized.pop("investigation_type")
     return update_project(path, **normalized, expected=prior)
+
+
+def check_section_layout_preference(root: Path, path: Path, sibling: Path) -> None:
+    """User-scoped section layout is available, durable and safe on malformed input."""
+    uri = "/api/user-preferences/section-layout"
+    key = "expand_one_project_section_at_a_time"
+    with (
+        patch("sigma.research_preferences.projects_root", return_value=root),
+        TestClient(app) as client,
+    ):
+        assert client.get(uri).status_code == 200
+        assert client.get(uri).json() == {key: False}
+        for bad in (None, 1, "true", [], {}):
+            assert client.put(uri, json={key: bad}).status_code == 422
+        assert client.put(uri, json={"unknown": True}).status_code == 422
+        saved = client.put(uri, json={key: True})
+        assert saved.status_code == 200, saved.text
+        assert saved.json() == {key: True}
+        assert client.get(uri).json() == {key: True}
+        assert section_layout_preferences.expand_one_project_section_at_a_time()
+        assert "expand_one_project_section_at_a_time" not in json.loads(
+            (path / "project.json").read_text()
+        )
+        assert "expand_one_project_section_at_a_time" not in json.loads(
+            (sibling / "project.json").read_text()
+        )
+        with (
+            TemporaryDirectory() as other_root,
+            patch("sigma.research_preferences.projects_root", return_value=Path(other_root)),
+        ):
+            assert client.get(uri).json() == {key: False}
+            assert client.put(uri, json={key: True}).status_code == 200
+        assert client.get(uri).json() == {key: True}
+        with patch("sigma.api.cloud_auth.current_principal", return_value=type("Guest", (), {"role": "guest"})()):
+            assert client.get(uri).status_code == 403
+            assert client.put(uri, json={key: False}).status_code == 403
+        preference_file = root / section_layout_preferences.PREFERENCES
+        original = preference_file.read_bytes()
+        preference_file.write_text('{"version":1,"expand_one_project_section_at_a_time":"true"}')
+        assert client.get(uri).status_code == 400
+        assert client.put(uri, json={key: False}).status_code == 400
+        preference_file.write_bytes(original)
+        assert client.get(uri).json() == {key: True}
+        assert client.put(uri, json={key: False}).status_code == 200
+        assert client.get(uri).json() == {key: False}
+    print("PASS section-layout preference API, persistence, validation, and workspace isolation")
 
 
 def check_unattended_execution(root: Path, path: Path, sibling: Path) -> None:
@@ -577,6 +623,7 @@ def main():
             "PASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior"
         )
         check_unattended_execution(root, path, Path(sibling.path))
+        check_section_layout_preference(root, path, Path(sibling.path))
 
 
 if __name__ == "__main__":
