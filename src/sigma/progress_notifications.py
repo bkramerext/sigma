@@ -229,8 +229,8 @@ def enqueue(
             db.execute(
                 """INSERT OR IGNORE INTO progress_email_dispatches
                 (subject,event_hash,state,event,project_title,number,path,session_id,
-                 paper_id,incomplete,attempts,retry_after,job_id)
-                SELECT jobs.subject,?,'pending',?,?,?,?,?,?,?,0,?,?
+                 paper_id,incomplete,attempts,retry_after)
+                SELECT jobs.subject,?,'pending',?,?,?,?,?,?,?,0,?
                 FROM progress_email_jobs AS jobs
                 JOIN progress_email_preferences AS prefs ON prefs.subject=jobs.subject
                 WHERE jobs.job_id=? AND prefs.enabled=1""",
@@ -244,7 +244,6 @@ def enqueue(
                     paper_id,
                     int(incomplete),
                     int(time.time()) + _PAUSE_SETTLE_SECONDS if event.endswith("_paused") else 0,
-                    job_id,
                     job_id,
                 ),
             )
@@ -270,10 +269,11 @@ def _pause_still_actionable(row: sqlite3.Row) -> bool:
             progress = papers._read_progress_status(row["path"])
             if progress is None:
                 return True
-            return (
-                progress.get("status") == "paused"
-                and f"paper:{progress.get('run_id')}" == row["job_id"]
-            )
+            if progress.get("status") != "paused" or not progress.get("run_id"):
+                return False
+            project_id = papers.inspect_project(row["path"]).project.id
+            current_event = f"paper:{project_id}:{progress['run_id']}:paper_paused"
+            return hashlib.sha256(current_event.encode("utf-8")).hexdigest() == row["event_hash"]
     except Exception as exc:  # noqa: BLE001 - missing state must not drop an important email
         _LOG.warning("progress_email.pause_state_unavailable error_type=%s", type(exc).__name__)
     return True
