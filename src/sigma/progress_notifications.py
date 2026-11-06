@@ -167,7 +167,7 @@ def message_for(
     link: str,
     *,
     incomplete: bool = False,
-    paper_attachment_note: str | None = None,
+
 ) -> EmailMessage:
     if event not in _COPY or type(number) is not int or number < 1:
         raise ValueError("Unsupported notification.")
@@ -183,8 +183,6 @@ def message_for(
         )
     message = EmailMessage()
     message["Subject"] = f"SIGMA: {subject.format(number=number)} · {clean}"
-    if event == "paper_finished" and paper_attachment_note:
-        body = f"{body}\n{paper_attachment_note}"
     message.set_content(f"{body.format(number=number)}\n\n{action}: {link}\n")
     return message
 
@@ -362,7 +360,7 @@ def _attach_completed_paper(message: EmailMessage, path: str, paper_id: str, num
         return
     body_text = original_body.get_content()
     phrase = "Your paper is ready to review."
-    message.set_content(body_text.replace(phrase, f"{phrase}\n{note}", 1))
+    original_body.set_content(body_text.replace(phrase, f"{phrase}\n{note}", 1))
 
 
 def _deliver_pending() -> None:
