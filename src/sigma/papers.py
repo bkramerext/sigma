@@ -3341,13 +3341,9 @@ def mark_scored_progress(path: str, paper_id: str) -> None:
             and state.get("status") == "complete"
             and state.get("stage") == "score_failed"
         ):
-            _write_progress_status(
-                path, {**state, "stage": "complete", "updated_at": _now()}
-            )
+            _write_progress_status(path, {**state, "stage": "complete", "updated_at": _now()})
     except (OSError, ProjectError):
-        logging.getLogger("sigma.lifecycle").warning(
-            "paper.score_progress_update_failed"
-        )
+        logging.getLogger("sigma.lifecycle").warning("paper.score_progress_update_failed")
 
 
 def _clear_published_paper_progress(path: str, paper_id: str) -> None:
@@ -3357,9 +3353,7 @@ def _clear_published_paper_progress(path: str, paper_id: str) -> None:
         if state is not None and state.get("paper_id") == paper_id:
             _clear_progress_status(path)
     except (OSError, ProjectError):
-        logging.getLogger("sigma.lifecycle").warning(
-            "paper.score_progress_cleanup_failed"
-        )
+        logging.getLogger("sigma.lifecycle").warning("paper.score_progress_cleanup_failed")
 
 
 def _clear_work(path: str) -> None:
