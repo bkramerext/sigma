@@ -1416,7 +1416,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, onInferredStrategy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onRevealNewSession, onSectionOpened, sessionControls, guest, onGuestPlay, playButtonRef, controlsDisabled, missingType, safeSavedTypeSettings, savedTypeName, onChooseReplacement }: { path: string; projectId: string; strategies: Strategy[]; nextStrategyOrdinal: number; onInferredStrategy: (view: ProjectView, id: string) => void; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onRevealNewSession: () => void; onSectionOpened: () => void; sessionControls: ProcessControls; guest: boolean; onGuestPlay: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null>; controlsDisabled: boolean; missingType: boolean; safeSavedTypeSettings: boolean; savedTypeName: string; onChooseReplacement: () => void }) {
+function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, onInferredStrategy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onInitialActivity, onRevealNewSession, onSectionOpened, sessionControls, guest, onGuestPlay, playButtonRef, controlsDisabled, missingType, safeSavedTypeSettings, savedTypeName, onChooseReplacement }: { path: string; projectId: string; strategies: Strategy[]; nextStrategyOrdinal: number; onInferredStrategy: (view: ProjectView, id: string) => void; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onInitialActivity: (status: 'running' | 'queued' | null) => void; onRevealNewSession: () => void; onSectionOpened: () => void; sessionControls: ProcessControls; guest: boolean; onGuestPlay: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null>; controlsDisabled: boolean; missingType: boolean; safeSavedTypeSettings: boolean; savedTypeName: string; onChooseReplacement: () => void }) {
   const cloud = useCloudIdentity();
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
@@ -1509,10 +1509,11 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   useEffect(() => {
     const revealRunningSession = () => {
-      const running = sessions.find(item => item.status === 'running');
-      if (running) {
+      const active = sessions.find(item => item.status === 'running')
+        ?? sessions.find(item => item.status === 'queued');
+      if (active) {
         // Header navigation must not collapse unrelated panes and shift the layout.
-        revealSession(running.id, true);
+        revealSession(active.id, true);
       }
     };
     window.addEventListener('sigma-reveal-running-session', revealRunningSession);
@@ -1552,9 +1553,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
         ? nextSessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused') ?? nextSessions[0] ?? null
         : null);
     if (firstLoad) {
+      const active = nextSessions.find(item => item.status === 'running')
+        ?? nextSessions.find(item => item.status === 'queued');
+      onInitialActivity(active?.status === 'running' || active?.status === 'queued' ? active.status : null);
       const requestedReveal = new URLSearchParams(window.location.search).get('reveal_session');
       initialRevealSessionId.current = requestedReveal && nextSessions.some(item => item.id === requestedReveal)
-        ? requestedReveal : chosen?.status === 'running' ? chosen.id : null;
+        ? requestedReveal : null;
       if (requestedReveal && nextSessions.some(item => item.id === requestedReveal)) {
         setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
         setExpandedSessionIds(new Set([requestedReveal]));
@@ -1576,7 +1580,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       lastAnnouncement.current = transition;
     }
     return chosen;
-  }, [path, projectId]);
+  }, [path, projectId, onInitialActivity]);
 
   const reportReadFailure = useCallback((cause: unknown) => {
     const message = errorMessage(cause);
@@ -2398,7 +2402,7 @@ function paperTimingLabel(progress: PaperProgress, now: number): string {
   return paperElapsed(seconds);
 }
 
-function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedChange, onSectionOpened }: { path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean) => void; onQueuedChange: (queued: boolean) => void; onSectionOpened: () => void }) {
+function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
   const ai = useAI();
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
   const [paperMenu, setPaperMenu] = useState<{ paperId: string; kind: 'download' | 'actions' } | null>(null);
@@ -2491,6 +2495,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [restartingCheckpoint, setRestartingCheckpoint] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
+  const initialPaperActivityReported = useRef(false);
   const [paperClock, setPaperClock] = useState(() => Date.now());
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -2573,6 +2578,11 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       const list = await listResponse.json(); const config = await configResponse.json();
       const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
       const generationRunning = ['active', 'queued'].includes(savedProgress?.progress?.status);
+      if (!initialPaperActivityReported.current) {
+        initialPaperActivityReported.current = true;
+        const status = savedProgress?.progress?.status;
+        onInitialActivity(status === 'active' || status === 'queued' ? status : null);
+      }
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
@@ -2607,7 +2617,10 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       } else setSelected(null);
       setError(!configResponse.ok || !config.available ? (config.message ?? 'Connect an eligible AI provider to author a paper.') : '');
     } catch (cause) { setError(errorMessage(cause)); }
-    finally { if (!silent) setLoading(false); }
+    finally {
+      if (!initialPaperActivityReported.current) { initialPaperActivityReported.current = true; onInitialActivity(null); }
+      if (!silent) setLoading(false);
+    }
   }
   useEffect(() => {
     if (!['active', 'queued'].includes(paperProgress?.status ?? '')) return;
@@ -5575,6 +5588,21 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [researchRunning, setResearchRunning] = useState(false);
   const [paperRunning, setPaperRunning] = useState(false);
   const [paperQueued, setPaperQueued] = useState(false);
+  const [initialResearchActivity, setInitialResearchActivity] = useState<'running' | 'queued' | null>();
+  const [initialPaperActivity, setInitialPaperActivity] = useState<'active' | 'queued' | null>();
+  const autoRevealed = useRef(false);
+  useEffect(() => {
+    if (!view || autoRevealed.current || initialResearchActivity === undefined || initialPaperActivity === undefined) return;
+    autoRevealed.current = true;
+    const params = new URLSearchParams(window.location.search);
+    // A citation/deep link takes precedence over automatic activity navigation.
+    if (params.has('reveal_session') || params.has('reveal_strategy') || params.has('reveal_project')) return;
+    const eventName = initialResearchActivity ? 'sigma-reveal-running-session'
+      : initialPaperActivity ? 'sigma-reveal-papers' : null;
+    if (!eventName) return;
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event(eventName))));
+    return () => cancelAnimationFrame(frame);
+  }, [view?.project.id, initialResearchActivity, initialPaperActivity]);
   useEffect(() => (researchRunning || paperRunning) ? runningFavicon() : paperQueued ? runningFavicon('yellow') : undefined, [researchRunning, paperRunning, paperQueued]);
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -6019,8 +6047,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
       setView(next);
       setAnnouncement('Advanced Outcome enabled.');
-    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
-    <PapersPane path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onSectionOpened={() => sectionOpen('papers')}/>
+    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
+    <PapersPane path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onAdjustReferences={() => { setProjectTypesFocusTypeId(view.project.investigation_type); /* Keep Settings mounted behind Project Types so draft edits survive. */ setProjectTypesOpen(true); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
