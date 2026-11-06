@@ -6312,7 +6312,9 @@ function App() {
     const timer = window.setInterval(() => void poll(), 10000);
     window.addEventListener("focus", poll);
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", poll); };
-  }, [location, cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
+  // Page navigation does not change the workspace identity or running jobs.
+  // Do not trigger an extra full Saved-project scan every time a project opens.
+  }, [cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
   useEffect(() => globalActivity === 'active' ? runningFavicon() : globalActivity === 'queued' ? runningFavicon('yellow') : undefined, [globalActivity]);
   useEffect(() => {
     if (cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')) return;
