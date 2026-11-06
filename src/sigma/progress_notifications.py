@@ -14,6 +14,7 @@ import re
 import sqlite3
 import time
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode, urlsplit
 
@@ -29,6 +30,7 @@ Event = Literal[
 ]
 _LOG = logging.getLogger("sigma.lifecycle")
 _MAX_ATTEMPTS = 3
+_PAUSE_SETTLE_SECONDS = 60
 _PUMP: asyncio.Task[None] | None = None
 
 
@@ -229,7 +231,7 @@ def enqueue(
                 """INSERT OR IGNORE INTO progress_email_dispatches
                 (subject,event_hash,state,event,project_title,number,path,session_id,
                  paper_id,incomplete,attempts,retry_after)
-                SELECT jobs.subject,?,'pending',?,?,?,?,?,?,?,0,0
+                SELECT jobs.subject,?,'pending',?,?,?,?,?,?,?,0,?
                 FROM progress_email_jobs AS jobs
                 JOIN progress_email_preferences AS prefs ON prefs.subject=jobs.subject
                 WHERE jobs.job_id=? AND prefs.enabled=1""",
@@ -242,11 +244,77 @@ def enqueue(
                     session_id,
                     paper_id,
                     int(incomplete),
+                    int(time.time()) + _PAUSE_SETTLE_SECONDS if event.endswith("_paused") else 0,
                     job_id,
                 ),
             )
     except (ValueError, OSError, RuntimeError, sqlite3.Error) as exc:
         _LOG.warning("progress_email.enqueue_unavailable error_type=%s", type(exc).__name__)
+
+
+def _pause_still_actionable(row: sqlite3.Row) -> bool:
+    """Only send a pause notice for the same still-active durable event.
+
+    Definitively missing work is obsolete. Unexpected read failures remain
+    fail-open so a temporary storage error does not silently lose the notice.
+    """
+    path = row["path"]
+    try:
+        if not Path(path).exists():
+            _LOG.info("progress_email.pause_suppressed reason=project_missing")
+            return False
+        if row["event"] == "session_paused" and row["session_id"]:
+            from sigma import research_sessions
+
+            session = research_sessions._read(path, row["session_id"])
+            if eligible_session_event(session) != "session_paused":
+                _LOG.info("progress_email.pause_suppressed reason=session_not_paused")
+                return False
+            event_id = (
+                f"session:{session['id']}:session_paused:"
+                f"{session.get('stopped_at') or session.get('updated_at')}"
+            )
+            actionable = hashlib.sha256(event_id.encode("utf-8")).hexdigest() == row["event_hash"]
+            if not actionable:
+                _LOG.info("progress_email.pause_suppressed reason=session_pause_superseded")
+            return actionable
+        if row["event"] == "paper_paused" and row["paper_id"]:
+            from sigma import papers
+
+            progress = papers._read_progress_status(path)
+            if progress is None:
+                _LOG.info("progress_email.pause_retained reason=paper_progress_missing")
+                return True
+            if progress.get("status") != "paused" or not progress.get("run_id"):
+                _LOG.info("progress_email.pause_suppressed reason=paper_not_paused")
+                return False
+            project_id = papers.inspect_project(path).project.id
+            current_event = f"paper:{project_id}:{progress['run_id']}:paper_paused"
+            actionable = (
+                hashlib.sha256(current_event.encode("utf-8")).hexdigest() == row["event_hash"]
+            )
+            if not actionable:
+                _LOG.info("progress_email.pause_suppressed reason=paper_pause_superseded")
+            return actionable
+    except Exception as exc:  # noqa: BLE001 - classify unavailable durable state
+        from sigma.projects import ProjectError
+
+        if isinstance(exc, FileNotFoundError) or (
+            isinstance(exc, ProjectError)
+            and ("not found" in str(exc).lower() or "access denied" in str(exc).lower())
+        ):
+            _LOG.info(
+                "progress_email.pause_suppressed reason=state_missing error_type=%s",
+                type(exc).__name__,
+            )
+            return False
+        _LOG.warning(
+            "progress_email.pause_retained reason=state_unreadable error_type=%s",
+            type(exc).__name__,
+        )
+        return True
+    _LOG.warning("progress_email.pause_retained reason=missing_event_identity")
+    return True
 
 
 def _deliver_pending() -> None:
@@ -279,7 +347,15 @@ def _deliver_pending() -> None:
             if changed != 1:
                 continue
             key = (row["subject"], row["event_hash"])
-            if not row["access_active"] or not row["opted_in"] or row["role"] == "guest":
+            if (
+                not row["access_active"]
+                or not row["opted_in"]
+                or row["role"] == "guest"
+                or (
+                    row["event"] in {"session_paused", "paper_paused"}
+                    and not _pause_still_actionable(row)
+                )
+            ):
                 state = "cancelled"
             else:
                 state = "unknown"

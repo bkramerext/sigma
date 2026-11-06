@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
 from unittest.mock import patch
+from uuid import uuid4
 
 from sigma import cloud_auth, progress_notifications
 
@@ -59,6 +62,8 @@ def main() -> None:
             error=None,
             local=True,
         )
+        paper_path = str(Path(root) / "test-paper.sigma")
+        Path(paper_path).mkdir()
         sent: list[tuple[str, str, str]] = []
 
         def deliver(message: Any, *, recipients: list[str], reply_to: str | None = None) -> None:
@@ -187,9 +192,14 @@ def main() -> None:
                 event_id="event:retry",
                 project_title="Project Alpha",
                 number=4,
-                path="/tmp/my project.sigma",
+                path=paper_path,
                 paper_id="draft",
             )
+            assert _event_state(cfg, "event:retry")["retry_after"] > int(time.time())
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "UPDATE progress_email_dispatches SET retry_after=0 WHERE event='paper_paused'"
+                )
             with patch(
                 "sigma.mail_transport.send_message",
                 side_effect=cloud_auth.SMTPDeliveryError("not delivered", state="failed"),
@@ -237,6 +247,101 @@ def main() -> None:
                     "SELECT COUNT(*) AS total FROM progress_email_dispatches WHERE event='session_failed'"
                 ).fetchone()
             assert row is not None and row["total"] == 0
+            # Real persisted research state: pause A, resume, pause B.
+            # Both events are queued; only B matches the durable pause identity.
+            session_id = str(uuid4())
+            research_path = Path(root) / "test-research.sigma"
+            sessions_dir = research_path / "research-sessions"
+            sessions_dir.mkdir(parents=True)
+            session_file = sessions_dir / f"{session_id}.json"
+            progress_notifications.bind_job(first, session_id)
+
+            def persist_research(status: str, timestamp: str) -> None:
+                session_file.write_text(
+                    json.dumps(
+                        {
+                            "id": session_id,
+                            "project_path": str(research_path.resolve()),
+                            "status": status,
+                            "message": "Paused · provider usage limit",
+                            "updated_at": timestamp,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            first_id = f"session:{session_id}:session_paused:2026-11-06T10:00:00+00:00"
+            second_id = f"session:{session_id}:session_paused:2026-11-06T10:01:00+00:00"
+            persist_research("paused", "2026-11-06T10:00:00+00:00")
+            progress_notifications.enqueue(
+                session_id,
+                "session_paused",
+                event_id=first_id,
+                project_title="Project Alpha",
+                number=3,
+                path=str(research_path),
+                session_id=session_id,
+            )
+            persist_research("running", "2026-11-06T10:00:20+00:00")
+            persist_research("paused", "2026-11-06T10:01:00+00:00")
+            progress_notifications.enqueue(
+                session_id,
+                "session_paused",
+                event_id=second_id,
+                project_title="Project Alpha",
+                number=3,
+                path=str(research_path),
+                session_id=session_id,
+            )
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "UPDATE progress_email_dispatches SET retry_after=0 WHERE event_hash IN (?,?)",
+                    (
+                        hashlib.sha256(first_id.encode()).hexdigest(),
+                        hashlib.sha256(second_id.encode()).hexdigest(),
+                    ),
+                )
+            progress_notifications._deliver_pending()
+            assert _event_state(cfg, first_id)["state"] == "cancelled"
+            assert _event_state(cfg, second_id)["state"] == "sent"
+            assert len(sent) == 3
+
+            # Deleted durable state must not send a stale pause email.
+            deleted_id = f"session:{session_id}:session_paused:2026-11-06T10:02:00+00:00"
+            persist_research("paused", "2026-11-06T10:02:00+00:00")
+            progress_notifications.enqueue(
+                session_id,
+                "session_paused",
+                event_id=deleted_id,
+                project_title="Project Alpha",
+                number=3,
+                path=str(research_path),
+                session_id=session_id,
+            )
+            session_file.unlink()
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "UPDATE progress_email_dispatches SET retry_after=0 WHERE event_hash=?",
+                    (hashlib.sha256(deleted_id.encode()).hexdigest(),),
+                )
+            progress_notifications._deliver_pending()
+            assert _event_state(cfg, deleted_id)["state"] == "cancelled"
+            assert len(sent) == 3
+
+            # Transient read failures remain eligible; they are not proof of recovery.
+            with patch("sigma.research_sessions._read", side_effect=OSError("transient")):
+                assert progress_notifications._pause_still_actionable(
+                    cast(
+                        sqlite3.Row,
+                        {
+                            "event": "session_paused",
+                            "session_id": session_id,
+                            "path": str(research_path),
+                            "event_hash": hashlib.sha256(deleted_id.encode()).hexdigest(),
+                        },
+                    )
+                )
+
             # Opt-out before a queued send suppresses the existing event too.
             progress_notifications.enqueue(
                 "session:123",
@@ -248,9 +353,13 @@ def main() -> None:
                 session_id="session-123",
             )
             progress_notifications.update_preference(first, False)
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "UPDATE progress_email_dispatches SET retry_after=0 WHERE state='pending'"
+                )
             progress_notifications._deliver_pending()
             assert _event_state(cfg, "event:optout")["state"] == "cancelled"
-            assert len(sent) == 2
+            assert len(sent) == 3
 
         with patch("sigma.cloud_auth.config", return_value=cfg):
             assert progress_notifications.preference(None) == {"enabled": False, "available": False}
