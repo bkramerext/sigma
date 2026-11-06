@@ -2537,7 +2537,9 @@ def recent_view(response: Response):
     result = home_projects()
     # Chrome DevTools can now distinguish backend listing time from browser
     # rendering/network delay without logging sensitive project information.
-    response.headers["Server-Timing"] = f"saved-projects;dur={(perf_counter() - started) * 1000:.1f}"
+    response.headers["Server-Timing"] = (
+        f"saved-projects;dur={(perf_counter() - started) * 1000:.1f}"
+    )
     return result
 
 
