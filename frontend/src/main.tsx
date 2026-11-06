@@ -2482,6 +2482,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [resetConfirm, setResetConfirm] = useState(false);
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
   const [confirmRestartDraft, setConfirmRestartDraft] = useState(false);
+  const [confirmPlayRestartDraft, setConfirmPlayRestartDraft] = useState(false);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
   const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; proofreading_status?: string; publication_status?: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -2512,29 +2513,34 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     bottom: paperPopupPlacement.above ? 'calc(100% + 5px)' : 'auto',
   };
   useEffect(() => {
-    if (!confirmDeleteId && !confirmDiscardDraft && !confirmRestartDraft) return;
+    if (!confirmDeleteId && !confirmDiscardDraft && !confirmRestartDraft && !confirmPlayRestartDraft) return;
     const cancelOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         setConfirmDeleteId('');
         setConfirmDiscardDraft(false);
         setConfirmRestartDraft(false);
+        setConfirmPlayRestartDraft(false);
       }
     };
     document.addEventListener('keydown', cancelOnEscape);
     return () => document.removeEventListener('keydown', cancelOnEscape);
-  }, [confirmDeleteId, confirmDiscardDraft, confirmRestartDraft]);
+  }, [confirmDeleteId, confirmDiscardDraft, confirmRestartDraft, confirmPlayRestartDraft]);
   useEffect(() => {
-    if (!confirmRestartDraft && !confirmDiscardDraft) return;
+    if (!confirmRestartDraft && !confirmDiscardDraft && !confirmPlayRestartDraft) return;
     const dismissOutside = (event: PointerEvent) => {
-      if (event.target instanceof Element && !event.target.closest('.paper-remove-anchor')) {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('.paper-remove-anchor')) {
         setConfirmRestartDraft(false);
         setConfirmDiscardDraft(false);
       }
+      // Play's confirmation closes when another paper action is chosen;
+      // Start over's existing confirmation remains completely unchanged.
+      if (!event.target.closest('.paper-play-tooltip')) setConfirmPlayRestartDraft(false);
     };
     document.addEventListener('pointerdown', dismissOutside);
     return () => document.removeEventListener('pointerdown', dismissOutside);
-  }, [confirmRestartDraft, confirmDiscardDraft]);
+  }, [confirmRestartDraft, confirmDiscardDraft, confirmPlayRestartDraft]);
   useEffect(() => { if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest, path]);
   useEffect(() => {
     if (!paperMenu) return;
@@ -2835,7 +2841,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRestartingCheckpoint(false); setBusy(false); }
   }
-  async function generatePaper() {
+  async function generatePaper(restartBeforePlay = false) {
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
@@ -2845,6 +2851,31 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     let requestDispatched = false;
     let providerCallsAttempted: number | undefined;
     try {
+      if (restartBeforePlay) {
+        // Play was explicitly confirmed on a non-resumable checkpoint. Do
+        // not silently replay an uncertain paid one-shot request.
+        const source = checkpointMismatch;
+        if (!source?.checkpoint_can_restart) throw new Error('The stopped paper state changed; refresh before starting another attempt.');
+        setPhase('Starting a new paper attempt…');
+        const resetResponse = await fetch('/api/projects/papers/restart', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: JSON.stringify({
+            path, expected_project_id: projectId, expected_binding: binding,
+            expected_snapshot_sha256: source.snapshot_sha256,
+            long_form: false, confirm_restart: true,
+          }),
+        });
+        const reset = await resetResponse.json();
+        if (!resetResponse.ok) throw new Error(reset.error ?? 'Could not reset the stopped paper attempt.');
+        setCheckpointMismatch(null);
+        setRestartableCheckpoint(null);
+        setRestartReady(true);
+        setContinuationAvailable(false);
+        setResumeDetails(null);
+        setPaperProgress(null);
+      }
       const preflightParams = new URLSearchParams({
         path, long_form: 'false', expected_project_id: projectId, expected_binding: binding,
         mode, model, reasoning_effort: effort,
@@ -2941,7 +2972,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   // still-active job really blocks dispatch.
   const paperPlayBlocked = !generationRunning &&
     ['active', 'queued'].includes(paperProgress?.status ?? '');
-  const paperPlayDisabled = generating || loading || !binding || !!checkpointMismatch || paperPlayBlocked;
+  const paperPlayDisabled = generating || loading || !binding || paperPlayBlocked;
   const paperPlayTooltip = paperPlayBlocked
     ? 'Only one paper at a time can be generated'
     : busy
@@ -2949,7 +2980,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         request.current ? 'Starting paper generation' : 'Paper action in progress'
       : loading ? 'Loading paper controls'
       : !binding ? 'Connect an AI provider to generate a paper'
-      : checkpointMismatch ? 'Start over to use the current settings'
+      : checkpointMismatch ? 'Start a new paper attempt (confirmation required)'
       : continuationAvailable ? 'Resume paper generation' : 'Generate paper';
   const canStartOver = !restartReady && !generationRunning &&
     (Boolean(checkpointMismatch?.checkpoint_can_restart || restartableCheckpoint?.checkpoint_can_restart) ||
@@ -3009,7 +3040,15 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
             <SavedPaperTitle title={`Paper ${draftVersion}`} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
-                {!generationRunning && <span className="paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={() => { setDraftPaperExpanded(true); void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
+                {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
+                  {confirmPlayRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm new paper generation attempt">
+                    <p>The previous attempt cannot resume. Start a new attempt? This may use additional AI calls. Saved research and papers remain.</p>
+                    <div className="session-remove-confirm-actions">
+                      <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => { setConfirmPlayRestartDraft(false); void generatePaper(true); }}>Confirm and play</button>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmPlayRestartDraft(false)}>Cancel</button>
+                    </div>
+                  </div></div>}
+                </span>}
                 {generationRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={`Stop Paper ${draftVersion}`} data-tooltip="Stop paper generation" disabled={!binding || loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                 {canStartOver && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(false); setConfirmRestartDraft(true); }}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
@@ -3036,7 +3075,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
           <div id="paper-draft-content" className="paper-draft-content" hidden={!draftPaperExpanded}>
       {checkpointMismatch && !generating && <p className="ai-paper-restart-notice" role="status">{checkpointMismatch.incomplete_one_shot
         ? 'The previous writing attempt stopped before saving a draft and cannot resume.'
-        : 'Research or AI settings changed; this checkpoint cannot resume.'} Saved research and papers remain. Use Start over to generate again.</p>}
+        : 'Research or AI settings changed; this checkpoint cannot resume.'} Saved research and papers remain. Use Play to confirm a new attempt, or Start over to reset without playing.</p>}
       {busy && (restartingCheckpoint || !paperProgress) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {paperProgress && !restartingCheckpoint && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
         {paperProgress.status === 'active' || paperProgress.status === 'queued'
