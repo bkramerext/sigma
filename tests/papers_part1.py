@@ -1084,6 +1084,10 @@ def test_one_shot_and_long_form_both_proofread_before_compiling() -> None:
                 patch.object(papers, "_provider", new=author),
                 patch.object(papers, "_generate_long_draft", new=long_author),
                 patch.object(papers, "_provider_structured", new=proofreader),
+                patch(
+                    "sigma.paper_scores.score_paper",
+                    new=lambda *_args, **_kwargs: asyncio.sleep(0, result={"total": 76}),
+                ),
                 # This test exercises TeX stage ordering, not external
                 # publication compilation. Keep the optional source set empty.
                 patch.object(
@@ -1114,7 +1118,12 @@ def test_one_shot_and_long_form_both_proofread_before_compiling() -> None:
             assert (
                 stages.index("validation") < stages.index("proofreading") < stages.index("compile")
             )
-            assert stages.index("compile") < stages.index("pdf_check") < stages.index("complete")
+            assert (
+                stages.index("compile")
+                < stages.index("pdf_check")
+                < stages.index("scoring")
+                < stages.index("complete")
+            )
             check_events = [event for event in events[key] if event["stage"] == "pdf_check"]
             assert len(check_events) >= 1, events[key]
             assert check_events[0]["detail"] == (
@@ -1470,7 +1479,9 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         first_stages = [event["stage"] for event in first_events if event["state"] == "active"]
         assert first_stages.index("validation") < first_stages.index("proofreading")
         assert first_stages.index("proofreading") < first_stages.index("compile")
-        assert retry_events[-1]["stage"] == "complete" and retry_events[-1]["state"] == "complete"
+        assert retry_events[-2]["stage"] == "scoring"
+        assert retry_events[-1]["stage"] in {"complete", "score_failed"}
+        assert retry_events[-1]["state"] == "complete"
         assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
 
 

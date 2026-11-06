@@ -663,7 +663,12 @@ def main_part2() -> None:
         assert not (paper_root / f"{first['paper_id']}.pdf").exists()
         assert not (paper_root / f"{first['paper_id']}.tex").exists()
         assert papers._load_work(str(path)) is None
-        assert papers._read_progress_status(str(path)) is None
+        # The newest saved paper still owns its post-publication scoring status;
+        # deleting an older PDF must not erase that status.
+        score_progress = papers._read_progress_status(str(path))
+        assert score_progress is not None
+        assert score_progress["paper_id"] == second["paper_id"]
+        assert score_progress["stage"] in {"complete", "score_failed"}
         assert len(inspect_project(path).project.events) == 1
 
         exploratory_path = Path(temporary) / "unresolved.sigma"

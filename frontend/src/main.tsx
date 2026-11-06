@@ -2310,7 +2310,7 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 }
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[]; sigma_issues?: string[]; sigma_issues_included?: boolean } };
-type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
+type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 const PAPER_STAGES = [
@@ -2321,11 +2321,12 @@ const PAPER_STAGES = [
   { label: 'Write sections', stages: ['writing', 'sections'] },
   { label: 'Validate', stages: ['validation'] },
   { label: 'Proofread', stages: ['proofreading'] },
-  { label: 'Generate PDF', stages: ['compile', 'pdf_check', 'complete'] },
+  { label: 'Generate PDF', stages: ['compile', 'pdf_check'] },
+  { label: 'Score paper', stages: ['scoring', 'score_failed', 'complete'] },
 ] as const;
 
 function paperStageLabel(step: number, active: number, progress: PaperProgress): string {
-  const completed = step < active || (step === active && progress.status === 'complete');
+  const completed = step < active || (step === active && progress.status === 'complete' && progress.stage !== 'score_failed');
   const current = step === active && (progress.status === 'active' || progress.status === 'queued');
   const sectionsTotal = progress.sections_total ?? (progress.stage === 'sections' ? progress.total : null);
   if (step === 0) return completed ? 'Started' : current ? 'Waiting' : 'Wait';
@@ -2349,7 +2350,8 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
     if (progress.current === 3) return 'Proofreading one more time';
     return 'Proofreading';
   }
-  return completed ? 'Generated PDF' : current ? 'Generating PDF' : 'Generate PDF';
+  if (step === 7) return completed ? 'Generated PDF' : current ? 'Generating PDF' : 'Generate PDF';
+  return completed ? 'Scored paper' : current ? 'Scoring paper' : 'Score paper';
 }
 
 function paperProgressOperation(progress: PaperProgress): string {
@@ -2369,7 +2371,7 @@ function paperErrorSummary(message: string): string {
 function PaperStageSteps({ progress }: { progress: PaperProgress }) {
   const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(progress.stage));
   return <ol className="session-strategy-live-status paper-stage-list" aria-label="Paper generation steps">
-    {PAPER_STAGES.map((group, step) => <li key={group.label} data-paper-step={group.label} className={step === index ? (progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : progress.status === 'complete' ? 'is-past' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
+    {PAPER_STAGES.map((group, step) => <li key={group.label} data-paper-step={group.label} className={step === index ? (progress.stage === 'score_failed' ? 'is-upcoming' : progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : progress.status === 'complete' ? 'is-past' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
       <strong>{paperStageLabel(step, index, progress)}</strong>
     </li>)}
     {index < 0 && <li className={progress.status === 'active' ? 'is-active' : 'is-idle'}><strong>Retrying</strong></li>}
@@ -2690,10 +2692,10 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     } catch (cause) { setEli5ErrorId(paper.paper_id); setEli5Error(errorMessage(cause)); }
     finally { explainingRef.current = false; setExplainingId(''); }
   }
-  async function scorePaper(paper: PaperSummary) {
+  async function scorePaper(paper: PaperSummary, force = false) {
     setScoreError('');
     // Reading an existing score never depends on ongoing generation/scoring.
-    if (paper.score) { setScoreDialog(paper.score); return; }
+    if (paper.score && !force) { setScoreDialog(paper.score); return; }
     if (scoringRef.current) return;
     if (!paper.pdf_available) { setScoreError('A saved PDF is required before this paper can be scored.'); return; }
     if (!binding) { setScoreError('Connect an eligible AI provider before scoring.'); return; }
@@ -2702,13 +2704,15 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/score`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, force }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not score the paper.');
       const score = result.score as PaperScore;
       setPapers(current => current.map(item => item.paper_id === paper.paper_id ? { ...item, score } : item));
       setScoreDialog(score);
+      setPaperProgress(current => current?.stage === 'score_failed'
+        ? { ...current, stage: 'complete', status: 'complete' } : current);
       window.dispatchEvent(new Event('sigma-paper-scores-updated'));
     } catch (cause) {
       setScoreError(errorMessage(cause));
@@ -3122,7 +3126,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   </div></div>}
                 </span>
               </>}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score paper'}</button>{paper.score && <button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" disabled={!!scoringId || !binding} data-tooltip="Evaluate again using an AI call" onClick={() => void scorePaper(paper, true)}>Rescore</button>}</div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>

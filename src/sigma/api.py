@@ -861,6 +861,7 @@ def paper_view(paper_id: str, path: str):
 class PaperScoreRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
+    force: bool = False
 
 
 @app.post("/api/projects/papers/{paper_id}/score")
@@ -869,11 +870,15 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
         body.expected_binding, body.expected_project_id, body.path
     )
     try:
-        return {
-            "score": await paper_scores.score_paper(
-                body.path, paper_id, body.expected_binding, body.expected_project_id
-            )
-        }
+        score = await paper_scores.score_paper(
+            body.path,
+            paper_id,
+            body.expected_binding,
+            body.expected_project_id,
+            force=body.force,
+        )
+        papers.mark_scored_progress(body.path, paper_id)
+        return {"score": score}
     except asyncio.CancelledError:
         if memory_guard.is_critical():
             return JSONResponse({"error": memory_guard.MESSAGE}, status_code=503)
