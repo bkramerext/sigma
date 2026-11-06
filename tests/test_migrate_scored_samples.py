@@ -89,7 +89,9 @@ class ScoredSampleMigrationTests(unittest.TestCase):
         second = self.source("Warp Drive Design v3", 71)
         self.source("Other Project v1", 49)
         before = {
-            path: {relative.name: relative.read_bytes() for relative in (path / "papers").iterdir()}
+            path.resolve(): {
+                relative.name: relative.read_bytes() for relative in (path / "papers").iterdir()
+            }
             for path in (first, second)
         }
         selected = [
