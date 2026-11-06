@@ -952,6 +952,7 @@ _SAFE_MATH_COMMANDS = {
     "tan",
     "exp",
     "mapsto",
+    "rightarrow",
     "colon",
     "mid",
     "setminus",
@@ -1228,7 +1229,7 @@ def _latex_table_cell(source: str) -> str:
     def math_spans(text: str) -> str:
         def restore(match: re.Match[str]) -> str:
             token = match.group(0)
-            delim = "$" if token.startswith("$") else "$"
+            delim = "$" * 2 if token.startswith("$" * 2) else "$"
             body = token[len(delim) : -len(delim)]
             if _safe_math(body):
                 return token
@@ -5017,7 +5018,9 @@ def _tex(
 
     def render_table(table: PaperTable) -> list[str]:
         columns_count = len(table.headers)
-        cell_text = lambda value: _latex_table_cell(readable_source_text(value))
+
+        def cell_text(value: str) -> str:
+            return _latex_table_cell(readable_source_text(value))
 
         def is_numeric_cell(value: str) -> bool:
             normalized = value.strip().replace("$", "").replace(",", "")
@@ -5073,8 +5076,7 @@ def _tex(
                 r"\midrule",
             ]
             compact.extend(
-                " & ".join(cell_text(cell) for cell in row) + r"\\"
-                for row in table.rows
+                " & ".join(cell_text(cell) for cell in row) + r"\\" for row in table.rows
             )
             compact.extend(
                 [
@@ -5109,10 +5111,7 @@ def _tex(
             r"\bottomrule",
             r"\endlastfoot",
         ]
-        parts.extend(
-            " & ".join(cell_text(cell) for cell in row) + r"\\"
-            for row in table.rows
-        )
+        parts.extend(" & ".join(cell_text(cell) for cell in row) + r"\\" for row in table.rows)
         parts.extend(
             [
                 r"\end{longtable}",

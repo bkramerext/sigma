@@ -3292,7 +3292,12 @@ def test_table_cell_math_escaping_and_currency_regression() -> None:
         ],
         rows=[
             [doubled, "Approved under " + math, "Cost $5 and $10", "Ordinary prose"],
-            ["$R \\\\rightarrow\n A \\\\rightarrow T$", "Keep $1,000 literal", "No change", "Agreed"],
+            [
+                "$R \\\\rightarrow\n A \\\\rightarrow T$",
+                "Keep $1,000 literal",
+                "No change",
+                "Agreed",
+            ],
         ],
         evidence_refs=["project:pid"],
         claim_ids=["C1"],

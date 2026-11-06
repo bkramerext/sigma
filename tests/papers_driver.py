@@ -40,6 +40,7 @@ def main_part1() -> None:
     test_pdf_layout_repairs_are_bounded_and_protect_research_semantics()
     test_caption_limits_reject_cutoff_and_allow_complete_long_caption()
     test_real_tadpole_onp_and_math_table_pdfs()
+    test_table_cell_math_escaping_and_currency_regression()
     test_one_shot_and_long_form_both_proofread_before_compiling()
     test_combined_visual_schema_and_safe_tex_rendering()
     test_fast_long_draft_obeys_combined_diagram_and_table_preference()
