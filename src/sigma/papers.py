@@ -15,6 +15,7 @@ import zlib
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
@@ -117,6 +118,11 @@ class PaperProgressEvent(TypedDict):
 
 
 PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
+
+# Task-local observation avoids changing one-shot provider API or leaking across jobs.
+_paper_output_observer: ContextVar[Callable[[], Awaitable[None]] | None] = ContextVar(
+    "sigma_paper_output_observer", default=None
+)
 
 
 class PaperStageCallback(Protocol):
@@ -3155,7 +3161,10 @@ def _load_work(path: str) -> dict[str, Any] | None:
             or not required_progress_keys.issubset(progress_state)
             or bool(
                 set(progress_state)
-                - (required_progress_keys | {"failure_reason", "detail", "sections_total", "last_progress_at"})
+                - (
+                    required_progress_keys
+                    | {"failure_reason", "detail", "sections_total", "last_progress_at"}
+                )
             )
             or (
                 "sections_total" in progress_state
@@ -3310,10 +3319,14 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
             or not isinstance(state.get("started_at"), str)
             or not isinstance(state.get("updated_at"), str)
             or type(state.get("elapsed_seconds")) is not int
-            or ("last_progress_at" in state and state["last_progress_at"] is not None and (
-                not isinstance(state["last_progress_at"], str)
-                or not re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:.+-]+", state["last_progress_at"])
-            ))
+            or (
+                "last_progress_at" in state
+                and state["last_progress_at"] is not None
+                and (
+                    not isinstance(state["last_progress_at"], str)
+                    or not re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:.+-]+", state["last_progress_at"])
+                )
+            )
             or (
                 "sections_total" in state
                 and (
@@ -3658,7 +3671,11 @@ def progress_status(path: str) -> dict[str, Any] | None:
             if status == "failed" and state.get("failure_reason")
             else {}
         ),
-        **({"last_progress_at": state["last_progress_at"]} if isinstance(state.get("last_progress_at"), str) else {}),
+        **(
+            {"last_progress_at": state["last_progress_at"]}
+            if isinstance(state.get("last_progress_at"), str)
+            else {}
+        ),
         **(
             {"sections_total": state["sections_total"]}
             if type(state.get("sections_total")) is int and 1 <= state["sections_total"] <= 100
@@ -5566,7 +5583,6 @@ async def _provider(
     project_id: str | None = None,
     project_path_value: str | None = None,
     include_diagrams: bool = True,
-    on_output_delta: Callable[[], Awaitable[None]] | None = None,
 ) -> tuple[PaperDraft, str]:
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
@@ -5652,7 +5668,7 @@ async def _provider(
                     max_event_chars=4_000_000,
                     max_events=100_000,
                     max_text_bytes=MAX_RESPONSE_BYTES,
-                    on_output_delta=on_output_delta,
+                    on_output_delta=_paper_output_observer.get(),
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
                         "Completed work is saved; transient errors may be retried up to three attempts."
@@ -6179,6 +6195,10 @@ async def _generate_long_draft(
         state["provider_calls_total"] = int(state.get("provider_calls_total", calls - 1)) + 1
         save_state(state)
 
+    async def section_output_observed(number: int) -> None:
+        if on_output_delta is not None:
+            await on_output_delta(number)
+
     async def call_with_safe_retry(
         input_value: Any,
         *,
@@ -6213,7 +6233,7 @@ async def _generate_long_draft(
                     response_model=response_model,
                     max_input_bytes=max_input_bytes,
                     on_output_delta=(
-                        (lambda number=input_value["section_number"]: on_output_delta(number))
+                        (lambda number=input_value["section_number"]: section_output_observed(number))
                         if on_output_delta is not None
                         and schema_name == "sigma_long_paper_section"
                         and isinstance(input_value, dict)
@@ -7984,7 +8004,9 @@ async def _generate_impl(
             now = _now()
             updated = {**active, "stage": stage, "updated_at": now, "last_progress_at": now}
             if active.get("stage") == "retry":
-                updated["current"] = len(work.get("section_drafts", {})) if stage == "sections" else None
+                updated["current"] = (
+                    len(work.get("section_drafts", {})) if stage == "sections" else None
+                )
                 updated["total"] = updated.get("sections_total") if stage == "sections" else None
             retry_detail = str(active.get("detail", ""))
             retry_section = re.search(r"Retrying section (\d+)", retry_detail, re.IGNORECASE)
@@ -8054,9 +8076,12 @@ async def _generate_impl(
             previous_active = _active_progress.get(project_key)
             if state in {"milestone", "complete"}:
                 saved_progress["last_progress_at"] = now
-            elif previous_active and stage in {previous_active.get("stage"), "retry"}:
-                if isinstance(previous_active.get("last_progress_at"), str):
-                    saved_progress["last_progress_at"] = previous_active["last_progress_at"]
+            elif (
+                previous_active
+                and stage in {previous_active.get("stage"), "retry"}
+                and isinstance(previous_active.get("last_progress_at"), str)
+            ):
+                saved_progress["last_progress_at"] = previous_active["last_progress_at"]
             if detail:
                 saved_progress["detail"] = detail[:160]
             sections_total = total if stage == "sections" else None
@@ -8525,6 +8550,9 @@ async def _generate_impl(
                             3,
                             detail=f"Retrying paper writing (attempt {attempt_number} of 3).",
                         )
+                    observer_token = _paper_output_observer.set(
+                        lambda: report_activity("writing")
+                    )
                     try:
                         draft, model = await _provider(
                             {
@@ -8536,13 +8564,14 @@ async def _generate_impl(
                             view.project.id,
                             path,
                             include_diagrams,
-                            on_output_delta=lambda: report_activity("writing"),
                         )
                     except (PaperConnectionFailure, PaperTransientFailure):
                         if attempt_number == 3:
                             raise
                     else:
                         break
+                    finally:
+                        _paper_output_observer.reset(observer_token)
                 if draft is None:
                     raise ProjectError("Paper writing ended without a complete provider draft")
                 # A complete structured author response is valuable paid work.

@@ -4,8 +4,8 @@ import codecs
 import email.utils
 import json
 import re
-from datetime import UTC, datetime
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
