@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from html import escape
 import logging
 import re
 import sqlite3
@@ -167,7 +168,6 @@ def message_for(
     link: str,
     *,
     incomplete: bool = False,
-
 ) -> EmailMessage:
     if event not in _COPY or type(number) is not int or number < 1:
         raise ValueError("Unsupported notification.")
@@ -183,7 +183,15 @@ def message_for(
         )
     message = EmailMessage()
     message["Subject"] = f"SIGMA: {subject.format(number=number)} · {clean}"
-    message.set_content(f"{body.format(number=number)}\n\n{action}: {link}\n")
+    formatted_body = body.format(number=number)
+    message.set_content(f"{formatted_body}\n\n{action}: {link}\n")
+    html_body = escape(formatted_body).replace("\n", "<br>\n")
+    message.add_alternative(
+        f"<html><body><p>{html_body}</p>"
+        f'<p><a href="{escape(link, quote=True)}">{escape(action)}</a></p>'
+        "</body></html>",
+        subtype="html",
+    )
     return message
 
 
@@ -354,13 +362,21 @@ def _attach_completed_paper(message: EmailMessage, path: str, paper_id: str, num
     except (OSError, ValueError, TypeError, KeyError, papers.ProjectError) as exc:
         _LOG.warning("progress_email.paper_pdf_not_attached error_type=%s", type(exc).__name__)
         note = "The PDF could not be attached. You can download it using the link below."
-    # The body must never claim an attachment that was not added.
-    original_body = message.get_body(preferencelist=("plain",))
-    if original_body is None:
-        return
-    body_text = original_body.get_content()
+    _add_attachment_notice(message, note)
+
+
+def _add_attachment_notice(message: EmailMessage, note: str) -> None:
+    """Keep the text and HTML alternatives consistent with actual attachment status."""
     phrase = "Your paper is ready to review."
-    original_body.set_content(body_text.replace(phrase, f"{phrase}\n{note}", 1))
+    plain = message.get_body(preferencelist=("plain",))
+    if plain is not None:
+        plain.set_content(plain.get_content().replace(phrase, f"{phrase}\n{note}", 1))
+    html = message.get_body(preferencelist=("html",))
+    if html is not None:
+        html.set_content(
+            html.get_content().replace(phrase, f"{phrase}<br>\n{escape(note)}", 1),
+            subtype="html",
+        )
 
 
 def _deliver_pending() -> None:
@@ -428,12 +444,8 @@ def _deliver_pending() -> None:
                                 message, row["path"], row["paper_id"], row["number"]
                             )
                         else:
-                            message.set_content(
-                                message.get_content().replace(
-                                    "Your paper is ready to review.",
-                                    "Your paper is ready to review.\nThe PDF could not be attached; open SIGMA to download it.",
-                                    1,
-                                )
+                            _add_attachment_notice(
+                                message, "The PDF could not be attached; open SIGMA to download it."
                             )
                     send_message(message, recipients=[recipient])
                     state = "sent"
