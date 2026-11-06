@@ -1110,6 +1110,23 @@ with sync_playwright() as playwright:
 
     page.route("**/api/projects/papers/restart", simulate_restart)
     restart.click()
+    confirm_restart = page.get_by_role("group", name="Confirm start over on paper generation")
+    expect(confirm_restart).to_be_visible()
+    assert reset_calls == [], reset_calls
+    confirm_restart.get_by_role("button", name="Cancel").click()
+    expect(confirm_restart).to_have_count(0)
+    assert reset_calls == [], reset_calls
+    restart.click()
+    page.keyboard.press("Escape")
+    expect(confirm_restart).to_have_count(0)
+    assert reset_calls == [], reset_calls
+    restart.click()
+    expect(confirm_restart).to_be_visible()
+    page.locator("#paper-draft-content").click(position={"x": 5, "y": 5})
+    expect(confirm_restart).to_have_count(0)
+    assert reset_calls == [], reset_calls
+    restart.click()
+    confirm_restart.get_by_role("button", name="Confirm").click()
     expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     assert reset_calls == ["POST"], reset_calls
     assert dispatched == ["POST"], dispatched
@@ -1129,6 +1146,10 @@ with sync_playwright() as playwright:
 
     page.route("**/api/projects/papers/discard", simulate_discard)
     start_over.click()
+    queued_confirm = page.get_by_role("group", name="Confirm start over on paper generation")
+    expect(queued_confirm).to_be_visible()
+    assert discard_calls == [], discard_calls
+    queued_confirm.get_by_role("button", name="Confirm").click()
     expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
     assert discard_calls == ["POST"], discard_calls
     assert dispatched == ["POST"], dispatched
