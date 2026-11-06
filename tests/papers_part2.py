@@ -424,6 +424,17 @@ def test_unreadable_authored_control_bytes_compile_with_visible_review_marks() -
     assert codes == ["U+0002", "U+001A", "U+001C"]
     assert "[U+0002]" in repaired and "[U+001C]" in repaired
     assert "\x02" in source and "\x02" not in repaired
+
+
+def manual_tectonic_control_byte_pdf_compilation() -> None:
+    """Optional Tectonic integration check; deliberately not in the routine test driver."""
+    source = (
+        "\\documentclass{article}\\begin{document}"
+        "$i=1,\x02ldots,n$ and $R\x1c1+\x1a_{k=1}^n k$"
+        "\\end{document}"
+    )
+    repaired, codes = papers._visible_invalid_tex_controls(source)
+    assert codes == ["U+0002", "U+001A", "U+001C"]
     pdf = papers._compile_pdf(repaired)
     assert pdf.startswith(b"%PDF-")
 
