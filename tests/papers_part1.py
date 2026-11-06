@@ -1454,6 +1454,19 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert r"\begin{abstract}" in saved["tex_source"]
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
+        # A one-shot provider response has no known partial section total.
+        # Once the complete draft is saved, the real total appears before
+        # validation and survives a failed PDF compilation.
+        writing = next(item for item in first_events if item["stage"] == "writing")
+        assert writing["current"] is None and writing["total"] is None
+        sections = [item for item in first_events if item["stage"] == "sections"]
+        assert len(sections) == 1
+        assert sections[0]["current"] == sections[0]["total"] == len(saved["draft"]["sections"])
+        assert sections[0].get("sections_total") == len(saved["draft"]["sections"])
+        assert failed_progress["sections_total"] == len(saved["draft"]["sections"])
+        resumed_sections = [item for item in retry_events if item["stage"] == "sections"]
+        assert len(resumed_sections) == 1
+        assert resumed_sections[0]["current"] == resumed_sections[0]["total"]
         first_stages = [event["stage"] for event in first_events if event["state"] == "active"]
         assert first_stages.index("validation") < first_stages.index("proofreading")
         assert first_stages.index("proofreading") < first_stages.index("compile")

@@ -880,7 +880,79 @@ with sync_playwright() as playwright:
     assert all(
         abs(line["x"] - active_geometry["lines"][0]["x"]) < 3 for line in active_geometry["lines"]
     ), active_geometry
-    assert abs(active_geometry["lines"][-1]["midY"] - active_geometry["dotMidY"]) < 9
+    assert abs(active_geometry["lines"][-1]["midY"] - active_geometry["dotMidY"]) < 6
+
+    # Paper steps display real completed/total sections and do not duplicate
+    # the heartbeat in the Paper N heading. The mocked active project remains
+    # provider-free; refreshing tests durable progress exactly as a reconnect.
+    step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
+    expect(step).to_have_text("Writing sections (1/3)", timeout=10000)
+    expect(page.locator(".paper-draft-card .paper-draft-pulse")).to_have_count(0)
+    page.unroute("**/api/projects/papers/progress?*")
+    page.route(
+        "**/api/projects/papers/progress?*",
+        lambda route: route.fulfill(
+            json={
+                "progress": {
+                    "status": "active",
+                    "stage": "sections",
+                    "current": 2,
+                    "total": 3,
+                    "sections_total": 3,
+                    "started_at": "2026-11-05T01:00:00+00:00",
+                    "elapsed_seconds": 91,
+                }
+            }
+        ),
+    )
+    page.reload()
+    step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
+    expect(step).to_have_text("Writing sections (2/3)", timeout=10000)
+    page.unroute("**/api/projects/papers/progress?*")
+    page.route(
+        "**/api/projects/papers/progress?*",
+        lambda route: route.fulfill(
+            json={
+                "progress": {
+                    "status": "active",
+                    "stage": "validation",
+                    "current": None,
+                    "total": None,
+                    "sections_total": 3,
+                    "started_at": "2026-11-05T01:00:00+00:00",
+                    "elapsed_seconds": 92,
+                }
+            }
+        ),
+    )
+    page.reload()
+    step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
+    expect(step).to_have_text("Wrote sections (3)", timeout=10000)
+
+    # The Papers list has individual session-style cards, not one shared
+    # border with internal separators. The grid gap applies equally to all
+    # drafts and saved versions.
+    cards_style = page.locator(".papers-pane .saved-paper-library").evaluate(
+        """library => {
+          const card = library.querySelector(':scope > .saved-paper-card');
+          const outer = getComputedStyle(library);
+          const inner = getComputedStyle(card);
+          return {
+            display: outer.display,
+            gap: Number.parseFloat(outer.rowGap),
+            outerBorder: outer.borderTopWidth,
+            cardBorder: inner.borderTopWidth,
+            cardRadius: Number.parseFloat(inner.borderTopLeftRadius),
+            cardBackground: inner.backgroundColor
+          };
+        }"""
+    )
+    assert cards_style["display"] == "grid", cards_style
+    assert cards_style["gap"] >= 8, cards_style
+    assert cards_style["outerBorder"] == "0px", cards_style
+    assert cards_style["cardBorder"] == "1px", cards_style
+    assert cards_style["cardRadius"] >= 5, cards_style
+    assert cards_style["cardBackground"] != "rgba(0, 0, 0, 0)", cards_style
 
     assert not errors, errors
     browser.close()

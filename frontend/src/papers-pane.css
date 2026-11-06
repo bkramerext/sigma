@@ -43,9 +43,18 @@
 .workspace-page .papers-pane .paper-stage-list li.is-past { color: #a9b9c6; }
 .workspace-page .papers-pane .paper-stage-list li span { color: #d4e0eb; }
 .workspace-page .papers-pane .paper-progress-error { color: #efa89a; }
-.workspace-page .papers-pane .saved-paper-library { gap: 0; margin-top: 2px; border: 1px solid var(--workspace-line); border-radius: 10px; overflow: visible; }
-.workspace-page .papers-pane .saved-paper-card { display: grid; min-width: 0; padding: 11px 16px; border: 0; border-top: 1px solid var(--workspace-line); border-radius: 0; background: transparent; }
-.workspace-page .papers-pane .saved-paper-card:first-child { border-top: 0; }
+/* Paper versions are independent disclosure cards, like Session rows. */
+.workspace-page .papers-pane .saved-paper-library {
+  display: grid; gap: 8px; margin-top: 2px;
+  border: 0; border-radius: 0; background: transparent; overflow: visible;
+}
+.workspace-page .papers-pane .saved-paper-card {
+  display: grid; min-width: 0; padding: 14px 16px;
+  border: 1px solid #344754; border-radius: 5px; background: #09141e;
+}
+.workspace-page .papers-pane .paper-draft-card:has(.paper-stage-list li.is-active) {
+  border-color: #466071; background: #112331;
+}
 .workspace-page .papers-pane .saved-paper-row { display: block; min-width: 0; }
 .workspace-page .papers-pane .saved-paper-heading { gap: 4px; }
 .workspace-page .papers-pane .saved-paper-heading > p { margin: 3px 0 0 28px; font-size: 12px; }
@@ -206,7 +215,6 @@
 .workspace-page .papers-pane .paper-draft-card .paper-draft-content[hidden] { display: none; }
 .workspace-page .papers-pane .saved-paper-card .ai-paper-progress { margin: 0; }
 .workspace-page .papers-pane .saved-paper-card .ai-paper-restart-notice { margin: 0 0 10px; }
-.workspace-page .papers-pane .saved-paper-library:has(.paper-draft-card) { border-color: var(--workspace-line); }
 @media (max-width: 700px) {
   .workspace-page .papers-pane .saved-paper-title-tools { gap: 2px; }
   .workspace-page .papers-pane .paper-draft-card .paper-draft-content { margin-left: 0; }
@@ -239,10 +247,6 @@
 }
 .workspace-page .papers-pane .paper-draft-process-control:disabled {
   opacity: .5; cursor: not-allowed;
-}
-.workspace-page .papers-pane .paper-draft-pulse {
-  display: inline-flex; flex: 0 0 28px; align-items: center;
-  justify-content: center; width: 28px; height: 28px;
 }
 .workspace-page .papers-pane .paper-draft-card .paper-draft-content { margin-top: 3px; }
 .workspace-page .papers-pane .paper-draft-card .ai-paper-progress {
