@@ -3264,6 +3264,81 @@ def test_caption_limits_reject_cutoff_and_allow_complete_long_caption() -> None:
     assert len(parsed.caption) > 300
 
 
+def test_table_cell_math_escaping_and_currency_regression() -> None:
+    """Table math must survive doubled escapes and wrapped author text."""
+    math = r"$A \rightarrow R \rightarrow T$"
+    doubled = r"$A \\rightarrow R \\rightarrow T$"
+    expected = r"$A \rightarrow R \rightarrow T$"
+    assert papers._latex_table_cell(math) == expected
+    assert papers._latex_table_cell(doubled) == expected
+    assert papers._latex_table_cell("$A \\\\rightarrow\n R \\\\rightarrow T$") == expected
+    assert papers._latex_table_cell("Path " + doubled + " approved") == (
+        "Path " + expected + " approved"
+    )
+    assert papers._latex_table_cell("Costs $5 and $10.") == r"Costs \$5 and \$10."
+    assert papers._latex_table_cell("Price $5, formula " + math) == (
+        r"Price \$5, formula " + expected
+    )
+    assert papers._latex_table_cell(r"$A \\input{secrets} B$").count(r"\textbackslash") >= 1
+
+    paper = draft("project:pid")
+    table = papers.PaperTable(
+        caption="Constructed history and transfer-contract comparison for approval.",
+        headers=[
+            "Constructed history",
+            "Authorization-time contract",
+            "Transfer-start contract",
+            "Expressly approved lease",
+        ],
+        rows=[
+            [doubled, "Approved under " + math, "Cost $5 and $10", "Ordinary prose"],
+            ["$R \\\\rightarrow\n A \\\\rightarrow T$", "Keep $1,000 literal", "No change", "Agreed"],
+        ],
+        evidence_refs=["project:pid"],
+        claim_ids=["C1"],
+    )
+    modified = paper.model_copy(
+        update={
+            "sections": [
+                paper.sections[0].model_copy(update={"tables": [table]}),
+                paper.sections[1],
+            ]
+        }
+    )
+    tex = papers._tex(modified, [], "a" * 64)
+    assert r"\begin{longtable}{" in tex
+    assert expected in tex
+    assert r"$R \rightarrow A \rightarrow T$" in tex
+    assert r"Cost \$5 and \$10" in tex
+    assert r"Keep \$1,000 literal" in tex
+    assert r"\\rightarrow" not in tex
+    assert r"\$A" not in tex
+    assert papers._latex_prose(r"Body $A \rightarrow T$") == r"Body $A \rightarrow T$"
+    assert table.rows[0][0] == doubled  # no mutation of the authored source
+
+    compact = table.model_copy(
+        update={
+            "headers": ["History", "Contract", "Price"],
+            "rows": [[doubled, "Approved", "Costs $5 and $10"]],
+        }
+    )
+    compact_draft = paper.model_copy(
+        update={
+            "sections": [
+                paper.sections[0].model_copy(update={"tables": [compact]}),
+                paper.sections[1],
+            ]
+        }
+    )
+    compact_tex = papers._tex(compact_draft, [], "a" * 64)
+    assert r"\begin{tabular}{" in compact_tex
+    assert expected in compact_tex
+    assert r"Costs \$5 and \$10" in compact_tex
+    if shutil.which("tectonic"):
+        pdf = papers._compile_pdf(tex, timeout_seconds=90)
+        assert pdf.startswith(b"%PDF-")
+
+
 def test_real_tadpole_onp_and_math_table_pdfs() -> None:
     """Compile realistic fixture PDFs and gate on width/layout warnings."""
     if not shutil.which("tectonic"):
