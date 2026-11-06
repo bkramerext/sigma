@@ -14,6 +14,7 @@ import re
 import sqlite3
 import time
 from email.message import EmailMessage
+from html import escape
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode, urlsplit
@@ -31,6 +32,8 @@ Event = Literal[
 _LOG = logging.getLogger("sigma.lifecycle")
 _MAX_ATTEMPTS = 3
 _PAUSE_SETTLE_SECONDS = 60
+# Base64/MIME overhead must fit within Gmail's 25 MB message limit.
+_MAX_PDF_ATTACHMENT_BYTES = 15 * 1024 * 1024
 _PUMP: asyncio.Task[None] | None = None
 
 
@@ -159,7 +162,12 @@ _COPY: dict[Event, tuple[str, str, str]] = {
 
 
 def message_for(
-    event: Event, project: str, number: int, link: str, *, incomplete: bool = False
+    event: Event,
+    project: str,
+    number: int,
+    link: str,
+    *,
+    incomplete: bool = False,
 ) -> EmailMessage:
     if event not in _COPY or type(number) is not int or number < 1:
         raise ValueError("Unsupported notification.")
@@ -175,7 +183,15 @@ def message_for(
         )
     message = EmailMessage()
     message["Subject"] = f"SIGMA: {subject.format(number=number)} · {clean}"
-    message.set_content(f"{body.format(number=number)}\n\n{action}: {link}\n")
+    formatted_body = body.format(number=number)
+    message.set_content(f"{formatted_body}\n\n{action}: {link}\n")
+    html_body = escape(formatted_body).replace("\n", "<br>\n")
+    message.add_alternative(
+        f"<html><body><p>{html_body}</p>"
+        f'<p><a href="{escape(link, quote=True)}">{escape(action)}</a></p>'
+        "</body></html>",
+        subtype="html",
+    )
     return message
 
 
@@ -317,6 +333,60 @@ def _pause_still_actionable(row: sqlite3.Row) -> bool:
     return True
 
 
+def _attach_completed_paper(message: EmailMessage, path: str, paper_id: str, number: int) -> None:
+    """Attach an integrity-checked published PDF without jeopardizing notification delivery.
+
+    This runs inside the outbox's background thread. If the file is absent,
+    unsafe, or too large for Gmail, the email still links to the paper.
+    """
+    from sigma import papers
+
+    try:
+        record = papers.get_paper(path, paper_id, include_tex=False)
+        size = record.get("pdf_size_bytes")
+        if type(size) is not int or size <= 0 or size > _MAX_PDF_ATTACHMENT_BYTES:
+            reason = (
+                "too_large"
+                if type(size) is int and size > _MAX_PDF_ATTACHMENT_BYTES
+                else "unavailable"
+            )
+            _LOG.warning("progress_email.paper_pdf_not_attached reason=%s", reason)
+            note = (
+                "The PDF is too large to attach. Download it using the link below."
+                if reason == "too_large"
+                else "The PDF could not be attached. You can download it using the link below."
+            )
+        else:
+            contents = papers.get_pdf(path, paper_id)
+            if len(contents) != size or not contents.startswith(b"%PDF-"):
+                raise ValueError("Invalid published PDF")
+            message.add_attachment(
+                contents,
+                maintype="application",
+                subtype="pdf",
+                filename=f"SIGMA-Paper-{number}.pdf",
+            )
+            note = "A PDF copy of your paper is attached."
+    except (OSError, ValueError, TypeError, KeyError, papers.ProjectError) as exc:
+        _LOG.warning("progress_email.paper_pdf_not_attached error_type=%s", type(exc).__name__)
+        note = "The PDF could not be attached. You can download it using the link below."
+    _add_attachment_notice(message, note)
+
+
+def _add_attachment_notice(message: EmailMessage, note: str) -> None:
+    """Keep the text and HTML alternatives consistent with actual attachment status."""
+    phrase = "Your paper is ready to review."
+    plain = message.get_body(preferencelist=("plain",))
+    if plain is not None:
+        plain.set_content(plain.get_content().replace(phrase, f"{phrase}\n{note}", 1))
+    html = message.get_body(preferencelist=("html",))
+    if html is not None:
+        html.set_content(
+            html.get_content().replace(phrase, f"{phrase}<br>\n{escape(note)}", 1),
+            subtype="html",
+        )
+
+
 def _deliver_pending() -> None:
     """Claim one pending delivery atomically; preserve ambiguous outcomes."""
     cfg = cloud_auth.config()
@@ -376,6 +446,15 @@ def _deliver_pending() -> None:
                         link,
                         incomplete=bool(row["incomplete"]),
                     )
+                    if row["event"] == "paper_finished":
+                        if row["paper_id"]:
+                            _attach_completed_paper(
+                                message, row["path"], row["paper_id"], row["number"]
+                            )
+                        else:
+                            _add_attachment_notice(
+                                message, "The PDF could not be attached; open SIGMA to download it."
+                            )
                     send_message(message, recipients=[recipient])
                     state = "sent"
                 except cloud_auth.SMTPDeliveryError as exc:
