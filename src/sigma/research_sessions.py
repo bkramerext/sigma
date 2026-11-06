@@ -409,6 +409,11 @@ def _argument_is_complete(
     ):
         return False
     for item in steps:
+        # Historical/sample evidence can contain prose where a typed reviewed
+        # step is expected. Such evidence is incomplete, never a server error
+        # or grounds for a positive scientific assessment.
+        if not isinstance(item, dict) or not isinstance(item.get("review"), dict):
+            return False
         if (
             item.get("review", {}).get("disposition") != "accepted"
             or len(str(item.get("review", {}).get("rationale", "")).strip()) < 24

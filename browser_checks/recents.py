@@ -36,6 +36,36 @@ with sync_playwright() as playwright:
             return
         route.fulfill(response=response)
 
+    # Saved startup must never silently request the heavy Samples catalog.
+    # The Samples panel is mounted but inactive until its own tab is selected.
+    saved_context = browser.new_context()
+    saved_context.add_init_script("localStorage.setItem('sigma.homeCatalogTab', 'recent')")
+    saved_page = saved_context.new_page()
+    sample_requests: list[str] = []
+    saved_page.on(
+        "request",
+        lambda request: (
+            sample_requests.append(request.url)
+            if request.url.split("?", 1)[0] == f"{UI_ORIGIN}/api/projects/samples"
+            else None
+        ),
+    )
+    saved_page.route("**/api/**", forward)
+    with saved_page.expect_response(
+        lambda response: response.url.split("?", 1)[0] == f"{UI_ORIGIN}/api/projects/recent"
+    ):
+        saved_page.goto(UI_ORIGIN + "/")
+    saved_page.wait_for_load_state("networkidle")
+    expect(saved_page.locator("#recent-tab")).to_have_attribute("aria-selected", "true")
+    assert not sample_requests, "Opening Saved must not load hidden Samples"
+    saved_page.locator("#samples-tab").click()
+    expect(saved_page.locator("#samples-panel .sample-open").first).to_be_visible()
+    assert len(sample_requests) == 1, "Samples should load on first selection only"
+    saved_page.locator("#recent-tab").click()
+    saved_page.locator("#samples-tab").click()
+    assert len(sample_requests) == 1, "Cached Samples should survive tab switches"
+    saved_context.close()
+
     page.route("**/api/**", forward)
     page.goto(UI_ORIGIN + "/")
     project_actions = page.locator(".home-projects-heading .home-project-action")

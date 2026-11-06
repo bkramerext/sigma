@@ -5195,24 +5195,30 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
   </div>;
 }
 
-function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView) => void; guest?: boolean }) {
+function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (view: ProjectView) => void; guest?: boolean; active?: boolean }) {
   const [projects, setProjects] = useState<SampleProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [opening, setOpening] = useState('');
   const pending = useRef(false);
+  const loaded = useRef(false);
   useEffect(() => {
+    // Loading Saved must not verify the entire sample-paper catalog.
+    if (!active || loaded.current) return;
     const controller = new AbortController();
     void fetch('/api/projects/samples', { signal: controller.signal }).then(async response => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Samples unavailable.');
+      if (controller.signal.aborted) return;
       setProjects([...data.projects].sort((a: SampleProject, b: SampleProject) => {
         const typeOrder = researchTypeLabel(a.investigation_type).localeCompare(researchTypeLabel(b.investigation_type), 'en', { sensitivity: 'base' });
         return typeOrder || a.title.localeCompare(b.title, 'en', { sensitivity: 'base' });
-      })); setLoading(false);
+      }));
+      loaded.current = true;
+      setError(''); setLoading(false);
     }).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } });
     return () => controller.abort();
-  }, []);
+  }, [active]);
   async function open(sample: SampleProject) {
     if (pending.current) return; pending.current = true; setOpening(sample.id); setError('');
     try {
@@ -5283,7 +5289,7 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
   </div>
     <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'}/>}</div>
     <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'}/>}</div>
-    <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
+    <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest} active={tab === 'samples'}/></div>
   </div>;
 }
 

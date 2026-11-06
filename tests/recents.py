@@ -35,6 +35,33 @@ from sigma.recents import (
 from sigma.samples import open_sample_project, sample_projects
 
 
+def check_recent_list_does_not_validate_sample_pdfs(root: Path) -> None:
+    """Saved listing and opening need sample IDs, never sample PDF contents."""
+    from sigma import samples
+
+    # This is intentionally a cold call: do not depend on prior sample work.
+    with patch.object(
+        samples,
+        "_sample_papers",
+        side_effect=AssertionError("Saved Projects must never validate sample PDFs"),
+    ):
+        sample_ids = samples.sample_project_ids()
+        assert sample_ids
+        assert len(sample_ids) == len(samples._projects())
+        view = initialize_project(
+            root / "sample-id-only-list-test.sigma",
+            "Saved list only",
+            "Do not read unrelated sample papers.",
+        )
+        open_project(view.path)
+        entries = recent_projects()["projects"]
+        assert any(item["id"] == view.project.id and item["available"] for item in entries)
+        with TestClient(app) as client:
+            response = client.get("/api/projects/recent")
+            assert response.status_code == 200
+            assert response.headers["Server-Timing"].startswith("saved-projects;dur=")
+
+
 def check_project_metadata_cache_invalidation(root: Path) -> None:
     """Unchanged Saved-list polls must not read full paper records repeatedly."""
     from sigma import paper_scores, papers
@@ -661,6 +688,7 @@ def check(root: Path, base: Path) -> None:
         index_path.unlink(missing_ok=True)
         backup.rename(index_path)
     assert recent_projects()["projects"]
+    check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
     check_home_session_status_cache(root)
     check_paper_preflight_presence(root)
