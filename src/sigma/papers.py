@@ -952,6 +952,7 @@ _SAFE_MATH_COMMANDS = {
     "tan",
     "exp",
     "mapsto",
+    "rightarrow",
     "colon",
     "mid",
     "setminus",
@@ -1213,6 +1214,45 @@ def _latex_prose(source: str, *, display_long_math: bool = False) -> str:
         position = match.end() + len(consumed_punctuation)
     output.append(plain(source[position:]))
     return "".join(output)
+
+
+def _latex_table_cell(source: str) -> str:
+    """Typeset validated inline math in table cells without trusting raw TeX.
+
+    Some authored table data contains JSON/Markdown-style doubled command
+    backslashes. Normalize those *only* inside valid math spans for rendering;
+    the persisted draft is not modified. Plain currency remains prose.
+    """
+    source = " ".join(source.split())
+    currency = re.compile(r"(?<!\\)\$\d+(?:,\d{3})*(?:\.\d+)?(?=\s|[.,;:!?]|$)")
+
+    def math_spans(text: str) -> str:
+        def restore(match: re.Match[str]) -> str:
+            token = match.group(0)
+            delim = "$" * 2 if token.startswith("$" * 2) else "$"
+            body = token[len(delim) : -len(delim)]
+            if _safe_math(body):
+                return token
+            repaired = re.sub(r"\\\\(?=[A-Za-z])", r"\\", body)
+            if repaired != body and _safe_math(repaired):
+                return delim + repaired + delim
+            return token
+
+        return _latex_prose(_MATH_SPAN.sub(restore, text))
+
+    rendered: list[str] = []
+    position = 0
+    for match in currency.finditer(source):
+        # $5 \rightarrow 10$ is mathematical, while "$5 and $10"
+        # contains literal currency amounts rather than paired math.
+        span = _MATH_SPAN.match(source, match.start())
+        if span is not None and re.search(r"\\[A-Za-z]+|[+*/=<>^_]", span.group(0)[1:-1]):
+            continue
+        rendered.append(math_spans(source[position : match.start()]))
+        rendered.append(_latex(match.group(0)))
+        position = match.end()
+    rendered.append(math_spans(source[position:]))
+    return "".join(rendered)
 
 
 def _publication_paragraphs(source: str) -> list[str]:
@@ -4979,6 +5019,9 @@ def _tex(
     def render_table(table: PaperTable) -> list[str]:
         columns_count = len(table.headers)
 
+        def cell_text(value: str) -> str:
+            return _latex_table_cell(readable_source_text(value))
+
         def is_numeric_cell(value: str) -> bool:
             normalized = value.strip().replace("$", "").replace(",", "")
             normalized = re.sub(r"\\(?:text|mathrm)\{([^{}]*)\}", r"\1", normalized)
@@ -5021,7 +5064,7 @@ def _tex(
             )
             + "@{}"
         )
-        header = " & ".join(r"\textbf{" + prose_text(cell) + "}" for cell in table.headers)
+        header = " & ".join(r"\textbf{" + cell_text(cell) + "}" for cell in table.headers)
         if columns_count <= 3 and len(table.rows) <= 5:
             compact = [
                 r"\begin{table}[!htbp]",
@@ -5033,8 +5076,7 @@ def _tex(
                 r"\midrule",
             ]
             compact.extend(
-                " & ".join(prose_text(" ".join(cell.split())) for cell in row) + r"\\"
-                for row in table.rows
+                " & ".join(cell_text(cell) for cell in row) + r"\\" for row in table.rows
             )
             compact.extend(
                 [
@@ -5069,10 +5111,7 @@ def _tex(
             r"\bottomrule",
             r"\endlastfoot",
         ]
-        parts.extend(
-            " & ".join(prose_text(" ".join(cell.split())) for cell in row) + r"\\"
-            for row in table.rows
-        )
+        parts.extend(" & ".join(cell_text(cell) for cell in row) + r"\\" for row in table.rows)
         parts.extend(
             [
                 r"\end{longtable}",
