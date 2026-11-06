@@ -5754,7 +5754,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         setExclusiveSections(data.expand_one_project_section_at_a_time);
         if (data.expand_one_project_section_at_a_time) {
           const params = new URLSearchParams(window.location.search);
-          const initialSection = params.has('reveal_session') || params.has('reveal_understanding') ? 'sessions' : params.has('reveal_strategy') ? 'strategies' : 'project';
+          const initialSection = params.has('reveal_session') || params.has('reveal_understanding') ? 'sessions' : params.has('reveal_paper') ? 'papers' : params.has('reveal_strategy') ? 'strategies' : 'project';
           window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: initialSection }));
         }
       }).catch(cause => { if (!controller.signal.aborted) console.warn('Section layout preference unavailable', errorMessage(cause)); });
@@ -5778,6 +5778,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlPlayIntent = params.get('resume_play') === '1';
+    // Following a progress email is view-only, even if another tab previously
+    // left a guest Play intent in session storage.
+    if (params.has('reveal_session') || params.has('reveal_paper')) return;
     if (
       resumedPlay.current
       || !view
@@ -6358,8 +6361,13 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     && !invitationRequestOpen
     && !invitationRecorded;
   const currentProjectPath = new URLSearchParams(window.location.search).get('path');
+  const notificationLink = new URLSearchParams(window.location.search);
+  const fromProgressEmail = notificationLink.has('reveal_session') || notificationLink.has('reveal_paper');
+  const signInDestination = fromProgressEmail
+    ? `/project?${notificationLink.toString()}`
+    : `/project?${new URLSearchParams({ path: currentProjectPath ?? '', resume_play: '1' })}`;
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
-    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}&resume_play=1` })}`
+    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: signInDestination })}`
     : '/api/cloud-auth/login';
   useEffect(() => {
     setInvitationRecorded(invitationRequestOpen);
