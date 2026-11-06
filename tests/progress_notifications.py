@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any, cast
 from unittest.mock import patch
 
 from sigma import cloud_auth, progress_notifications
@@ -14,9 +15,14 @@ def main() -> None:
         database = Path(root) / "access.sqlite3"
         cloud_auth._initialize(database)
         cfg = cloud_auth.Config(
-            enabled=True, client_id=None, client_secret=None,
+            enabled=True,
+            client_id=None,
+            client_secret=None,
             origin="http://localhost:5173",
-            admin_contact_email=None, database=database, error=None, local=True,
+            admin_contact_email=None,
+            database=database,
+            error=None,
+            local=True,
         )
         sent: list[tuple[str, str, str]] = []
 
@@ -29,34 +35,40 @@ def main() -> None:
             patch("sigma.progress_notifications._configured", return_value=True),
             patch("sigma.mail_transport.send_message", side_effect=deliver),
         ):
-            assert progress_notifications.preference(first) == {
-                "enabled": False, "available": True
-            }
+            assert progress_notifications.preference(first) == {"enabled": False, "available": True}
             assert progress_notifications.preference(second)["enabled"] is False
             assert progress_notifications.update_preference(first, True)["enabled"] is True
             # Opening another project still uses the same signed-in subject.
             assert progress_notifications.preference(first)["enabled"] is True
             assert progress_notifications.preference(second)["enabled"] is False
-            assert progress_notifications.eligible_session_event({"status": "ended"}) == "session_finished"
-            assert progress_notifications.eligible_session_event({"status": "completed"}) == "session_finished"
-            assert progress_notifications.eligible_session_event({"status": "failed"}) == "session_failed"
-            assert progress_notifications.eligible_session_event({
-                "status": "paused", "message": "Paused · provider usage limit"
-            }) == "session_paused"
-            assert progress_notifications.eligible_session_event({
-                "status": "paused", "message": "Paused by user. A request may still finish."
-            }) is None
-            assert progress_notifications.eligible_session_event({
-                "status": "paused", "message": "Simulated research paused. No provider was called."
-            }) is None
+            for status in ("ended", "completed"):
+                assert progress_notifications.eligible_session_event({"status": status}) == "session_finished"
+            assert (
+                progress_notifications.eligible_session_event({"status": "failed"})
+                == "session_failed"
+            )
+            assert (
+                progress_notifications.eligible_session_event(
+                    {"status": "paused", "message": "Paused · provider usage limit"}
+                )
+                == "session_paused"
+            )
+            for message in (
+                "Paused by user. A request may still finish.",
+                "Simulated research paused. No provider was called.",
+            ):
+                assert progress_notifications.eligible_session_event(
+                    {"status": "paused", "message": message}
+                ) is None
             for invalid in ("true", 1, None):
                 try:
-                    progress_notifications.update_preference(first, invalid)
+                    progress_notifications.update_preference(first, cast(bool, invalid))
                 except ValueError:
                     pass
                 else:
                     raise AssertionError("Non-boolean opt-in accepted")
 
+            assert cfg.origin is not None
             session = progress_notifications.deep_link(
                 cfg.origin, "/tmp/my project.sigma", session_id="session-123"
             )
@@ -76,16 +88,20 @@ def main() -> None:
                 ("paper_failed", "Paper 3 failed"),
                 ("paper_paused", "Paper 3 paused"),
             ):
-                msg = progress_notifications.message_for(event, "Project Alpha", 3, hosted)
+                msg = progress_notifications.message_for(
+                    cast(progress_notifications.Event, event), "Project Alpha", 3, hosted
+                )
                 assert expected in msg["Subject"]
                 assert "View " in msg.get_content()
                 assert hosted in msg.get_content()
 
-            options = dict(
-                event_id="session:123:ended:2026-11-06T00:00:00Z",
-                project_title="Project Alpha", number=3,
-                path="/tmp/my project.sigma", session_id="session-123",
-            )
+            options: dict[str, Any] = {
+                "event_id": "session:123:ended:2026-11-06T00:00:00Z",
+                "project_title": "Project Alpha",
+                "number": 3,
+                "path": "/tmp/my project.sigma",
+                "session_id": "session-123",
+            }
             progress_notifications.dispatch(first, "session_finished", **options)
             progress_notifications.dispatch(first, "session_finished", **options)
             assert len(sent) == 1
@@ -100,9 +116,13 @@ def main() -> None:
 
             with patch("sigma.mail_transport.send_message", side_effect=RuntimeError("offline")):
                 progress_notifications.dispatch(
-                    first, "paper_paused",
-                    event_id="paper:failure-attempt", project_title="Project Alpha",
-                    number=4, path="/tmp/my project.sigma", paper_id="draft",
+                    first,
+                    "paper_paused",
+                    event_id="paper:failure-attempt",
+                    project_title="Project Alpha",
+                    number=4,
+                    path="/tmp/my project.sigma",
+                    paper_id="draft",
                 )
             with cloud_auth._db(cfg) as db:
                 state = db.execute(
@@ -110,22 +130,28 @@ def main() -> None:
                 ).fetchone()
                 assert state is not None
             progress_notifications.dispatch(
-                first, "paper_paused",
-                event_id="paper:failure-attempt", project_title="Project Alpha",
-                number=4, path="/tmp/my project.sigma", paper_id="draft",
+                first,
+                "paper_paused",
+                event_id="paper:failure-attempt",
+                project_title="Project Alpha",
+                number=4,
+                path="/tmp/my project.sigma",
+                paper_id="draft",
             )
             assert len(sent) == 1
             assert progress_notifications.update_preference(first, False)["enabled"] is False
             progress_notifications.dispatch(
-                first, "session_failed",
-                event_id="session:after-opt-out", project_title="Project Alpha",
-                number=4, path="/tmp/my project.sigma", session_id="session-456",
+                first,
+                "session_failed",
+                event_id="session:after-opt-out",
+                project_title="Project Alpha",
+                number=4,
+                path="/tmp/my project.sigma",
+                session_id="session-456",
             )
             assert len(sent) == 1
         with patch("sigma.cloud_auth.config", return_value=cfg):
-            assert progress_notifications.preference(None) == {
-                "enabled": False, "available": False
-            }
+            assert progress_notifications.preference(None) == {"enabled": False, "available": False}
             try:
                 progress_notifications.update_preference(
                     cloud_auth.Principal("guest", "guest@example.org", "guest"), True
@@ -134,6 +160,12 @@ def main() -> None:
                 pass
             else:
                 raise AssertionError("Guest preferences accepted")
+    # Default SMTP_HOST is implicit in mail_transport; verified credentials suffice.
+    with (
+        patch("sigma.cloud_auth.email_env", side_effect=lambda name: "sender@example.org" if name == "SMTP_USERNAME" else ""),
+        patch("sigma.cloud_auth.email_secret", return_value="configured"),
+    ):
+        assert progress_notifications._configured()
     print("PASS user-scoped progress email opt-in, six templates, links and deduplication")
 
 
