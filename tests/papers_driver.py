@@ -102,6 +102,7 @@ def main_part1() -> None:
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallback()
     test_unreadable_authored_control_bytes_compile_with_visible_review_marks()
+    test_sov_ai_structured_graph_uses_vector_layout_not_relationship_list()
     test_interrupted_section_dispatch_records_only_protect_sent_work()
     test_legacy_retry_checkpoint_identifies_only_the_logged_section()
     test_legacy_unknown_section_dispatch_stops_before_paid_replay()
