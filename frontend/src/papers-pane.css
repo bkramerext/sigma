@@ -245,6 +245,7 @@
   border: 0; background: transparent;
 }
 .workspace-page .papers-pane .paper-stage-list li.is-upcoming { color: #7f919f; }
+.workspace-page .papers-pane .paper-stage-list [data-paper-step='Writing sections'] { column-gap: 14px; }
 .workspace-page .papers-pane .paper-stage-list li.is-past::before {
   content: '✓'; padding-right: 1px; color: #7aab89;
 }
