@@ -128,6 +128,9 @@ async def start_memory_protection() -> None:
     from sigma.memory_guard import attach_loop
 
     attach_loop(asyncio.get_running_loop())
+    from sigma import progress_notifications
+
+    progress_notifications.start_outbox()
 
 
 @app.on_event("shutdown")
@@ -135,6 +138,9 @@ async def stop_memory_protection() -> None:
     from sigma.memory_guard import detach_loop
 
     detach_loop()
+    from sigma import progress_notifications
+
+    progress_notifications.stop_outbox()
 
 
 _research_qa_tasks: dict[
