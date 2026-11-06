@@ -152,14 +152,39 @@ def _to_mib(value: int | None, *, kib: bool = False) -> int | None:
     return None if value is None else round(value / (1024 if kib else 1024 * 1024))
 
 
-def _sample(period_seconds: int) -> None:
-    """Log memory every period_seconds; check pressure every five seconds.
+_MEMORY_DELTA_MIB = 64
+_MEMORY_DELTA_PERCENT = 5.0
 
+
+def _memory_changed(
+    previous: dict[str, int | float | None] | None,
+    current: dict[str, int | float | None],
+) -> bool:
+    """Only emit a sample for meaningful changes from the last *logged* sample."""
+    if previous is None:
+        return True
+    for key, after in current.items():
+        before = previous.get(key)
+        if (before is None) != (after is None):
+            return True
+        if before is None or after is None:
+            continue
+        threshold = _MEMORY_DELTA_PERCENT if key == "cgroup_pct" else _MEMORY_DELTA_MIB
+        if abs(after - before) >= threshold:
+            return True
+    return False
+
+
+def _sample(period_seconds: int) -> None:
+    """Sample every period_seconds; log only meaningful memory deltas.
+
+    Continue memory-pressure protection every five seconds regardless of logs.
     A telemetry or protection failure must not silently terminate this thread.
     """
     import time
 
     last_log = float("-inf")
+    last_reported: dict[str, int | float | None] | None = None
     wake = threading.Event()
     while True:
         try:
@@ -168,19 +193,22 @@ def _sample(period_seconds: int) -> None:
                 stats = memory_snapshot()
                 used, limit = stats["cgroup_used_mib"], stats["cgroup_limit_mib"]
                 pct = round(100 * used / limit, 1) if used is not None and limit else None
-                _LOGGER.info(
-                    "memory rss_mib=%s rss_peak_mib=%s cgroup_used_mib=%s "
-                    "cgroup_limit_mib=%s cgroup_peak_mib=%s cgroup_pct=%s "
-                    "host_available_mib=%s host_free_mib=%s",
-                    stats["rss_mib"],
-                    stats["rss_peak_mib"],
-                    used,
-                    limit,
-                    stats["cgroup_peak_mib"],
-                    pct,
-                    stats["host_available_mib"],
-                    stats["host_free_mib"],
-                )
+                fields = {**stats, "cgroup_pct": pct}
+                if _memory_changed(last_reported, fields):
+                    _LOGGER.info(
+                        "memory rss_mib=%s rss_peak_mib=%s cgroup_used_mib=%s "
+                        "cgroup_limit_mib=%s cgroup_peak_mib=%s cgroup_pct=%s "
+                        "host_available_mib=%s host_free_mib=%s",
+                        stats["rss_mib"],
+                        stats["rss_peak_mib"],
+                        used,
+                        limit,
+                        stats["cgroup_peak_mib"],
+                        pct,
+                        stats["host_available_mib"],
+                        stats["host_free_mib"],
+                    )
+                    last_reported = fields
                 last_log = now
         except Exception as exc:  # noqa: BLE001 - monitoring must survive sample errors
             _LOGGER.error("memory.sample_failed error_type=%s", type(exc).__name__)
