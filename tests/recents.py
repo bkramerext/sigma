@@ -56,6 +56,10 @@ def check_recent_list_does_not_validate_sample_pdfs(root: Path) -> None:
         open_project(view.path)
         entries = recent_projects()["projects"]
         assert any(item["id"] == view.project.id and item["available"] for item in entries)
+        with TestClient(app) as client:
+            response = client.get("/api/projects/recent")
+            assert response.status_code == 200
+            assert response.headers["Server-Timing"].startswith("saved-projects;dur=")
 
 
 def check_project_metadata_cache_invalidation(root: Path) -> None:
