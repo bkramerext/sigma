@@ -27,7 +27,86 @@ def load(name: str, filename: str):
     return module
 
 
+def check_memory_telemetry() -> None:
+    """30-second telemetry must reach both docker logs and the durable file."""
+    import io
+    import logging
+
+    from sigma import production_observability
+
+    loggers = [
+        logging.getLogger(),
+        logging.getLogger("sigma.production"),
+        logging.getLogger("uvicorn.error"),
+        logging.getLogger("uvicorn.access"),
+    ]
+    previous = [(logger, tuple(logger.handlers), logger.level) for logger in loggers]
+    stderr = io.StringIO()
+    with tempfile.TemporaryDirectory(prefix="sigma-memory-logs-") as temp:
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                        "SIGMA_CLOUD_AUTH_HOME": temp,
+                    },
+                ),
+                patch("sys.stderr", stderr),
+                patch.object(production_observability, "_STARTED", False),
+                patch.object(production_observability.threading, "Thread") as worker,
+            ):
+                production_observability.start()
+                worker.assert_called_once()
+                assert worker.call_args.kwargs["args"] == (30,)
+                assert worker.call_args.kwargs["daemon"] is True
+                logging.getLogger("sigma.production").info("memory rss_mib=123")
+                for logger in loggers:
+                    for handler in logger.handlers:
+                        handler.flush()
+                assert "memory rss_mib=123" in stderr.getvalue()
+                durable = Path(temp) / "operational-logs" / "backend.log"
+                assert "memory rss_mib=123" in durable.read_text(encoding="utf-8")
+        finally:
+            added: set[logging.Handler] = set()
+            for logger, handlers, level in previous:
+                for handler in tuple(logger.handlers):
+                    if handler not in handlers:
+                        logger.removeHandler(handler)
+                        added.add(handler)
+                logger.setLevel(level)
+            for handler in added:
+                handler.close()
+
+    # A broken state disk may lose archival logging, but it must never
+    # disable the console heartbeat or the memory-pressure safety guard.
+    stderr = io.StringIO()
+    log = logging.getLogger("sigma.production")
+    before = tuple(log.handlers)
+    before_level = log.level
+    try:
+        with (
+            patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "true"}),
+            patch("sys.stderr", stderr),
+            patch.object(production_observability, "_STARTED", False),
+            patch.object(
+                production_observability, "TimedRotatingFileHandler", side_effect=OSError
+            ),
+            patch.object(production_observability.threading, "Thread") as worker,
+        ):
+            production_observability.start()
+            worker.assert_called_once()
+            assert "persistent backend log setup failed" in stderr.getvalue()
+    finally:
+        for handler in tuple(log.handlers):
+            if handler not in before:
+                log.removeHandler(handler)
+                handler.close()
+        log.setLevel(before_level)
+
+
 def main() -> None:
+    check_memory_telemetry()
     stats = memory_snapshot()
     assert {
         "rss_mib",
