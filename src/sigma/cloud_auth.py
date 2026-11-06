@@ -1583,9 +1583,11 @@ def _safe_login_return_to(value: str) -> str | None:
             ):
                 return None
             target[key] = values[0]
-    if not any(key in target for key in ("reveal_session", "reveal_paper")):
-        if query.get("resume_play", []) == ["1"]:
-            target["resume_play"] = "1"
+    if (
+        not any(key in target for key in ("reveal_session", "reveal_paper"))
+        and query.get("resume_play", []) == ["1"]
+    ):
+        target["resume_play"] = "1"
     return "/project?" + urlencode(target)
 
 
