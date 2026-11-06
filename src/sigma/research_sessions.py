@@ -15876,6 +15876,37 @@ async def _worker(session_id: str, path: str) -> None:
             )
         except (OSError, ProjectError, ValueError):
             log.warning("session.worker_end session_id=%s status=unavailable", session_id)
+        else:
+            # Send only after a durable final worker state. No notifications
+            # for intermediate retries or a deliberate user Stop.
+            try:
+                from sigma import cloud_auth, progress_notifications
+
+                event = {
+                    "ended": "session_finished",
+                    "completed": "session_finished",
+                    "failed": "session_failed",
+                    "paused": "session_paused",
+                }.get(final.get("status"))
+                principal = cloud_auth.current_principal()
+                if event and principal:
+                    project_title = inspect_project(path).project.title
+                    progress_notifications.schedule(
+                        principal,
+                        event,
+                        event_id=(
+                            f"session:{final['id']}:{event}:"
+                            f"{final.get('stopped_at') or final.get('updated_at')}"
+                        ),
+                        project_title=project_title,
+                        number=final["session_number"],
+                        path=path,
+                        session_id=session_id,
+                    )
+            except (OSError, ProjectError, ValueError, KeyError, TypeError) as exc:
+                log.warning(
+                    "session.progress_email_skipped error_type=%s", type(exc).__name__
+                )
         if cloud_research.billing_enabled():
             try:
                 current = _read(path, session_id)
