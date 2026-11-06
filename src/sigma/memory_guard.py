@@ -25,6 +25,7 @@ MESSAGE = (
 )
 _LOCK = threading.Lock()
 _CRITICAL = False
+_TELEMETRY_DEGRADED = False
 _LOOP: asyncio.AbstractEventLoop | None = None
 _SHUTDOWN_PENDING = False
 _LAST_ALERT = 0.0
@@ -49,15 +50,33 @@ def critical_snapshot(snapshot: dict[str, int | None]) -> bool:
     return used * 100 >= limit * 85 or limit - used <= 512
 
 
+def capacity_verified(snapshot: dict[str, int | None]) -> bool:
+    """Unverifiable container pressure is not evidence of spare capacity."""
+    used = snapshot["cgroup_used_mib"]
+    limit = snapshot["cgroup_limit_mib"]
+    return used is not None and limit is not None and limit >= 256
+
+
 def is_critical() -> bool:
     # Never rely on an old sample alone when admitting a new provider job.
     return critical_snapshot(memory_snapshot()) or _CRITICAL
 
 
 def require_capacity() -> None:
-    if is_critical():
-        from sigma.projects import ProjectError
+    from sigma.projects import ProjectError
 
+    snapshot = memory_snapshot()
+    if os.getenv("SIGMA_MEMORY_REQUIRE_METRICS", "").lower() == "true" and not capacity_verified(
+        snapshot
+    ):
+        # Do not cancel active work just because metrics are unavailable, but
+        # do not admit another hosted job without an OOM boundary. Local
+        # development often has no cgroup memory limit and must still work.
+        raise ProjectError(
+            "Backend memory capacity cannot be verified. Existing work is preserved, "
+            "but new AI jobs are paused. Check memory.read_failed in backend logs."
+        )
+    if critical_snapshot(snapshot) or _CRITICAL:
         raise ProjectError(MESSAGE)
 
 
@@ -159,8 +178,19 @@ def _schedule_cancellation() -> None:
 
 def poll() -> None:
     """Called from the telemetry thread; safe to invoke without a running loop."""
-    global _CRITICAL
+    global _CRITICAL, _TELEMETRY_DEGRADED
     snapshot = memory_snapshot()
+    verified = capacity_verified(snapshot)
+    if not verified and not _TELEMETRY_DEGRADED:
+        LOG.error(
+            "memory.telemetry_degraded cgroup_used_mib=%s cgroup_limit_mib=%s "
+            "new_ai_admission=blocked active_work=preserved",
+            snapshot["cgroup_used_mib"],
+            snapshot["cgroup_limit_mib"],
+        )
+    elif verified and _TELEMETRY_DEGRADED:
+        LOG.info("memory.telemetry_restored new_ai_admission=permitted_if_capacity")
+    _TELEMETRY_DEGRADED = not verified
     critical = critical_snapshot(snapshot)
     previous = _CRITICAL
     # Hysteresis reduces repeated alerts and premature re-admission.

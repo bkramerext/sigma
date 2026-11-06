@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import resource
 import threading
 import traceback
 from logging.handlers import TimedRotatingFileHandler
@@ -16,34 +17,92 @@ from pathlib import Path
 _LOGGER = logging.getLogger("sigma.production")
 _STARTED = False
 _LOCK = threading.Lock()
+_READ_FAILURES: set[str] = set()
+_READ_FAILURES_LOCK = threading.Lock()
+
+
+def _read_text(path: Path) -> str | None:
+    """Read kernel counters, reporting failures instead of hiding them as None."""
+    try:
+        content = path.read_text(encoding="ascii")
+    except (OSError, UnicodeError) as exc:
+        key = str(path)
+        with _READ_FAILURES_LOCK:
+            first = key not in _READ_FAILURES
+            _READ_FAILURES.add(key)
+        if first:
+            _LOGGER.warning(
+                "memory.read_failed path=%s error_type=%s errno=%s",
+                key,
+                type(exc).__name__,
+                getattr(exc, "errno", None),
+            )
+        return None
+    with _READ_FAILURES_LOCK:
+        _READ_FAILURES.discard(str(path))
+    return content
 
 
 def _integer(path: Path) -> int | None:
+    content = _read_text(path)
+    if content is None:
+        return None
+    value = content.strip()
+    if value == "max":
+        return None
     try:
-        value = path.read_text(encoding="ascii").strip()
-        return int(value) if value != "max" else None
-    except (OSError, ValueError):
+        return int(value)
+    except ValueError:
+        _LOGGER.warning("memory.invalid_counter path=%s", path)
         return None
 
 
 def _process_kib(field: str) -> int | None:
-    try:
-        for line in Path("/proc/self/status").read_text(encoding="ascii").splitlines():
-            if line.startswith(field + ":"):
+    content = _read_text(Path("/proc/self/status"))
+    if content is None:
+        return None
+    for line in content.splitlines():
+        if line.startswith(field + ":"):
+            try:
                 return int(line.split()[1])
-    except (OSError, ValueError, IndexError):
-        pass
+            except (ValueError, IndexError):
+                _LOGGER.warning("memory.invalid_field source=proc_status field=%s", field)
+                return None
     return None
 
 
 def _host_available_kib() -> int | None:
-    try:
-        for line in Path("/proc/meminfo").read_text(encoding="ascii").splitlines():
-            if line.startswith("MemAvailable:"):
+    content = _read_text(Path("/proc/meminfo"))
+    if content is None:
+        return None
+    for line in content.splitlines():
+        if line.startswith("MemAvailable:"):
+            try:
                 return int(line.split()[1])
-    except (OSError, ValueError, IndexError):
-        pass
+            except (ValueError, IndexError):
+                _LOGGER.warning("memory.invalid_field source=proc_meminfo field=MemAvailable")
+                return None
     return None
+
+
+def _resident_from_statm_kib() -> int | None:
+    """Alternate current process RSS when /proc/self/status is unavailable."""
+    content = _read_text(Path("/proc/self/statm"))
+    if content is None:
+        return None
+    try:
+        resident_pages = int(content.split()[1])
+        return resident_pages * os.sysconf("SC_PAGE_SIZE") // 1024
+    except (ValueError, IndexError, OSError):
+        return None
+
+
+def _host_free_kib() -> int | None:
+    """Last-resort host free pages (not equivalent to MemAvailable)."""
+    try:
+        return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") // 1024
+    except (OSError, ValueError):
+        return None
 
 
 def safe_exception_trace(error: BaseException) -> str:
@@ -55,15 +114,37 @@ def safe_exception_trace(error: BaseException) -> str:
 
 
 def memory_snapshot() -> dict[str, int | None]:
-    """Current process RSS plus cgroup usage/limit, the actual OOM boundary."""
+    """Process RSS and cgroup OOM counters, supporting Linux cgroup v1/v2."""
     group = Path("/sys/fs/cgroup")
+    usage = _integer(group / "memory.current")
+    limit = _integer(group / "memory.max")
+    peak = _integer(group / "memory.peak")
+    if usage is None:
+        usage = _integer(group / "memory" / "memory.usage_in_bytes")
+    if limit is None:
+        limit = _integer(group / "memory" / "memory.limit_in_bytes")
+    if peak is None:
+        peak = _integer(group / "memory" / "memory.max_usage_in_bytes")
+    # Linux cgroup-v1 uses a huge sentinel to mean "unlimited".
+    if limit is not None and limit >= (1 << 60):
+        limit = None
+
+    rss_kib = _process_kib("VmRSS")
+    if rss_kib is None:
+        rss_kib = _resident_from_statm_kib()
+    peak_kib = _process_kib("VmHWM")
+    if peak_kib is None:
+        # On Linux ru_maxrss is measured in KiB.
+        peak_kib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
     return {
-        "rss_mib": _to_mib(_process_kib("VmRSS"), kib=True),
-        "rss_peak_mib": _to_mib(_process_kib("VmHWM"), kib=True),
-        "cgroup_used_mib": _to_mib(_integer(group / "memory.current")),
-        "cgroup_limit_mib": _to_mib(_integer(group / "memory.max")),
-        "cgroup_peak_mib": _to_mib(_integer(group / "memory.peak")),
+        "rss_mib": _to_mib(rss_kib, kib=True),
+        "rss_peak_mib": _to_mib(peak_kib, kib=True),
+        "cgroup_used_mib": _to_mib(usage),
+        "cgroup_limit_mib": _to_mib(limit),
+        "cgroup_peak_mib": _to_mib(peak),
         "host_available_mib": _to_mib(_host_available_kib(), kib=True),
+        "host_free_mib": _to_mib(_host_free_kib(), kib=True),
     }
 
 
@@ -90,7 +171,7 @@ def _sample(period_seconds: int) -> None:
                 _LOGGER.info(
                     "memory rss_mib=%s rss_peak_mib=%s cgroup_used_mib=%s "
                     "cgroup_limit_mib=%s cgroup_peak_mib=%s cgroup_pct=%s "
-                    "host_available_mib=%s",
+                    "host_available_mib=%s host_free_mib=%s",
                     stats["rss_mib"],
                     stats["rss_peak_mib"],
                     used,
@@ -98,6 +179,7 @@ def _sample(period_seconds: int) -> None:
                     stats["cgroup_peak_mib"],
                     pct,
                     stats["host_available_mib"],
+                    stats["host_free_mib"],
                 )
                 last_log = now
         except Exception as exc:  # noqa: BLE001 - monitoring must survive sample errors
@@ -130,6 +212,7 @@ def start() -> None:
         console = logging.StreamHandler()
         console.setFormatter(formatter)
         _LOGGER.addHandler(console)
+        logging.getLogger("sigma.memory_guard").addHandler(console)
         _LOGGER.setLevel(logging.INFO)
 
         home = Path(os.environ.get("SIGMA_CLOUD_AUTH_HOME", "/var/lib/sigma-auth"))
