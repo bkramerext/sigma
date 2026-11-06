@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from html import escape
 import logging
 import re
 import sqlite3
 import time
 from email.message import EmailMessage
+from html import escape
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode, urlsplit
@@ -345,9 +345,17 @@ def _attach_completed_paper(message: EmailMessage, path: str, paper_id: str, num
         record = papers.get_paper(path, paper_id, include_tex=False)
         size = record.get("pdf_size_bytes")
         if type(size) is not int or size <= 0 or size > _MAX_PDF_ATTACHMENT_BYTES:
-            reason = "too_large" if type(size) is int and size > _MAX_PDF_ATTACHMENT_BYTES else "unavailable"
+            reason = (
+                "too_large"
+                if type(size) is int and size > _MAX_PDF_ATTACHMENT_BYTES
+                else "unavailable"
+            )
             _LOG.warning("progress_email.paper_pdf_not_attached reason=%s", reason)
-            note = "The PDF is too large to attach. Download it using the link below." if reason == "too_large" else "The PDF could not be attached. You can download it using the link below."
+            note = (
+                "The PDF is too large to attach. Download it using the link below."
+                if reason == "too_large"
+                else "The PDF could not be attached. You can download it using the link below."
+            )
         else:
             contents = papers.get_pdf(path, paper_id)
             if len(contents) != size or not contents.startswith(b"%PDF-"):

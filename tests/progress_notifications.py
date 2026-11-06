@@ -52,7 +52,7 @@ def main() -> None:
     html_part = completed.get_body(preferencelist=("html",))
     assert plain_part is not None and html_part is not None
     assert f"View paper: {link}" in plain_part.get_content()
-    assert f'<a href="{link}">View paper</a>' in html_part.get_content()
+    assert f'<a href="{link.replace("&", "&amp;")}">View paper</a>' in html_part.get_content()
     assert "A < B" not in html_part.get_content()
 
     session = progress_notifications.message_for(
@@ -85,9 +85,11 @@ def main() -> None:
         ({"pdf_size_bytes": 12}, "could not be attached"),
     ):
         email = progress_notifications.message_for("paper_finished", "Project", 3, link)
-        with patch("sigma.papers.get_paper", return_value=fake_record):
-            with patch("sigma.papers.get_pdf", side_effect=FileNotFoundError):
-                progress_notifications._attach_completed_paper(email, "/tmp/paper", "paper123", 3)
+        with (
+            patch("sigma.papers.get_paper", return_value=fake_record),
+            patch("sigma.papers.get_pdf", side_effect=FileNotFoundError),
+        ):
+            progress_notifications._attach_completed_paper(email, "/tmp/paper", "paper123", 3)
         assert not list(email.iter_attachments())
         fallback_plain = email.get_body(preferencelist=("plain",))
         fallback_html = email.get_body(preferencelist=("html",))
@@ -199,14 +201,18 @@ def main() -> None:
             for event, expected in cases:
                 msg = progress_notifications.message_for(event, "Project Alpha", 3, hosted)
                 assert expected in str(msg["Subject"])
-                assert "View " in msg.get_content()
-                assert hosted in msg.get_content()
+                plain = msg.get_body(preferencelist=("plain",))
+                assert plain is not None
+                assert "View " in plain.get_content()
+                assert hosted in plain.get_content()
 
             incomplete = progress_notifications.message_for(
                 "session_finished", "Project Alpha", 3, session, incomplete=True
             )
             assert "finished" in str(incomplete["Subject"])
-            assert "completed successfully" not in incomplete.get_content()
+            plain = incomplete.get_body(preferencelist=("plain",))
+            assert plain is not None
+            assert "completed successfully" not in plain.get_content()
 
             # Bind once. A different viewer must not take over the original job.
             progress_notifications.bind_job(first, "session:123")
