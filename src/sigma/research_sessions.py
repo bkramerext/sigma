@@ -5222,8 +5222,12 @@ def _recent_session_status(
             or raw.get("project_path") != project_path
         ):
             return None
-        return file.stem, raw.get("status") if isinstance(raw.get("status"), str) else ""
-    except (OSError, ValueError, TypeError, UnicodeDecodeError):
+        status = raw.get("status")
+        return file.stem, status if isinstance(status, str) else ""
+    except OSError:
+        # A transient filesystem error must be retried rather than cached.
+        raise
+    except (ValueError, TypeError, UnicodeDecodeError):
         return None
 
 
@@ -5240,10 +5244,12 @@ def has_active_session(path: str, *, project_id: str | None = None) -> bool:
         # A portable bundle has no individual session files to stat; retain
         # the validated full-record implementation for this legacy format.
         records, _unavailable = read_session_snapshot(path)
-        statuses = [
-            (record.get("id"), record.get("status"))
-            for record in records
-        ]
+        statuses: list[tuple[str, str]] = []
+        for record in records:
+            session_id = record.get("id")
+            status = record.get("status")
+            if isinstance(session_id, str) and isinstance(status, str):
+                statuses.append((session_id, status))
     else:
         if project_id is None:
             project_id = inspect_project(target).project.id
@@ -5266,12 +5272,16 @@ def has_active_session(path: str, *, project_id: str | None = None) -> bool:
                     continue
             except OSError:
                 continue
-            status = _recent_session_status(
-                str(file),
-                str(target),
-                project_id,
-                (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns),
-            )
+            try:
+                status = _recent_session_status(
+                    str(file),
+                    str(target),
+                    project_id,
+                    (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns),
+                )
+            except OSError:
+                # A transient error must not hide live activity indefinitely.
+                continue
             if status is not None:
                 statuses.append(status)
     for session_id, status in statuses:
@@ -5297,6 +5307,7 @@ def has_active_session(path: str, *, project_id: str | None = None) -> bool:
         finally:
             os.close(fd)
     return False
+
 
 async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
