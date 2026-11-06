@@ -68,6 +68,13 @@ with sync_playwright() as playwright:
         route.fulfill(response=response)
 
     page.route("**/api/**", proxy)
+    # Presence is a long-lived SSE stream. Proxying it via route.fetch blocks
+    # until timeout and can stall subsequent fixture requests during reloads.
+    # HTTP 204 tells EventSource not to reconnect; presence is out of scope here.
+    page.route(
+        "**/api/projects/research-presence?*",
+        lambda route: route.fulfill(status=204, body=""),
+    )
     page.goto(BASE_URL)
     page.evaluate(
         "window.__projectTypeConfirmations = []; window.confirm = message => { window.__projectTypeConfirmations.push(String(message)); return true; }"
