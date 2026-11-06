@@ -15,7 +15,12 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import research_preferences, research_presence, research_sessions, section_layout_preferences
+from sigma import (
+    research_preferences,
+    research_presence,
+    research_sessions,
+    section_layout_preferences,
+)
 from sigma.api import app, research_presence_view
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
@@ -77,7 +82,10 @@ def check_section_layout_preference(root: Path, path: Path, sibling: Path) -> No
             assert client.get(uri).json() == {key: False}
             assert client.put(uri, json={key: True}).status_code == 200
         assert client.get(uri).json() == {key: True}
-        with patch("sigma.api.cloud_auth.current_principal", return_value=type("Guest", (), {"role": "guest"})()):
+        with patch(
+            "sigma.api.cloud_auth.current_principal",
+            return_value=type("Guest", (), {"role": "guest"})(),
+        ):
             assert client.get(uri).status_code == 403
             assert client.put(uri, json={key: False}).status_code == 403
         preference_file = root / section_layout_preferences.PREFERENCES

@@ -647,6 +647,14 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
         assert saved_work is not None
         assert saved_work["progress"]["status"] == "paused"
 
+        # An explicit Stop has the same durable, resumable-work requirement.
+        saved_work["progress"]["status"] = "running"
+        papers._save_work(str(path), saved_work)
+        papers.finish_progress(str(path), "cancelled")
+        cancelled = papers._load_work(str(path))
+        assert cancelled is not None and cancelled["progress"]["status"] == "cancelled"
+        assert papers.progress_status(str(path))["status"] == "cancelled"
+
 
 def test_paper_progress_counts_keep_generation_resumable() -> None:
     """Zero sections is legitimate; bad display counts must not discard paid work."""

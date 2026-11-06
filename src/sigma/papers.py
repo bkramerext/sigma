@@ -3138,7 +3138,8 @@ def _load_work(path: str) -> dict[str, Any] | None:
             )
             or not isinstance(progress_state.get("run_id"), str)
             or not re.fullmatch(r"[0-9a-f]{32}", progress_state["run_id"])
-            or progress_state.get("status") not in {"running", "failed", "cancelled", "paused", "complete"}
+            or progress_state.get("status")
+            not in {"running", "failed", "cancelled", "paused", "complete"}
             or progress_state.get("stage")
             not in {
                 "queued",
@@ -3479,9 +3480,13 @@ def progress_status(path: str) -> dict[str, Any] | None:
         **(
             {
                 "detail": (
-                    "The backend restarted during paper generation. Saved work is intact; "
-                    "use Continue to resume from the latest checkpoint. An in-flight provider "
-                    "call might have been billed and will not be blindly repeated."
+                    state["detail"]
+                    if state.get("status") == "paused" and isinstance(state.get("detail"), str)
+                    else (
+                        "The backend restarted during paper generation. Saved work is intact; "
+                        "use Continue to resume from the latest checkpoint. An in-flight provider "
+                        "call might have been billed and will not be blindly repeated."
+                    )
                 )
             }
             if status == "interrupted"
