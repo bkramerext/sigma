@@ -8622,9 +8622,7 @@ async def _generate_impl(
                 except RuntimeError as compile_error:
                     diagnosed_diagram_error = bool(
                         draft.diagrams
-                        and _diagram_compile_failure_is_identified(
-                            pass_diagnostics, compile_error
-                        )
+                        and _diagram_compile_failure_is_identified(pass_diagnostics, compile_error)
                     )
                     if diagnosed_diagram_error:
                         removed_diagram_count = len(draft.diagrams)
@@ -8639,7 +8637,10 @@ async def _generate_impl(
                             "reason": next(
                                 (
                                     line[:500]
-                                    for line in [*pass_diagnostics, *str(compile_error).splitlines()]
+                                    for line in [
+                                        *pass_diagnostics,
+                                        *str(compile_error).splitlines(),
+                                    ]
                                     if _diagram_compile_failure_is_identified(
                                         [line], RuntimeError(line)
                                     )

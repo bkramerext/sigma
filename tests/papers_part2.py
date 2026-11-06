@@ -2332,7 +2332,9 @@ def test_optional_table_tex_failure_keeps_paper_and_publishes_text_pdf() -> None
             patch.object(papers, "_compile_pdf", new=compile_tex),
             mock_pdf_inspection(),
         ):
-            result = asyncio.run(papers.generate(str(path), credential["identity"], view.project.id))
+            result = asyncio.run(
+                papers.generate(str(path), credential["identity"], view.project.id)
+            )
 
         saved = papers.get_paper(str(path), result["paper_id"])
         assert author_calls == 1
@@ -2341,9 +2343,7 @@ def test_optional_table_tex_failure_keeps_paper_and_publishes_text_pdf() -> None
         assert all(not section["tables"] for section in saved["draft"]["sections"])
         assert r"\begin{tabular}" not in saved["tex_source"]
         assert saved["generation"]["publication_status"] == "needs_review"
-        assert any(
-            "text-only rendering" in issue for issue in saved["generation"]["sigma_issues"]
-        )
+        assert any("text-only rendering" in issue for issue in saved["generation"]["sigma_issues"])
         assert papers._load_work(str(path)) is None
 
 
