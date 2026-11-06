@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from itertools import pairwise
+from math import cos, pi, sin
 from pathlib import Path
 from time import monotonic
 from typing import Annotated, Any, Literal, NotRequired, Protocol, TypedDict
@@ -477,6 +478,7 @@ class DiagramBoundary(BaseModel):
 class PaperDiagram(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     caption: str = Field(min_length=12, max_length=1000)
+    layout: Literal["auto", "hierarchical", "architecture", "network", "timeline"] = "auto"
     nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
     edges: list[DiagramEdge] = Field(min_length=1, max_length=12)
     boundaries: list[DiagramBoundary] = Field(default_factory=list, max_length=4)
@@ -519,7 +521,7 @@ class PaperDraft(BaseModel):
     conclusions: list[str] = Field(min_length=1, max_length=8)
     conclusion_claim_ids: list[str] = Field(max_length=30)
     validation_warnings: list[str] = Field(max_length=12)
-    diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
+    diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=12)
     reader_guide: PaperReaderGuide | None = None
 
 
@@ -596,7 +598,7 @@ class LongPaperPlan(BaseModel):
     conclusion_claim_ids: list[str] = Field(max_length=30)
     validation_warnings: list[str] = Field(max_length=12)
     # Defaulted for compatibility with plans saved before diagrams were added.
-    diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
+    diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=12)
     reader_guide: PaperReaderGuide | None = None
 
 
@@ -867,7 +869,7 @@ def _subject_methodology(investigation_type: str) -> str:
     return ""
 
 
-VISUAL_AUTHORING_INSTRUCTIONS = """VISUALS: Actively consider both explanatory diagrams and informative tables, and include each when it materially strengthens the paper. Use the supplied diagrams field and section tables fields. Diagrams can clarify architecture, trust boundaries, decision flows, or evidence-supported mechanisms. Tables can compare alternatives, report source-backed quantitative results, expose assumptions, or summarize sensitivity analyses. Ground every visual in saved evidence and link it to the appropriate source references and claim IDs. Label proposals and hypothetical calculations clearly. Write complete, grammatical captions; never stop at a schema or character limit. Do not add decorative or trivial diagrams, repetitive tables, duplicate prose, fabricated measurements, or unsupported conclusions. A visual is optional when the evidence does not justify it."""
+VISUAL_AUTHORING_INSTRUCTIONS = """VISUALS: Examine the saved research outcomes for relationships that a drawing explains better than prose: dependencies and decisions, system components and trust boundaries, interacting feedback cycles, and evidence-backed chronological sequences. When diagrams are enabled, proactively include relevant source-linked diagrams that clarify the actual findings; a paper can warrant several distinct diagrams, and no arbitrary target count should suppress useful ones. Actively consider both explanatory diagrams and informative tables, and include each when it materially strengthens the paper. In a multi-perspective design study, use separate diagrams when the views answer different questions rather than collapsing them into one overloaded figure. Prefer a clear figure to a textual node/edge inventory when safe rendering is possible. Make the selected layout explicit when its semantics are supported; never invent evidence, ordering, edges, dates or boundaries. Distinguish proposed or synthetic designs from measured outcomes. Diagram layout: choose hierarchical for stepwise dependencies, decisions and reasoning chains; architecture for systems, interfaces and trust/containment boundaries; network for causal interactions or feedback cycles; timeline ONLY for evidence-supported chronological sequences with one directed chain. Leave layout as auto if no semantic choice is justified. The graph must truthfully preserve every directed relation and boundary. Do not claim that graph node order alone establishes chronology. Use the supplied diagrams field and section tables fields. Diagrams can clarify architecture, trust boundaries, decision flows, or evidence-supported mechanisms. Tables can compare alternatives, report source-backed quantitative results, expose assumptions, or summarize sensitivity analyses. Ground every visual in saved evidence and link it to the appropriate source references and claim IDs. Label proposals and hypothetical calculations clearly. Write complete, grammatical captions; never stop at a schema or character limit. Do not add decorative or trivial diagrams, repetitive tables, duplicate prose, fabricated measurements, or unsupported conclusions. A visual is optional when the evidence does not justify it."""
 
 SECTION_TABLE_INSTRUCTIONS = """TABLES: Actively consider an informative table when it materially strengthens this section, such as a source-backed comparison, quantitative result, assumptions register, or sensitivity summary. Use only the supplied evidence notes, cite exact source IDs, and use only this section's fixed claim IDs. Avoid decorative or trivial tables, repeated information, fabricated measurements, or unsupported conclusions. Return an empty tables list when evidence does not justify a table."""
 
@@ -4757,6 +4759,99 @@ def _source_reference_records(package: Mapping[str, Any]) -> list[dict[str, str]
     return records
 
 
+def _diagram_chain_order(diagram: PaperDiagram) -> list[str] | None:
+    """A timeline needs one directed chain, not merely source-ordered nodes."""
+    ids = [node.id for node in diagram.nodes]
+    if len(set(ids)) != len(ids) or len(diagram.edges) != len(ids) - 1:
+        return None
+    incoming = dict.fromkeys(ids, 0)
+    outgoing: dict[str, list[str]] = {node_id: [] for node_id in ids}
+    for edge in diagram.edges:
+        if edge.source not in outgoing or edge.target not in incoming:
+            return None
+        incoming[edge.target] += 1
+        outgoing[edge.source].append(edge.target)
+    starts = [node_id for node_id in ids if incoming[node_id] == 0]
+    if (
+        len(starts) != 1
+        or any(degree > 1 for degree in incoming.values())
+        or any(len(targets) > 1 for targets in outgoing.values())
+    ):
+        return None
+    ordered = [starts[0]]
+    while outgoing[ordered[-1]]:
+        target = outgoing[ordered[-1]][0]
+        if target in ordered:
+            return None
+        ordered.append(target)
+    return ordered if len(ordered) == len(ids) else None
+
+
+def _diagram_is_acyclic(diagram: PaperDiagram) -> bool:
+    """Check topology independently of the conservative page layout."""
+    ids = [node.id for node in diagram.nodes]
+    if len(set(ids)) != len(ids):
+        return False
+    outgoing: dict[str, list[str]] = {node_id: [] for node_id in ids}
+    incoming = dict.fromkeys(ids, 0)
+    for edge in diagram.edges:
+        if edge.source not in outgoing or edge.target not in incoming:
+            return False
+        outgoing[edge.source].append(edge.target)
+        incoming[edge.target] += 1
+    queue = deque(node_id for node_id in ids if incoming[node_id] == 0)
+    visited = 0
+    while queue:
+        node_id = queue.popleft()
+        visited += 1
+        for target in outgoing[node_id]:
+            incoming[target] -= 1
+            if incoming[target] == 0:
+                queue.append(target)
+    return visited == len(ids)
+
+
+def _diagram_selected_layout(diagram: PaperDiagram) -> tuple[str, str | None]:
+    """AI chooses semantics; this deterministic gate prevents misleading layouts.
+
+    Auto never infers chronology from a chain of node IDs.
+    """
+    acyclic = _diagram_is_acyclic(diagram)
+    safe_default = (
+        "architecture" if diagram.boundaries else ("hierarchical" if acyclic else "network")
+    )
+    requested = diagram.layout
+    if requested == "auto":
+        return safe_default, None
+    if requested == "timeline":
+        if diagram.boundaries or _diagram_chain_order(diagram) is None:
+            return (
+                safe_default,
+                (
+                    "Requested timeline was not a single boundary-free chronological chain; "
+                    "a topology-compatible layout was used instead."
+                ),
+            )
+        return "timeline", None
+    if requested == "network" and diagram.boundaries:
+        return (
+            "architecture",
+            (
+                "Network layout cannot safely represent these trust boundaries; "
+                "architecture layout was used instead."
+            ),
+        )
+    if requested == "hierarchical" and not acyclic:
+        return (
+            safe_default,
+            (
+                "A cyclic graph cannot use the hierarchical DAG layout; "
+                "a topology-compatible layout was used instead."
+            ),
+        )
+    return requested, None
+
+
 def _diagram_layout(
     diagram: PaperDiagram,
 ) -> tuple[dict[str, tuple[float, float]], dict[str, float]] | None:
@@ -5128,11 +5223,115 @@ def _tex(
 
     def render_diagram(diagram: PaperDiagram) -> list[str]:
         layout = _diagram_layout(diagram)
+        selected_layout, selection_warning = _diagram_selected_layout(diagram)
+        if selection_warning:
+            warnings.append(selection_warning)
         source_note = (
             r"\par\smallskip{\scriptsize Source-linked claims: "
             + esc(", ".join(diagram.claim_ids))
             + r"; evidence links appear in the claim notes.}"
         )
+
+        if selected_layout in {"network", "timeline"}:
+            # Numbered relationships keep complete edge labels out of crowded
+            # vector geometry, while preserving every directed source/target.
+            labels = {node.id: node.label for node in diagram.nodes}
+            result = [
+                r"\begin{figure}[!htbp]",
+                r"\centering",
+            ]
+            if selected_layout == "network":
+                result.append(
+                    r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
+                    r"network node/.style={draw=blue!65,rounded corners,align=center,"
+                    r"text width=2.5cm,font=\footnotesize,fill=blue!5,inner sep=4pt},"
+                    r"edge badge/.style={circle,draw=blue!65,fill=white,"
+                    r"font=\tiny,inner sep=1pt}]"
+                )
+                count = len(diagram.nodes)
+                for index, node in enumerate(diagram.nodes):
+                    theta = pi / 2 - 2 * pi * index / count
+                    x, y = 3.85 * cos(theta), 4.25 * sin(theta)
+                    result.append(
+                        r"\node[network node] ("
+                        + node.id
+                        + ") at ("
+                        + f"{x:.2f},{y:.2f}"
+                        + ") {"
+                        + prose_text(node.label)
+                        + "};"
+                    )
+                for index, edge in enumerate(diagram.edges, start=1):
+                    result.append(
+                        r"\draw[->,blue!65,thin] ("
+                        + edge.source
+                        + r") to[bend left=12] node[midway,edge badge] {"
+                        + str(index)
+                        + "} ("
+                        + edge.target
+                        + ");"
+                    )
+            else:
+                # Chronology is asserted only by the author's explicit choice,
+                # validated against a directed chain; no dates are fabricated.
+                order = _diagram_chain_order(diagram)
+                if order is None:
+                    raise ProjectError("Timeline validation did not preserve directed chain")
+                result.append(
+                    r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
+                    r"timeline node/.style={draw=blue!65,rounded corners,align=left,"
+                    r"text width=8cm,font=\small,fill=blue!5,inner sep=5pt},"
+                    r"timeline marker/.style={circle,draw=blue!65,fill=white,font=\scriptsize,"
+                    r"minimum size=0.65cm,inner sep=1pt}]"
+                )
+                for index, node_id in enumerate(order):
+                    y = -1.8 * index
+                    result.append(
+                        r"\node[timeline marker] at (-4.7," + f"{y:.2f}" + ") {" + str(index + 1) + "};"
+                    )
+                    result.append(
+                        r"\node[timeline node] ("
+                        + node_id
+                        + ") at (0.4,"
+                        + f"{y:.2f}"
+                        + ") {"
+                        + prose_text(labels[node_id])
+                        + "};"
+                    )
+                    result.append(
+                        r"\draw[blue!65] (-4.35," + f"{y:.2f}" + ") -- (" + node_id + ".west);"
+                    )
+                    if index:
+                        previous_y = -1.8 * (index - 1)
+                        result.append(
+                            r"\draw[->,thick,blue!65] (-4.7,"
+                            + f"{previous_y - 0.35:.2f}"
+                            + ") -- (-4.7,"
+                            + f"{y + 0.35:.2f}"
+                            + ");"
+                        )
+            result.extend(
+                [
+                    r"\end{tikzpicture}",
+                    r"\par\smallskip{\footnotesize\textbf{Numbered relationships:}}",
+                    r"\begin{description}",
+                ]
+            )
+            for index, edge in enumerate(diagram.edges, start=1):
+                description = f"{labels[edge.source]} to {labels[edge.target]}"
+                if edge.label:
+                    description += ": " + edge.label
+                result.append(r"\item[\textbf{" + str(index) + ".}] " + prose_text(description))
+            result.extend(
+                [
+                    r"\end{description}",
+                    r"\caption{" + prose_text(diagram.caption) + "}",
+                    source_note,
+                    r"\end{figure}",
+                ]
+            )
+            return result
+
         incoming = {node.id: 0 for node in diagram.nodes}
         outgoing = {node.id: [] for node in diagram.nodes}
         for edge in diagram.edges:
@@ -5151,7 +5350,7 @@ def _tex(
             while outgoing[ordered[-1]]:
                 ordered.append(outgoing[ordered[-1]][0].target)
             linear = len(ordered) == len(diagram.nodes)
-        if linear:
+        if linear and (selected_layout != "architecture" or diagram.layout == "auto"):
             labels = {node.id: node.label for node in diagram.nodes}
             result = [
                 r"\begin{figure}[!htbp]",
