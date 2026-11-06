@@ -9132,6 +9132,50 @@ async def _generate_impl(
         } | {"title": draft.title}
 
 
+def _schedule_progress_email(
+    path: str,
+    event: str,
+    paper_id: str | None = None,
+) -> None:
+    """Best-effort, nonblocking email after a durable paper outcome."""
+    try:
+        from sigma import cloud_auth, progress_notifications
+
+        principal = cloud_auth.current_principal()
+        if principal is None:
+            return
+        status = progress_status(path) or {}
+        published = list_papers(path)
+        # Derive versions from stored papers; never rely on an unfinished draft.
+        versions = [
+            item["paper_version"] for item in published
+            if type(item.get("paper_version")) is int
+        ]
+        number = max(versions, default=0) + 1
+        if paper_id:
+            saved = next((item for item in published if item["paper_id"] == paper_id), None)
+            if saved is None:
+                return
+            number = saved.get("paper_version") or len(published)
+        project = inspect_project(path).project
+        run_identity = status.get("run_id") or paper_id or status.get("started_at")
+        if not run_identity:
+            return
+        progress_notifications.schedule(
+            principal,
+            event,
+            event_id=f"paper:{project.id}:{run_identity}:{event}",
+            project_title=project.title,
+            number=number,
+            path=path,
+            paper_id=paper_id or "draft",
+        )
+    except (ProjectError, OSError, ValueError, TypeError, KeyError) as exc:
+        logging.getLogger("sigma.lifecycle").warning(
+            "paper.progress_email_skipped error_type=%s", type(exc).__name__
+        )
+
+
 async def generate(
     path: str,
     expected_binding: str | None = None,
@@ -9183,6 +9227,7 @@ async def generate(
     try:
         result = await task
         log.info("paper.complete project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
+        _schedule_progress_email(path, "paper_finished", result.get("paper_id"))
         return result
     except asyncio.CancelledError:
         task.cancel()
@@ -9200,6 +9245,8 @@ async def generate(
         if key in _started_paper_attempts:
             finish_progress(path, "paused", str(exc))
         log.info("paper.paused project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
+        if key in _started_paper_attempts:
+            _schedule_progress_email(path, "paper_paused")
         raise
     except Exception as exc:
         # The SSE error can disappear on page reload; retain only the same
@@ -9211,6 +9258,8 @@ async def generate(
         )
         if key in _started_paper_attempts:
             finish_progress(path, "failed", reason)
+        if key in _started_paper_attempts:
+            _schedule_progress_email(path, "paper_failed")
         from sigma.production_observability import safe_exception_trace
 
         log.error(
