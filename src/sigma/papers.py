@@ -9134,7 +9134,7 @@ async def _generate_impl(
 
 def _schedule_progress_email(
     path: str,
-    event: str,
+    event: Literal["paper_finished", "paper_failed", "paper_paused"],
     paper_id: str | None = None,
 ) -> None:
     """Best-effort, nonblocking email after a durable paper outcome."""
@@ -9148,8 +9148,7 @@ def _schedule_progress_email(
         published = list_papers(path)
         # Derive versions from stored papers; never rely on an unfinished draft.
         versions = [
-            item["paper_version"] for item in published
-            if type(item.get("paper_version")) is int
+            item["paper_version"] for item in published if type(item.get("paper_version")) is int
         ]
         number = max(versions, default=0) + 1
         if paper_id:
