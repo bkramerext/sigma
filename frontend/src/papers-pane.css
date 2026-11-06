@@ -297,3 +297,12 @@
 /* A wrapper owns the hint when browser-disabled Play cannot receive pointer events. */
 .workspace-page .papers-pane .paper-play-tooltip { display: inline-flex; align-items: center; }
 .workspace-page .papers-pane .paper-play-tooltip > button:disabled { pointer-events: none; }
+
+/* Observed paper output activity; one muted line beneath the active stage. */
+.paper-activity-line {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.86em;
+  font-weight: 400;
+  color: var(--text-muted, #aeb7c5);
+}
