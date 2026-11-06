@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
 from time import monotonic
-from typing import Annotated, Any, Literal, Protocol, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, Protocol, TypedDict
 from uuid import uuid4
 
 import httpx
@@ -109,6 +109,7 @@ class PaperProgressEvent(TypedDict):
     started_at: str
     elapsed_seconds: int
     detail: str | None
+    sections_total: NotRequired[int | None]
 
 
 PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
@@ -3120,7 +3121,10 @@ def _load_work(path: str) -> dict[str, Any] | None:
         if (
             not isinstance(progress_state, dict)
             or not required_progress_keys.issubset(progress_state)
-            or bool(set(progress_state) - (required_progress_keys | {"failure_reason", "detail", "sections_total"}))
+            or bool(
+                set(progress_state)
+                - (required_progress_keys | {"failure_reason", "detail", "sections_total"})
+            )
             or (
                 "sections_total" in progress_state
                 and (
@@ -3272,7 +3276,10 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
             or type(state.get("elapsed_seconds")) is not int
             or (
                 "sections_total" in state
-                and (type(state["sections_total"]) is not int or not 1 <= state["sections_total"] <= 100)
+                and (
+                    type(state["sections_total"]) is not int
+                    or not 1 <= state["sections_total"] <= 100
+                )
             )
         ):
             raise ValueError("invalid progress metadata")

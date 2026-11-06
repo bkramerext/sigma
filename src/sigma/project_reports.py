@@ -1026,7 +1026,7 @@ def _compile_pdf(
                 diagnostics.extend(
                     line.strip()[:500]
                     for line in output.splitlines()
-                    if re.search(r"^(?:!|l\\.\\d+|fatal error:)", line.strip(), re.IGNORECASE)
+                    if re.search(r"^(?:!|l\.\d+|fatal error:)", line.strip(), re.IGNORECASE)
                 )
             raise RuntimeError(
                 "Tectonic could not compile this report. No PDF was downloaded. "

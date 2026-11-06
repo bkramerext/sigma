@@ -44,7 +44,6 @@ def test_cold_cache_collision_retries_once_without_provider_calls() -> None:
         assert cache_homes[0] != cache_homes[1]
 
 
-
 def test_tectonic_failure_hides_raw_output_but_records_backend_diagnostics() -> None:
     """The UI sees a short error while the compiler cause stays in logs."""
     failure_output = (
