@@ -8529,31 +8529,32 @@ async def _generate_impl(
                 )
                 warnings.append(fallback_note)
                 marker = r"\end{document}"
-                if tex.count(marker) != 1:
-                    raise ProjectError(
-                        "TeX proofreading fell back, but the publication note could not be placed safely. The authored draft remains saved."
-                    )
                 title_marker = r"\maketitle"
-                if tex.count(title_marker) != 1:
-                    raise ProjectError(
-                        "TeX proofreading fell back, but its review status could not be placed safely at the start of the paper. The authored draft remains saved."
+                if tex.count(marker) == 1 and tex.count(title_marker) == 1:
+                    notice = (
+                        r"\begin{center}\fbox{\parbox{.92\linewidth}{\textbf{Needs review: "
+                        r"TeX verification is incomplete.} Review the archived proofreading "
+                        r"diagnostics before relying on the typesetting.}}\end{center}"
                     )
-                notice = (
-                    r"\begin{center}\fbox{\parbox{.92\linewidth}{\textbf{Needs review: "
-                    r"TeX verification is incomplete.} Review the archived proofreading "
-                    r"diagnostics before relying on the typesetting.}}\end{center}"
-                )
-                tex = tex.replace(title_marker, title_marker + "\n" + notice, 1)
-                tex = tex.replace(
-                    marker,
-                    r"\section*{Typesetting verification note}"
-                    + "\n"
-                    + _latex(fallback_note)
-                    + "\n"
-                    + marker,
-                    1,
-                )
-                proofreading["publication_note_added"] = True
+                    tex = tex.replace(title_marker, title_marker + "\n" + notice, 1)
+                    tex = tex.replace(
+                        marker,
+                        r"\section*{Typesetting verification note}"
+                        + "\n"
+                        + _latex(fallback_note)
+                        + "\n"
+                        + marker,
+                        1,
+                    )
+                    proofreading["publication_note_added"] = True
+                else:
+                    # The optional in-paper notice must never block compiling the
+                    # existing authored TeX. The archived review status remains.
+                    _record_paper_generation_issue(
+                        work,
+                        "A typesetting-review notice could not be inserted in the paper; "
+                        "the review status remains in paper diagnostics.",
+                    )
             record["generation"]["proofreading"] = {
                 "attempted": True,
                 "ai_performed": proofreading.get("ai_performed", False),
@@ -8619,30 +8620,57 @@ async def _generate_impl(
                         diagnostics=pass_diagnostics,
                     )
                 except RuntimeError as compile_error:
-                    if not draft.diagrams or not _diagram_compile_failure_is_identified(
-                        pass_diagnostics, compile_error
-                    ):
-                        raise ProjectError(str(compile_error)) from compile_error
-                    removed_diagram_count = len(draft.diagrams)
-                    tex = _remove_diagram_figures(tex, removed_diagram_count)
-                    draft = draft.model_copy(update={"diagrams": []})
-                    warnings.append(
-                        "Tectonic reported a TikZ/PGF error in an explanatory diagram; the paper uses the text-only PDF fallback, which preserves the graph relationships."
+                    diagnosed_diagram_error = bool(
+                        draft.diagrams
+                        and _diagram_compile_failure_is_identified(
+                            pass_diagnostics, compile_error
+                        )
                     )
-                    diagram_fallback = {
-                        "applied": True,
-                        "removed_diagram_count": removed_diagram_count,
-                        "reason": next(
-                            (
-                                line[:500]
-                                for line in [*pass_diagnostics, *str(compile_error).splitlines()]
-                                if _diagram_compile_failure_is_identified(
-                                    [line], RuntimeError(line)
-                                )
+                    if diagnosed_diagram_error:
+                        removed_diagram_count = len(draft.diagrams)
+                        tex = _remove_diagram_figures(tex, removed_diagram_count)
+                        draft = draft.model_copy(update={"diagrams": []})
+                        warnings.append(
+                            "Tectonic reported a TikZ/PGF error in an explanatory diagram; the paper uses the text-only PDF fallback, which preserves the graph relationships."
+                        )
+                        diagram_fallback = {
+                            "applied": True,
+                            "removed_diagram_count": removed_diagram_count,
+                            "reason": next(
+                                (
+                                    line[:500]
+                                    for line in [*pass_diagnostics, *str(compile_error).splitlines()]
+                                    if _diagram_compile_failure_is_identified(
+                                        [line], RuntimeError(line)
+                                    )
+                                ),
+                                "Tectonic identified a TikZ/PGF compilation error.",
                             ),
-                            "Tectonic identified a TikZ/PGF compilation error.",
-                        ),
-                    }
+                        }
+                    elif any(section.tables for section in draft.sections):
+                        # Optional tables can break TeX even when the prose and
+                        # evidence are sound. Rerender the exact saved draft
+                        # without visuals; never repeat a paid authoring call.
+                        draft = _without_optional_visuals(draft)
+                        warning = (
+                            "Needs review: Optional paper tables or diagrams prevented "
+                            "PDF compilation; the text-only rendering preserved the "
+                            "authored analysis."
+                        )
+                        warnings.append(warning)
+                        _record_paper_generation_issue(work, warning)
+                        tex = _tex(draft, warnings, snapshot_hash, **tex_options)
+                        tex, restored = _restore_escaped_math_in_tex(tex)
+                        work["static_math_restorations"] = (
+                            int(work.get("static_math_restorations", 0)) + restored
+                        )
+                        record["generation"]["publication_status"] = "needs_review"
+                        record["generation"]["proofreading"]["verification_status"] = "incomplete"
+                        record["generation"]["proofreading"]["review_reason"] = (
+                            "The PDF used an unproofread text-only fallback rendering."
+                        )
+                    else:
+                        raise ProjectError(str(compile_error)) from compile_error
                     pass_diagnostics = []
                     try:
                         pdf = await asyncio.to_thread(
@@ -8655,7 +8683,7 @@ async def _generate_impl(
                         )
                     except RuntimeError as fallback_error:
                         raise ProjectError(
-                            "The safe diagram fallback could not compile; the authored TeX remains saved."
+                            "The safe visual fallback could not compile; the authored TeX remains saved."
                         ) from fallback_error
                 compile_diagnostics = list(pass_diagnostics)
                 await report(
