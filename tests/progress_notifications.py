@@ -42,7 +42,10 @@ def main() -> None:
             assert progress_notifications.preference(first)["enabled"] is True
             assert progress_notifications.preference(second)["enabled"] is False
             for status in ("ended", "completed"):
-                assert progress_notifications.eligible_session_event({"status": status}) == "session_finished"
+                assert (
+                    progress_notifications.eligible_session_event({"status": status})
+                    == "session_finished"
+                )
             assert (
                 progress_notifications.eligible_session_event({"status": "failed"})
                 == "session_failed"
@@ -162,7 +165,10 @@ def main() -> None:
                 raise AssertionError("Guest preferences accepted")
     # Default SMTP_HOST is implicit in mail_transport; verified credentials suffice.
     with (
-        patch("sigma.cloud_auth.email_env", side_effect=lambda name: "sender@example.org" if name == "SMTP_USERNAME" else ""),
+        patch(
+            "sigma.cloud_auth.email_env",
+            side_effect=lambda name: "sender@example.org" if name == "SMTP_USERNAME" else "",
+        ),
         patch("sigma.cloud_auth.email_secret", return_value="configured"),
     ):
         assert progress_notifications._configured()
