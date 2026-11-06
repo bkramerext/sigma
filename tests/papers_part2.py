@@ -555,6 +555,10 @@ def test_graph_atlas_sample_has_four_exact_research_diagrams() -> None:
     session = evidence["research_sessions"][0]
     assert session["status"] == "ended"
     assert len(session["artifacts"]) == 4
+    assert all(
+        artifact["reasoning_steps"] == [] and len(artifact["design_notes"]) == 4
+        for artifact in session["artifacts"]
+    )
     assert "four" in raw["problem"].lower()
     assert "independently validated" not in raw["problem"].lower()
 
@@ -606,6 +610,7 @@ def test_graph_atlas_sample_has_four_exact_research_diagrams() -> None:
         assert copies[0]["project_id"] == view.project.id
         assert copies[0]["status"] == "ended"
         assert len(copies[0]["artifacts"]) == 4
+        assert copies[0]["outcome"]["assessment"] != "positive"
         assert all(item["project_id"] == view.project.id for item in copies[0]["artifacts"])
         package, _ = papers._snapshot(view.path)
         assert sum(item["kind"] == "artifact" for item in package["sources"]) == 4
