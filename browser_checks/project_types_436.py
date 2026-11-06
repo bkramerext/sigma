@@ -1143,9 +1143,9 @@ with sync_playwright() as playwright:
     expect(score).to_be_enabled()
     score.click()
     expect(
-        page.locator(".papers-pane").get_by_role("alert").filter(
-            has_text="A saved PDF is required before this paper can be scored."
-        )
+        page.locator(".papers-pane")
+        .get_by_role("alert")
+        .filter(has_text="A saved PDF is required before this paper can be scored.")
     ).to_be_visible()
 
     paper_fixture["pdf"] = True
