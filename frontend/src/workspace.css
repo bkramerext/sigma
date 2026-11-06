@@ -483,3 +483,49 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   .workspace-page .project-header-title .paper-queued-indicator,
   .workspace-page .papers-pane .paper-queued-pulse .research-running-indicator { animation: none; }
 }
+
+/* Hanging title alignment: icon occupies its own grid track. Text, including
+   every wrapped line, begins at the same inset. The last-line pulse stays inline. */
+.workspace-page .project-header-title-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  column-gap: 9px;
+  align-items: start;
+  width: 100%;
+  overflow: visible;
+}
+.workspace-page .project-header-title-row > .research-type-icon {
+  grid-column: 1;
+  align-self: start;
+  margin-top: .12em;
+}
+.workspace-page .project-header-title-row > .project-header-title {
+  grid-column: 2;
+  display: -webkit-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.workspace-page .project-header-title-row .project-header-title-text {
+  display: inline;
+  overflow: visible;
+  white-space: normal;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+.workspace-page .project-header-title-action .research-running-indicator-frame {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0, 1fr); column-gap: 7px; }
+}

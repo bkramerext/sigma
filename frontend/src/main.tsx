@@ -2455,7 +2455,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [includeDiagramsAndTables, setIncludeDiagramsAndTables] = useState(() => window.localStorage.getItem('sigma.paper.diagrams:' + projectId) !== 'false');
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
-  const [resetConfirm, setResetConfirm] = useState(false);
+
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
   const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; proofreading_status?: string; publication_status?: string } | null>(null);
@@ -2467,6 +2467,23 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
+  const pdfTabs = useRef<Map<string, Window>>(new Map());
+  function viewPaperPdf(paper: PaperSummary) {
+    const current = pdfTabs.current.get(paper.paper_id);
+    if (current && !current.closed) {
+      current.focus();
+      return;
+    }
+    const url = `/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`;
+    const tab = window.open(url, `sigma-paper-${paper.paper_id}`);
+    if (!tab) {
+      setError('Allow pop-ups to view the paper PDF in a browser tab.');
+      return;
+    }
+    pdfTabs.current.set(paper.paper_id, tab);
+    try { tab.opener = null; } catch { /* Some PDF viewers block access to their window. */ }
+    tab.focus();
+  }
   const [eli5Id, setEli5Id] = useState('');
   const [explainingId, setExplainingId] = useState('');
   const [eli5Error, setEli5Error] = useState('');
@@ -2521,7 +2538,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       const [listResponse, configResponse, progressResponse] = await Promise.all([
         fetch(`/api/projects/papers?${query}`, { cache: 'no-store' }),
         fetch(`/api/projects/proposals/config?${query}`, { cache: 'no-store' }),
-        fetch(`/api/projects/papers/progress?${query}`, { cache: 'no-store' }),
+        fetch(`/api/projects/papers/progress?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
       ]);
       const list = await listResponse.json(); const config = await configResponse.json();
       const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
@@ -2529,14 +2546,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setRestartableCheckpoint(null); setResetConfirm(false); setContinuationAvailable(false); setResumeDetails(null); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setRestartableCheckpoint(null); setContinuationAvailable(false); setResumeDetails(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
           path, long_form: 'false', expected_project_id: projectId, expected_binding: config.binding,
           mode: config.mode, model: config.model, reasoning_effort: config.reasoning_effort,
         });
-        const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store' });
+        const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const preflight = await preflightResponse.json();
         const resumable = Boolean(preflightResponse.ok && preflight.checkpoint_exists && preflight.resume_available);
         setContinuationAvailable(resumable);
@@ -2564,7 +2581,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     let stopped = false;
     const poll = async () => {
       try {
-        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const body = await response.json();
         if (!stopped && response.ok) {
           const next = (body.progress ?? null) as PaperProgress | null;
@@ -2724,8 +2741,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   async function discardDraft() {
     if (busy || request.current !== null || ['active', 'queued'].includes(paperProgress?.status ?? '')) return;
     if (!paperProgress && !restartableCheckpoint && !checkpointMismatch) {
-      setNewPaperRequested(false); setConfirmDiscardDraft(false); setResetConfirm(false);
-      return;
+      setNewPaperRequested(false); setConfirmDiscardDraft(false); return;
     }
     if (!binding) { setError('Connect an eligible AI provider before discarding saved unfinished paper work.'); return; }
     setBusy(true); setError('');
@@ -2738,13 +2754,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished paper work.');
       setNewPaperRequested(false); setPaperProgress(null); setCheckpointMismatch(null);
       setRestartableCheckpoint(null); setContinuationAvailable(false); setResumeDetails(null);
-      setResetConfirm(false); setConfirmDiscardDraft(false); setSuccess('');
+      setConfirmDiscardDraft(false); setSuccess('');
       await refresh(selected?.paper_id);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
 
   async function restartCheckpoint() {
+    let startAgain = false;
     const restartSource = checkpointMismatch ?? restartableCheckpoint;
     if (busy || !restartSource?.checkpoint_can_restart || !binding) return;
     setBusy(true); setError(''); setSuccess(''); setPhase('Clearing unfinished paper work…');
@@ -2760,17 +2777,16 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
       setCheckpointMismatch(null);
       setRestartableCheckpoint(null);
-      setResetConfirm(false);
       setContinuationAvailable(false);
       setResumeDetails(null);
       setPaperProgress(null);
-      setNewPaperRequested(false);
-      setSuccess(result.evidence_updated_since_preflight
-        ? 'Unfinished paper work cleared using the latest research evidence. No generation has started. Saved versions remain unchanged; choose Generate to start.'
-        : 'Unfinished paper work cleared. No generation has started. Saved versions remain unchanged; choose Generate to start.');
+      setNewPaperRequested(true);
+      setDraftPaperExpanded(true);
       await refresh(selected?.paper_id);
+      startAgain = true;
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
+    if (startAgain) void generatePaper();
   }
   async function generatePaper() {
     if (busy || !binding) return;
@@ -2921,12 +2937,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={`Paper ${draftVersion}`} data-paper-version={draftVersion}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={`Paper ${draftVersion}`} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
-              beforeCopy={<span className="paper-real-title paper-draft-title">{paperProgress?.status === 'queued' ? 'Waiting to generate' : paperProgress?.status === 'active' ? 'Generating paper' : paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
+              beforeCopy={<span className="paper-draft-status"><span className="paper-real-title paper-draft-title">{paperProgress?.status === 'queued' ? 'Waiting to generate' : paperProgress?.status === 'active' ? 'Generating paper' : paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>
+              {paperProgress?.status === 'active' && paperProgress.stage === 'sections' && paperProgress.current !== null && paperProgress.total !== null && <span className="paper-sections-remaining" aria-live="polite">{Math.max(0, paperProgress.total - paperProgress.current)} section{Math.max(0, paperProgress.total - paperProgress.current) === 1 ? '' : 's'} remaining</span>}
+              </span>}
               actions={<>
                 {!generationRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} data-tooltip={continuationAvailable ? 'Resume paper generation' : 'Generate paper'} disabled={generating || loading || !binding || !!checkpointMismatch} onClick={() => { setDraftPaperExpanded(true); void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
                 {generationRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={`Stop Paper ${draftVersion}`} data-tooltip="Stop paper generation" disabled={!binding || loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                 {generationRunning && <span className={`research-running-indicator-frame paper-draft-pulse${paperProgress?.status === "queued" ? " paper-queued-pulse" : ""}`} aria-label="Paper generation running" title="Paper generation running"><span className="research-running-indicator"/></span>}
-                {!generationRunning && restartableCheckpoint?.checkpoint_can_restart && <button type="button" className="text-view-link papers-header-action paper-restart-action" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>}
+                {!generationRunning && restartableCheckpoint?.checkpoint_can_restart && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-process-control paper-rewind-action" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 4v12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M15.5 4.5 7 10l8.5 5.5z" fill="currentColor"/></svg></button>}
                 {!generationRunning && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove unfinished Paper ${draftVersion}`} data-tooltip={`Remove unfinished Paper ${draftVersion}`} disabled={busy || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
@@ -2943,11 +2961,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       {checkpointMismatch && !generating && <p className="ai-paper-restart-notice" role="status">{checkpointMismatch.incomplete_one_shot
         ? 'The previous writing attempt stopped before saving a draft and cannot resume.'
         : 'Research or AI settings changed; this checkpoint cannot resume.'} Saved research and papers remain. Use Start over to generate again.</p>}
-      {resetConfirm && !generating && restartableCheckpoint && !checkpointMismatch && <div className="paper-restart-inline" role="group" aria-label="Confirm starting paper over">
-        <span>Discard unfinished paper work?</span>
-        <button type="button" className="text-view-link papers-header-action paper-restart-action" disabled={busy} onClick={() => void restartCheckpoint()}>Start over</button>
-        <button type="button" className="text-view-link papers-header-action paper-restart-action" onClick={() => setResetConfirm(false)}>Cancel</button>
-      </div>}
+
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {paperProgress && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
         {paperProgress.status === 'active' || paperProgress.status === 'queued'
@@ -2969,7 +2983,9 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} beforeCopy={<span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} beforeCopy={paper.pdf_available
+                ? <a className="paper-real-title paper-pdf-title-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" aria-label={`View ${paper.title} PDF in browser tab`} onClick={event => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); viewPaperPdf(paper); }}>{paper.title}</a>
+                : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
@@ -2982,7 +2998,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     {paper.pdf_available && <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.pdf`} onClick={() => setPaperMenu(null)}>Download PDF</a>}
                   </span>}
                 </span>
-                {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" aria-label="View PDF in a new browser tab" data-tooltip="View PDF in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
+                {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" aria-label="View PDF in a new browser tab" data-tooltip="View PDF in a new browser tab" onClick={event => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); viewPaperPdf(paper); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
                 {!paper.score && <button type="button" className="text-view-link paper-score-link" disabled={busy || !!scoringId || !paper.pdf_available} aria-busy={scoringId === paper.paper_id} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : 'Score'}</button>}
                 <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
@@ -4411,7 +4427,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   useEffect(() => {
     if (!initial) return;
     const controller = new AbortController();
-    fetch("/api/user-preferences/section-layout", { signal: controller.signal })
+    fetch("/api/user-preferences/section-layout", { signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } })
       .then(async response => {
         const data = await response.json();
         if (!response.ok || typeof data.expand_one_project_section_at_a_time !== 'boolean')
@@ -5502,7 +5518,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   useEffect(() => {
     if (guest) return;
     const controller = new AbortController();
-    void fetch('/api/user-preferences/section-layout', { signal: controller.signal })
+    void fetch('/api/user-preferences/section-layout', { signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } })
       .then(async response => {
         if (!response.ok) throw new Error('Section layout preferences could not be loaded.');
         const data = await response.json();
@@ -5514,7 +5530,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           const initialSection = params.has('reveal_session') || params.has('reveal_understanding') ? 'sessions' : params.has('reveal_strategy') ? 'strategies' : 'project';
           window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: initialSection }));
         }
-      }).catch(cause => { if (!controller.signal.aborted) reportRequestFailure(errorMessage(cause)); });
+      }).catch(cause => { if (!controller.signal.aborted) console.warn('SIGMA section layout preference unavailable:', errorMessage(cause)); });
     return () => controller.abort();
   }, [guest, path]);
   useEffect(() => {

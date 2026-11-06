@@ -261,3 +261,29 @@
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure { margin: 10px 0 0 28px; border: 0; background: transparent; }
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure > summary { padding: 4px 0; color: #b5a18c; font-size: 12px; }
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-content { padding: 4px 10px 8px; }
+
+/* Paper numbers match Session disclosure: underline only when hovered/focused. */
+.workspace-page .papers-pane .saved-paper-title-toggle { text-decoration: none; }
+.workspace-page .papers-pane .saved-paper-title-toggle:hover,
+.workspace-page .papers-pane .saved-paper-title-toggle:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+/* Paper title is a PDF link, not an expansion control. */
+.workspace-page .papers-pane .paper-pdf-title-link {
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.workspace-page .papers-pane .paper-pdf-title-link:hover,
+.workspace-page .papers-pane .paper-pdf-title-link:focus-visible {
+  color: #f1c58d;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.workspace-page .papers-pane .paper-draft-status { display: grid; gap: 3px; }
+.workspace-page .papers-pane .paper-sections-remaining { display: block; color: #a8b8c6; font-size: 12px; font-weight: 400; }
+.workspace-page .papers-pane .paper-stage-list li.is-active { column-gap: 12px; row-gap: 8px; }
+.workspace-page .papers-pane .saved-paper-title-tools .paper-rewind-action { color: #e5ba69; }
