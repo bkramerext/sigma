@@ -2696,14 +2696,22 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
         stored_record["snapshot_ref"] = _store_frozen_snapshot(
             path, stored_record.pop("snapshot"), stored_record["snapshot_sha256"]
         )
+    # Keep the exact authored TeX in durable storage, not duplicated in the
+    # metadata JSON loaded for every saved paper.
+    tex_source = stored_record.pop("tex_source", None)
+    tex_bytes = tex_source.encode("utf-8") if isinstance(tex_source, str) else None
+    if tex_bytes:
+        stored_record["tex_sha256"] = hashlib.sha256(tex_bytes).hexdigest()
+        stored_record["tex_size_bytes"] = len(tex_bytes)
     json_bytes = _json(stored_record)
-    if len(json_bytes) + len(pdf) > MAX_PAPER_BYTES:
+    if len(json_bytes) + len(pdf) + len(tex_bytes or b"") > MAX_PAPER_BYTES:
         raise ProjectError("Paper record exceeds the 12 MB storage limit")
     if target.suffix == ".json":
         names = _paper_artifact_names(target)
         json_name = f"artifacts/papers/{identifier}.json"
         pdf_name = f"artifacts/papers/{identifier}.pdf"
-        if json_name in names or pdf_name in names:
+        tex_name = f"artifacts/papers/{identifier}.tex"
+        if json_name in names or pdf_name in names or tex_name in names:
             raise ProjectError("Paper version identifier already exists")
         count = sum(
             name.startswith("artifacts/papers/")
@@ -2715,24 +2723,33 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
             raise ProjectError("This project has reached the 50 paper version limit")
         from sigma.projects import save_project_artifacts
 
-        save_project_artifacts(target, {json_name: json_bytes, pdf_name: pdf})
+        artifacts = {json_name: json_bytes, pdf_name: pdf}
+        if tex_bytes:
+            artifacts[tex_name] = tex_bytes
+        save_project_artifacts(target, artifacts)
         return
     directory = _paper_dir(path)
     destination = directory / f"{identifier}.json"
     pdf_destination = directory / f"{identifier}.pdf"
+    tex_destination = directory / f"{identifier}.tex"
     if (
         destination.exists()
         or destination.is_symlink()
         or pdf_destination.exists()
         or pdf_destination.is_symlink()
+        or tex_destination.exists()
+        or tex_destination.is_symlink()
     ):
         raise ProjectError("Paper version identifier already exists")
     if len(list(directory.glob("*.json"))) >= MAX_PAPERS:
         raise ProjectError("This project has reached the 50 paper version limit")
     staged_json = _stage(directory, json_bytes)
     staged_pdf = _stage(directory, pdf)
+    staged_tex = _stage(directory, tex_bytes) if tex_bytes else None
     try:
         os.link(staged_pdf, pdf_destination)
+        if staged_tex is not None:
+            os.link(staged_tex, tex_destination)
         os.link(staged_json, destination)
         fd = os.open(directory, os.O_RDONLY)
         try:
@@ -2741,11 +2758,14 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
             os.close(fd)
     except OSError as exc:
         pdf_destination.unlink(missing_ok=True)
+        tex_destination.unlink(missing_ok=True)
         destination.unlink(missing_ok=True)
         raise ProjectError(f"Could not save the complete paper version: {exc}") from exc
     finally:
         staged_json.unlink(missing_ok=True)
         staged_pdf.unlink(missing_ok=True)
+        if staged_tex is not None:
+            staged_tex.unlink(missing_ok=True)
 
 
 def _work_file(path: str, *, create: bool) -> Path:
@@ -9485,11 +9505,43 @@ def list_papers(path: str) -> list[dict[str, Any]]:
     return records
 
 
-def get_paper(path: str, paper_id: str) -> dict[str, Any]:
+def _paper_tex_source(path: str, paper_id: str, record: dict[str, Any]) -> str:
+    """Read TeX on demand; older saved versions contain inline TeX."""
+    inline = record.get("tex_source")
+    if isinstance(inline, str) and inline:
+        return inline
+    digest = record.get("tex_sha256")
+    size = record.get("tex_size_bytes")
+    if not isinstance(digest, str) or not isinstance(size, int) or not 0 < size <= MAX_PAPER_BYTES:
+        raise ProjectError("The TeX source for this saved paper is unavailable.")
+    identifier = _paper_id(paper_id)
+    target = project_path(path)
+    if target.suffix == ".json":
+        from sigma.projects import read_project_artifact
+
+        contents = read_project_artifact(target, f"artifacts/papers/{identifier}.tex")
+    else:
+        file = _paper_dir(path, create=False) / f"{identifier}.tex"
+        if file.is_symlink() or not file.is_file() or file.stat().st_size != size:
+            raise ProjectError("Saved TeX source is missing or unsafe")
+        contents = file.read_bytes()
+    if len(contents) != size or hashlib.sha256(contents).hexdigest() != digest:
+        raise ProjectError("Saved TeX source does not match its published checksum")
+    try:
+        return contents.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectError("Saved TeX source is not UTF-8") from exc
+
+
+def get_paper(path: str, paper_id: str, *, include_tex: bool = True) -> dict[str, Any]:
     record = _read_one(path, paper_id)
     if record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Paper belongs to a different project")
     record["pdf_available"] = _valid_pdf_file(path, record)
+    if include_tex and "tex_sha256" in record:
+        record["tex_source"] = _paper_tex_source(path, paper_id, record)
+    elif not include_tex:
+        record.pop("tex_source", None)
     from sigma.paper_scores import cached_score
 
     record["score"] = cached_score(record) if record["pdf_available"] else None
@@ -9547,11 +9599,8 @@ def paper_text(path: str, paper_id: str) -> str:
 
 def paper_tex(path: str, paper_id: str) -> str:
     """Return the exact TeX source compiled into this saved version's PDF."""
-    record = get_paper(path, paper_id)
-    source = record.get("tex_source")
-    if not isinstance(source, str) or not source:
-        raise ProjectError("The TeX source for this saved paper is unavailable.")
-    return source
+    record = get_paper(path, paper_id, include_tex=False)
+    return _paper_tex_source(path, paper_id, record)
 
 
 def delete_paper(path: str, paper_id: str) -> None:
@@ -9571,11 +9620,12 @@ def delete_paper(path: str, paper_id: str) -> None:
                 {
                     f"artifacts/papers/{identifier}.json": None,
                     f"artifacts/papers/{identifier}.pdf": None,
+                    f"artifacts/papers/{identifier}.tex": None,
                 },
             )
             return
         directory = _paper_dir(path, create=False)
-        for suffix in (".json", ".pdf"):
+        for suffix in (".json", ".pdf", ".tex"):
             artifact = directory / f"{identifier}{suffix}"
             try:
                 if artifact.is_symlink() or artifact.is_file():
