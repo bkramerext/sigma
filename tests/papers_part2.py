@@ -715,6 +715,7 @@ def test_paper_progress_counts_keep_generation_resumable() -> None:
             "stage": "sections",
             "current": 0,
             "total": 6,
+            "sections_total": 6,
             "started_at": "2026-11-04T01:00:00+00:00",
             "updated_at": "2026-11-04T01:00:00+00:00",
             "elapsed_seconds": 10,
@@ -727,6 +728,7 @@ def test_paper_progress_counts_keep_generation_resumable() -> None:
         assert loaded.get("generation_issues") is None
         status = papers.progress_status(str(path))
         assert status is not None and status["current"] == 0 and status["total"] == 6
+        assert status["sections_total"] == 6
 
         # Only progress-display metadata is recoverable; real accounting is unchanged.
         for current, total in [(-1, 6), (7, 6), (0, 0), (None, 6), (True, 6)]:

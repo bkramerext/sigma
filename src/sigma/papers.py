@@ -3120,8 +3120,14 @@ def _load_work(path: str) -> dict[str, Any] | None:
         if (
             not isinstance(progress_state, dict)
             or not required_progress_keys.issubset(progress_state)
-            or set(progress_state) - required_progress_keys
-            not in (set(), {"failure_reason"}, {"detail"}, {"failure_reason", "detail"})
+            or bool(set(progress_state) - (required_progress_keys | {"failure_reason", "detail", "sections_total"}))
+            or (
+                "sections_total" in progress_state
+                and (
+                    type(progress_state["sections_total"]) is not int
+                    or not 1 <= progress_state["sections_total"] <= 100
+                )
+            )
             or (
                 "failure_reason" in progress_state
                 and (
@@ -3227,6 +3233,7 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "elapsed_seconds",
         "detail",
         "failure_reason",
+        "sections_total",
     )
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
@@ -3263,6 +3270,10 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
             or not isinstance(state.get("started_at"), str)
             or not isinstance(state.get("updated_at"), str)
             or type(state.get("elapsed_seconds")) is not int
+            or (
+                "sections_total" in state
+                and (type(state["sections_total"]) is not int or not 1 <= state["sections_total"] <= 100)
+            )
         ):
             raise ValueError("invalid progress metadata")
         if (
@@ -3491,6 +3502,11 @@ def progress_status(path: str) -> dict[str, Any] | None:
         **(
             {"failure_reason": state["failure_reason"]}
             if status == "failed" and state.get("failure_reason")
+            else {}
+        ),
+        **(
+            {"sections_total": state["sections_total"]}
+            if type(state.get("sections_total")) is int and 1 <= state["sections_total"] <= 100
             else {}
         ),
     }
@@ -5003,7 +5019,6 @@ def _tex(
     parts = [
         r"\documentclass[11pt]{article}",
         r"\usepackage[T1]{fontenc}",
-        r"\usepackage[utf8]{inputenc}",
         r"\usepackage[margin=1in]{geometry}",
         r"\usepackage{amsmath,amssymb,array,booktabs,longtable,pdflscape}",
         r"\usepackage{microtype}",
@@ -7782,6 +7797,19 @@ async def _generate_impl(
             }
             if detail:
                 saved_progress["detail"] = detail[:160]
+            sections_total = total if stage == "sections" else None
+            if sections_total is None and work:
+                for source_key in ("plan", "one_shot_draft"):
+                    source = work.get(source_key)
+                    if isinstance(source, dict) and isinstance(source.get("sections"), list):
+                        sections_total = len(source["sections"])
+                        break
+                if sections_total is None:
+                    previous = work.get("progress")
+                    if isinstance(previous, dict):
+                        sections_total = previous.get("sections_total")
+            if type(sections_total) is int and 1 <= sections_total <= 100:
+                saved_progress["sections_total"] = sections_total
             nonlocal last_logged_stage
             milestone = (str(stage), str(state))
             if milestone != last_logged_stage:
@@ -7809,6 +7837,7 @@ async def _generate_impl(
                         "started_at": started_at,
                         "elapsed_seconds": elapsed,
                         "detail": detail,
+                        "sections_total": saved_progress.get("sections_total"),
                     }
                 )
 
@@ -8673,7 +8702,10 @@ async def _generate_impl(
                             "The PDF used an unproofread text-only fallback rendering."
                         )
                     else:
-                        raise ProjectError(str(compile_error)) from compile_error
+                        raise ProjectError(
+                            "PDF compilation failed. The paper draft is saved; "
+                            "use Continue to retry without rewriting it."
+                        ) from compile_error
                     pass_diagnostics = []
                     try:
                         pdf = await asyncio.to_thread(

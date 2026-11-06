@@ -44,6 +44,37 @@ def test_cold_cache_collision_retries_once_without_provider_calls() -> None:
         assert cache_homes[0] != cache_homes[1]
 
 
+
+def test_tectonic_failure_hides_raw_output_but_records_backend_diagnostics() -> None:
+    """The UI sees a short error while the compiler cause stays in logs."""
+    failure_output = (
+        b"warning: inputenc package ignored under XeTeX\\n"
+        b"! Missing $ inserted.\\nl.88 unexpected token\\nSECRET-TEX-DETAIL"
+    )
+    diagnostics: list[str] = []
+    with (
+        TemporaryDirectory() as root,
+        patch("sigma.project_reports.shutil.which", return_value="/usr/local/bin/tectonic"),
+        patch(
+            "sigma.project_reports.subprocess.run",
+            return_value=SimpleNamespace(returncode=1, stdout=failure_output),
+        ),
+        patch("sigma.project_reports.logging.getLogger") as logger,
+        patch.dict(os.environ, {"SIGMA_STATE_DIR": root}),
+    ):
+        try:
+            _compile_pdf("broken TeX", diagnostics=diagnostics)
+        except RuntimeError as exc:
+            assert "Tectonic could not compile" in str(exc)
+            assert "SECRET-TEX-DETAIL" not in str(exc)
+            assert "Missing $ inserted" not in str(exc)
+        else:
+            raise AssertionError("The failed PDF must not be published")
+        assert any("Missing $ inserted" in item for item in diagnostics)
+        assert any("l.88" in item for item in diagnostics)
+        assert logger.return_value.error.called
+
+
 def fixture() -> dict:
     return {
         "export_version": 2,

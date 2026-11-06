@@ -1827,7 +1827,7 @@ def test_unrelated_compile_failure_does_not_remove_valid_diagrams() -> None:
         try:
             asyncio.run(run())
         except ProjectError as exc:
-            assert "Missing $ inserted" in str(exc)
+            assert "PDF compilation failed" in str(exc)
         else:
             raise AssertionError("An unrelated TeX error must remain a recoverable failure")
         checkpoint = papers._load_work(str(path))
