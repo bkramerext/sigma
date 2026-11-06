@@ -163,9 +163,7 @@ def project_metadata(path: str) -> ProjectPaperMetadata:
         candidates = [state]
         if directory.exists():
             candidates.extend(
-                entry
-                for entry in directory.iterdir()
-                if entry.suffix in {".json", ".pdf"}
+                entry for entry in directory.iterdir() if entry.suffix in {".json", ".pdf"}
             )
         signature = tuple(
             sorted(

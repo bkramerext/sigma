@@ -70,7 +70,6 @@ def check_project_metadata_cache_invalidation(root: Path) -> None:
 
 
 def check(root: Path, base: Path) -> None:
-    check_project_metadata_cache_invalidation(root)
     sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
     assert len(catalog) == len(sources)
@@ -547,6 +546,7 @@ def check(root: Path, base: Path) -> None:
         index_path.unlink(missing_ok=True)
         backup.rename(index_path)
     assert recent_projects()["projects"]
+    check_project_metadata_cache_invalidation(root)
     print(
         "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and unlimited recents"
     )
