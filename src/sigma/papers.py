@@ -3336,7 +3336,6 @@ def _clear_work(path: str) -> None:
     _clear_progress_status(path)
 
 
-
 def _reset_ledger_file(path: str) -> Path:
     """Small attempt-accounting receipt, NOT a resumable paper checkpoint."""
     return _work_file(path, create=False).with_name("reset-ledger.json")
@@ -3357,12 +3356,17 @@ def _read_reset_ledger(path: str) -> dict[str, Any] | None:
             or type(value.get("provider_calls_total")) is not int
             or value["provider_calls_total"] < 0
             or type(value.get("attempt_started")) is not bool
+            or not isinstance(value.get("snapshot_sha256"), str)
+            or not isinstance(value.get("kind"), str)
+            or type(value.get("snapshot_bytes")) is not int
             or not isinstance(runs, list)
             or len(runs) > 100
             or any(
                 not isinstance(run, dict)
                 or type(run.get("provider_calls_attempted")) is not int
-                or not 0 <= run["provider_calls_attempted"] <= MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
+                or not 0
+                <= run["provider_calls_attempted"]
+                <= MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
                 or not isinstance(run.get("reset_at"), str)
                 for run in runs
             )
@@ -3770,18 +3774,37 @@ async def _restart_work_locked(
     # Do not relax the snapshot check on generation itself: a new provider call
     # still requires a fresh, matching preflight.
     package, snapshot_hash = _snapshot(path)
-    state = _load_work(path)
-    if state is None or state.get("project_id") != view.project.id:
-        raise ProjectError("There is no resumable paper checkpoint to restart")
     auth = await auth_context()
     if auth["identity"] != expected_binding:
         raise ProjectError("AI account or billing mode changed; review it and retry")
     config = await configuration(view=view, context=auth)
     if not config["available"]:
         raise ProjectError(config["message"])
-    binding_fingerprint = hashlib.sha256(
-        (auth["mode"] + "\0" + auth["identity"]).encode()
-    ).hexdigest()
+    state = _load_work(path)
+    if state is None:
+        # A retransmitted reset must be idempotent, without recreating a
+        # checkpoint or manufacturing a second zero-call attempt.
+        ledger = _read_reset_ledger(path)
+        if ledger is None or ledger["project_id"] != view.project.id or ledger["attempt_started"]:
+            raise ProjectError("There is no resumable paper checkpoint to restart")
+        kind = ledger["kind"]
+        digest = ledger["snapshot_sha256"]
+        return {
+            "provider_calls_attempted": 0,
+            "provider_calls_previous_runs": sum(
+                item["provider_calls_attempted"] for item in ledger["prior_runs"]
+            ),
+            "maximum_provider_calls": (
+                MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
+                if kind == "long_form"
+                else 1 + MAX_PROOFREAD_CALLS
+            ),
+            "snapshot_bytes": ledger["snapshot_bytes"],
+            "snapshot_sha256": digest,
+            "evidence_updated_since_preflight": digest != expected_snapshot_sha256,
+        }
+    if state.get("project_id") != view.project.id:
+        raise ProjectError("There is no resumable paper checkpoint to restart")
     history = list(state.get("prior_runs", []))
     # Repeated clicks or a retry of the reset request must not manufacture
     # additional zero-call attempts or exhaust the bounded history ledger.
@@ -3795,11 +3818,7 @@ async def _restart_work_locked(
                 "reset_at": _now(),
             }
         )
-    kind = (
-        "long_form"
-        if _paper_long_form(package, force_long_form=force_long_form)
-        else "one_shot"
-    )
+    kind = "long_form" if _paper_long_form(package, force_long_form=force_long_form) else "one_shot"
     # Persist only bounded accounting. Once confirmed, NO unpublished draft,
     # checkpoint or terminal progress receipt survives Start over.
     _write_reset_ledger(
@@ -3807,9 +3826,14 @@ async def _restart_work_locked(
         {
             "schema_version": 1,
             "project_id": view.project.id,
-            "provider_calls_total": int(state.get("provider_calls_total", state.get("provider_calls", 0))),
+            "provider_calls_total": int(
+                state.get("provider_calls_total", state.get("provider_calls", 0))
+            ),
             "prior_runs": history,
             "attempt_started": False,
+            "snapshot_sha256": snapshot_hash,
+            "snapshot_bytes": len(_json(package)),
+            "kind": kind,
         },
     )
     _clear_work(path)
@@ -8092,7 +8116,9 @@ async def _generate_impl(
                 config["model"],
                 config["reasoning_effort"],
                 kind=expected_kind,
-                provider_calls_total=int(reset_ledger["provider_calls_total"]) if reset_ledger else 0,
+                provider_calls_total=int(reset_ledger["provider_calls_total"])
+                if reset_ledger
+                else 0,
                 prior_runs=list(reset_ledger["prior_runs"]) if reset_ledger else None,
             )
             work["frozen_package"] = package
