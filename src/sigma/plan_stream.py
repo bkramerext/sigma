@@ -4,6 +4,7 @@ import codecs
 import email.utils
 import json
 import re
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -327,6 +328,7 @@ async def completed(
     max_event_chars: int | None = None,
     max_text_bytes: int | None = None,
     max_events: int | None = None,
+    on_text_delta: Callable[[], Awaitable[None]] | None = None,
     incomplete_message: str = (
         "ChatGPT stream ended without a valid response.completed. No strategy was saved."
     ),
@@ -515,6 +517,9 @@ async def completed(
                         "Provider generated text exceeds the bounded response capacity."
                     )
                 delta_chunks.append(delta)
+                # Observable output activity, not validated or saved scientific progress.
+                if delta and on_text_delta is not None:
+                    await on_text_delta()
             elif kind.startswith("response.refusal."):
                 refused = True
         # Drop fully processed events: the retained partial frame stays bounded
