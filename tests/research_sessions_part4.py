@@ -2904,7 +2904,8 @@ async def test_explicit_budget_and_duration_consent_preserves_saved_state(path: 
                 str(path), started["id"], "resume", additional_calls=2
             )
         except ProjectError as exc:
-            assert "requires explicit approval to extend" in str(exc)
+            assert "for up to 60 additional minutes" in str(exc)
+            assert "2220" not in str(exc)
         else:
             raise AssertionError("Extra-call consent silently extended session duration")
         assert research_sessions._read(str(path), started["id"]) == original
@@ -2917,6 +2918,75 @@ async def test_explicit_budget_and_duration_consent_preserves_saved_state(path: 
         assert final["total_token_limit"] == original["total_token_limit"]
         assert final["steps"] == original["steps"]
         assert final["protocol_completion_time_extensions"][-1]["additional_minutes"] > 0
+
+
+async def test_resume_37_pending_turns_uses_actual_remaining_session_time(path: Path) -> None:
+    """Sovereign 17/54: one rejected attempt needs consent, not 37 hours upfront."""
+    view, strategy, credential, config = await setup(path)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        record.update(
+            {
+                "status": "paused",
+                "provider_usage_limited": True,
+                "stopped_at": research_sessions._now(),
+                "cycle_limit": 9,
+                "call_limit": 54,
+                "calls_used": 18,
+                "deadline_at": (datetime.now(UTC) + timedelta(minutes=15)).isoformat(),
+                "configured_duration_limit_minutes": 60,
+                "duration_limit_minutes": 60,
+                "hard_budget_ledger": None,
+            }
+        )
+        research_sessions._save(str(path), record)
+        original = research_sessions._read(str(path), started["id"])
+        # The saved protocol planner is verified separately. Isolate admission
+        # of the exact observed 37 unfinished valid roles / 36 available attempts.
+        plan = {
+            "required_calls": 37,
+            "completed_turns": 17,
+            "branches": [],
+            "had_provider_limit_rejection": True,
+        }
+        with (
+            patch.object(
+                research_sessions,
+                "_provider_limit_safe_plan",
+                return_value=(plan, None),
+            ),
+            patch.object(
+                research_sessions,
+                "_protocol_completion_recovery_plan",
+                return_value=(plan, None),
+            ),
+        ):
+            try:
+                await research_sessions.control_session(str(path), started["id"], "resume")
+            except ProjectError as exc:
+                assert "exactly 1 explicitly authorized additional attempts" in str(exc)
+            else:
+                raise AssertionError("Resume silently increased the paid-attempt ceiling")
+            assert research_sessions._read(str(path), started["id"]) == original
+            resumed = await research_sessions.control_session(
+                str(path), started["id"], "resume", additional_calls=1
+            )
+        assert resumed["status"] == "queued"
+        final = research_sessions._read(str(path), started["id"])
+        assert final["call_limit"] == 55
+        assert final["calls_used"] == 18
+        assert final.get("protocol_completion_time_extensions", []) == []
+        assert datetime.fromisoformat(final["deadline_at"]) < datetime.now(UTC) + timedelta(
+            minutes=20
+        )
 
 
 async def test_terminal_time_expiry_requires_separate_confirmation(path: Path) -> None:
@@ -3349,7 +3419,9 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(
         time_extension = resumed_record["protocol_completion_time_extensions"][-1]
         assert time_extension["remaining_protocol_calls"] == 5
         assert time_extension["elapsed_session_clock_preserved"] is True
-        assert time_extension["additional_minutes"] >= 5 * research_sessions.CALL_TIMEOUT // 60
+        assert time_extension["authorized_active_minutes"] == 60
+        assert 60 <= time_extension["additional_minutes"] <= 66
+        assert time_extension["additional_minutes"] < 5 * research_sessions.CALL_TIMEOUT // 60
         assert datetime.fromisoformat(resumed_record["deadline_at"]) > datetime.now(UTC)
         assert resumed_record["duration_limit_minutes"] > 60
         branch = resumed["strategy_runs"][0]
