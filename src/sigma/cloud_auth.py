@@ -341,10 +341,24 @@ def _initialize(path: Path) -> None:
                 subject TEXT PRIMARY KEY,
                 enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1))
             );
+            CREATE TABLE IF NOT EXISTS progress_email_jobs (
+                job_id TEXT PRIMARY KEY,
+                subject TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS progress_email_dispatches (
                 subject TEXT NOT NULL,
                 event_hash TEXT NOT NULL,
-                state TEXT NOT NULL CHECK(state IN ('sending','sent','unknown')),
+                state TEXT NOT NULL
+                    CHECK(state IN ('pending','sending','sent','unknown','failed','cancelled')),
+                event TEXT NOT NULL,
+                project_title TEXT NOT NULL,
+                number INTEGER NOT NULL,
+                path TEXT NOT NULL,
+                session_id TEXT,
+                paper_id TEXT,
+                incomplete INTEGER NOT NULL DEFAULT 0,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                retry_after INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(subject, event_hash)
             );
             CREATE TABLE IF NOT EXISTS audit (
