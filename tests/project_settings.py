@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import research_preferences, research_presence, research_sessions
+from sigma import research_preferences, research_presence, research_sessions, section_layout_preferences
 from sigma.api import app, research_presence_view
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
@@ -120,6 +120,32 @@ def check_unattended_execution(root: Path, path: Path, sibling: Path) -> None:
                 client.put(uri, json={"allow_unattended_background_execution": False}).status_code
                 == 200
             )
+
+            layout_uri = "/api/user-preferences/section-layout"
+            assert client.get(layout_uri).json() == {
+                "expand_one_project_section_at_a_time": False
+            }
+            for invalid in ("true", 1, None):
+                assert client.put(
+                    layout_uri, json={"expand_one_project_section_at_a_time": invalid}
+                ).status_code == 422
+            assert client.put(
+                layout_uri, json={"expand_one_project_section_at_a_time": True}
+            ).status_code == 200
+            assert client.get(layout_uri).json() == {
+                "expand_one_project_section_at_a_time": True
+            }
+            with (
+                TemporaryDirectory() as unrelated_layout,
+                patch("sigma.research_preferences.projects_root", return_value=Path(unrelated_layout)),
+            ):
+                assert client.get(layout_uri).json() == {
+                    "expand_one_project_section_at_a_time": False
+                }
+            assert section_layout_preferences.expand_one_project_section_at_a_time() is True
+            assert client.put(
+                layout_uri, json={"expand_one_project_section_at_a_time": False}
+            ).status_code == 200
 
             # A missing/failed SSE connection must not create a browser-funded
             # run that is later mistaken for an unobserved API/CLI session.
