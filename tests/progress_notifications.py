@@ -331,12 +331,15 @@ def main() -> None:
             # Transient read failures remain eligible; they are not proof of recovery.
             with patch("sigma.research_sessions._read", side_effect=OSError("transient")):
                 assert progress_notifications._pause_still_actionable(
-                    cast(sqlite3.Row, {
-                        "event": "session_paused",
-                        "session_id": session_id,
-                        "path": str(research_path),
-                        "event_hash": hashlib.sha256(deleted_id.encode()).hexdigest(),
-                    })
+                    cast(
+                        sqlite3.Row,
+                        {
+                            "event": "session_paused",
+                            "session_id": session_id,
+                            "path": str(research_path),
+                            "event_hash": hashlib.sha256(deleted_id.encode()).hexdigest(),
+                        },
+                    )
                 )
 
             # Opt-out before a queued send suppresses the existing event too.
