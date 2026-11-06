@@ -34,6 +34,7 @@ from sigma import (
     python_sandbox,
     research_qa,
     research_sessions,
+    section_layout_preferences,
     session_log,
 )
 from sigma.agentic import agentic_events
@@ -1190,6 +1191,33 @@ def set_unattended_execution_preference(body: UnattendedExecutionPreference):
     return {
         "allow_unattended_background_execution": research_preferences.update_unattended_background_execution(
             body.allow_unattended_background_execution
+        )
+    }
+
+
+class SectionLayoutPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expand_one_project_section_at_a_time: bool
+
+
+@app.get("/api/user-preferences/section-layout")
+def section_layout_preference():
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot change section layout preferences")
+    return {
+        "expand_one_project_section_at_a_time": section_layout_preferences.expand_one_project_section_at_a_time()
+    }
+
+
+@app.put("/api/user-preferences/section-layout")
+def set_section_layout_preference(body: SectionLayoutPreference):
+    principal = cloud_auth.current_principal()
+    if principal and principal.role == "guest":
+        raise HTTPException(403, "Guests cannot change section layout preferences")
+    return {
+        "expand_one_project_section_at_a_time": section_layout_preferences.update_expand_one_project_section_at_a_time(
+            body.expand_one_project_section_at_a_time
         )
     }
 
