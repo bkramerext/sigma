@@ -712,6 +712,16 @@ with sync_playwright() as playwright:
     assert reference_link.evaluate("el => getComputedStyle(el).fontSize") == hint.evaluate(
         "el => getComputedStyle(el).fontSize"
     )
+    # This preference previously had a frontend checkbox but no backend route;
+    # the checkbox must be usable without creating global request-error toasts.
+    exclusive = settings.get_by_role("checkbox", name="Expand one project section at a time")
+    expect(exclusive).to_be_enabled(timeout=10000)
+    initially_checked = exclusive.is_checked()
+    exclusive.set_checked(not initially_checked)
+    assert exclusive.is_checked() != initially_checked
+    exclusive.set_checked(initially_checked)
+    expect(page.locator(".request-toast-stack .request-toast")).to_have_count(0)
+
     # An unsaved change must survive a round trip through Project Types.
     advanced = settings.get_by_role("checkbox", name="Show advanced Outcome details")
     advanced.set_checked(not advanced.is_checked())
@@ -806,6 +816,65 @@ with sync_playwright() as playwright:
         restored_common.locator(".pt-reference-toggle").filter(has_text="Disable")
     ).to_have_count(3)
     restored_types.locator("header").get_by_role("button", name="Close", exact=True).click()
+
+    # Long project titles must align every wrapped line after the independent
+    # discipline icon track, not restart subsequent lines beneath that icon.
+    long_name = (
+        "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? "
+        "A Long-Running Investigation of Stage-Dependent Recovery v1 (continued)"
+    )
+    long_project = project(page, long_name, "mathematical")
+    open_project(page, long_project["path"])
+    title_row = page.locator(".project-header-title-row")
+    title = title_row.locator(".project-header-title")
+    expect(title).to_have_text(long_name)
+    geometry = title_row.evaluate(
+        """row => {
+          const title = row.querySelector('.project-header-title');
+          const range = document.createRange();
+          range.selectNodeContents(title);
+          const lines = [...range.getClientRects()].filter(rect => rect.width > 25)
+            .map(rect => ({x: rect.x, y: rect.y}));
+          const icon = row.querySelector('.research-type-icon').getBoundingClientRect();
+          return {lines, iconRight: icon.right};
+        }"""
+    )
+    assert len(geometry["lines"]) >= 2, geometry
+    assert all(abs(line["x"] - geometry["lines"][0]["x"]) < 3 for line in geometry["lines"]), geometry
+    assert geometry["lines"][0]["x"] > geometry["iconRight"], geometry
+
+    # The same hanging indent applies to the live title button. In particular,
+    # the pulsing dot must be vertically centered on the last wrapped line.
+    page.route(
+        "**/api/projects/papers/progress?*",
+        lambda route: route.fulfill(json={
+            "progress": {
+                "status": "active",
+                "stage": "sections",
+                "current": 1,
+                "total": 3,
+                "started_at": "2026-11-05T01:00:00+00:00",
+                "elapsed_seconds": 90,
+            }
+        }),
+    )
+    page.reload()
+    active_title = page.locator(".project-header-title-action")
+    expect(active_title).to_be_visible(timeout=10000)
+    active_geometry = active_title.evaluate(
+        """node => {
+          const text = node.querySelector('.project-header-title-text');
+          const range = document.createRange();
+          range.selectNodeContents(text.firstChild);
+          const lines = [...range.getClientRects()].filter(rect => rect.width > 25)
+            .map(rect => ({x:rect.x, midY:rect.y + rect.height / 2}));
+          const dot = text.querySelector('.research-running-indicator').getBoundingClientRect();
+          return {lines, dotMidY: dot.y + dot.height / 2};
+        }"""
+    )
+    assert len(active_geometry["lines"]) >= 2, active_geometry
+    assert all(abs(line["x"] - active_geometry["lines"][0]["x"]) < 3 for line in active_geometry["lines"])
+    assert abs(active_geometry["lines"][-1]["midY"] - active_geometry["dotMidY"]) < 9
 
     assert not errors, errors
     browser.close()
