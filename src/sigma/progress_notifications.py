@@ -25,10 +25,33 @@ _LOG = logging.getLogger("sigma.lifecycle")
 
 
 def _configured() -> bool:
-    return bool(
-        cloud_auth.email_env("GMAIL_TOKEN_FILE")
-        or cloud_auth.email_env("SMTP_HOST")
-    )
+    # SMTP_HOST has a default in the shared transport; it is optional even
+    # when SMTP_USERNAME and SMTP_PASSWORD are configured correctly.
+    if cloud_auth.email_env("GMAIL_TOKEN_FILE"):
+        return True
+    if not cloud_auth.email_env("SMTP_USERNAME"):
+        return False
+    try:
+        return bool(cloud_auth.email_secret("SMTP_PASSWORD"))
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def eligible_session_event(record: dict) -> Event | None:
+    """Report only settled outcomes and pauses requiring user intervention."""
+    status = record.get("status")
+    if status in {"completed", "ended"}:
+        return "session_finished"
+    if status == "failed":
+        return "session_failed"
+    if status == "paused":
+        # The explicit Pause control is not an unexpected interruption.
+        # Automatically paused sessions cannot continue without intervention.
+        message = str(record.get("message") or "")
+        if message.startswith(("Paused by user.", "Simulated research paused.")):
+            return None
+        return "session_paused"
+    return None
 
 
 def preference(principal: cloud_auth.Principal | None) -> dict:
