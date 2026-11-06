@@ -3965,7 +3965,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{(researchRunning || paperRunning || paperQueued)
         ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : 'Scroll to Papers'} in ${projectTitle}`} data-tooltip={researchRunning ? 'Scroll to running session' : 'Scroll to Papers'} onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : 'sigma-reveal-papers'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true"><span className={`research-running-indicator${paperQueued && !researchRunning && !paperRunning ? " paper-queued-indicator" : ""}`}/></span></span></button>
-        : <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}</div>{projectActions}</>}</div>
+        : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
@@ -5619,7 +5619,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event(eventName))));
     return () => cancelAnimationFrame(frame);
   }, [view?.project.id, initialResearchActivity, initialPaperActivity]);
-  useEffect(() => (researchRunning || paperRunning) ? runningFavicon() : paperQueued ? runningFavicon('yellow') : undefined, [researchRunning, paperRunning, paperQueued]);
+  // Global favicon is owned by App; this project only controls its header indicator.
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
@@ -6127,6 +6127,55 @@ function App() {
   const [openedView, setOpenedView] = useState<ProjectView | null>(null);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const route = new URL(location, window.location.origin);
+  const [globalActivity, setGlobalActivity] = useState<'active' | 'queued' | null>(null);
+  useEffect(() => {
+    if (cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')) {
+      setGlobalActivity(null);
+      return;
+    }
+    const controller = new AbortController();
+    let pending = false;
+    const poll = async () => {
+      if (pending || controller.signal.aborted) return;
+      pending = true;
+      try {
+        const response = await fetch('/api/projects/recent', { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
+        if (!response.ok) throw new Error('Global activity unavailable');
+        const body = await response.json() as { projects: RecentProject[] };
+        if (controller.signal.aborted) return;
+        const all = body.projects ?? [];
+        setGlobalActivity(all.some(row => row.research_running || row.paper_generating || row.paper_activity === 'active')
+          ? 'active' : all.some(row => row.paper_activity === 'queued') ? 'queued' : null);
+      } catch { /* Keep the last known activity; a transient error must not clear it. */ }
+      finally { pending = false; }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 10000);
+    window.addEventListener("focus", poll);
+    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", poll); };
+  }, [location, cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
+  useEffect(() => globalActivity === 'active' ? runningFavicon() : globalActivity === 'queued' ? runningFavicon('yellow') : undefined, [globalActivity]);
+  useEffect(() => {
+    if (cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')) return;
+    const controller = new AbortController();
+    const viewerId = crypto.randomUUID();
+    let pending = false;
+    const heartbeat = async () => {
+      if (pending || controller.signal.aborted) return;
+      pending = true;
+      try {
+        await fetch('/api/projects/research-presence/workspace', {
+          method: 'POST', credentials: 'same-origin', signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: JSON.stringify({ viewer_id: viewerId }),
+        });
+      } catch { /* Expired leases are handled by the backend's existing safety gate. */ }
+      finally { pending = false; }
+    };
+    void heartbeat();
+    const timer = window.setInterval(() => void heartbeat(), 15000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
   const presencePath = route.pathname === '/project' && !route.searchParams.has('qa_browser')
     ? route.searchParams.get('path') : null;
   useEffect(() => {
@@ -6394,6 +6443,12 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       } else if (currentProjectPath) {
         destination = projectUrl(currentProjectPath);
       }
+      // Explicit reauthentication is distinct from the browser closing: keep
+      // already admitted jobs alive during a bounded identity handoff.
+      const handoff = await fetch('/api/projects/research-presence/auth-handoff', {
+        method: 'POST', credentials: 'same-origin',
+      });
+      if (!handoff.ok) throw new Error('Could not preserve active work for re-sign-in.');
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');
       // Signing out is not a first visit. Keep the post-logout guest view

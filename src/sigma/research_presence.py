@@ -12,12 +12,15 @@ import os
 import stat
 import time
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from sigma.projects import ProjectError
+from sigma.projects import ProjectError, projects_root
 
 LEASE_TIMEOUT_SECONDS = 45
 DIRECTORY = ".sigma-browser-viewers"
+AUTH_HANDOFF_SECONDS = 15 * 60
+AUTH_HANDOFF_MARKER = "auth-handoff.viewer"
+WORKSPACE_PREFIX = "workspace-"
 
 
 def _directory(root: Path) -> Path:
@@ -81,6 +84,13 @@ def has_live_viewer(path: str) -> bool:
     metadata; this method deliberately has no historical-project exemption.
     """
     folder, identity = _project_lease_location(path)
+    try:
+        if _workspace_live_viewer(path):
+            return True
+    except ProjectError:
+        # Background workers may have no request-local workspace context.
+        # Preserve exact-project leases instead of failing the whole job.
+        pass
     if not folder.exists():
         return False
     cutoff = time.time() - LEASE_TIMEOUT_SECONDS
@@ -92,3 +102,66 @@ def has_live_viewer(path: str) -> bool:
         if stat.S_ISREG(info.st_mode) and info.st_mtime >= cutoff:
             return True
     return False
+
+
+def _workspace_lease_folder() -> Path:
+    """The caller's authenticated workspace, not a global cross-user registry."""
+    return _directory(projects_root().resolve(strict=True))
+
+
+def open_workspace_viewer() -> Path:
+    """Keep the owner's active jobs alive across project and home navigation."""
+    folder = _workspace_lease_folder()
+    folder.mkdir(mode=0o700, exist_ok=True)
+    marker = folder / f"{WORKSPACE_PREFIX}{uuid4()}.viewer"
+    _touch(marker)
+    return marker
+
+
+def refresh_workspace_viewer(viewer_id: str) -> None:
+    """Renew a short workspace lease without holding an HTTP stream open."""
+    try:
+        identifier = str(UUID(viewer_id))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ProjectError("Invalid workspace viewer identifier") from exc
+    folder = _workspace_lease_folder()
+    folder.mkdir(mode=0o700, exist_ok=True)
+    _touch(folder / f"{WORKSPACE_PREFIX}{identifier}.viewer")
+
+
+def begin_auth_handoff() -> None:
+    """Allow an explicit sign-out to reauthenticate without pausing in-flight jobs.
+
+    This is a bounded 15-minute grace period, not generic disconnected-browser
+    execution; tab closure or network loss cannot create the handoff.
+    """
+    folder = _workspace_lease_folder()
+    folder.mkdir(mode=0o700, exist_ok=True)
+    _touch(folder / AUTH_HANDOFF_MARKER)
+
+
+def _workspace_live_viewer(path: str) -> bool:
+    """Never allow a workspace lease to cover another identity's project."""
+    from sigma.projects import inspect_project
+
+    root = projects_root().resolve(strict=True)
+    project = Path(inspect_project(path).path).resolve(strict=True)
+    if not project.is_relative_to(root):
+        return False
+    folder = _workspace_lease_folder()
+    if not folder.exists():
+        return False
+    now = time.time()
+    for marker in folder.glob(f"{WORKSPACE_PREFIX}*.viewer"):
+        try:
+            info = marker.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(info.st_mode) and info.st_mtime >= now - LEASE_TIMEOUT_SECONDS:
+            return True
+    marker = folder / AUTH_HANDOFF_MARKER
+    try:
+        info = marker.lstat()
+    except FileNotFoundError:
+        return False
+    return stat.S_ISREG(info.st_mode) and info.st_mtime >= now - AUTH_HANDOFF_SECONDS

@@ -592,7 +592,9 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             route.fulfill(response=response, json=limits)
 
         page.route("**/api/projects/research-limits?**", generous_research_limits)
-        page.goto(f"{ui_url}{return_to}", wait_until="networkidle")
+        # Live presence and activity polling intentionally keep network requests open;
+        # the explicit UI assertions below, not network idleness, establish readiness.
+        page.goto(f"{ui_url}{return_to}", wait_until="domcontentloaded")
         expect(
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible()
