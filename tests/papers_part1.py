@@ -1356,7 +1356,9 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         def fail_compile_visual_and_fallback(_tex, **_kwargs):
             nonlocal compile_calls
             compile_calls += 1
-            if compile_calls == 2:
+            if compile_calls in {2, 3}:
+                # Neither original visuals nor the bounded text-only recovery
+                # can compile in this fixture, so resume must remain possible.
                 raise RuntimeError("fixture compiler unavailable for an unrelated reason")
             return b"%PDF-fixture"
 
@@ -1393,9 +1395,9 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
                 try:
                     await task
                 except ProjectError as exc:
-                    assert "fixture compiler unavailable" in str(exc)
+                    assert "safe visual fallback could not compile" in str(exc)
                 else:
-                    raise AssertionError("The injected compile failure must be surfaced")
+                    raise AssertionError("The unrecoverable compile failure must be surfaced")
 
             asyncio.run(first_attempt())
             failed_progress = papers.progress_status(str(path))
@@ -1439,7 +1441,7 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
 
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
-        assert compile_calls == 4
+        assert compile_calls == 5
         assert saved["generation"]["provider_calls_attempted"] == 3
         assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 2
         assert saved["generation"]["provider_calls_lifetime_total"] == 3
