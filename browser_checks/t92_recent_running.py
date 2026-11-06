@@ -259,6 +259,15 @@ with sync_playwright() as playwright:
     expect(saved_button).to_be_disabled()
     expect(saved_button.locator(".project-opening-hourglass")).to_be_visible()
     expect(saved_button.locator(".project-opening-label")).to_have_text("Opening...")
+    saved_opening_style = saved_button.evaluate(
+        """button => ({
+          gap: parseFloat(getComputedStyle(button.querySelector('.project-opening-hourglass')).marginLeft),
+          label: getComputedStyle(button.querySelector('.project-opening-label')).color,
+          title: getComputedStyle(button.querySelector('strong') || button).color
+        })"""
+    )
+    assert saved_opening_style["gap"] >= 11, saved_opening_style
+    assert saved_opening_style["label"] == saved_opening_style["title"], saved_opening_style
     expect(saved_button).to_have_css("cursor", "pointer")
     page.evaluate("window.__finishProjectOpen()")
     expect(saved_button).to_have_attribute("aria-busy", "false")
@@ -278,6 +287,15 @@ with sync_playwright() as playwright:
     expect(sample_button).to_be_disabled()
     expect(sample_button.locator(".project-opening-hourglass")).to_be_visible()
     expect(sample_button.locator(".project-opening-label")).to_have_text("Opening...")
+    sample_opening_style = sample_button.evaluate(
+        """button => ({
+          gap: parseFloat(getComputedStyle(button.querySelector('.project-opening-hourglass')).marginLeft),
+          label: getComputedStyle(button.querySelector('.project-opening-label')).color,
+          title: getComputedStyle(button.querySelector('strong')).color
+        })"""
+    )
+    assert sample_opening_style["gap"] >= 11, sample_opening_style
+    assert sample_opening_style["label"] == sample_opening_style["title"], sample_opening_style
     expect(sample_button).to_have_css("cursor", "pointer")
     page.evaluate("window.__finishProjectOpen()")
     expect(sample_button).to_have_attribute("aria-busy", "false")

@@ -474,14 +474,12 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 }
 
 /* Running green takes precedence; a queued paper pulses bright yellow. */
-.workspace-page .project-header-title .research-running-indicator.paper-queued-indicator,
-.workspace-page .papers-pane .paper-draft-pulse.paper-queued-pulse .research-running-indicator {
+.workspace-page .project-header-title .research-running-indicator.paper-queued-indicator {
   background: #ffff00; border-color: #b8a900; box-shadow: 0 0 0 0 #ffff0080;
   animation-name: paper-queued-heartbeat;
 }
 @media (prefers-reduced-motion: reduce) {
-  .workspace-page .project-header-title .paper-queued-indicator,
-  .workspace-page .papers-pane .paper-queued-pulse .research-running-indicator { animation: none; }
+  .workspace-page .project-header-title .paper-queued-indicator { animation: none; }
 }
 
 /* A dedicated icon track provides a true hanging indent on wrapped project titles. */
@@ -503,7 +501,12 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   -webkit-line-clamp: unset;
   line-clamp: unset;
 }
-.workspace-page .project-header-title-action .research-running-indicator-frame { display: inline-flex; width: 20px; height: 1em; vertical-align: -0.12em; margin-left: 3px; }
+.workspace-page .project-header-title-action .research-running-indicator-frame {
+  display: inline-flex; width: 20px; height: 1em;
+  /* Align the heartbeat to the text line's middle, not the baseline.
+     Inline flow keeps it beside the last line of wrapped titles. */
+  vertical-align: middle; margin-left: 3px;
+}
 @media (max-width:700px) { .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0,1fr); gap: 5px; } }
 
 

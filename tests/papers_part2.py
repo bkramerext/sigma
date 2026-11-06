@@ -882,6 +882,8 @@ def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
         item[1:3] for item in progress_events if item[0] == "sections" and item[3] == "milestone"
     ]
     assert section_milestones == [(number, 6) for number in range(1, 7)]
+    # Sections finish in reverse order here; progress is completed-count,
+    # not the latest section number, and does not erase saved work.
     assert set(state["section_drafts"]) == {str(number) for number in range(1, 7)}
     assert all(
         set(snapshot.get("section_drafts", {})) <= set(state["section_drafts"])

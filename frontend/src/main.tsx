@@ -2483,6 +2483,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [continuationAvailable, setContinuationAvailable] = useState(false);
   const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; proofreading_status?: string; publication_status?: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [restartingCheckpoint, setRestartingCheckpoint] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
   const [paperClock, setPaperClock] = useState(() => Date.now());
@@ -2537,8 +2538,9 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     const timer = window.setInterval(() => setPaperClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [busy, paperProgress?.status]);
-  async function refresh(keepId?: string) {
-    setLoading(true);
+  async function refresh(keepId?: string, silent = false) {
+    // Preserve the open paper cards during a Start over refresh.
+    if (!silent) setLoading(true);
     try {
       const query = new URLSearchParams({ path });
       const [listResponse, configResponse, progressResponse] = await Promise.all([
@@ -2569,7 +2571,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         else setCheckpointMismatch(null);
         setRestartableCheckpoint(
           !generationRunning && preflightResponse.ok && preflight.checkpoint_exists &&
-          preflight.checkpoint_can_restart ? preflight : null
+          !preflight.resume_available && preflight.checkpoint_can_restart ? preflight : null
         );
       }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
@@ -2580,7 +2582,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       } else setSelected(null);
       setError(!configResponse.ok || !config.available ? (config.message ?? 'Connect an eligible AI provider to author a paper.') : '');
     } catch (cause) { setError(errorMessage(cause)); }
-    finally { setLoading(false); }
+    finally { if (!silent) setLoading(false); }
   }
   useEffect(() => {
     if (!['active', 'queued'].includes(paperProgress?.status ?? '')) return;
@@ -2772,7 +2774,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   async function restartCheckpoint() {
     const restartSource = checkpointMismatch ?? restartableCheckpoint;
     if (busy || !restartSource?.checkpoint_can_restart || !binding) return;
-    setBusy(true); setError(''); setSuccess(''); setPhase('Clearing unfinished paper work…');
+    setBusy(true); setRestartingCheckpoint(true); setError(''); setSuccess(''); setPhase('Paper generation starting over');
     try {
       const response = await fetch('/api/projects/papers/restart', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
@@ -2793,10 +2795,10 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       setDraftPaperExpanded(true);
       // Restart only after a confirmed reset, without extending the reset handler
       // through the entire paper-generation stream.
-      await refresh(selected?.paper_id);
-      // Restart clears the checkpoint; Play begins generation only when requested.
+      await refresh(selected?.paper_id, true);
+      // The new checkpoint is immediately resumable: leave Play as its only process action.
     } catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); }
+    finally { setRestartingCheckpoint(false); setBusy(false); }
 
   }
   async function generatePaper() {
@@ -2957,7 +2959,6 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
               actions={<>
                 {!generationRunning && <span className="paper-play-tooltip" data-tooltip={generating ? 'Only one paper at a time' : continuationAvailable ? 'Resume paper generation' : 'Generate paper'}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={generating || loading || !binding || !!checkpointMismatch} onClick={() => { setDraftPaperExpanded(true); void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
                 {generationRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={`Stop Paper ${draftVersion}`} data-tooltip="Stop paper generation" disabled={!binding || loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
-                {generationRunning && <span className={`research-running-indicator-frame paper-draft-pulse${paperProgress?.status === "queued" ? " paper-queued-pulse" : ""}`} aria-label="Paper generation running" title="Paper generation running"><span className="research-running-indicator"/></span>}
                 {!generationRunning && (restartableCheckpoint?.checkpoint_can_restart || checkpointMismatch?.checkpoint_can_restart) && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>}
                 {!generationRunning && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove unfinished Paper ${draftVersion}`} data-tooltip={`Remove unfinished Paper ${draftVersion}`} disabled={busy || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
@@ -2975,8 +2976,8 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       {checkpointMismatch && !generating && <p className="ai-paper-restart-notice" role="status">{checkpointMismatch.incomplete_one_shot
         ? 'The previous writing attempt stopped before saving a draft and cannot resume.'
         : 'Research or AI settings changed; this checkpoint cannot resume.'} Saved research and papers remain. Use Start over to generate again.</p>}
-      {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
-      {paperProgress && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
+      {busy && (restartingCheckpoint || !paperProgress) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
+      {paperProgress && !restartingCheckpoint && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
         {paperProgress.status === 'active' || paperProgress.status === 'queued'
           ? <>
               <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>

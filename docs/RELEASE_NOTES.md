@@ -60,3 +60,84 @@ We want to learn whether SIGMA's multi-agent approach produces useful insights, 
 SIGMA remains an experimental research application. Investigator/Skeptic agreement is not independent verification, and generated research papers may contain errors or unsupported conclusions.
 
 Please report confusing behavior, unsuccessful investigations, missing evidence, or unexpected results. Negative findings are valuable feedback too.
+
+---
+
+## Version 0.2.0 — Deeper Research, Better Papers
+*November 4, 2026*
+
+**A substantial expansion of SIGMA as a research workbench.** Version 0.2.0 goes beyond producing an answer: it gives investigators more room to explore difficult questions, scrutinize the evidence, preserve the work, and turn results into papers that are easier to evaluate.
+
+### Research process and scientific rigor
+
+- **Structured research rounds.** Investigator and Skeptic exchanges now follow configurable rounds and paired turns. The new default is three rounds with three paired turns per round: **18 AI agent calls per enabled strategy**. The interface also shows the total across enabled strategies.
+- **Parallel strategies, ordered debates.** Independent strategies can advance concurrently within shared capacity limits, while Investigator and Skeptic calls remain sequential within each strategy. Longer sessions preserve the relationships between findings, reviews, and open obligations.
+- **Longer-running research.** The default session duration is 60 minutes, with an **Unlimited** option for the overall research deadline. Per-call, spending, usage, and configured turn limits still apply.
+- **Durable continuation.** Interrupted or provider-limited sessions can resume from saved work, even when the connected provider account changes. Completed role calls, findings, evidence, attempted calls, and uncertain usage are preserved rather than restarted or silently replayed.
+- **More careful scientific outcomes.** SIGMA now separates scientific acceptability from merely reaching a scheduler limit. Substantive challenges and conflicting evidence remain blocking; nonblocking peer-inspection tasks can be identified without treating a promising candidate result as independently proven. Multiple strategies are reconciled without discarding disagreements or negative findings.
+- **Improved research methodology.** Stronger adversarial review, explicit evidence provenance, smaller bounded context packages, and clearer source-availability records reduce unsupported claims. The system distinguishes retrieved and inspected reference material from an unvisited link.
+
+### Project Types and research standards
+
+- **Built-in and custom Project Types.** Create projects using subject-specific conventions or define custom types inherited from other types. Common research and publication standards are kept separate from disciplinary guidance; Literature has been added alongside the scientific and mathematical subjects.
+- **Reference selection per user.** Enable or disable individual research and publication references, with settings isolated between users. Changes apply to new work without rewriting frozen references in existing sessions or papers.
+- **Reference compilation and reuse.** SIGMA can compile the selected methodology material into concise, durable guidance once per research session, and separately for paper writing. Selected, omitted, unavailable, and hashed excerpts remain traceable. Reference compilation has its own accounting and guarded retry behavior.
+
+### Better papers
+
+- **More faithful writing.** Paper generation more carefully traces claims to saved research, recognizes counterexamples and uncertainty, and distinguishes verified evidence from open questions. Subject-specific guidance improves mathematical, physical, and literary presentation.
+- **Resumable multi-section authoring.** Long-form papers retain planning, section, and proofreading checkpoints. Completed sections remain saved if another section encounters a provider failure, and bounded automatic retries help recover from transient interruptions.
+- **Iterative LaTeX proofreading.** Up to three proofreading passes, stopping early when changes converge, improve presentation while protecting the scientific meaning of the manuscript.
+- **Paper Score.** Saved papers can be scored against a weighted, versioned rubric on a 100-point scale. The score appears in paper metadata and a detailed review dialog. **This is an editorial quality assessment, not independent scientific validation.**
+- **Plain-language explanations.** The Explain-it-to-me-like-I'm-5 feature can generate and cache an accessible explanation of a saved paper.
+- **Paper archives and downloads.** Paper versions, readable filenames, LaTeX source, PDFs, and provenance are easier to locate and inspect.
+
+### Explore, organize, and share
+
+- **Research Q&A.** Ask questions about saved sessions, artifacts, findings, and Current Understanding. Answers retain a frozen evidence basis and validated citation links, and are included in project export/import.
+- **An expanded sample library.** New example investigations cover AI agent reliability, sovereign AI, biology, mathematics, qubit decoherence, warp-drive physics, and literary analysis of *The Crucible*. Public sample papers are supported where complete, approved PDF and score artifacts are available.
+- **Project version pinning.** Pin a preferred project version in place, temporarily hiding its unpinned siblings without deleting anything.
+- **Save As and project email.** Duplicate a saved project under a new identity, preserving its independent history and related work. Share an importable project bundle by email, with optional PDF and LaTeX attachments, when SMTP is configured.
+- **Clearer workflow and navigation.** Revised session controls, project summaries, step progress, logs, citations, tooltips, exports, and workflow documentation make long investigations easier to follow.
+
+### Reliability and limitations
+
+This release strengthens recovery from interrupted streams, provider errors, capacity limits, context growth, and incomplete paper-writing calls. SIGMA records uncertainties about AI usage rather than assuming a failed request was free or safe to replay.
+
+**SIGMA remains experimental.** Investigator/Skeptic agreement, a completed research schedule, and a high paper score are not substitutes for independent review. Generated claims and citations should be checked before relying on or publishing them.
+
+<details>
+<summary>Maintainer release boundary</summary>
+
+Deployed v0.1.7 SHA: \`802e9b6b7da5829868070f760e17280cd8a927f2\`.
+Deployed v0.2.0 SHA: \`9d938907ffd02fb89c9d10545e8df61484310cbd\`.
+The compared range contains 885 commits. Features merged after the v0.2.0 SHA are excluded from this section.
+</details>
+
+---
+
+## Version 0.2.1 — Paper Workflow and Production Resilience
+*Release candidate — not yet deployed*
+
+**A focused follow-up to make paper generation more dependable, visible, and easier to control.** These notes describe work merged after v0.2.0, together with the final changes in this release-notes PR. The production release remains on hold.
+
+### A simpler Papers workspace
+
+- **Papers alongside Sessions.** Paper generation moves out of a modal dialog into a collapsible **Papers** section on each project, with individual paper cards, familiar Play/Stop controls, progress steps, downloads, browser viewing, scoring, and explanations.
+- **Clearer progress.** The writing stage reports completed and total sections when known, including after refresh and continuation. Reference review, evidence extraction, writing, validation, proofreading, and PDF compilation use consistent pending, active, and completed labels. Errors are presented without burying the user in internal diagnostic chatter.
+- **More intuitive controls.** Start over clears the unfinished paper work but does not automatically generate a new paper. When the reset completes, the paper remains in place with **Play** available; it no longer presents Start over again. The reset displays **Paper generation starting over**.
+- **Polished paper cards.** Each paper has its own container and spacing. High-scoring papers show a star by the paper title for scores **above 70**. Activity indicators, hover behavior, action menus, confirmation popovers, and loading labels are aligned with the rest of SIGMA.
+
+### Generation continuity and resource protection
+
+- **Queued paper generation.** Starting a paper in another project queues it when the generation slot is occupied. Yellow indicates waiting, green indicates active generation. Queue state and cancellation are durable enough to explain interruptions without silently replaying unknown AI work.
+- **Checkpoint-first recovery.** Section drafts and provider accounting survive interruptions, failed PDFs, Stop/Continue, and transient network or provider failures. Compilation diagnostics are preserved privately while the user sees a concise recoverable message.
+- **Production memory protection.** A backend watchdog can restart an unresponsive service. Memory-pressure monitoring limits new AI work and halts active work at critical thresholds while preserving recoverable state. Administrators can receive urgent alerts.
+- **Persistent operational diagnostics.** Backend memory and activity logging are retained on persistent storage, with automatic log retention and more usable project/session diagnostics. Resource limits were adjusted for the larger production host.
+- **Smaller memory footprint.** Paper-list rendering and routine progress checks avoid loading unnecessarily large paper checkpoints.
+
+### Additional improvements
+
+Research Q&A browser pages scroll correctly; literature-specific research and paper guidance is improved; opening projects has a consistent status indicator; browser favicon activity settles back to idle; and session/paper controls, tooltips, spacing, and error notices are more consistent.
+
+**Status:** Source version 0.2.1 is prepared. This section is a release-candidate summary; it does not imply the new version has been deployed or that the pending release checks have run.

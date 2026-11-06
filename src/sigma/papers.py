@@ -6639,8 +6639,10 @@ or document markup."""
         state["provider_calls"] = calls
         save_state(state)
         if progress:
-            completed_count = len(saved_sections) if fast_path else section_number
-            await progress("sections", completed_count, len(long_plan.sections), "milestone")
+            # Count persisted completions, not the author's section number.
+            # Independent section jobs can finish in any order and Continue
+            # may resume with sections already present in the checkpoint.
+            await progress("sections", len(saved_sections), len(long_plan.sections), "milestone")
         if calls > MAX_LONG_PAPER_CALLS:
             raise ProjectError("Long-paper generation exceeded its bounded provider-call budget")
         return PaperSection(
@@ -8200,6 +8202,10 @@ async def _generate_impl(
                 model = config["model"]
                 work = checkpoint
                 provider_calls = int(work.get("provider_calls", 1))
+                # One-shot writing completes in one paid response. The number
+                # of sections is not known while that response is pending.
+                if draft.sections:
+                    await report("sections", len(draft.sections), len(draft.sections), "milestone")
             else:
                 if checkpoint is None and not work:
                     work = _new_work(
@@ -8282,6 +8288,11 @@ async def _generate_impl(
                 )
                 work["one_shot_draft"] = draft.model_dump()
                 _save_work(path, work)
+                # Do not claim fractional one-shot progress. Once the single
+                # authoring response is durably saved, its actual section count
+                # is available and the UI can show Wrote sections (N).
+                if draft.sections:
+                    await report("sections", len(draft.sections), len(draft.sections), "milestone")
                 await report("validation", None, None)
                 draft, _ = _validate_with_local_recovery(draft, package, work)
                 if work["one_shot_draft"] != draft.model_dump():
