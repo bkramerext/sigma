@@ -15882,12 +15882,7 @@ async def _worker(session_id: str, path: str) -> None:
             try:
                 from sigma import cloud_auth, progress_notifications
 
-                event = {
-                    "ended": "session_finished",
-                    "completed": "session_finished",
-                    "failed": "session_failed",
-                    "paused": "session_paused",
-                }.get(final.get("status"))
+                event = progress_notifications.eligible_session_event(final)
                 # A deliberate Pause is not an unexpected interruption.
                 if event == "session_paused" and str(final.get("message", "")).startswith("Paused by user."):
                     event = None
