@@ -826,7 +826,10 @@ def papers_preflight_view(
 
 @app.get("/api/projects/papers/progress")
 def papers_progress_view(path: str):
-    return {"progress": papers.progress_status(path)}
+    return {
+        "progress": papers.progress_status(path),
+        "preflight_needed": papers.needs_preflight_on_open(path),
+    }
 
 
 @app.post("/api/projects/papers/cancel")
