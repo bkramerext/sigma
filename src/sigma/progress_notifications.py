@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import logging
 import re
+import sqlite3
 from email.message import EmailMessage
 from typing import Literal
 from urllib.parse import urlencode
@@ -43,7 +44,7 @@ def preference(principal: cloud_auth.Principal | None) -> dict:
                 (principal.subject,),
             ).fetchone()
         return {"enabled": bool(row["enabled"]) if row else False, "available": _configured()}
-    except (ValueError, OSError, RuntimeError) as exc:
+    except (ValueError, OSError, RuntimeError, sqlite3.Error) as exc:
         _LOG.warning("progress_email.preference_unavailable error_type=%s", type(exc).__name__)
         return {"enabled": False, "available": False}
 
@@ -110,7 +111,7 @@ def message_for(event: Event, project: str, number: int, link: str) -> EmailMess
         raise ValueError("Unsupported notification.")
     if not link.startswith(("https://", "http://localhost:", "http://127.0.0.1:")):
         raise ValueError("Invalid notification link.")
-    clean = re.sub(r"[\\x00-\\x1f\\x7f]+", " ", project).strip()[:140] or "Untitled project"
+    clean = re.sub(r"[\x00-\x1f\x7f]+", " ", project).strip()[:140] or "Untitled project"
     subject, body, action = _COPY[event]
     message = EmailMessage()
     message["Subject"] = f"SIGMA: {subject.format(number=number)} · {clean}"
@@ -129,7 +130,13 @@ def deep_link(
         parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1"}
     ):
         raise ValueError("Notification origin is invalid.")
-    if not origin or parsed.path not in ("", "/") or parsed.query or parsed.fragment or parsed.username:
+    if (
+        not origin
+        or parsed.path not in ("", "/")
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+    ):
         raise ValueError("Notification origin is invalid.")
     params: dict[str, str] = {"path": path}
     if session_id:
@@ -184,18 +191,28 @@ def dispatch(
             # Delivery could have succeeded before the connection failed.
             with cloud_auth._db(cfg) as db:
                 db.execute(
-                    "UPDATE progress_email_dispatches SET state='unknown' WHERE subject=? AND event_hash=?",
+                    "UPDATE progress_email_dispatches SET state='unknown' "
+                    "WHERE subject=? AND event_hash=?",
                     (principal.subject, digest),
                 )
-            _LOG.warning("progress_email.delivery_unknown event=%s error_type=%s", event, type(exc).__name__)
+            _LOG.warning(
+                "progress_email.delivery_unknown event=%s error_type=%s",
+                event,
+                type(exc).__name__,
+            )
             return
         with cloud_auth._db(cfg) as db:
             db.execute(
-                "UPDATE progress_email_dispatches SET state='sent' WHERE subject=? AND event_hash=?",
+                "UPDATE progress_email_dispatches SET state='sent' "
+                "WHERE subject=? AND event_hash=?",
                 (principal.subject, digest),
             )
     except Exception as exc:
-        _LOG.warning("progress_email.dispatch_unavailable event=%s error_type=%s", event, type(exc).__name__)
+        _LOG.warning(
+            "progress_email.dispatch_unavailable event=%s error_type=%s",
+            event,
+            type(exc).__name__,
+        )
 
 
 def schedule(
