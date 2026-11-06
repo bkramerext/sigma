@@ -13,11 +13,6 @@
 .home-page .home-recents .recent-open > .research-running-indicator {
   vertical-align: middle;
 }
-.home-page .home-recents .recent-open strong {
-  display: inline; font: inherit; color: inherit; overflow-wrap: anywhere;
-}
-.home-page .home-recents .recent-open strong.is-current-project,
-.home-page .home-recents .recent-open strong.is-most-recent-project { font-weight: 700; }
 .home-page .home-recents .recent-meta-row { position: relative; display: flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; margin-top: 2px; }
 .home-page .home-recents .recent-meta-row > small { display: inline-flex; align-items: center; gap: 6px; margin-top: 0; color: #b6c2ce; font-size: 11px; font-weight: 400; }
 .home-page .home-recents .recent-open:hover:not(:disabled) {
