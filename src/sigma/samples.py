@@ -658,7 +658,22 @@ def sample_projects() -> dict[str, list[dict[str, Any]]]:
 
 
 def sample_project_ids() -> set[str]:
-    return {_load(name)[0]["id"] for name, _ in _projects()}
+    """Identify immutable templates without opening or verifying their PDFs.
+
+    Saved Projects calls this on every listing request to exclude built-in
+    examples. The full Samples catalog and sample-opening paths still verify
+    sample papers and their checksums as before.
+    """
+    identifiers: set[str] = set()
+    for name, path in _projects():
+        if path.is_symlink():
+            raise ProjectError(f"Sample project {name} is unavailable.")
+        try:
+            project = _decode(json.loads(path.read_bytes()))
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise ProjectError(f"Sample project {name} is unavailable: {exc}") from exc
+        identifiers.add(project.id)
+    return identifiers
 
 
 def open_sample_project(identifier: str) -> ProjectView:
