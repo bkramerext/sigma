@@ -15883,9 +15883,6 @@ async def _worker(session_id: str, path: str) -> None:
                 from sigma import cloud_auth, progress_notifications
 
                 event = progress_notifications.eligible_session_event(final)
-                # A deliberate Pause is not an unexpected interruption.
-                if event == "session_paused" and str(final.get("message", "")).startswith("Paused by user."):
-                    event = None
                 principal = cloud_auth.current_principal()
                 if event and principal:
                     project_title = inspect_project(path).project.title
@@ -15902,9 +15899,7 @@ async def _worker(session_id: str, path: str) -> None:
                         session_id=session_id,
                     )
             except (OSError, ProjectError, ValueError, KeyError, TypeError) as exc:
-                log.warning(
-                    "session.progress_email_skipped error_type=%s", type(exc).__name__
-                )
+                log.warning("session.progress_email_skipped error_type=%s", type(exc).__name__)
         if cloud_research.billing_enabled():
             try:
                 current = _read(path, session_id)
