@@ -2314,7 +2314,7 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 }
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[]; sigma_issues?: string[]; sigma_issues_included?: boolean } };
-type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
+type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 const PAPER_STAGES = [
@@ -2326,7 +2326,8 @@ const PAPER_STAGES = [
   { label: 'Validate', stages: ['validation'] },
   { label: 'Proofread', stages: ['proofreading'] },
   { label: 'Generate PDF', stages: ['compile', 'pdf_check'] },
-  { label: 'Score paper', stages: ['scoring', 'score_failed', 'complete'] },
+  { label: 'Score paper', stages: ['scoring', 'score_failed'] },
+  { label: 'Finish', stages: ['finishing', 'complete'] },
 ] as const;
 
 function paperStageLabel(step: number, active: number, progress: PaperProgress): string {
@@ -2355,30 +2356,43 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
     return 'Proofreading';
   }
   if (step === 7) return completed ? 'Generated PDF' : current ? 'Generating PDF' : 'Generate PDF';
-  return completed ? 'Scored paper' : current ? 'Scoring paper' : 'Score paper';
+  if (step === 8) {
+    if (progress.detail?.includes('scoring did not finish')) return 'Score unavailable';
+    return completed ? 'Scored paper' : current ? 'Scoring paper' : 'Score paper';
+  }
+  return completed ? 'Finished' : current ? 'Finishing' : 'Finish';
+}
+
+// Previously persisted checkpoints sometimes used retry as a synthetic stage.
+function paperDisplayProgress(progress: PaperProgress): PaperProgress {
+  if (progress.stage !== 'retry') return progress;
+  return progress.sections_total
+    ? { ...progress, stage: 'sections', current: null, total: progress.sections_total }
+    : { ...progress, stage: 'writing', current: null, total: null };
 }
 
 function paperProgressOperation(progress: PaperProgress): string {
-  const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(progress.stage));
-  return index < 0 ? 'Retrying' : paperStageLabel(index, index, progress);
+  const display = paperDisplayProgress(progress);
+  const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(display.stage));
+  return index < 0 ? 'Paper generation' : paperStageLabel(index, index, display);
 }
 
 function paperErrorSummary(message: string): string {
   const value = message.trim();
   if (/Tectonic could not compile|No PDF was downloaded|PDF compilation failed/i.test(value)) {
-    return 'PDF compilation failed. The paper draft is saved; use Continue to retry without rewriting it.';
+    return 'PDF compilation failed. The paper draft is saved; use Resume to retry without rewriting it.';
   }
   const line = value.split(/\r?\n/, 1)[0];
   return line.length > 250 ? line.slice(0, 247) + '…' : line;
 }
 
 function PaperStageSteps({ progress }: { progress: PaperProgress }) {
-  const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(progress.stage));
+  const display = paperDisplayProgress(progress);
+  const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(display.stage));
   return <ol className="session-strategy-live-status paper-stage-list" aria-label="Paper generation steps">
-    {PAPER_STAGES.map((group, step) => <li key={group.label} data-paper-step={group.label} className={step === index ? (progress.stage === 'score_failed' ? 'is-upcoming' : progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : progress.status === 'complete' ? 'is-past' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
-      <strong>{paperStageLabel(step, index, progress)}</strong>
+    {PAPER_STAGES.map((group, step) => <li key={group.label} data-paper-step={group.label} className={step === index ? (display.stage === 'score_failed' ? 'is-upcoming' : progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : progress.status === 'complete' ? 'is-past' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
+      <strong>{paperStageLabel(step, index, display)}</strong>
     </li>)}
-    {index < 0 && <li className={progress.status === 'active' ? 'is-active' : 'is-idle'}><strong>Retrying</strong></li>}
   </ol>;
 }
 
@@ -3079,6 +3093,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={`Paper ${draftVersion}`} data-paper-version={draftVersion}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={`Paper ${draftVersion}`} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
+              badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} title={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'}/> : undefined}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
@@ -3123,6 +3138,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
           ? <>
               <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>
               <PaperStageSteps progress={paperProgress}/>
+              {paperProgress.detail?.startsWith('Retrying') && <span className="paper-progress-substep">{paperProgress.detail}</span>}
             </>
           : <details className="paper-stage-history">
               <summary>Last stage: {paperProgressOperation(paperProgress)} · View steps</summary>
@@ -5006,7 +5022,7 @@ function RecentProjects({ onOpen, flat = false }: { onOpen: (view: ProjectView) 
     return groups;
   }, []).sort((a, b) => flat ? 0 : researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents" data-opening={!!opening || !!removing}>
-    {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
+    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading saved projects...'}</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);

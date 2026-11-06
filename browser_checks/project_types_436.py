@@ -105,7 +105,7 @@ with sync_playwright() as playwright:
         dialog.get_by_role("heading", name="Project Types", exact=True).evaluate(
             "e => getComputedStyle(e).color"
         )
-        == "rgb(244, 204, 105)"
+        == "rgb(237, 195, 141)"
     )
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     # Shared references start disabled per user; subject-specific references
@@ -136,14 +136,14 @@ with sync_playwright() as playwright:
     common_new = common_section.get_by_role("button", name="New", exact=True).first
     common_toggle = common_section.locator(".pt-reference-toggle").first
     page.mouse.move(1, 1)  # Clear the previous toggle's hover before checking idle colors.
-    expect(common_new).to_have_css("color", "rgb(244, 204, 105)")
+    expect(common_new).to_have_css("color", "rgb(237, 195, 141)")
     expect(common_toggle).to_have_css("color", "rgb(237, 195, 141)")
     common_link_box = common_link.bounding_box()
     common_new_box = common_new.bounding_box()
     assert common_link_box and common_new_box
     assert abs(common_link_box["x"] - common_new_box["x"]) < 1
     common_new.hover()
-    expect(common_new).to_have_css("color", "rgb(255, 231, 161)")
+    expect(common_new).to_have_css("color", "rgb(255, 229, 166)")
     # Leaving New blank cancels the insertion rather than trapping a row in edit mode.
     common_new.click()
     common_input = common_section.get_by_label("Research reference URL 3")
@@ -249,17 +249,18 @@ with sync_playwright() as playwright:
         "button", name="New"
     )
     expect(add_button).to_be_enabled()
-    assert add_button.evaluate("e => getComputedStyle(e).color") == "rgb(244, 204, 105)"
+    assert add_button.evaluate("e => getComputedStyle(e).color") == "rgb(237, 195, 141)"
     add_button.focus()
     page.keyboard.press("Tab")
     assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
     page.keyboard.press("Shift+Tab")
     expect(add_button).to_be_focused()
-    page.keyboard.press("Escape")
-    expect(dialog).to_be_visible()
-    assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
-        "Escape must not demote Project Types to an ordinary Home element"
-    )
+    for _ in range(3):
+        page.keyboard.press("Escape")
+        expect(dialog).to_be_visible()
+        assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
+            "Repeated Escape must not dismiss or demote Project Types"
+        )
     dialog.locator("header").get_by_role("button", name="Close").click()
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()

@@ -1479,8 +1479,9 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         first_stages = [event["stage"] for event in first_events if event["state"] == "active"]
         assert first_stages.index("validation") < first_stages.index("proofreading")
         assert first_stages.index("proofreading") < first_stages.index("compile")
-        assert retry_events[-2]["stage"] == "scoring"
-        assert retry_events[-1]["stage"] in {"complete", "score_failed"}
+        assert retry_events[-3]["stage"] in {"score_failed", "scoring"}
+        assert retry_events[-2]["stage"] == "finishing"
+        assert retry_events[-1]["stage"] == "complete"
         assert retry_events[-1]["state"] == "complete"
         assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
 

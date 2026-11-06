@@ -43,6 +43,13 @@
 .workspace-page .papers-pane .paper-stage-list li.is-past { color: #a9b9c6; }
 .workspace-page .papers-pane .paper-stage-list li span { color: #d4e0eb; }
 .workspace-page .papers-pane .paper-progress-error { color: #efa89a; }
+.workspace-page .papers-pane .paper-progress-substep { display: block; color: #c5d3df; font-size: 12px; line-height: 1.45; }
+.workspace-page .papers-pane .paper-title-activity { margin: 0 0 0 10px; vertical-align: middle; }
+.workspace-page .papers-pane .paper-title-activity.paper-queued-indicator {
+  border-color: #eac16a; background: #e3b74d;
+  --pulse-shadow-rest: #e3b74d40; --pulse-shadow-peak: #e3b74d80;
+}
+
 /* Paper versions are independent disclosure cards, like Session rows. */
 .workspace-page .papers-pane .saved-paper-library {
   display: grid; gap: 8px; margin-top: 2px;

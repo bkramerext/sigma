@@ -476,7 +476,8 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 /* Running green takes precedence; a queued paper pulses bright yellow. */
 .workspace-page .project-header-title .research-running-indicator.paper-queued-indicator {
   background: #ffff00; border-color: #b8a900; box-shadow: 0 0 0 0 #ffff0080;
-  animation-name: paper-queued-heartbeat;
+  --pulse-shadow-rest: #ffff0040; --pulse-shadow-peak: #ffff0080;
+  animation-name: research-running-heartbeat;
 }
 @media (prefers-reduced-motion: reduce) {
   .workspace-page .project-header-title .paper-queued-indicator { animation: none; }

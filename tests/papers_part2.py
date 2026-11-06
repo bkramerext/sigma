@@ -397,7 +397,7 @@ def test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallba
     assert state["provider_calls_total"] == 8
     assert any("Retrying section 1 (attempt 3 of 3)." in d for d in retry_details)
 
-    # A Continue must reuse all saved text, including the explicit gap,
+    # A Resume must reuse all saved text, including the explicit gap,
     # rather than silently spend another provider request.
     async def no_repeat(*_args, **_kwargs):
         raise AssertionError("All sections are checkpointed; no repeat provider call is allowed")
@@ -2769,7 +2769,8 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                 status = papers._read_progress_status(str(path))
                 assert status is not None
                 assert status["status"] == "complete"
-                assert status["stage"] == "score_failed"
+                assert status["stage"] == "complete"
+                assert "scoring did not finish" in status.get("detail", "")
                 assert papers.get_pdf(str(path), result["paper_id"]) == b"%PDF-fixture"
 
         asyncio.run(check())
