@@ -847,16 +847,18 @@ with sync_playwright() as playwright:
     # the pulsing dot must be vertically centered on the last wrapped line.
     page.route(
         "**/api/projects/papers/progress?*",
-        lambda route: route.fulfill(json={
-            "progress": {
-                "status": "active",
-                "stage": "sections",
-                "current": 1,
-                "total": 3,
-                "started_at": "2026-11-05T01:00:00+00:00",
-                "elapsed_seconds": 90,
+        lambda route: route.fulfill(
+            json={
+                "progress": {
+                    "status": "active",
+                    "stage": "sections",
+                    "current": 1,
+                    "total": 3,
+                    "started_at": "2026-11-05T01:00:00+00:00",
+                    "elapsed_seconds": 90,
+                }
             }
-        }),
+        ),
     )
     page.reload()
     active_title = page.locator(".project-header-title-action")

@@ -287,3 +287,6 @@
 .workspace-page .papers-pane .paper-sections-remaining { display: block; color: #a8b8c6; font-size: 12px; font-weight: 400; }
 .workspace-page .papers-pane .paper-stage-list li.is-active { column-gap: 12px; row-gap: 8px; }
 .workspace-page .papers-pane .saved-paper-title-tools .paper-rewind-action { color: #e5ba69; }
+
+/* Distinct writing-stage label and operation, including on wrapped steps. */
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Writing sections"] { column-gap: 16px; }

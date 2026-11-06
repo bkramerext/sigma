@@ -3485,7 +3485,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
                     "call might have been billed and will not be blindly repeated."
                 )
             }
-            if status == "interrupted"
+            if status == "interrupted" and state["status"] == "running"
             else ({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {})
         ),
         **(

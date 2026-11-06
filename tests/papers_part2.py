@@ -646,6 +646,12 @@ def test_paper_paused_progress_preserves_disconnect_reason() -> None:
         saved_work = papers._load_work(str(path))
         assert saved_work is not None
         assert saved_work["progress"]["status"] == "paused"
+        saved_work["progress"]["status"] = "running"
+        papers._save_work(str(path), saved_work)
+        papers.finish_progress(str(path), "cancelled")
+        cancelled = papers._load_work(str(path))
+        assert cancelled is not None and cancelled["progress"]["status"] == "cancelled"
+        assert papers.progress_status(str(path))["status"] == "cancelled"
 
 
 def test_stopped_paper_checkpoint_remains_valid_on_resume() -> None:
