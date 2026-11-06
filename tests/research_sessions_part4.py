@@ -2947,9 +2947,7 @@ async def test_resume_37_pending_turns_uses_actual_remaining_session_time(path: 
                     "cycle": 3,
                     "calls_used": 6,
                     "pending_investigation": (
-                        {"claim": "Saved third-round Investigator output."}
-                        if index == 2
-                        else None
+                        {"claim": "Saved third-round Investigator output."} if index == 2 else None
                     ),
                 }
             )
