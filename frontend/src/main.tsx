@@ -2,6 +2,7 @@ import { Component, createContext, createElement, lazy, Suspense, useCallback, u
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
+import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
 import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
@@ -327,23 +328,6 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   if (session.status === 'stopped' && (/stopped by user|stopped by you/i.test(session.message) || session.termination_reason_code === 'user_stop')) {
     return { cause: 'Stopped by user. A dispatched provider request may still consume allowance.', next: 'Resume when you are ready.' };
   }
-  if (session.provider_usage_limited && ['paused', 'stopped', 'ended', 'failed'].includes(session.status)) {
-    const rejection = [...session.steps].reverse().find(step => step.failure_kind === 'provider_limited');
-    const lastLimitEvent = [...session.events].reverse().find(event => event.kind === 'provider.usage_limit');
-    const resumedBeforeRejection = lastLimitEvent != null && session.events.some(event =>
-      event.kind === 'resumed' && event.sequence < lastLimitEvent.sequence);
-    const evidence = rejection ? [
-      rejection.provider_error_code && `code: ${rejection.provider_error_code}`,
-      rejection.provider_http_status != null && `HTTP ${rejection.provider_http_status}`,
-      rejection.provider_stream_event && `stream event: ${rejection.provider_stream_event}`,
-    ].filter(Boolean).join('; ') : '';
-    return {
-      cause: `${resumedBeforeRejection
-        ? 'Resume succeeded, but the provider rejected a subsequent research request at its account or app usage limit.'
-        : 'The AI provider rejected a research request at its account or app usage limit.'} ${evidence ? `Provider evidence: ${evidence}. ` : ''}Saved findings are intact. A successful HTTP transport does not override an in-stream provider rejection.`,
-      next: 'Click Resume when the provider allowance is available.',
-    };
-  }
   const action = session.current_action.toLowerCase();
   const message = session.message.trim();
   const typedReason = [...session.steps].reverse().find(step => step.failure_kind || step.interruption_reason);
@@ -379,6 +363,15 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
   session: ResearchSession; dismissed: boolean; onDismiss: () => void;
 }) {
   if (dismissed) return null;
+  if (session.provider_usage_limited && ['paused', 'stopped', 'ended', 'failed'].includes(session.status)) {
+    const chatgpt = session.mode === 'chatgpt';
+    return <SessionNotice number={session.session_number} onDismiss={onDismiss}
+      title={chatgpt ? 'ChatGPT usage limit reached' : 'AI usage limit reached'}
+      kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
+      <p>Your research is saved. Check {chatgpt ? 'ChatGPT → Settings → Usage' : "your provider's usage dashboard"} to see when your allowance resets.</p>
+      <p><strong>Next:</strong> Resume when usage is available again.</p>
+    </SessionNotice>;
+  }
   const guidance = stoppedSessionGuidance(session);
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
@@ -1435,6 +1428,25 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const continueWithSavedType = useRef(false);
   const missingTypeDialog = useRef<HTMLDialogElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
+  const [resumeAuthorization, setResumeAuthorization] = useState<ResumeAuthorization | null>(null);
+  const resumeApprovalResolver = useRef<((approved: boolean) => void) | null>(null);
+  useEffect(() => () => {
+    const resolve = resumeApprovalResolver.current;
+    resumeApprovalResolver.current = null;
+    resolve?.(false);
+  }, []);
+  const requestResumeAuthorization = (request: ResumeAuthorization): Promise<boolean> =>
+    new Promise(resolve => {
+      if (resumeApprovalResolver.current) { resolve(false); return; }
+      resumeApprovalResolver.current = resolve;
+      setResumeAuthorization(request);
+    });
+  const answerResumeAuthorization = (approved: boolean) => {
+    const resolve = resumeApprovalResolver.current;
+    resumeApprovalResolver.current = null;
+    setResumeAuthorization(null);
+    resolve?.(approved);
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
@@ -1701,9 +1713,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           const attemptShortfall = message.match(/Resume with exactly (\d+) explicitly authorized additional attempts/);
           if (action === 'resume' && authorizedCalls === 0 && attemptShortfall) {
             const count = Number(attemptShortfall[1]);
-            if (count >= 1 && count <= 12 && window.confirm(
-              `Continuing this saved session requires ${count} additional paid provider attempt${count === 1 ? '' : 's'} beyond its existing call limit. Further approvals may be needed if more research remains unfinished. This may consume more provider allowance. Keep all saved research and authorize exactly ${count} additional attempt${count === 1 ? '' : 's'}?`
-            )) {
+            if (count < 1 || count > 12) throw cause;
+            if (await requestResumeAuthorization({ kind: 'attempts', count, sessionNumber: target.session_number })) {
               authorizedCalls = count;
               continue;
             }
@@ -1712,9 +1723,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           }
           const durationShortfall = message.match(/Resume requires explicit approval to extend the session duration for up to (\d+) additional minutes/);
           if (action === 'resume' && recoveryAction === 'resume' && durationShortfall) {
-            if (window.confirm(
-              `This saved session has reached its active-time limit. Authorize up to ${durationShortfall[1]} more minutes of research? This is an additional time window, not a guarantee that all unfinished turns will complete. Saved evidence and provider spending limits remain preserved.`
-            )) {
+            const minutes = Number(durationShortfall[1]);
+            if (!Number.isSafeInteger(minutes) || minutes < 1) throw cause;
+            if (await requestResumeAuthorization({ kind: 'duration', count: minutes, sessionNumber: target.session_number })) {
               recoveryAction = 'repair';
               continue;
             }
@@ -1890,6 +1901,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const runningCount = activeSessionCount;
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
+    <ResumeAuthorizationDialog request={resumeAuthorization} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
       <h2 id="missing-type-heading">Project type unavailable</h2>
       {safeSavedTypeSettings
