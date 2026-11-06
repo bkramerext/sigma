@@ -7977,6 +7977,7 @@ async def _generate_impl(
             if active.get("stage") == "retry":
                 updated["current"] = len(work.get("section_drafts", {})) if stage == "sections" else None
                 updated["total"] = updated.get("sections_total") if stage == "sections" else None
+            if str(active.get("detail", "")).lower().startswith("retrying"):
                 updated.pop("detail", None)
             _active_progress[project_key] = updated
             if work:
@@ -8573,12 +8574,12 @@ async def _generate_impl(
                 config,
                 work,
                 lambda state: _save_work(path, state),
-                on_output_delta=lambda: report_activity("sections"),
                 report,
                 view.project.id,
                 path,
                 structured_fast_path=True,
                 include_diagrams=include_diagrams,
+                on_output_delta=lambda: report_activity("sections"),
             )
             model = config["model"]
             long_form = True
