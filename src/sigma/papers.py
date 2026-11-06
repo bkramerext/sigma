@@ -2819,7 +2819,7 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
 
 
 def _work_file(path: str, *, create: bool) -> Path:
-    root = _paper_dir(path)
+    root = _paper_dir(path, create=create)
     directory = root / ".long-paper-work"
     if directory.is_symlink():
         raise ProjectError("Long-paper checkpoint directory must not be a symbolic link")
@@ -2832,6 +2832,19 @@ def _work_file(path: str, *, create: bool) -> Path:
         raise ProjectError("Long-paper checkpoint directory is unsafe")
     os.chmod(directory, 0o700)
     return directory / "checkpoint.json"
+
+
+def needs_preflight_on_open(path: str) -> bool:
+    """Only saved paper work requires the expensive evidence preflight on navigation.
+
+    A new paper always receives a full, authoritative preflight when Play is
+    pressed. Existing checkpoints and reset receipts still get the normal
+    validation/resume guidance on project opening. Include unsafe symlinks so
+    the usual preflight reports them rather than silently treating them as absent.
+    """
+    checkpoint = _work_file(path, create=False)
+    receipt = checkpoint.with_name("reset-ledger.json")
+    return any(item.exists() or item.is_symlink() for item in (checkpoint, receipt))
 
 
 _PAPER_PROGRESS_RECOVERY_ISSUE = (
