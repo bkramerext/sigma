@@ -143,6 +143,47 @@ def check_paper_preflight_presence(root: Path) -> None:
     assert not papers.needs_preflight_on_open(view.path)
 
 
+def check_pdf_verification_cache(root: Path) -> None:
+    """Opening a listed project must reuse its verified PDF without another hash."""
+    from sigma import papers
+
+    view = initialize_project(
+        root / "pdf-verification-cache-test.sigma", "PDF cache test", "Check integrity."
+    )
+    paper_dir = Path(view.path) / "papers"
+    paper_dir.mkdir(mode=0o700)
+    file = paper_dir / "paper-test.pdf"
+    original = b"%PDF-verified-test"
+    file.write_bytes(original)
+    record = {
+        "paper_id": "paper-test",
+        "pdf_size_bytes": len(original),
+        "pdf_sha256": hashlib.sha256(original).hexdigest(),
+    }
+    papers._cached_pdf_digest.cache_clear()
+    original_open = Path.open
+    reads: list[int] = []
+
+    def tracked_open(path: Path, *args, **kwargs):
+        if path == file and args and args[0] == "rb":
+            reads.append(1)
+        return original_open(path, *args, **kwargs)
+
+    with patch.object(Path, "open", tracked_open):
+        assert papers._valid_pdf_file(view.path, record)
+        assert papers._valid_pdf_file(view.path, record)
+        assert len(reads) == 1, "Project reopening should not hash an unchanged PDF"
+        file.write_bytes(b"%PDX-verified-test")
+        assert not papers._valid_pdf_file(view.path, record)
+        assert len(reads) == 2, "Same-sized content changes must invalidate cached hashes"
+        file.write_bytes(original)
+        assert papers._valid_pdf_file(view.path, record)
+        assert len(reads) == 3
+        file.unlink()
+        assert not papers._valid_pdf_file(view.path, record)
+    papers._cached_pdf_digest.cache_clear()
+
+
 def check(root: Path, base: Path) -> None:
     sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
@@ -623,6 +664,7 @@ def check(root: Path, base: Path) -> None:
     check_project_metadata_cache_invalidation(root)
     check_home_session_status_cache(root)
     check_paper_preflight_presence(root)
+    check_pdf_verification_cache(root)
     print(
         "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and unlimited recents"
     )
