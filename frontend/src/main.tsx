@@ -2310,56 +2310,69 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 }
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[]; sigma_issues?: string[]; sigma_issues_included?: boolean } };
-type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
+type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function paperProgressOperation(progress: PaperProgress): string {
-  const count = progress.current !== null && progress.total !== null ? ` (${progress.current} of ${progress.total})` : '';
-  const pdfPass = progress.current !== null && progress.total !== null
-    ? ` · pass ${progress.current} of ${progress.total}${progress.current === progress.total ? ' (final)' : ''}`
-    : '';
-  const milestone = progress.activity_state === 'milestone';
-  switch (progress.stage) {
-    case 'queued': return progress.detail || 'Waiting for available generation capacity';
-    case 'snapshot': return 'Preparing research evidence';
-    case 'source_material': return milestone ? 'Writing references selected' : 'Selecting usable writing references';
-    case 'publication_compilation': return progress.detail || (milestone ? 'Publication references ready' : 'Compiling publication references…');
-    case 'writing': return 'Finishing paper';
-    case 'evidence': return `${milestone ? 'Evidence extracted' : 'Extracting evidence'}${count}`;
-    case 'consolidation': return 'Consolidating findings';
-    case 'planning': return milestone ? 'Paper plan ready' : 'Planning the paper';
-    case 'sections': {
-      if (progress.current === null || progress.total === null) return 'Sections remaining';
-      const remaining = Math.max(0, progress.total - progress.current);
-      return `${remaining} section${remaining === 1 ? '' : 's'} remaining`;
+const PAPER_STAGES = [
+  { label: 'Wait', stages: ['queued'] },
+  { label: 'Review references', stages: ['snapshot', 'source_material', 'publication_compilation'] },
+  { label: 'Extract evidence', stages: ['evidence', 'consolidation'] },
+  { label: 'Planning', stages: ['planning'] },
+  { label: 'Write sections', stages: ['writing', 'sections'] },
+  { label: 'Validate', stages: ['validation'] },
+  { label: 'Proofread', stages: ['proofreading'] },
+  { label: 'Generate PDF', stages: ['compile', 'pdf_check', 'complete'] },
+] as const;
+
+function paperStageLabel(step: number, active: number, progress: PaperProgress): string {
+  const completed = step < active || (step === active && progress.status === 'complete');
+  const current = step === active && (progress.status === 'active' || progress.status === 'queued');
+  const sectionsTotal = progress.sections_total ?? (progress.stage === 'sections' ? progress.total : null);
+  if (step === 0) return completed ? 'Started' : current ? 'Waiting' : 'Wait';
+  if (step === 1) return completed ? 'Reviewed references' : current ? 'Reviewing references' : 'Review references';
+  if (step === 2) return completed ? 'Extracted evidence' : current ? 'Extracting evidence' : 'Extract evidence';
+  if (step === 3) return completed ? 'Planned' : 'Planning';
+  if (step === 4) {
+    if (completed) return 'Wrote sections' + (sectionsTotal !== null && sectionsTotal > 0 ? ` (${sectionsTotal})` : '');
+    if (current) {
+      const count = progress.stage === 'sections' && progress.current !== null && sectionsTotal !== null && sectionsTotal > 0
+        ? ` (${progress.current}/${sectionsTotal})` : '';
+      return 'Writing sections' + count;
     }
-    case 'validation': return milestone ? 'Paper validated' : 'Validating the paper';
-    case 'proofreading': return 'Proofreading TeX';
-    case 'compile': return `Compiling PDF${pdfPass}`;
-    case 'pdf_check': return `Checking PDF${pdfPass}`;
-    case 'retry': return `Retrying provider connection${count}`;
-    case 'complete': return 'Complete';
+    return 'Write sections';
   }
+  if (step === 5) return completed ? 'Validated' : current ? 'Validating' : 'Validate';
+  if (step === 6) {
+    if (completed) return 'Proofreading done';
+    if (!current) return 'Proofread';
+    if (progress.current === 2) return 'Proofreading again';
+    if (progress.current === 3) return 'Proofreading one more time';
+    return 'Proofreading';
+  }
+  return completed ? 'PDF ready' : current ? 'Generating PDF' : 'Generate PDF';
 }
 
-const PAPER_STAGES = [
-  { label: 'Waiting', stages: ['queued'] },
-  { label: 'References', stages: ['snapshot', 'source_material', 'publication_compilation'] },
-  { label: 'Evidence', stages: ['evidence', 'consolidation'] },
-  { label: 'Planning', stages: ['planning'] },
-  { label: 'Writing sections', stages: ['writing', 'sections'] },
-  { label: 'Validation', stages: ['validation'] },
-  { label: 'Proofreading', stages: ['proofreading'] },
-  { label: 'PDF', stages: ['compile', 'pdf_check', 'complete'] },
-] as const;
+function paperProgressOperation(progress: PaperProgress): string {
+  const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(progress.stage));
+  return index < 0 ? 'Retrying' : paperStageLabel(index, index, progress);
+}
+
+function paperErrorSummary(message: string): string {
+  const value = message.trim();
+  if (/Tectonic could not compile|No PDF was downloaded|PDF compilation failed/i.test(value)) {
+    return 'PDF compilation failed. The paper draft is saved; use Continue to retry without rewriting it.';
+  }
+  const line = value.split(/\r?\n/, 1)[0];
+  return line.length > 250 ? line.slice(0, 247) + '…' : line;
+}
 
 function PaperStageSteps({ progress }: { progress: PaperProgress }) {
   const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(progress.stage));
   return <ol className="session-strategy-live-status paper-stage-list" aria-label="Paper generation steps">
-    {PAPER_STAGES.map((group, step) => <li key={group.label} data-paper-step={group.label} className={step === index ? (progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
-      <strong>{group.label}</strong>{step === index && progress.status !== 'queued' && <span>{paperProgressOperation(progress)}</span>}
+    {PAPER_STAGES.map((group, step) => <li key={group.label} data-paper-step={group.label} className={step === index ? (progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : progress.status === 'complete' ? 'is-past' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
+      <strong>{paperStageLabel(step, index, progress)}</strong>
     </li>)}
-    {index < 0 && <li className={progress.status === 'active' ? 'is-active' : 'is-idle'}><strong>Retry</strong><span>{paperProgressOperation(progress)}</span></li>}
+    {index < 0 && <li className={progress.status === 'active' ? 'is-active' : 'is-idle'}><strong>Retrying</strong></li>}
   </ol>;
 }
 
@@ -2925,7 +2938,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
 
     {error && <div className="request-toast-stack ai-paper-toast-stack" aria-label="Paper generation errors">
       <div className="request-toast-item"><div className="request-toast-item-inner"><div className="request-toast" role="alert">
-        <div className="request-toast-content"><strong>Paper generation</strong><p>{error}</p></div>
+        <div className="request-toast-content"><strong>Paper generation</strong><p>{paperErrorSummary(error)}</p></div>
         <button type="button" aria-label="Dismiss paper error" onClick={() => setError('')}>Dismiss</button>
       </div></div></div>
     </div>}
@@ -2967,14 +2980,13 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {paperProgress.status === 'active' || paperProgress.status === 'queued'
           ? <>
               <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>
-              {paperProgress.status === 'active' && paperProgress.stage === 'sections' && paperProgress.total !== null && paperProgress.current !== null && <span className="paper-sections-remaining">{Math.max(0, paperProgress.total - paperProgress.current)} section{Math.max(0, paperProgress.total - paperProgress.current) === 1 ? '' : 's'} remaining</span>}
               <PaperStageSteps progress={paperProgress}/>
             </>
           : <details className="paper-stage-history">
-              <summary>Last stage: {PAPER_STAGES.find(group => (group.stages as readonly string[]).includes(paperProgress.stage))?.label ?? 'Preparing'} · View steps</summary>
+              <summary>Last stage: {paperProgressOperation(paperProgress)} · View steps</summary>
               <PaperStageSteps progress={paperProgress}/>
             </details>}
-        {paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="paper-progress-error">{paperProgress.failure_reason}</span>}
+        {paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="paper-progress-error">{paperErrorSummary(paperProgress.failure_reason)}</span>}
         {paperProgress.status === 'interrupted' && paperProgress.detail && <span className="paper-progress-error" role="alert">{paperProgress.detail}</span>}
       </div>}
 

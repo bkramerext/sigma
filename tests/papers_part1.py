@@ -1560,7 +1560,7 @@ def test_proofreading_option_changes_keep_per_render_and_cumulative_call_counts(
                 try:
                     await run(**options)
                 except ProjectError as exc:
-                    assert "fixture final compile failure" in str(exc)
+                    assert "PDF compilation failed" in str(exc)
                 else:
                     raise AssertionError("The first two versions must preserve resumable work")
                 checkpoint = papers._load_work(str(path))
@@ -1827,7 +1827,7 @@ def test_unrelated_compile_failure_does_not_remove_valid_diagrams() -> None:
         try:
             asyncio.run(run())
         except ProjectError as exc:
-            assert "Missing $ inserted" in str(exc)
+            assert "PDF compilation failed" in str(exc)
         else:
             raise AssertionError("An unrelated TeX error must remain a recoverable failure")
         checkpoint = papers._load_work(str(path))

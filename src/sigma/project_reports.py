@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import os
 import re
 import shutil
@@ -1012,9 +1013,24 @@ def _compile_pdf(
             if result.returncode != 0:
                 diagnostics.append(f"Tectonic exited with status {result.returncode}")
         if result.returncode != 0 or not os.path.isfile(pdf_path):
-            detail = result.stdout.decode("utf-8", "replace")[-1200:]
+            # Keep the full cause in server logs, not in end-user errors or the
+            # paper's persistent progress. The last bytes of Tectonic output
+            # often contain only package names, not the actual failure.
+            output = result.stdout.decode("utf-8", "replace")
+            logging.getLogger("sigma.lifecycle").error(
+                "paper.pdf_compile_failed returncode=%s output_tail=%r",
+                result.returncode,
+                output[-6000:],
+            )
+            if diagnostics is not None:
+                diagnostics.extend(
+                    line.strip()[:500]
+                    for line in output.splitlines()
+                    if re.search(r"^(?:!|l\.\d+|fatal error:)", line.strip(), re.IGNORECASE)
+                )
             raise RuntimeError(
-                "Tectonic could not compile this report. No PDF was downloaded. " + detail
+                "Tectonic could not compile this report. No PDF was downloaded. "
+                "Review the backend compiler diagnostics."
             )
         with open(pdf_path, "rb") as file:
             pdf = file.read(max_pdf_bytes + 1)
