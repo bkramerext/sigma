@@ -86,6 +86,8 @@ def check_memory_telemetry() -> None:
     log = logging.getLogger("sigma.production")
     before = tuple(log.handlers)
     before_level = log.level
+    guard_log = logging.getLogger("sigma.memory_guard")
+    before_guard = tuple(guard_log.handlers)
     try:
         with (
             tempfile.TemporaryDirectory(prefix="sigma-memory-file-failure-") as home,
@@ -111,6 +113,10 @@ def check_memory_telemetry() -> None:
                 log.removeHandler(handler)
                 handler.close()
         log.setLevel(before_level)
+        for handler in tuple(guard_log.handlers):
+            if handler not in before_guard:
+                guard_log.removeHandler(handler)
+                handler.close()
 
 
 def check_memory_sources() -> None:
@@ -163,6 +169,7 @@ def check_memory_sources() -> None:
 
     assert not memory_guard.capacity_verified(stats)
     with (
+        patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "true"}),
         patch.object(memory_guard, "memory_snapshot", return_value=stats),
         patch.object(memory_guard, "_CRITICAL", False),
     ):
