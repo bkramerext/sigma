@@ -3635,7 +3635,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
             {
                 "detail": (
                     "The backend restarted during paper generation. Saved work is intact; "
-                    "use Resume to resume from the latest checkpoint. An in-flight provider "
+                    "use Resume to recover from the latest checkpoint. An in-flight provider "
                     "call might have been billed and will not be blindly repeated."
                 )
             }
@@ -7957,8 +7957,15 @@ async def _generate_impl(
                 # stage and completed-section count visible throughout retry.
                 previous = _active_progress.get(project_key) or work.get("progress")
                 if isinstance(previous, dict) and previous.get("stage") in {
-                    "writing", "sections", "planning", "evidence", "consolidation",
-                    "validation", "proofreading", "compile", "pdf_check",
+                    "writing",
+                    "sections",
+                    "planning",
+                    "evidence",
+                    "consolidation",
+                    "validation",
+                    "proofreading",
+                    "compile",
+                    "pdf_check",
                 }:
                     stage = previous["stage"]
                     current = previous.get("current")

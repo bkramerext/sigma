@@ -6208,6 +6208,37 @@ function App() {
   const route = new URL(location, window.location.origin);
   const [globalActivity, setGlobalActivity] = useState<'active' | 'queued' | null>(null);
   useEffect(() => {
+    // CSS animations begin on element insertion by default, leaving newly
+    // mounted yellow/green pulses out of phase. Anchor every heartbeat to the
+    // document timeline so their beats stay synchronized across projects.
+    let frame: number | undefined;
+    const alignPulsePhases = () => {
+      frame = undefined;
+      const nodes = document.querySelectorAll<HTMLElement>(
+        '.research-running-indicator, .session-running i, .paper-stage-list li.is-active, .paper-stage-list li.is-queued'
+      );
+      for (const node of nodes) {
+        for (const animation of node.getAnimations()) {
+          if ('animationName' in animation &&
+            animation.animationName === 'research-running-heartbeat' &&
+            animation.startTime !== 0) {
+            animation.startTime = 0;
+          }
+        }
+      }
+    };
+    const schedule = () => {
+      if (frame === undefined) frame = requestAnimationFrame(alignPulsePhases);
+    };
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    schedule();
+    return () => {
+      observer.disconnect();
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
+  }, []);
+  useEffect(() => {
     if (cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')) {
       setGlobalActivity(null);
       return;

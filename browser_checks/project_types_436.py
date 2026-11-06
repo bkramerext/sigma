@@ -95,6 +95,37 @@ with sync_playwright() as playwright:
     assert about_rect and google_rect
     assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
 
+    # Green and yellow heartbeats use the same document-clock phase, even
+    # when inserted in different DOM updates.
+    page.evaluate("""() => {
+        const home = document.querySelector('.home-recents');
+        if (!home) throw Error('Saved project list missing');
+        const green = document.createElement('span');
+        green.id = 'pulse-sync-green';
+        green.className = 'research-running-indicator';
+        home.appendChild(green);
+    }""")
+    page.wait_for_timeout(80)
+    page.evaluate("""() => {
+        const home = document.querySelector('.home-recents');
+        const yellow = document.createElement('span');
+        yellow.id = 'pulse-sync-yellow';
+        yellow.className = 'research-running-indicator paper-queued-indicator';
+        home.appendChild(yellow);
+    }""")
+    page.wait_for_function("""() => {
+        const green = document.getElementById('pulse-sync-green');
+        const yellow = document.getElementById('pulse-sync-yellow');
+        if (!green || !yellow) return false;
+        const g = green.getAnimations().find(a => a.animationName === 'research-running-heartbeat');
+        const y = yellow.getAnimations().find(a => a.animationName === 'research-running-heartbeat');
+        return !!g && !!y && g.startTime === 0 && y.startTime === 0;
+    }""")
+    page.evaluate("""() => {
+        document.getElementById('pulse-sync-green')?.remove();
+        document.getElementById('pulse-sync-yellow')?.remove();
+    }""")
+
     # Project Types traps focus, ignores Escape/backdrop clicks, and only
     # dismisses via its Close button (or an explicit successful Save).
     types_button = page.get_by_role("button", name="Project Types", exact=True)
