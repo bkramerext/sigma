@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 import time
 from pathlib import Path
@@ -256,7 +257,7 @@ def main() -> None:
                 db.execute(
                     "UPDATE progress_email_dispatches SET retry_after=0 "
                     "WHERE event_hash=?",
-                    (__import__("hashlib").sha256(b"event:recovered").hexdigest(),),
+                    (hashlib.sha256(b"event:recovered").hexdigest(),),
                 )
             with patch(
                 "sigma.progress_notifications._pause_still_actionable", return_value=False
