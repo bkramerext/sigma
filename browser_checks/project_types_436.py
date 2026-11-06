@@ -125,9 +125,13 @@ with sync_playwright() as playwright:
         }));
     }""")
     green, yellow = pulse_state
-    assert green["animationName"] == yellow["animationName"] == "research-running-heartbeat", pulse_state
+    assert green["animationName"] == yellow["animationName"] == "research-running-heartbeat", (
+        pulse_state
+    )
     assert green["animations"] and yellow["animations"], pulse_state
-    assert green["animations"][0]["startTime"] == yellow["animations"][0]["startTime"] == 0, pulse_state
+    assert green["animations"][0]["startTime"] == yellow["animations"][0]["startTime"] == 0, (
+        pulse_state
+    )
     page.evaluate("document.getElementById('pulse-sync-test-host').remove()")
 
     # Project Types traps focus, ignores Escape/backdrop clicks, and only
