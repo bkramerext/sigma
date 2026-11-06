@@ -1691,7 +1691,10 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       let authorizedCalls = 0;
       for (;;) {
         try {
-          await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" });
+          // The backend's preflight authorization responses are handled by
+          // the two confirmations below, not global Request Failed toasts.
+          // Unexpected errors are still reported by the enclosing catch.
+          await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" }, undefined, true);
           break;
         } catch (cause) {
           const message = errorMessage(cause);
@@ -1710,7 +1713,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           const durationShortfall = message.match(/Resume requires explicit approval to extend the session duration for up to (\d+) additional minutes/);
           if (action === 'resume' && recoveryAction === 'resume' && durationShortfall) {
             if (window.confirm(
-              `This saved session needs up to ${durationShortfall[1]} additional minutes to complete its unfinished research. The existing evidence and provider spending limits remain preserved. Authorize extending this session's duration?`
+              `This saved session has reached its active-time limit. Authorize up to ${durationShortfall[1]} more minutes of research? This is an additional time window, not a guarantee that all unfinished turns will complete. Saved evidence and provider spending limits remain preserved.`
             )) {
               recoveryAction = 'repair';
               continue;

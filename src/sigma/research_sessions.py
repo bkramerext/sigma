@@ -6595,6 +6595,17 @@ async def start_session(
     return _public(record)
 
 
+def _protocol_time_window_minutes(record: dict[str, Any]) -> int:
+    """Offer one configured-duration window, not every role's maximum timeout."""
+    configured = record.get("configured_duration_limit_minutes")
+    if type(configured) is int and 1 <= configured <= MAX_SESSION_DURATION_MINUTES:
+        return configured
+    current = record.get("duration_limit_minutes")
+    if type(current) is int and 1 <= current <= MAX_SESSION_DURATION_MINUTES:
+        return current
+    return 60
+
+
 async def control_session(
     path: str,
     session_id: str,
@@ -6827,11 +6838,13 @@ async def control_session(
                             effective_deadline += datetime.now(UTC) - datetime.fromisoformat(
                                 stopped_at
                             )
-                        minimum_time = timedelta(seconds=int(plan["required_calls"]) * CALL_TIMEOUT)
-                        if effective_deadline < datetime.now(UTC) + minimum_time:
-                            minutes = math.ceil(minimum_time.total_seconds() / 60)
+                        # Remaining active-session time is a deadline, not a promise
+                        # that all unfinished roles can consume their individual
+                        # one-hour timeouts. Resume can make progress within it.
+                        if effective_deadline <= datetime.now(UTC):
+                            minutes = _protocol_time_window_minutes(record)
                             raise ProjectError(
-                                f"Resume requires explicit approval to extend the session duration "
+                                "Resume requires explicit approval to extend the session duration "
                                 f"for up to {minutes} additional minutes; no limits were changed."
                             )
                     ledger = record.get("hard_budget_ledger")
@@ -7052,33 +7065,47 @@ async def control_session(
         # authentication/model checks fail or another resume is attempted.
         record["stopped_at"] = _now()
         _save(record["project_path"], record)
-    if protocol_completion_resume and isinstance(record.get("deadline_at"), str):
+    if (
+        protocol_completion_resume
+        and explicit_protocol_recovery
+        and isinstance(record.get("deadline_at"), str)
+    ):
         old_deadline = datetime.fromisoformat(record["deadline_at"])
-        required_calls = max(0, int(record.get("protocol_completion_required_calls", 0)))
-        minimum_remaining_time = timedelta(seconds=required_calls * CALL_TIMEOUT)
-        new_deadline = max(old_deadline, datetime.now(UTC) + minimum_remaining_time)
-        if new_deadline > old_deadline:
-            extension_seconds = (new_deadline - old_deadline).total_seconds()
-            extension_minutes = math.ceil(extension_seconds / 60)
+        now = datetime.now(UTC)
+        if old_deadline <= now:
+            # Only the separate, expressly confirmed Repair action may extend
+            # an expired deadline. Grant one session-sized block of active time;
+            # neither approval nor Resume promises to finish every remaining role.
+            approved_minutes = _protocol_time_window_minutes(record)
+            new_deadline = now + timedelta(minutes=approved_minutes)
+            # Count only the explicitly approved active-time window. An
+            # already-expired deadline can be far in the past; that inactive
+            # interval is not new research time or a new user authorization.
+            extension_minutes = approved_minutes
             record["deadline_at"] = new_deadline.isoformat()
             record["duration_limit_minutes"] = (
                 int(record.get("duration_limit_minutes", 0)) + extension_minutes
             )
+            required_calls = max(0, int(record.get("protocol_completion_required_calls", 0)))
             record.setdefault("protocol_completion_time_extensions", []).append(
                 {
                     "at": _now(),
                     "previous_deadline_at": old_deadline.isoformat(),
                     "new_deadline_at": new_deadline.isoformat(),
                     "additional_minutes": extension_minutes,
+                    "authorized_active_minutes": approved_minutes,
+                    "expired_deadline_gap_seconds": max(
+                        0, int((now - old_deadline).total_seconds())
+                    ),
                     "remaining_protocol_calls": required_calls,
-                    "minimum_per_call_timeout_seconds": CALL_TIMEOUT,
                     "elapsed_session_clock_preserved": True,
                 }
             )
             _event(
                 record,
                 "session.protocol_time_limit_extended",
-                f"The existing elapsed-work clock was preserved and its deadline extended by {extension_minutes} minutes to allow up to {CALL_TIMEOUT} seconds per each of {required_calls} missing protocol role turns.",
+                f"The existing elapsed-work clock was preserved and {approved_minutes} minutes "
+                "of additional active research time were explicitly authorized.",
             )
             _save(record["project_path"], record)
     if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
