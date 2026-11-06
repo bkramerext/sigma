@@ -7930,6 +7930,11 @@ async def _generate_impl(
             "paper.start project_id=%s", expected_project_id or "unknown"
         )
         run_id = uuid4().hex
+        from sigma import cloud_auth, progress_notifications
+
+        progress_notifications.bind_job(
+            cloud_auth.current_principal(), f"paper:{run_id}"
+        )
         started_at = _now()
         elapsed_before = 0
         work: dict[str, Any] = {}
@@ -9137,33 +9142,25 @@ def _schedule_progress_email(
     event: Literal["paper_finished", "paper_failed", "paper_paused"],
     paper_id: str | None = None,
 ) -> None:
-    """Best-effort, nonblocking email after a durable paper outcome."""
+    """Enqueue from a small durable receipt; no expensive paper scan on the loop."""
     try:
-        from sigma import cloud_auth, progress_notifications
+        from sigma import progress_notifications
 
-        principal = cloud_auth.current_principal()
-        if principal is None:
+        # The progress sidecar survives a paper failure and records the exact
+        # run even if a different Google account reopens the project later.
+        status = _read_progress_status(path)
+        if not status or not isinstance(status.get("run_id"), str):
             return
-        status = progress_status(path) or {}
-        published = list_papers(path)
-        # Derive versions from stored papers; never rely on an unfinished draft.
-        versions = [
-            item["paper_version"] for item in published if type(item.get("paper_version")) is int
-        ]
-        number = max(versions, default=0) + 1
-        if paper_id:
-            saved = next((item for item in published if item["paper_id"] == paper_id), None)
-            if saved is None:
-                return
-            number = saved.get("paper_version") or len(published)
+        number = _read_version_sequence(path)
+        if not paper_id:
+            number += 1
+        if number < 1:
+            return
         project = inspect_project(path).project
-        run_identity = status.get("run_id") or paper_id or status.get("started_at")
-        if not run_identity:
-            return
         progress_notifications.schedule(
-            principal,
+            f"paper:{status['run_id']}",
             event,
-            event_id=f"paper:{project.id}:{run_identity}:{event}",
+            event_id=f"paper:{project.id}:{status['run_id']}:{event}",
             project_title=project.title,
             number=number,
             path=path,
@@ -9173,7 +9170,6 @@ def _schedule_progress_email(
         logging.getLogger("sigma.lifecycle").warning(
             "paper.progress_email_skipped error_type=%s", type(exc).__name__
         )
-
 
 async def generate(
     path: str,
@@ -9236,6 +9232,7 @@ async def generate(
         if key in _started_paper_attempts:
             if is_critical():
                 finish_progress(path, "failed", MESSAGE)
+                _schedule_progress_email(path, "paper_failed")
             else:
                 finish_progress(path, "cancelled")
         log.info("paper.cancelled project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
