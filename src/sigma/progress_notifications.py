@@ -14,6 +14,7 @@ import re
 import sqlite3
 import time
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode, urlsplit
 
@@ -252,30 +253,69 @@ def enqueue(
 
 
 def _pause_still_actionable(row: sqlite3.Row) -> bool:
-    """Suppress a queued pause if its exact job already resumed or settled.
+    """Only send a pause notice for the same still-active durable event.
 
-    Missing/unreadable state is not proof of recovery; prefer delivering a
-    potentially important notification over silently losing it.
+    Definitively missing work is obsolete. Unexpected read failures remain
+    fail-open so a temporary storage error does not silently lose the notice.
     """
+    path = row["path"]
     try:
+        if not Path(path).exists():
+            _LOG.info("progress_email.pause_suppressed reason=project_missing")
+            return False
         if row["event"] == "session_paused" and row["session_id"]:
             from sigma import research_sessions
 
-            session = research_sessions._read(row["path"], row["session_id"])
-            return eligible_session_event(session) == "session_paused"
+            session = research_sessions._read(path, row["session_id"])
+            if eligible_session_event(session) != "session_paused":
+                _LOG.info("progress_email.pause_suppressed reason=session_not_paused")
+                return False
+            event_id = (
+                f"session:{session['id']}:session_paused:"
+                f"{session.get('stopped_at') or session.get('updated_at')}"
+            )
+            actionable = (
+                hashlib.sha256(event_id.encode("utf-8")).hexdigest() == row["event_hash"]
+            )
+            if not actionable:
+                _LOG.info("progress_email.pause_suppressed reason=session_pause_superseded")
+            return actionable
         if row["event"] == "paper_paused" and row["paper_id"]:
             from sigma import papers
 
-            progress = papers._read_progress_status(row["path"])
+            progress = papers._read_progress_status(path)
             if progress is None:
+                _LOG.info("progress_email.pause_retained reason=paper_progress_missing")
                 return True
             if progress.get("status") != "paused" or not progress.get("run_id"):
+                _LOG.info("progress_email.pause_suppressed reason=paper_not_paused")
                 return False
-            project_id = papers.inspect_project(row["path"]).project.id
+            project_id = papers.inspect_project(path).project.id
             current_event = f"paper:{project_id}:{progress['run_id']}:paper_paused"
-            return hashlib.sha256(current_event.encode("utf-8")).hexdigest() == row["event_hash"]
-    except Exception as exc:  # noqa: BLE001 - missing state must not drop an important email
-        _LOG.warning("progress_email.pause_state_unavailable error_type=%s", type(exc).__name__)
+            actionable = (
+                hashlib.sha256(current_event.encode("utf-8")).hexdigest() == row["event_hash"]
+            )
+            if not actionable:
+                _LOG.info("progress_email.pause_suppressed reason=paper_pause_superseded")
+            return actionable
+    except Exception as exc:  # noqa: BLE001 - classify unavailable durable state
+        from sigma.projects import ProjectError
+
+        if isinstance(exc, FileNotFoundError) or (
+            isinstance(exc, ProjectError)
+            and ("not found" in str(exc).lower() or "access denied" in str(exc).lower())
+        ):
+            _LOG.info(
+                "progress_email.pause_suppressed reason=state_missing error_type=%s",
+                type(exc).__name__,
+            )
+            return False
+        _LOG.warning(
+            "progress_email.pause_retained reason=state_unreadable error_type=%s",
+            type(exc).__name__,
+        )
+        return True
+    _LOG.warning("progress_email.pause_retained reason=missing_event_identity")
     return True
 
 
