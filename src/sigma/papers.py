@@ -5548,6 +5548,8 @@ async def _provider(
     project_id: str | None = None,
     project_path_value: str | None = None,
     include_diagrams: bool = True,
+    *,
+    output_observer: Callable[[], Awaitable[None]] | None = None,
 ) -> tuple[PaperDraft, str]:
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
@@ -5633,6 +5635,7 @@ async def _provider(
                     max_event_chars=4_000_000,
                     max_events=100_000,
                     max_text_bytes=MAX_RESPONSE_BYTES,
+                    on_text_delta=output_observer,
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
                         "Completed work is saved; transient errors may be retried up to three attempts."
@@ -5670,7 +5673,10 @@ async def _provider(
             raise PaperTransientFailure(
                 "Provider returned no single structured paper draft; retrying within the bounded authoring limit."
             )
-        return PaperDraft.model_validate_json(texts[0]), config["model"]
+        draft = PaperDraft.model_validate_json(texts[0])
+        if output_observer is not None and binding["mode"] != "chatgpt":
+            await output_observer()
+        return draft, config["model"]
     except ProjectError as exc:
         if _retryable_paper_response_failure(exc):
             raise PaperTransientFailure(
@@ -5720,6 +5726,7 @@ async def _provider_structured(
     project_path_value: str | None = None,
     include_diagrams: bool = False,
     usage_sink: dict[str, Any] | None = None,
+    output_observer: Callable[[], Awaitable[None]] | None = None,
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
     input_text = _provider_input_text(input_value, schema_name, max_input_bytes)
@@ -5781,6 +5788,7 @@ async def _provider_structured(
                     max_event_chars=4_000_000,
                     max_events=100_000,
                     max_text_bytes=MAX_RESPONSE_BYTES,
+                    on_text_delta=output_observer,
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
                         "Completed work is saved; transient errors may be retried up to three attempts."
@@ -5817,6 +5825,8 @@ async def _provider_structured(
         if len(texts) != 1:
             raise ProjectError("Provider returned no single structured long-paper stage")
         parsed_response = response_model.model_validate_json(texts[0])
+        if output_observer is not None and binding["mode"] != "chatgpt":
+            await output_observer()
         if usage_sink is not None:
             usage = raw.get("usage")
             if isinstance(usage, dict):
@@ -6104,6 +6114,7 @@ async def _generate_long_draft(
     project_path_value: str | None = None,
     structured_fast_path: bool = False,
     include_diagrams: bool = True,
+    output_observer: Callable[[], Awaitable[None]] | None = None,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     writing_methodology = publication_reference_compiler.guidance(
@@ -6194,6 +6205,9 @@ async def _generate_long_draft(
                     include_diagrams=(
                         include_diagrams
                         and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
+                    ),
+                    output_observer=(
+                        output_observer if schema_name == "sigma_long_paper_section" else None
                     ),
                 )
             except (PaperConnectionFailure, PaperTransientFailure):
@@ -8443,6 +8457,7 @@ async def _generate_impl(
                             view.project.id,
                             path,
                             include_diagrams,
+                            output_observer=observe_paper_output,
                         )
                     except (PaperConnectionFailure, PaperTransientFailure):
                         if attempt_number == 3:
@@ -8504,6 +8519,7 @@ async def _generate_impl(
                 path,
                 structured_fast_path=True,
                 include_diagrams=include_diagrams,
+                output_observer=observe_paper_output,
             )
             model = config["model"]
             long_form = True
