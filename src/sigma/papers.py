@@ -5167,6 +5167,92 @@ def _tex(
             )
             return result
         if layout is None:
+            # A narrow, vertically stacked graph is useful when the rank layout
+            # rejects crossing edges or large boundary boxes. Each directed
+            # edge gets its own right-hand lane, avoiding node intersections.
+            # Restrict this to source-ordered DAGs with contiguous, disjoint
+            # boundaries so the drawing cannot misrepresent membership.
+            order = {node.id: index for index, node in enumerate(diagram.nodes)}
+            forward = all(order[edge.source] < order[edge.target] for edge in diagram.edges)
+            used_boundary_nodes: set[str] = set()
+            contiguous_boundaries = True
+            for boundary in diagram.boundaries:
+                indices = sorted(order[node_id] for node_id in boundary.node_ids)
+                if indices != list(
+                    range(indices[0], indices[-1] + 1)
+                ) or used_boundary_nodes.intersection(boundary.node_ids):
+                    contiguous_boundaries = False
+                    break
+                used_boundary_nodes.update(boundary.node_ids)
+            if forward and contiguous_boundaries:
+                result = [
+                    r"\begin{figure}[!htbp]",
+                    r"\centering",
+                    (
+                        r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,"
+                        r"main node/.style={draw=blue!65,rounded corners,align=center,"
+                        r"text width=7.5cm,font=\footnotesize,fill=blue!5,inner sep=5pt},"
+                        r"edge badge/.style={circle,draw=blue!60,fill=white,"
+                        r"inner sep=1pt,font=\tiny},"
+                        r"boundary/.style={draw,dashed,rounded corners,inner sep=8pt}]"
+                    ),
+                ]
+                for index, node in enumerate(diagram.nodes):
+                    result.append(
+                        r"\node[main node] ("
+                        + node.id
+                        + ") at (0,"
+                        + f"{-index * 2.0:.2f}"
+                        + ") {"
+                        + prose_text(node.label)
+                        + "};"
+                    )
+                for index, edge in enumerate(diagram.edges, start=1):
+                    lane_x = 4.4 + index * 0.24
+                    source_y = -order[edge.source] * 2.0
+                    target_y = -order[edge.target] * 2.0
+                    result.append(
+                        r"\draw[->,thin,blue!65] ("
+                        + edge.source
+                        + ".east) -- ("
+                        + f"{lane_x:.2f},{source_y:.2f}"
+                        + ") -- node[midway,edge badge] {"
+                        + str(index)
+                        + "} ("
+                        + f"{lane_x:.2f},{target_y:.2f}"
+                        + ") -- ("
+                        + edge.target
+                        + ".east);"
+                    )
+                for boundary in diagram.boundaries:
+                    fit_nodes = "".join("(" + node_id + ")" for node_id in boundary.node_ids)
+                    result.append(
+                        r"\node[boundary,fit="
+                        + fit_nodes
+                        + r",label={[font=\scriptsize,fill=white,inner sep=1pt]left:{"
+                        + prose_text(boundary.label)
+                        + r"}}] {};"
+                    )
+                result.extend(
+                    [
+                        r"\end{tikzpicture}",
+                        r"\caption{" + prose_text(diagram.caption) + "}",
+                        source_note,
+                        r"\end{figure}",
+                        r"\par\smallskip{\footnotesize\textbf{Numbered relationships:}}",
+                        r"\begin{description}",
+                    ]
+                )
+                labels = {node.id: node.label for node in diagram.nodes}
+                for index, edge in enumerate(diagram.edges, start=1):
+                    description = f"{labels[edge.source]} to {labels[edge.target]}"
+                    if edge.label:
+                        description += ": " + edge.label
+                    result.append(r"\item[\textbf{" + str(index) + ".}] " + prose_text(description))
+                result.append(r"\end{description}")
+                return result
+
+        if layout is None:
             warnings.append(
                 "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation."
             )

@@ -439,6 +439,57 @@ def manual_tectonic_control_byte_pdf_compilation() -> None:
     assert pdf.startswith(b"%PDF-")
 
 
+def test_sov_ai_structured_graph_uses_vector_layout_not_relationship_list() -> None:
+    """The eight-node campus policy DAG is visual, not a prose-only fallback."""
+    nodes = [
+        ("operation", "Immutable operation envelope"),
+        ("authority", "Home-campus identity, policy and classification authority"),
+        ("gate", "Fail-closed eligibility and revocation gate"),
+        ("liability", "Durable liability admission"),
+        ("ranking", "Rank approved destinations"),
+        ("local", "Approved local inference"),
+        ("partner", "Hypothetical approved partner-campus service"),
+        ("frontier", "Hypothetical approved frontier path"),
+    ]
+    edges = [
+        ("operation", "gate", "Bound identity, data dependencies and destination"),
+        ("authority", "gate", "Authoritative permission"),
+        ("gate", "liability", "Only eligible operations proceed"),
+        ("liability", "ranking", "Only covered liability proceeds"),
+        ("ranking", "local", "Local policy eligibility"),
+        ("ranking", "partner", "Cross-campus approval"),
+        ("ranking", "frontier", "Separate provider approval"),
+    ]
+    diagram = papers.PaperDiagram(
+        caption="Policy-first control path with two hypothetical processing domains.",
+        nodes=[papers.DiagramNode(id=node_id, label=label) for node_id, label in nodes],
+        edges=[
+            papers.DiagramEdge(source=source, target=target, label=label)
+            for source, target, label in edges
+        ],
+        boundaries=[
+            papers.DiagramBoundary(
+                label="Origin campus", node_ids=[node_id for node_id, _ in nodes[:6]]
+            ),
+            papers.DiagramBoundary(label="Partner campus", node_ids=["partner"]),
+            papers.DiagramBoundary(label="Provider domain", node_ids=["frontier"]),
+        ],
+        claim_ids=["C1"],
+    )
+    assert papers._diagram_layout(diagram) is None
+    paper = draft("project:pid").model_copy(update={"diagrams": [diagram]})
+    warnings: list[str] = []
+    tex = papers._tex(paper, warnings, "f" * 64)
+    assert r"\begin{tikzpicture}" in tex
+    assert "Diagram (readable relationship list)." not in tex
+    assert tex.count(r"\draw[->,thin,blue!65]") == 7
+    assert tex.count(r"\node[main node]") == 8
+    assert tex.count(r"\node[boundary,fit=") == 3
+    assert all(label in tex for _, label in nodes)
+    assert all(label in tex for _, _, label in edges)
+    assert not any("could not be laid out" in warning for warning in warnings)
+
+
 def test_interrupted_section_dispatch_records_only_protect_sent_work() -> None:
     package, plan = fast_package(section_count=5)
     state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
