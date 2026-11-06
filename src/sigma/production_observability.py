@@ -72,44 +72,69 @@ def _to_mib(value: int | None, *, kib: bool = False) -> int | None:
 
 
 def _sample(period_seconds: int) -> None:
-    last_log = 0.0
+    """Log memory every period_seconds; check pressure every five seconds.
+
+    A telemetry or protection failure must not silently terminate this thread.
+    """
     import time
 
+    last_log = float("-inf")
+    wake = threading.Event()
     while True:
-        stats = memory_snapshot()
-        used, limit = stats["cgroup_used_mib"], stats["cgroup_limit_mib"]
-        pct = round(100 * used / limit, 1) if used is not None and limit else None
-        if time.monotonic() - last_log >= period_seconds:
-            _LOGGER.info(
-                "memory rss_mib=%s rss_peak_mib=%s cgroup_used_mib=%s "
-                "cgroup_limit_mib=%s cgroup_peak_mib=%s cgroup_pct=%s "
-                "host_available_mib=%s",
-                stats["rss_mib"],
-                stats["rss_peak_mib"],
-                used,
-                limit,
-                stats["cgroup_peak_mib"],
-                pct,
-                stats["host_available_mib"],
-            )
-            last_log = time.monotonic()
-        from sigma.memory_guard import poll
+        try:
+            now = time.monotonic()
+            if now - last_log >= period_seconds:
+                stats = memory_snapshot()
+                used, limit = stats["cgroup_used_mib"], stats["cgroup_limit_mib"]
+                pct = round(100 * used / limit, 1) if used is not None and limit else None
+                _LOGGER.info(
+                    "memory rss_mib=%s rss_peak_mib=%s cgroup_used_mib=%s "
+                    "cgroup_limit_mib=%s cgroup_peak_mib=%s cgroup_pct=%s "
+                    "host_available_mib=%s",
+                    stats["rss_mib"],
+                    stats["rss_peak_mib"],
+                    used,
+                    limit,
+                    stats["cgroup_peak_mib"],
+                    pct,
+                    stats["host_available_mib"],
+                )
+                last_log = now
+        except Exception as exc:  # noqa: BLE001 - monitoring must survive sample errors
+            _LOGGER.error("memory.sample_failed error_type=%s", type(exc).__name__)
+        try:
+            from sigma.memory_guard import poll
 
-        poll()
-        # Event.wait avoids a busy loop and allows clean process exit.
-        threading.Event().wait(5)
+            poll()
+        except Exception as exc:  # noqa: BLE001 - never lose telemetry after guard errors
+            _LOGGER.error("memory.guard_poll_failed error_type=%s", type(exc).__name__)
+        wake.wait(5)
 
 
 def start() -> None:
-    """Attach one file handler for application, Uvicorn error and access logs."""
+    """Start hosted memory telemetry, mirrored to Docker logs and durable storage."""
     global _STARTED
     if os.getenv("SIGMA_CLOUD_AUTH_ENABLED", "").lower() != "true":
         return
     with _LOCK:
         if _STARTED:
             return
+
+        formatter = logging.Formatter(
+            "%(asctime)sZ %(levelname)s %(name)s %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+        # Uvicorn configures its own console loggers, not the root logger.
+        # Without this handler the periodic memory samples only reach the
+        # persistent file, and are invisible in docker logs.
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        _LOGGER.addHandler(console)
+        _LOGGER.setLevel(logging.INFO)
+
         home = Path(os.environ.get("SIGMA_CLOUD_AUTH_HOME", "/var/lib/sigma-auth"))
         directory = home / "operational-logs"
+        persistent = False
         try:
             directory.mkdir(mode=0o700, parents=True, exist_ok=True)
             if directory.is_symlink():
@@ -123,26 +148,33 @@ def start() -> None:
                 utc=True,
                 encoding="utf-8",
             )
-            handler.setFormatter(
-                logging.Formatter(
-                    "%(asctime)sZ %(levelname)s %(name)s %(message)s",
-                    datefmt="%Y-%m-%dT%H:%M:%S",
-                )
-            )
+            handler.setFormatter(formatter)
             for name in ("", "uvicorn.error", "uvicorn.access"):
                 logging.getLogger(name).addHandler(handler)
             logging.getLogger().setLevel(logging.INFO)
-            _LOGGER.setLevel(logging.INFO)
-        except OSError:
-            logging.getLogger("sigma.configuration").exception(
-                "Persistent backend log setup failed; stdout logs remain available"
+            persistent = True
+        except OSError as exc:
+            # Keep memory sampling and the circuit breaker alive even when the
+            # state disk is unavailable or its permissions have drifted.
+            _LOGGER.error(
+                "persistent backend log setup failed; console telemetry remains active "
+                "error_type=%s",
+                type(exc).__name__,
             )
-            return
+
+        try:
+            interval = max(10, int(os.environ.get("SIGMA_MEMORY_LOG_INTERVAL_SECONDS", "30")))
+        except ValueError:
+            interval = 30
+            _LOGGER.warning("invalid memory log interval; using 30 seconds")
+
         _STARTED = True
-        interval = max(10, int(os.environ.get("SIGMA_MEMORY_LOG_INTERVAL_SECONDS", "30")))
         threading.Thread(
             target=_sample, args=(interval,), name="sigma-memory-telemetry", daemon=True
         ).start()
         _LOGGER.info(
-            "persistent logging enabled path=operational-logs/backend.log interval_s=%d", interval
+            "memory telemetry started interval_s=%d console=true persistent=%s "
+            "path=operational-logs/backend.log",
+            interval,
+            str(persistent).lower(),
         )
