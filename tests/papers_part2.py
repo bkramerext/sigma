@@ -2216,12 +2216,16 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
                 )
             )
             assert reset["provider_calls_attempted"] == 0
-            saved = papers._load_work(str(path))
-            assert saved is not None
-            assert saved["kind"] == "one_shot"
-            assert saved["provider_calls_total"] == 2
-            assert len(saved["prior_runs"]) == 1
-            assert saved["prior_runs"][0]["provider_calls_attempted"] == 2
+            # Start over keeps only small attempt accounting, not a restartable
+            # checkpoint or a stale terminal progress sidecar.
+            assert papers._load_work(str(path)) is None
+            assert papers._read_progress_status(str(path)) is None
+            assert papers.progress_status(str(path)) is None
+            ledger = papers._read_reset_ledger(str(path))
+            assert ledger is not None and ledger["attempt_started"] is False
+            assert ledger["provider_calls_total"] == 2
+            assert len(ledger["prior_runs"]) == 1
+            assert ledger["prior_runs"][0]["provider_calls_attempted"] == 2
             after = papers.preflight(
                 str(path),
                 expected_project_id=view.project.id,
@@ -2233,6 +2237,9 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
             assert after["long_form"] is False
             assert after["maximum_provider_calls"] == 1 + papers.MAX_PROOFREAD_CALLS
             assert after["provider_calls_attempted"] == 0
+            assert after["checkpoint_exists"] is False
+            assert after["checkpoint_can_restart"] is False
+            assert after["restart_ready"] is True
 
 
 def test_one_shot_local_validation_retries_without_stopping_or_rebilling() -> None:
@@ -2747,6 +2754,9 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                 )
                 assert reset["provider_calls_attempted"] == 0
                 assert calls == 1  # Starting over makes no provider request.
+                assert papers._load_work(str(path)) is None
+                assert papers._read_progress_status(str(path)) is None
+                assert papers._read_reset_ledger(str(path)) is not None
                 reject = False
                 result = await papers.generate(str(path), account["identity"], view.project.id)
                 assert calls == 2
@@ -2755,6 +2765,8 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                 assert record["generation"]["provider_calls_prior_runs"] == 1
                 assert record["generation"]["provider_calls_lifetime_total"] == 3
                 assert papers._load_work(str(path)) is None
+                assert papers._read_reset_ledger(str(path)) is None
+                assert papers._read_progress_status(str(path)) is None
 
         asyncio.run(check())
 
