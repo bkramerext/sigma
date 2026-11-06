@@ -7078,7 +7078,10 @@ async def control_session(
             # neither approval nor Resume promises to finish every remaining role.
             approved_minutes = _protocol_time_window_minutes(record)
             new_deadline = now + timedelta(minutes=approved_minutes)
-            extension_minutes = math.ceil((new_deadline - old_deadline).total_seconds() / 60)
+            # Count only the explicitly approved active-time window. An
+            # already-expired deadline can be far in the past; that inactive
+            # interval is not new research time or a new user authorization.
+            extension_minutes = approved_minutes
             record["deadline_at"] = new_deadline.isoformat()
             record["duration_limit_minutes"] = (
                 int(record.get("duration_limit_minutes", 0)) + extension_minutes
@@ -7091,6 +7094,9 @@ async def control_session(
                     "new_deadline_at": new_deadline.isoformat(),
                     "additional_minutes": extension_minutes,
                     "authorized_active_minutes": approved_minutes,
+                    "expired_deadline_gap_seconds": max(
+                        0, int((now - old_deadline).total_seconds())
+                    ),
                     "remaining_protocol_calls": required_calls,
                     "elapsed_session_clock_preserved": True,
                 }
