@@ -2,6 +2,8 @@ import { Component, createContext, createElement, lazy, Suspense, useCallback, u
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
+import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
+import { friendlyProviderError, providerInterruptionCopy, providerUsageLimitCopy, setSponsoredUsageConnection } from './provider-usage-guidance';
 import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
@@ -152,7 +154,7 @@ type ResearchSourceMaterial = { version: string; status: string; mode: string; b
 type ExecutionProvenance = { records: { id: string; runtime: string; statuses: string[]; artifact_ids: string[]; step_ids: string[]; source_recorded: boolean; output_recorded: boolean }[]; unidentified_count: number; completed_count: number; completed_without_recorded_io_count?: number; other_count: number; note: string };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; source_material?: ResearchSourceMaterial; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { investigation_type?: string; provider_usage_limited?: boolean; research_method_sources?: { advisory?: string | null; sources?: unknown[] }; approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; backend_build_commit?: string | null; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; scheduler_version?: number; turns_per_round?: number; research_round?: number; research_round_limit?: number; paired_turn_in_round?: number; configured_duration_limit_minutes?: number | null; duration_limit_minutes?: number | null; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; protocol_completed_calls?: number; protocol_target_calls?: number; provider_limit_continuation?: { eligible: boolean; missing_calls: number; reason?: string | null }; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { investigation_type?: string; provider_usage_limited?: boolean; cloud_sponsored?: boolean; research_method_sources?: { advisory?: string | null; sources?: unknown[] }; approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; backend_build_commit?: string | null; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; scheduler_version?: number; turns_per_round?: number; research_round?: number; research_round_limit?: number; paired_turn_in_round?: number; configured_duration_limit_minutes?: number | null; duration_limit_minutes?: number | null; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; protocol_completed_calls?: number; protocol_target_calls?: number; provider_limit_continuation?: { eligible: boolean; missing_calls: number; reason?: string | null }; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 
 
 /**
@@ -327,23 +329,6 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   if (session.status === 'stopped' && (/stopped by user|stopped by you/i.test(session.message) || session.termination_reason_code === 'user_stop')) {
     return { cause: 'Stopped by user. A dispatched provider request may still consume allowance.', next: 'Resume when you are ready.' };
   }
-  if (session.provider_usage_limited && ['paused', 'stopped', 'ended', 'failed'].includes(session.status)) {
-    const rejection = [...session.steps].reverse().find(step => step.failure_kind === 'provider_limited');
-    const lastLimitEvent = [...session.events].reverse().find(event => event.kind === 'provider.usage_limit');
-    const resumedBeforeRejection = lastLimitEvent != null && session.events.some(event =>
-      event.kind === 'resumed' && event.sequence < lastLimitEvent.sequence);
-    const evidence = rejection ? [
-      rejection.provider_error_code && `code: ${rejection.provider_error_code}`,
-      rejection.provider_http_status != null && `HTTP ${rejection.provider_http_status}`,
-      rejection.provider_stream_event && `stream event: ${rejection.provider_stream_event}`,
-    ].filter(Boolean).join('; ') : '';
-    return {
-      cause: `${resumedBeforeRejection
-        ? 'Resume succeeded, but the provider rejected a subsequent research request at its account or app usage limit.'
-        : 'The AI provider rejected a research request at its account or app usage limit.'} ${evidence ? `Provider evidence: ${evidence}. ` : ''}Saved findings are intact. A successful HTTP transport does not override an in-stream provider rejection.`,
-      next: 'Click Resume when the provider allowance is available.',
-    };
-  }
   const action = session.current_action.toLowerCase();
   const message = session.message.trim();
   const typedReason = [...session.steps].reverse().find(step => step.failure_kind || step.interruption_reason);
@@ -378,11 +363,22 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
 function StoppedSessionNotice({ session, dismissed, onDismiss }: {
   session: ResearchSession; dismissed: boolean; onDismiss: () => void;
 }) {
+  const cloud = useCloudIdentity();
   if (dismissed) return null;
+  if (session.provider_usage_limited && ['paused', 'stopped', 'ended', 'failed'].includes(session.status)) {
+    const sponsored = session.cloud_sponsored === true || cloud?.funding.selectedConnection === 'sponsored' || cloud?.target === 'hosted';
+    const copy = providerUsageLimitCopy(sponsored, session.mode === 'chatgpt');
+    return <SessionNotice number={session.session_number} onDismiss={onDismiss}
+      title={copy.title}
+      kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
+      <p>{copy.description}</p>
+      <p><strong>Next:</strong> {sponsored ? 'Try Resume again in a few hours.' : copy.next}</p>
+    </SessionNotice>;
+  }
   const guidance = stoppedSessionGuidance(session);
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
-  const title = 'Stopped';
+  const title = session.status === 'failed' ? 'Session failed' : 'Stopped';
   return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
     <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
     {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
@@ -801,16 +797,16 @@ function sessionNoticeKey(session: ResearchSession): string {
   return `${session.id}:${(hash >>> 0).toString(16)}`;
 }
 
-function SessionNoticeDismiss({ number, onDismiss }: { number: number; onDismiss: () => void }) {
-  return <button type="button" className="session-notice-dismiss" aria-label={`Dismiss notices for Session ${number}`}
-    title={`Dismiss Session ${number} notices`} onClick={onDismiss}>Dismiss</button>;
+function SessionNoticeDismiss({ number, onDismiss, label }: { number: number; onDismiss: () => void; label?: string }) {
+  return <button type="button" className="session-notice-dismiss" aria-label={label ?? `Dismiss notices for Session ${number}`}
+    title={label ?? `Dismiss Session ${number} notices`} onClick={onDismiss}>Dismiss</button>;
 }
 
 // An in-flow exit slot: the notice slides through its own bottom edge
 // as that slot collapses, instead of flying toward the viewport footer.
 // Dismissal is a presentation-only operation; saved research is unchanged.
-function SessionNotice({ number, onDismiss, title, kind, ariaLabel, children }: {
-  number: number; onDismiss: () => void; title: string; kind: string; ariaLabel: string; children: ReactNode;
+function SessionNotice({ number, onDismiss, title, kind, ariaLabel, dismissLabel, children }: {
+  number: number; onDismiss: () => void; title: string; kind: string; ariaLabel: string; dismissLabel?: string; children: ReactNode;
 }) {
   const [exiting, setExiting] = useState(false);
   const timer = useRef<number | null>(null);
@@ -824,10 +820,10 @@ function SessionNotice({ number, onDismiss, title, kind, ariaLabel, children }: 
   };
   return <div className={`session-notice-exit-slot${exiting ? ' is-exiting' : ''}`}>
     <div className="session-notice-exit-inner">
-      <div className={kind} role={kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
+      <div className={kind} role={kind.includes('paper-contextual-error') ? 'alert' : kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
         <div className="session-notice-header">
           <strong className="session-notice-title">{title}</strong>
-          <SessionNoticeDismiss number={number} onDismiss={dismiss}/>
+          <SessionNoticeDismiss number={number} onDismiss={dismiss} label={dismissLabel}/>
         </div>
         {children}
       </div>
@@ -859,6 +855,12 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   onInterventionSaved: (sessionId: string) => Promise<void>;
   dismissedStatusNotice: boolean; onDismissStatusNotice: () => void;
 }) {
+  const cloud = useCloudIdentity();
+  const usageCopy = providerUsageLimitCopy(
+    session.cloud_sponsored === true || cloud?.funding.selectedConnection === 'sponsored' || cloud?.target === 'hosted',
+    session.mode === 'chatgpt',
+  );
+  const usageSponsored = session.cloud_sponsored === true || cloud?.funding.selectedConnection === 'sponsored' || cloud?.target === 'hosted';
   const [markdownSections, setMarkdownSections] = useState<OutcomeMarkdownSection[]>(() =>
     containsMathNotation(session.outcome.conclusion || '') ? ['conclusion'] : []);
   const [convertedBlocks, setConvertedBlocks] = useState<Record<string, FormattedOutcomeBlock>>({});
@@ -932,19 +934,19 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   // Display one primary stop cause; leave per-strategy failures in the Session Log.
   // This also corrects historical sessions whose saved message used legacy v1
   // cycle terminology despite running under the v2 scheduler.
-  const usageLimitStopMessage = session.mode === 'chatgpt'
-    ? 'ChatGPT reached its account usage limit.'
-    : 'The AI provider reached its account usage limit.';
-  const usageLimitImpact = `Research paused with ${session.protocol_completed_calls ?? 0} of ${session.protocol_target_calls ?? session.call_limit} Investigator/Skeptic calls completed; ${session.artifacts.length} findings were preserved. Accepted work will not be repeated.`;
+  const usageLimitStopMessage = usageCopy.description;
+  const usageLimitImpact = `${session.protocol_completed_calls ?? 0} of ${session.protocol_target_calls ?? session.call_limit} research calls completed; ${session.artifacts.length} findings saved.`;
   const separateFailureNote = independentFailure
     ? 'Other earlier research failures are recorded separately in the Session Log.'
     : '';
-  const statusHeading = accountUsageLimited ? 'Provider usage limit reached' : budgetDenied
+  const statusHeading = accountUsageLimited ? usageCopy.title : budgetDenied
     ? session.calls_used === 0 ? 'Insufficient research funds' : 'Research funding limit reached'
     : session.status === 'paused' ? 'Paused'
       : session.status === 'stopped' ? 'Stopped'
         : session.status === 'failed' ? 'Error' : 'Ended';
-  const statusNextStep = session.next_step_guidance
+  const statusNextStep = accountUsageLimited
+    ? (usageSponsored ? 'Try Resume again in a few hours.' : usageCopy.next)
+    : session.next_step_guidance
     || (session.termination_reason_code === 'research_completed_early' ? 'Review the saved findings and rationale; the configured turn count was an upper limit, not a target.'
       : budgetDenied ? 'Review the available research allowance before starting another session.'
         : 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
@@ -1024,7 +1026,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
               target: 'markdown', expected_digest: expectedDigest,
               expected_binding: settings.binding, expected_project_id: session.project_id,
             },
-            controller.signal,
+            controller.signal, true,
           );
           if (converted.source_digest !== expectedDigest)
             throw new Error('Research text changed while formatting. The saved source is unchanged.');
@@ -1033,7 +1035,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           setConvertedBlocks(next);
         } catch (cause) {
           if (!controller.signal.aborted) {
-            setConversionError(`Markdown formatting paused: ${errorMessage(cause)}. Saved research remains unchanged; Markdown rendering stays available.`);
+            setConversionError(`Markdown formatting paused: ${friendlyProviderError(errorMessage(cause))}. Saved research remains unchanged; Markdown rendering stays available.`);
             conversionQueue.current = [];
           }
         } finally {
@@ -1440,6 +1442,30 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const continueWithSavedType = useRef(false);
   const missingTypeDialog = useRef<HTMLDialogElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
+  // Contextual failures belong to the affected session, not the global toast.
+  // A dismissed failure remains suppressed until the user tries Resume again.
+  const [sessionControlFailures, setSessionControlFailures] = useState<Record<string, { message: string; serial: number; dismissed: boolean }>>({});
+  const sessionControlSerial = useRef(0);
+  const [resumeAuthorization, setResumeAuthorization] = useState<ResumeAuthorization | null>(null);
+  const resumeApprovalResolver = useRef<((approved: boolean) => void) | null>(null);
+  const resumePlayAnchor = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => () => {
+    const resolve = resumeApprovalResolver.current;
+    resumeApprovalResolver.current = null;
+    resolve?.(false);
+  }, []);
+  const requestResumeAuthorization = (request: ResumeAuthorization): Promise<boolean> =>
+    new Promise(resolve => {
+      if (resumeApprovalResolver.current) { resolve(false); return; }
+      resumeApprovalResolver.current = resolve;
+      setResumeAuthorization(request);
+    });
+  const answerResumeAuthorization = (approved: boolean) => {
+    const resolve = resumeApprovalResolver.current;
+    resumeApprovalResolver.current = null;
+    setResumeAuthorization(null);
+    resolve?.(approved);
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
@@ -1493,15 +1519,22 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     setProjectDiagnostics(result.diagnostics);
   }, [path]);
   useEffect(() => { void reloadDiagnostics().catch(() => setDiagnosticStatus('Project diagnostics unavailable; previous errors may not be shown.')); }, [reloadDiagnostics]);
-  const recordClientError = async (message: string, stage: string) => {
+  const recordClientError = async (message: string, stage: string, sessionId?: string) => {
     const result = await reportProjectDiagnostic(path, message, stage, crypto.randomUUID());
     setDiagnosticStatus(result.status);
     if (result.recorded) {
       // If the server redacted the message, render that same sanitized
       // diagnostic in the UI instead of showing a different raw value.
-      if (result.message && result.message !== message) {
-        if (stage === 'session_read') setReadError(result.message);
-        else setError(result.message);
+      const sanitizedMessage = result.message;
+      if (sanitizedMessage && sanitizedMessage !== message) {
+        if (stage === 'session_read') setReadError(sanitizedMessage);
+        else if ((stage === 'session_control' || stage === 'session_failure') && sessionId) {
+          setSessionControlFailures(current => {
+            const prior = current[sessionId];
+            if (!prior) return current;
+            return { ...current, [sessionId]: { ...prior, message: sanitizedMessage } };
+          });
+        } else setError(sanitizedMessage);
       }
       void reloadDiagnostics().catch(() => {});
     }
@@ -1527,7 +1560,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
-    const response = await fetch(`/api/projects/research-sessions?${query}`, { signal });
+    const response = await fetch(`/api/projects/research-sessions?${query}`, { signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
     if (!Array.isArray(data.sessions)) throw new Error('Research sessions response is missing its sessions array');
@@ -1575,9 +1608,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     if (chosen) {
       const transition = `${chosen.id}:${chosen.status}:${chosen.current_action}`;
       if (chosen.status === 'failed' && lastAnnouncement.current.startsWith(`${chosen.id}:`) && /:(queued|running):/.test(lastAnnouncement.current)) {
-        setError(chosen.message);
-        reportRequestFailure(chosen.message);
-        void recordClientError(chosen.message, 'session_failure');
+        // The failed session's in-flow card is the sole visible notice.
+        void recordClientError(chosen.message, 'session_failure', chosen.id);
       }
       if (lastAnnouncement.current && transition !== lastAnnouncement.current) {
         setAnnouncement(`Research session ${chosen.session_number}: ${chosen.status}. ${chosen.current_action}.`);
@@ -1591,7 +1623,6 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     const message = errorMessage(cause);
     setReadError(message);
     if (!readErrorReported.current) {
-      reportRequestFailure(message);
       void recordClientError(message, 'session_read');
     }
     readErrorReported.current = true;
@@ -1691,6 +1722,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
     if (!target) return;
     setBusy(true); setError('');
+    setSessionControlFailures(current => {
+      if (!current[target.id]) return current;
+      const next = { ...current };
+      delete next[target.id];
+      return next;
+    });
     try {
       let recoveryAction: 'pause' | 'resume' | 'stop' | 'repair' = action;
       let authorizedCalls = 0;
@@ -1706,9 +1743,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           const attemptShortfall = message.match(/Resume with exactly (\d+) explicitly authorized additional attempts/);
           if (action === 'resume' && authorizedCalls === 0 && attemptShortfall) {
             const count = Number(attemptShortfall[1]);
-            if (count >= 1 && count <= 12 && window.confirm(
-              `Continuing this saved session requires ${count} additional paid provider attempt${count === 1 ? '' : 's'} beyond its existing call limit. Further approvals may be needed if more research remains unfinished. This may consume more provider allowance. Keep all saved research and authorize exactly ${count} additional attempt${count === 1 ? '' : 's'}?`
-            )) {
+            if (count < 1 || count > 12) throw cause;
+            if (await requestResumeAuthorization({ kind: 'attempts', count, sessionNumber: target.session_number })) {
               authorizedCalls = count;
               continue;
             }
@@ -1717,9 +1753,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           }
           const durationShortfall = message.match(/Resume requires explicit approval to extend the session duration for up to (\d+) additional minutes/);
           if (action === 'resume' && recoveryAction === 'resume' && durationShortfall) {
-            if (window.confirm(
-              `This saved session has reached its active-time limit. Authorize up to ${durationShortfall[1]} more minutes of research? This is an additional time window, not a guarantee that all unfinished turns will complete. Saved evidence and provider spending limits remain preserved.`
-            )) {
+            const minutes = Number(durationShortfall[1]);
+            if (!Number.isSafeInteger(minutes) || minutes < 1) throw cause;
+            if (await requestResumeAuthorization({ kind: 'duration', count: minutes, sessionNumber: target.session_number })) {
               recoveryAction = 'repair';
               continue;
             }
@@ -1729,13 +1765,28 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           throw cause;
         }
       }
+      if (action === 'resume') {
+        // A new accepted Resume deserves a fresh saved-status notice if it
+        // quickly stops again, even when the previous notice was dismissed.
+        const key = sessionNoticeKey(target);
+        setDismissedNoticeKeys(current => {
+          if (!current.has(key)) return current;
+          const next = new Set(current);
+          next.delete(key);
+          try { window.localStorage.setItem(noticeStorageKey, JSON.stringify([...next])); } catch { /* Presentation only. */ }
+          return next;
+        });
+      }
       await load(target.id);
     }
     catch (cause) {
       await load(target.id).catch(() => {});
       const message = errorMessage(cause);
-      setError(message); reportRequestFailure(message);
-      void recordClientError(message, 'session_control');
+      setSessionControlFailures(current => ({
+        ...current,
+        [target.id]: { message, serial: ++sessionControlSerial.current, dismissed: false },
+      }));
+      void recordClientError(message, 'session_control', target.id);
     }
     finally { setBusy(false); }
   }
@@ -1745,9 +1796,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     setAnnouncement('Human feedback added for a later agent step. No provider call was made.');
   }, [load]);
 
-  function requestResume(target: ResearchSession) {
-    // Resume reuses the saved checkpoint. Paid-attempt or duration extensions
-    // require a separate explicit confirmation before any provider dispatch.
+  function requestResume(target: ResearchSession, playButton: HTMLButtonElement) {
+    // Anchor any explicit authorization prompt to the Play button that initiated it.
+    resumePlayAnchor.current = playButton;
     void control('resume', target);
   }
 
@@ -1895,6 +1946,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const runningCount = activeSessionCount;
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
+    <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
       <h2 id="missing-type-heading">Project type unavailable</h2>
       {safeSavedTypeSettings
@@ -1931,21 +1983,33 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session {item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {sessionOffersResume(item) && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
+                  {sessionOffersResume(item) && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
                   {!['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
                   {!['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
+                {sessionControlFailures[item.id]
+                  ? (!sessionControlFailures[item.id].dismissed && <SessionNotice key={`${item.id}:control:${sessionControlFailures[item.id].serial}`}
+                      number={item.session_number}
+                      title={providerInterruptionCopy(sessionControlFailures[item.id].message, item.cloud_sponsored === true || sponsoredSession)?.title ?? 'Resume could not start'}
+                      kind="stopped-session-guidance"
+                      ariaLabel={`Session ${item.session_number} Resume feedback`}
+                      onDismiss={() => setSessionControlFailures(current => ({
+                        ...current, [item.id]: { ...current[item.id], dismissed: true },
+                      }))}>
+                      <p>{friendlyProviderError(sessionControlFailures[item.id].message, item.cloud_sponsored === true || sponsoredSession)}</p>
+                    </SessionNotice>)
+                  : (['paused', 'stopped', 'failed'].includes(item.status) || (item.provider_usage_limited && item.status === 'ended'))
+                    && <SessionRenderBoundary key={`${item.id}:notice:${sessionNoticeKey(item)}`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} status notice could not be displayed; its saved record remains in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
                 {(['ended', 'completed', 'failed'].includes(item.status)) && <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>}
                 <small className="session-progress-inline">Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</small>
                 {strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
                 {strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
             </div>
-            {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
+            {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={Boolean(sessionControlFailures[item.id]) || dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
           </li></SessionRenderBoundary>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
@@ -2388,6 +2452,7 @@ function paperProgressOperation(progress: PaperProgress): string {
 
 function paperErrorSummary(message: string): string {
   const value = message.trim();
+  if (friendlyProviderError(value) !== value) return friendlyProviderError(value);
   if (/Tectonic could not compile|No PDF was downloaded|PDF compilation failed/i.test(value)) {
     return 'PDF compilation failed. The paper draft is saved; use Resume to retry without rewriting it.';
   }
@@ -2544,6 +2609,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [restartingCheckpoint, setRestartingCheckpoint] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
+  const [dismissedPaperNoticeKey, setDismissedPaperNoticeKey] = useState('');
   const initialPaperActivityReported = useRef(false);
   const [paperClock, setPaperClock] = useState(() => Date.now());
   const [error, setError] = useState('');
@@ -2605,10 +2671,12 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     return () => document.removeEventListener('pointerdown', dismiss);
   }, [paperMenu]);
   useEffect(() => {
-    if (!error && !scoreError && !eli5Error && !copyError && !success) return;
-    const timer = window.setTimeout(() => { setError(''); setScoreError(''); setEli5Error(''); setCopyError(''); setSuccess(''); }, 8000);
+    // Contextual paper failures remain visible until Dismiss; lightweight
+    // secondary feedback still expires automatically.
+    if (!scoreError && !eli5Error && !copyError && !success) return;
+    const timer = window.setTimeout(() => { setScoreError(''); setEli5Error(''); setCopyError(''); setSuccess(''); }, 8000);
     return () => window.clearTimeout(timer);
-  }, [error, scoreError, eli5Error, copyError, success]);
+  }, [scoreError, eli5Error, copyError, success]);
   useEffect(() => {
     if (!busy && !['active', 'queued'].includes(paperProgress?.status ?? '')) return;
     const timer = window.setInterval(() => setPaperClock(Date.now()), 1000);
@@ -2947,7 +3015,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess('');
+    setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
     let requestDispatched = false;
@@ -3089,6 +3157,17 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
      ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? ''));
   const draftVersion = Math.max(0, ...papers.map(paper => paper.paper_version)) + 1;
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
+  const paperProgressFailure = paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? ''
+    : paperProgress?.status === 'interrupted' ? paperProgress.detail ?? '' : '';
+  const paperNoticeMessage = error || paperProgressFailure;
+  const paperNoticeKey = [
+    paperProgress?.started_at ?? '',
+    paperProgress?.status ?? '',
+    paperProgress?.failure_reason ?? '',
+    paperProgress?.detail ?? '',
+  ].join('|');
+  const paperNoticeCopy = providerInterruptionCopy(paperNoticeMessage);
+  const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
   const showDraftPaper = !guest && (newPaperRequested || generating || restartReady || continuationAvailable || (paperProgress != null && paperProgress.status !== 'complete'));
   useEffect(() => { onRunningChange(generationRunning && paperProgress?.status !== 'queued'); return () => onRunningChange(false); }, [generationRunning, paperProgress?.status, onRunningChange]);
   useEffect(() => { onQueuedChange(paperProgress?.status === 'queued'); return () => onQueuedChange(false); }, [paperProgress?.status, onQueuedChange]);
@@ -3123,12 +3202,15 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
 
-    {error && <div className="request-toast-stack ai-paper-toast-stack" aria-label="Paper generation errors">
-      <div className="request-toast-item"><div className="request-toast-item-inner"><div className="request-toast" role="alert">
-        <div className="request-toast-content"><strong>Paper generation</strong><p>{paperErrorSummary(error)}</p></div>
-        <button type="button" aria-label="Dismiss paper error" onClick={() => setError('')}>Dismiss</button>
-      </div></div></div>
-    </div>}
+    {showPaperNotice && <SessionNotice key={paperNoticeKey} number={draftVersion}
+      title={paperNoticeCopy?.title ?? 'Paper generation stopped'}
+      kind="research-pause-guidance paper-contextual-error"
+      ariaLabel="Paper generation feedback"
+      dismissLabel="Dismiss paper generation notice"
+      onDismiss={() => { setDismissedPaperNoticeKey(paperNoticeKey); setError(''); }}>
+      <p>{paperNoticeCopy ? paperNoticeCopy.description : paperErrorSummary(paperNoticeMessage)}</p>
+      {paperNoticeCopy && <p><strong>Next:</strong> {paperNoticeCopy.next}</p>}
+    </SessionNotice>}
     <div id="papers-pane-content" hidden={!expanded} className="papers-pane-content">
       <div className="ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
@@ -3191,8 +3273,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
               <summary>Last stage: {paperProgressOperation(paperProgress)} · View steps</summary>
               <PaperStageSteps progress={paperProgress}/>
             </details>}
-        {paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="paper-progress-error">{paperErrorSummary(paperProgress.failure_reason)}</span>}
-        {paperProgress.status === 'interrupted' && paperProgress.detail && <span className="paper-progress-error" role="alert">{paperProgress.detail}</span>}
+        {/* Failure details are presented once in the contextual, dismissible paper card above. */}
       </div>}
 
 
@@ -3272,7 +3353,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
           <p>Authoring, validation, and typesetting problems are kept in the saved paper record even when the optional diagnostic appendix is not included.</p>
           <ol>{selected.generation.sigma_issues?.map((issue, index) => <li key={index}>{issue}</li>)}</ol>
           {selected?.generation.sigma_issues_included && <p role="status">The saved PDF includes the optional diagnostics appendix.</p>}
-          {paperProgress?.status === 'failed' && paperProgress.failure_reason && <p role="alert">{paperProgress.failure_reason}</p>}
+          {paperProgress?.status === 'failed' && paperProgress.failure_reason && <p role="alert">{paperErrorSummary(paperProgress.failure_reason)}</p>}
         </div>
       </details>}</div>
       </article>)}
@@ -7236,6 +7317,9 @@ function CloudAuthGate() {
     setProviderStatus({ status: next, guidance: 'Simulated local provider status.' });
   }, [providerStatus?.status]);
   const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
+  useEffect(() => {
+    setSponsoredUsageConnection(funding.target === 'hosted' || funding.selectedConnection === 'sponsored');
+  }, [funding.target, funding.selectedConnection]);
   const context: CloudIdentityState | null = status ? { ...status, deniedIdentityAvailable, deniedInvitationStatus, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = !!status?.account?.invitation_welcome_pending
