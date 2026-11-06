@@ -6231,7 +6231,7 @@ function App() {
       if (frame === undefined) frame = requestAnimationFrame(alignPulsePhases);
     };
     const observer = new MutationObserver(schedule);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
     schedule();
     return () => {
       observer.disconnect();

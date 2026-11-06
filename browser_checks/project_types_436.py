@@ -95,40 +95,40 @@ with sync_playwright() as playwright:
     assert about_rect and google_rect
     assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
 
-    # Green and yellow heartbeats use the same document-clock phase, even
-    # when inserted in different DOM updates. Saved must be visible so its
-    # CSS animations are active; the default Samples tab is hidden.
-    page.get_by_role("tab", name="Saved").click()
-    expect(page.locator("#recent-panel")).to_be_visible()
+    # A visible test host avoids the default Samples tab hiding Saved's
+    # animations. Compare the CSSAnimation timeline anchors directly.
+    page.emulate_media(reduced_motion="no-preference")
     page.evaluate("""() => {
-        const home = document.querySelector('.home-recents');
-        if (!home) throw Error('Saved project list missing');
+        const host = document.createElement('div');
+        host.id = 'pulse-sync-test-host';
+        host.className = 'home-recents';
+        host.style.cssText = 'position:fixed;top:65px;left:25px;display:block;width:80px;height:24px;pointer-events:none';
+        document.querySelector('.home-page').appendChild(host);
         const green = document.createElement('span');
         green.id = 'pulse-sync-green';
         green.className = 'research-running-indicator';
-        home.appendChild(green);
+        host.appendChild(green);
     }""")
-    page.wait_for_timeout(80)
+    page.wait_for_timeout(100)
     page.evaluate("""() => {
-        const home = document.querySelector('.home-recents');
         const yellow = document.createElement('span');
         yellow.id = 'pulse-sync-yellow';
         yellow.className = 'research-running-indicator paper-queued-indicator';
-        home.appendChild(yellow);
+        document.getElementById('pulse-sync-test-host').appendChild(yellow);
     }""")
-    page.wait_for_function("""() => {
-        const green = document.getElementById('pulse-sync-green');
-        const yellow = document.getElementById('pulse-sync-yellow');
-        if (!green || !yellow) return false;
-        const g = green.getAnimations().find(a => a.animationName === 'research-running-heartbeat');
-        const y = yellow.getAnimations().find(a => a.animationName === 'research-running-heartbeat');
-        return !!g && !!y && g.startTime === 0 && y.startTime === 0;
+    page.wait_for_timeout(300)
+    pulse_state = page.evaluate("""() => {
+        const nodes = ['pulse-sync-green', 'pulse-sync-yellow'].map(id => document.getElementById(id));
+        return nodes.map(node => ({
+            animationName: getComputedStyle(node).animationName,
+            animations: node.getAnimations().map(a => ({name: a.animationName, startTime: a.startTime}))
+        }));
     }""")
-    page.evaluate("""() => {
-        document.getElementById('pulse-sync-green')?.remove();
-        document.getElementById('pulse-sync-yellow')?.remove();
-    }""")
-    page.get_by_role("tab", name="Samples").click()
+    green, yellow = pulse_state
+    assert green["animationName"] == yellow["animationName"] == "research-running-heartbeat", pulse_state
+    assert green["animations"] and yellow["animations"], pulse_state
+    assert green["animations"][0]["startTime"] == yellow["animations"][0]["startTime"] == 0, pulse_state
+    page.evaluate("document.getElementById('pulse-sync-test-host').remove()")
 
     # Project Types traps focus, ignores Escape/backdrop clicks, and only
     # dismisses via its Close button (or an explicit successful Save).
