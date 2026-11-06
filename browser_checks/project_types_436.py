@@ -1220,6 +1220,16 @@ with sync_playwright() as playwright:
     page.keyboard.press("Escape")
     expect(play_confirm).to_have_count(0)
     assert reset_calls == ["POST"], reset_calls
+    # Switching to Start over dismisses Play's popup without changing the
+    # original Start over confirmation or causing provider requests.
+    fresh_play.click()
+    expect(play_confirm).to_be_visible()
+    page.get_by_role("button", name="Start over on paper generation").click()
+    expect(play_confirm).to_have_count(0)
+    original_confirm = page.get_by_role("group", name="Confirm start over on paper generation")
+    expect(original_confirm).to_be_visible()
+    original_confirm.get_by_role("button", name="Cancel").click()
+    assert reset_calls == ["POST"], reset_calls
     fresh_play.click()
     play_confirm.get_by_role("button", name="Confirm and play").click()
     for _ in range(80):
