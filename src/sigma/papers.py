@@ -3855,6 +3855,31 @@ def _validate(draft: PaperDraft, package: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(warnings))[:20]
 
 
+def _validate_with_local_recovery(
+    draft: PaperDraft, package: dict[str, Any], work: dict[str, Any]
+) -> tuple[PaperDraft, list[str]]:
+    """Give deterministic validation one extra local chance, never another AI call.
+
+    Optional visual attribution is repaired or removed without changing prose.
+    A persistent evidence/provenance violation still blocks publication.
+    """
+    try:
+        return draft, _validate(draft, package)
+    except ProjectError:
+        repaired = PaperDraft.model_validate(
+            _repair_paper_references(draft, {item["id"] for item in package["sources"]})
+        )
+        warnings = _validate(repaired, package)
+        _record_paper_generation_issue(
+            work,
+            "SIGMA recovered a local paper-validation failure without regenerating the draft.",
+        )
+        logging.getLogger("sigma.lifecycle").warning(
+            "paper.validation_recovered repair=local_retry"
+        )
+        return repaired, warnings
+
+
 def _research_completion_limitations(package: dict[str, Any]) -> list[str]:
     """Surface consequential saved research-session incompleteness, not failure noise.
 
@@ -5463,7 +5488,9 @@ async def _provider(
             raise ProjectError("Provider declined paper generation")
         texts = [part["text"] for part in contents if part.get("type") == "output_text"]
         if len(texts) != 1:
-            raise ProjectError("Provider returned no single structured paper draft")
+            raise PaperTransientFailure(
+                "Provider returned no single structured paper draft; retrying within the bounded authoring limit."
+            )
         return PaperDraft.model_validate_json(texts[0]), config["model"]
     except ProjectError as exc:
         if _retryable_paper_response_failure(exc):
@@ -5480,8 +5507,11 @@ async def _provider(
             "The paper provider connection was interrupted; saved work is intact."
         ) from exc
     except (ValueError, KeyError, TypeError, ValidationError) as exc:
-        raise ProjectError(
-            "Provider returned malformed paper content. No PDF was published; retry explicitly."
+        # A malformed structured response is an authoring failure, not a
+        # permanent integrity defect in the frozen research. Retry only inside
+        # the already bounded, accounted one-shot loop.
+        raise PaperTransientFailure(
+            "Provider returned malformed paper content; retrying within the bounded authoring limit."
         ) from exc
     except cloud_research.CloudResearchUnavailable as exc:
         raise ProjectError(str(exc)) from exc
@@ -5782,6 +5812,15 @@ def _repair_paper_references(
                 if not table_sources or not table_claims:
                     diagnostics.append(
                         f"A table in {section.heading} without valid evidence and claim links was omitted."
+                    )
+                    continue
+                if not set(table_claims).issubset(section_claims):
+                    # A legitimate paper-wide claim is not necessarily supported
+                    # by this particular section. Preserve the section prose, but
+                    # never publish a table with misleading local attribution.
+                    diagnostics.append(
+                        f"A table in {section.heading} referenced claims outside its section "
+                        "and was omitted; the authored prose was preserved."
                     )
                     continue
                 valid_tables.append(
@@ -8206,7 +8245,10 @@ async def _generate_impl(
                 work["one_shot_draft"] = draft.model_dump()
                 _save_work(path, work)
                 await report("validation", None, None)
-                _validate(draft, package)
+                draft, _ = _validate_with_local_recovery(draft, package, work)
+                if work["one_shot_draft"] != draft.model_dump():
+                    work["one_shot_draft"] = draft.model_dump()
+                    _save_work(path, work)
                 one_shot_validation_started = True
                 provider_calls = int(work["provider_calls"])
             evidence_batch_count = 0
@@ -8255,7 +8297,7 @@ async def _generate_impl(
             _repair_paper_references(draft, {item["id"] for item in package["sources"]})
         )
         draft = _annotate_research_completion(draft, package)
-        validation_warnings = _validate(draft, package)
+        draft, validation_warnings = _validate_with_local_recovery(draft, package, work)
         obligation_reconciliation = _reconcile_obligations(draft, package)
         await report("validation", None, None, "milestone")
         # The accepted model, account and frozen evidence belong to this
@@ -8487,31 +8529,32 @@ async def _generate_impl(
                 )
                 warnings.append(fallback_note)
                 marker = r"\end{document}"
-                if tex.count(marker) != 1:
-                    raise ProjectError(
-                        "TeX proofreading fell back, but the publication note could not be placed safely. The authored draft remains saved."
-                    )
                 title_marker = r"\maketitle"
-                if tex.count(title_marker) != 1:
-                    raise ProjectError(
-                        "TeX proofreading fell back, but its review status could not be placed safely at the start of the paper. The authored draft remains saved."
+                if tex.count(marker) == 1 and tex.count(title_marker) == 1:
+                    notice = (
+                        r"\begin{center}\fbox{\parbox{.92\linewidth}{\textbf{Needs review: "
+                        r"TeX verification is incomplete.} Review the archived proofreading "
+                        r"diagnostics before relying on the typesetting.}}\end{center}"
                     )
-                notice = (
-                    r"\begin{center}\fbox{\parbox{.92\linewidth}{\textbf{Needs review: "
-                    r"TeX verification is incomplete.} Review the archived proofreading "
-                    r"diagnostics before relying on the typesetting.}}\end{center}"
-                )
-                tex = tex.replace(title_marker, title_marker + "\n" + notice, 1)
-                tex = tex.replace(
-                    marker,
-                    r"\section*{Typesetting verification note}"
-                    + "\n"
-                    + _latex(fallback_note)
-                    + "\n"
-                    + marker,
-                    1,
-                )
-                proofreading["publication_note_added"] = True
+                    tex = tex.replace(title_marker, title_marker + "\n" + notice, 1)
+                    tex = tex.replace(
+                        marker,
+                        r"\section*{Typesetting verification note}"
+                        + "\n"
+                        + _latex(fallback_note)
+                        + "\n"
+                        + marker,
+                        1,
+                    )
+                    proofreading["publication_note_added"] = True
+                else:
+                    # The optional in-paper notice must never block compiling the
+                    # existing authored TeX. The archived review status remains.
+                    _record_paper_generation_issue(
+                        work,
+                        "A typesetting-review notice could not be inserted in the paper; "
+                        "the review status remains in paper diagnostics.",
+                    )
             record["generation"]["proofreading"] = {
                 "attempted": True,
                 "ai_performed": proofreading.get("ai_performed", False),
@@ -8577,30 +8620,58 @@ async def _generate_impl(
                         diagnostics=pass_diagnostics,
                     )
                 except RuntimeError as compile_error:
-                    if not draft.diagrams or not _diagram_compile_failure_is_identified(
-                        pass_diagnostics, compile_error
-                    ):
-                        raise ProjectError(str(compile_error)) from compile_error
-                    removed_diagram_count = len(draft.diagrams)
-                    tex = _remove_diagram_figures(tex, removed_diagram_count)
-                    draft = draft.model_copy(update={"diagrams": []})
-                    warnings.append(
-                        "Tectonic reported a TikZ/PGF error in an explanatory diagram; the paper uses the text-only PDF fallback, which preserves the graph relationships."
+                    diagnosed_diagram_error = bool(
+                        draft.diagrams
+                        and _diagram_compile_failure_is_identified(pass_diagnostics, compile_error)
                     )
-                    diagram_fallback = {
-                        "applied": True,
-                        "removed_diagram_count": removed_diagram_count,
-                        "reason": next(
-                            (
-                                line[:500]
-                                for line in [*pass_diagnostics, *str(compile_error).splitlines()]
-                                if _diagram_compile_failure_is_identified(
-                                    [line], RuntimeError(line)
-                                )
+                    if diagnosed_diagram_error:
+                        removed_diagram_count = len(draft.diagrams)
+                        tex = _remove_diagram_figures(tex, removed_diagram_count)
+                        draft = draft.model_copy(update={"diagrams": []})
+                        warnings.append(
+                            "Tectonic reported a TikZ/PGF error in an explanatory diagram; the paper uses the text-only PDF fallback, which preserves the graph relationships."
+                        )
+                        diagram_fallback = {
+                            "applied": True,
+                            "removed_diagram_count": removed_diagram_count,
+                            "reason": next(
+                                (
+                                    line[:500]
+                                    for line in [
+                                        *pass_diagnostics,
+                                        *str(compile_error).splitlines(),
+                                    ]
+                                    if _diagram_compile_failure_is_identified(
+                                        [line], RuntimeError(line)
+                                    )
+                                ),
+                                "Tectonic identified a TikZ/PGF compilation error.",
                             ),
-                            "Tectonic identified a TikZ/PGF compilation error.",
-                        ),
-                    }
+                        }
+                    elif any(section.tables for section in draft.sections):
+                        # Optional tables can break TeX even when the prose and
+                        # evidence are sound. Rerender the exact saved draft
+                        # without visuals; never repeat a paid authoring call.
+                        draft = _without_optional_visuals(draft)
+                        warning = (
+                            "Needs review: Optional paper tables or diagrams prevented "
+                            "PDF compilation; the text-only rendering preserved the "
+                            "authored analysis."
+                        )
+                        warnings.append(warning)
+                        _record_paper_generation_issue(work, warning)
+                        tex = _tex(draft, warnings, snapshot_hash, **tex_options)
+                        tex, restored = _restore_escaped_math_in_tex(tex)
+                        work["static_math_restorations"] = (
+                            int(work.get("static_math_restorations", 0)) + restored
+                        )
+                        record["generation"]["publication_status"] = "needs_review"
+                        record["generation"]["proofreading"]["verification_status"] = "incomplete"
+                        record["generation"]["proofreading"]["review_reason"] = (
+                            "The PDF used an unproofread text-only fallback rendering."
+                        )
+                    else:
+                        raise ProjectError(str(compile_error)) from compile_error
                     pass_diagnostics = []
                     try:
                         pdf = await asyncio.to_thread(
@@ -8613,7 +8684,7 @@ async def _generate_impl(
                         )
                     except RuntimeError as fallback_error:
                         raise ProjectError(
-                            "The safe diagram fallback could not compile; the authored TeX remains saved."
+                            "The safe visual fallback could not compile; the authored TeX remains saved."
                         ) from fallback_error
                 compile_diagnostics = list(pass_diagnostics)
                 await report(

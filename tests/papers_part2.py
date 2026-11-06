@@ -2182,8 +2182,8 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
             assert after["provider_calls_attempted"] == 0
 
 
-def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None:
-    """Local validation errors must not erase a complete paid author response."""
+def test_one_shot_local_validation_retries_without_stopping_or_rebilling() -> None:
+    """A transient local check retries in the same run with its paid draft intact."""
     with TemporaryDirectory() as directory:
         path = Path(directory) / "validation-recovery.sigma"
         view = initialize_project(
@@ -2224,24 +2224,142 @@ def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None
                 patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
                 mock_pdf_inspection(),
             ):
-                try:
-                    await papers.generate(str(path), account["identity"], view.project.id)
-                except ProjectError as exc:
-                    assert "metadata check" in str(exc)
-                else:
-                    raise AssertionError("The first validation was deliberately interrupted")
-                saved_work = papers._load_work(str(path))
-                assert saved_work is not None
-                assert saved_work["provider_calls"] == 1
-                assert saved_work["one_shot_draft"] is not None
                 result = await papers.generate(str(path), account["identity"], view.project.id)
                 assert provider_calls == 1
+                assert validations >= 2
                 saved = papers.get_paper(str(path), result["paper_id"])
                 assert saved["pdf_available"] is True
                 assert saved["generation"]["provider_calls_attempted"] == 2
+                assert any(
+                    "recovered a local paper-validation failure" in issue
+                    for issue in saved["generation"]["sigma_issues"]
+                )
                 assert papers._load_work(str(path)) is None
 
         asyncio.run(run())
+
+
+def test_table_cross_section_claim_is_omitted_without_losing_authored_prose() -> None:
+    """An out-of-section citation is an optional table defect, not a fatal paper."""
+    original = draft()
+    claim = original.claims[0]
+    second = claim.model_copy(
+        update={"id": "C2", "statement": "A distinct hypothesis concerns a different section."}
+    )
+    table = papers.PaperTable.model_validate(
+        {
+            "caption": "Candidate discriminator with a misplaced paper-wide claim.",
+            "headers": ["Candidate", "Status"],
+            "rows": [["Stage coupling", "Needs additional evidence"]],
+            "claim_ids": ["C2"],
+            "evidence_refs": ["project:pid"],
+        }
+    )
+    corrupt = original.model_copy(
+        update={
+            "claims": [claim, second],
+            "sections": [
+                original.sections[0].model_copy(update={"tables": [table]}),
+                original.sections[1].model_copy(update={"claim_ids": ["C2"]}),
+            ],
+        }
+    )
+    repaired = papers.PaperDraft.model_validate(
+        papers._repair_paper_references(corrupt, {"project:pid"})
+    )
+    assert repaired.sections[0].tables == []
+    assert repaired.sections[0].paragraphs == original.sections[0].paragraphs
+    assert repaired.sections[0].claim_ids == original.sections[0].claim_ids
+    assert repaired.sections[1].claim_ids == ["C2"]
+    assert any(
+        "referenced claims outside its section" in message
+        for message in repaired.validation_warnings
+    )
+    assert papers._validate(repaired, {"sources": [{"id": "project:pid", "data": {}}]})
+
+
+def test_optional_table_tex_failure_keeps_paper_and_publishes_text_pdf() -> None:
+    """Broken optional table typesetting must not discard paid scientific prose."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "table-render-recovery.sigma"
+        view = initialize_project(
+            path, "Table recovery", "Review the saved objective.", research_mode="mathematical"
+        )
+        credential = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        author_calls = 0
+        compile_attempts = 0
+
+        async def author(context, _account, _config, *_args):
+            nonlocal author_calls
+            author_calls += 1
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            paper = draft(source)
+            table = papers.PaperTable(
+                caption="The optional candidate-discriminator comparison.",
+                headers=["Candidate", "Status"],
+                rows=[["Temporal coupling", "Not independently verified"]],
+                evidence_refs=[source],
+                claim_ids=["C1"],
+            )
+            return paper.model_copy(
+                update={
+                    "sections": [
+                        paper.sections[0].model_copy(update={"tables": [table]}),
+                        paper.sections[1],
+                    ]
+                }
+            ), config["model"]
+
+        def compile_tex(tex, **_kwargs):
+            nonlocal compile_attempts
+            compile_attempts += 1
+            if r"\begin{tabular}" in tex or r"\begin{longtable}" in tex:
+                raise RuntimeError("Fixture table alignment failure")
+            return b"%PDF-fixture"
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=author),
+            patch.object(papers, "_compile_pdf", new=compile_tex),
+            mock_pdf_inspection(),
+        ):
+            result = asyncio.run(
+                papers.generate(str(path), credential["identity"], view.project.id)
+            )
+
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert author_calls == 1
+        assert compile_attempts >= 2
+        assert saved["pdf_available"] is True
+        assert all(not section["tables"] for section in saved["draft"]["sections"])
+        assert r"\begin{tabular}" not in saved["tex_source"]
+        assert saved["generation"]["publication_status"] == "needs_review"
+        assert any("text-only rendering" in issue for issue in saved["generation"]["sigma_issues"])
+        assert papers._load_work(str(path)) is None
+
+
+def test_persistent_invalid_paper_validation_still_blocks_publication() -> None:
+    """A repeatable integrity error is not silently downgraded to an accepted paper."""
+    original = draft()
+    with patch.object(papers, "_validate", side_effect=ProjectError("Invalid provenance")) as check:
+        try:
+            papers._validate_with_local_recovery(
+                original, {"sources": [{"id": "project:pid", "data": {}}]}, {}
+            )
+        except ProjectError as exc:
+            assert "Invalid provenance" in str(exc)
+        else:
+            raise AssertionError("Unsupported paper provenance must not be accepted")
+    assert check.call_count == 2
 
 
 def test_live_research_change_does_not_discard_completed_paper() -> None:
