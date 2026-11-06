@@ -96,6 +96,7 @@ PaperProgressStage = Literal[
     "pdf_check",
     "scoring",
     "score_failed",
+    "finishing",
     "retry",
     "complete",
 ]
@@ -3339,9 +3340,17 @@ def mark_scored_progress(path: str, paper_id: str) -> None:
             state is not None
             and state.get("paper_id") == paper_id
             and state.get("status") == "complete"
-            and state.get("stage") == "score_failed"
+            and (
+                state.get("stage") == "score_failed"
+                or (
+                    state.get("stage") == "complete"
+                    and "scoring did not finish" in str(state.get("detail", ""))
+                )
+            )
         ):
-            _write_progress_status(path, {**state, "stage": "complete", "updated_at": _now()})
+            _write_progress_status(
+                path, {**state, "stage": "complete", "detail": None, "updated_at": _now()}
+            )
     except (OSError, ProjectError):
         logging.getLogger("sigma.lifecycle").warning("paper.score_progress_update_failed")
 
@@ -3629,7 +3638,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
             {
                 "detail": (
                     "The backend restarted during paper generation. Saved work is intact; "
-                    "use Continue to resume from the latest checkpoint. An in-flight provider "
+                    "use Resume to recover from the latest checkpoint. An in-flight provider "
                     "call might have been billed and will not be blindly repeated."
                 )
             }
@@ -7946,6 +7955,27 @@ async def _generate_impl(
             *,
             detail: str | None = None,
         ) -> None:
+            if stage == "retry":
+                # Retrying is a substep, not a pipeline stage. Keep the actual
+                # stage and completed-section count visible throughout retry.
+                previous = _active_progress.get(project_key) or work.get("progress")
+                if isinstance(previous, dict) and previous.get("stage") in {
+                    "writing",
+                    "sections",
+                    "planning",
+                    "evidence",
+                    "consolidation",
+                    "validation",
+                    "proofreading",
+                    "compile",
+                    "pdf_check",
+                }:
+                    stage = previous["stage"]
+                    current = previous.get("current")
+                    total = previous.get("total")
+                else:
+                    stage = "writing"
+                    current = total = None
             if not _paper_progress_counts_valid(current, total):
                 # A progress-display mistake must not abort paid paper authoring.
                 if work:
@@ -7996,7 +8026,7 @@ async def _generate_impl(
             if work:
                 work["progress"] = saved_progress
                 _save_work(path, work)
-            elif stage in {"scoring", "score_failed", "complete"}:
+            elif stage in {"scoring", "score_failed", "finishing", "complete"}:
                 # Keep only bounded status after publication, not the draft checkpoint.
                 saved_progress["paper_id"] = record["paper_id"]
                 _write_progress_status(path, saved_progress)
@@ -8896,7 +8926,7 @@ async def _generate_impl(
                     else:
                         raise ProjectError(
                             "PDF compilation failed. The paper draft is saved; "
-                            "use Continue to retry without rewriting it."
+                            "use Resume to retry without rewriting it."
                         ) from compile_error
                     pass_diagnostics = []
                     try:
@@ -9096,6 +9126,7 @@ async def _generate_impl(
         record.pop("snapshot", None)
         del tex, pdf
         await report("scoring", None, None)
+        score_failure_detail: str | None = None
         try:
             if not expected_binding or not expected_project_id:
                 raise ProjectError("Automatic scoring requires an AI connection")
@@ -9111,15 +9142,13 @@ async def _generate_impl(
                 record["paper_id"],
                 type(exc).__name__,
             )
-            await report(
-                "score_failed",
-                None,
-                None,
-                "complete",
-                detail="PDF saved; scoring did not finish. Use Score paper to retry.",
-            )
-        else:
-            await report("complete", None, None, "complete")
+            score_failure_detail = "PDF saved; scoring did not finish. Use Score paper to retry."
+            await report("score_failed", None, None, "active", detail=score_failure_detail)
+        # The PDF is durable. Email is handed to a separate outbox, so
+        # reaching Finished never implies that SMTP delivery has completed.
+        await report("finishing", None, None, detail=score_failure_detail)
+        _schedule_progress_email(path, "paper_finished", record["paper_id"])
+        await report("complete", None, None, "complete", detail=score_failure_detail)
         return {
             key: record[key]
             for key in (
@@ -9164,7 +9193,7 @@ def _schedule_progress_email(
             path=path,
             paper_id=paper_id or "draft",
         )
-    except (ProjectError, OSError, ValueError, TypeError, KeyError) as exc:
+    except Exception as exc:  # noqa: BLE001 - email cannot invalidate a published paper
         logging.getLogger("sigma.lifecycle").warning(
             "paper.progress_email_skipped error_type=%s", type(exc).__name__
         )
@@ -9221,7 +9250,6 @@ async def generate(
     try:
         result = await task
         log.info("paper.complete project_id=%s elapsed_s=%.1f", project_id, monotonic() - started)
-        _schedule_progress_email(path, "paper_finished", result.get("paper_id"))
         return result
     except asyncio.CancelledError:
         task.cancel()

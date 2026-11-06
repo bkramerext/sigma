@@ -197,6 +197,15 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     if (!element) return;
     if (!element.open) element.showModal();
     first.current?.focus();
+    // Capture Escape before the browser's native dialog close behavior,
+    // without swallowing inline editor key handlers.
+    const preserveModal = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && element.open && !explicitlyClosing.current) {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener('keydown', preserveModal, true);
+    return () => document.removeEventListener('keydown', preserveModal, true);
   }, []);
   async function load() {
     const response = await fetch('/api/project-types', { cache: 'no-store', headers: handledErrorHeaders });

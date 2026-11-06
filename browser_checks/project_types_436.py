@@ -95,6 +95,45 @@ with sync_playwright() as playwright:
     assert about_rect and google_rect
     assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
 
+    # A visible test host avoids the default Samples tab hiding Saved's
+    # animations. Compare the CSSAnimation timeline anchors directly.
+    page.emulate_media(reduced_motion="no-preference")
+    page.evaluate("""() => {
+        const host = document.createElement('div');
+        host.id = 'pulse-sync-test-host';
+        host.className = 'home-recents';
+        host.style.cssText = 'position:fixed;top:65px;left:25px;display:block;width:80px;height:24px;pointer-events:none';
+        document.querySelector('.home-page').appendChild(host);
+        const green = document.createElement('span');
+        green.id = 'pulse-sync-green';
+        green.className = 'research-running-indicator';
+        host.appendChild(green);
+    }""")
+    page.wait_for_timeout(100)
+    page.evaluate("""() => {
+        const yellow = document.createElement('span');
+        yellow.id = 'pulse-sync-yellow';
+        yellow.className = 'research-running-indicator paper-queued-indicator';
+        document.getElementById('pulse-sync-test-host').appendChild(yellow);
+    }""")
+    page.wait_for_timeout(300)
+    pulse_state = page.evaluate("""() => {
+        const nodes = ['pulse-sync-green', 'pulse-sync-yellow'].map(id => document.getElementById(id));
+        return nodes.map(node => ({
+            animationName: getComputedStyle(node).animationName,
+            animations: node.getAnimations().map(a => ({name: a.animationName, startTime: a.startTime}))
+        }));
+    }""")
+    green, yellow = pulse_state
+    assert green["animationName"] == yellow["animationName"] == "research-running-heartbeat", (
+        pulse_state
+    )
+    assert green["animations"] and yellow["animations"], pulse_state
+    assert green["animations"][0]["startTime"] == yellow["animations"][0]["startTime"] == 0, (
+        pulse_state
+    )
+    page.evaluate("document.getElementById('pulse-sync-test-host').remove()")
+
     # Project Types traps focus, ignores Escape/backdrop clicks, and only
     # dismisses via its Close button (or an explicit successful Save).
     types_button = page.get_by_role("button", name="Project Types", exact=True)
@@ -105,7 +144,7 @@ with sync_playwright() as playwright:
         dialog.get_by_role("heading", name="Project Types", exact=True).evaluate(
             "e => getComputedStyle(e).color"
         )
-        == "rgb(244, 204, 105)"
+        == "rgb(237, 195, 141)"
     )
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     # Shared references start disabled per user; subject-specific references
@@ -136,14 +175,14 @@ with sync_playwright() as playwright:
     common_new = common_section.get_by_role("button", name="New", exact=True).first
     common_toggle = common_section.locator(".pt-reference-toggle").first
     page.mouse.move(1, 1)  # Clear the previous toggle's hover before checking idle colors.
-    expect(common_new).to_have_css("color", "rgb(244, 204, 105)")
+    expect(common_new).to_have_css("color", "rgb(237, 195, 141)")
     expect(common_toggle).to_have_css("color", "rgb(237, 195, 141)")
     common_link_box = common_link.bounding_box()
     common_new_box = common_new.bounding_box()
     assert common_link_box and common_new_box
     assert abs(common_link_box["x"] - common_new_box["x"]) < 1
     common_new.hover()
-    expect(common_new).to_have_css("color", "rgb(255, 231, 161)")
+    expect(common_new).to_have_css("color", "rgb(255, 229, 166)")
     # Leaving New blank cancels the insertion rather than trapping a row in edit mode.
     common_new.click()
     common_input = common_section.get_by_label("Research reference URL 3")
@@ -249,17 +288,18 @@ with sync_playwright() as playwright:
         "button", name="New"
     )
     expect(add_button).to_be_enabled()
-    assert add_button.evaluate("e => getComputedStyle(e).color") == "rgb(244, 204, 105)"
+    assert add_button.evaluate("e => getComputedStyle(e).color") == "rgb(237, 195, 141)"
     add_button.focus()
     page.keyboard.press("Tab")
     assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
     page.keyboard.press("Shift+Tab")
     expect(add_button).to_be_focused()
-    page.keyboard.press("Escape")
-    expect(dialog).to_be_visible()
-    assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
-        "Escape must not demote Project Types to an ordinary Home element"
-    )
+    for _ in range(3):
+        page.keyboard.press("Escape")
+        expect(dialog).to_be_visible()
+        assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
+            "Repeated Escape must not dismiss or demote Project Types"
+        )
     dialog.locator("header").get_by_role("button", name="Close").click()
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()
