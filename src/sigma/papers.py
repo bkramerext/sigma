@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from functools import lru_cache
 from itertools import pairwise
 from pathlib import Path
 from time import monotonic
@@ -10228,6 +10229,26 @@ def delete_paper(path: str, paper_id: str) -> None:
         os.close(descriptor)
 
 
+@lru_cache(maxsize=256)
+def _cached_pdf_digest(
+    filename: str, expected_sha256: str, signature: tuple[int, int, int, int]
+) -> bool:
+    """Verify each unchanged PDF once across Home, Papers, and project reopening.
+
+    Re-check whenever inode, size, mtime, or ctime changes, including atomic
+    replacements and same-size edits. Cache only the boolean, never PDF bytes.
+    """
+    del signature  # Cache invalidation key; the caller already validated the stat.
+    checksum = hashlib.sha256()
+    try:
+        with Path(filename).open("rb") as stored_pdf:
+            for chunk in iter(lambda: stored_pdf.read(1024 * 1024), b""):
+                checksum.update(chunk)
+        return checksum.hexdigest() == expected_sha256
+    except OSError:
+        return False
+
+
 def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
     target = project_path(path)
     try:
@@ -10248,16 +10269,16 @@ def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
             stat.S_ISREG(info.st_mode)
             and info.st_size == record.get("pdf_size_bytes")
             and info.st_size <= 80_000_000
+            and isinstance(record.get("pdf_sha256"), str)
         ):
             return False
-        checksum = hashlib.sha256()
-        with file.open("rb") as stored_pdf:
-            for chunk in iter(lambda: stored_pdf.read(1024 * 1024), b""):
-                checksum.update(chunk)
-        return checksum.hexdigest() == record.get("pdf_sha256")
+        return _cached_pdf_digest(
+            str(file),
+            record["pdf_sha256"],
+            (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns),
+        )
     except (OSError, ProjectError):
         return False
-
 
 def get_pdf(path: str, paper_id: str) -> bytes:
     record = get_paper(path, paper_id, include_tex=False)
