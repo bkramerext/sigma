@@ -843,6 +843,39 @@ with sync_playwright() as playwright:
     assert abs(geometry["lines"][0]["x"] - geometry["lines"][1]["x"]) < 3, geometry
     assert geometry["lines"][0]["x"] > geometry["iconRight"], geometry
 
+    # The same hanging indent applies to the live title button. In particular,
+    # the pulsing dot must be vertically centered on the last wrapped line.
+    page.route(
+        "**/api/projects/papers/progress?*",
+        lambda route: route.fulfill(json={
+            "progress": {
+                "status": "active",
+                "stage": "sections",
+                "current": 1,
+                "total": 3,
+                "started_at": "2026-11-05T01:00:00+00:00",
+                "elapsed_seconds": 90,
+            }
+        }),
+    )
+    page.reload()
+    active_title = page.locator(".project-header-title-action")
+    expect(active_title).to_be_visible(timeout=10000)
+    active_geometry = active_title.evaluate(
+        """node => {
+          const text = node.querySelector('.project-header-title-text');
+          const range = document.createRange();
+          range.selectNodeContents(text.firstChild);
+          const lines = [...range.getClientRects()].filter(rect => rect.width > 25)
+            .map(rect => ({x:rect.x, midY:rect.y + rect.height / 2}));
+          const dot = text.querySelector('.research-running-indicator').getBoundingClientRect();
+          return {lines, dotMidY: dot.y + dot.height / 2};
+        }"""
+    )
+    assert len(active_geometry["lines"]) == 2, active_geometry
+    assert abs(active_geometry["lines"][0]["x"] - active_geometry["lines"][1]["x"]) < 3
+    assert abs(active_geometry["lines"][-1]["midY"] - active_geometry["dotMidY"]) < 9
+
     assert not errors, errors
     browser.close()
 
