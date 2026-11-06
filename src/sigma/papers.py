@@ -5287,7 +5287,11 @@ def _tex(
                 for index, node_id in enumerate(order):
                     y = -1.8 * index
                     result.append(
-                        r"\node[timeline marker] at (-4.7," + f"{y:.2f}" + ") {" + str(index + 1) + "};"
+                        r"\node[timeline marker] at (-4.7,"
+                        + f"{y:.2f}"
+                        + ") {"
+                        + str(index + 1)
+                        + "};"
                     )
                     result.append(
                         r"\node[timeline node] ("
