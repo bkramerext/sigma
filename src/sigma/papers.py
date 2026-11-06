@@ -268,6 +268,9 @@ def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
     # API task scheduling is deferred until the request yields; committing
     # here guarantees an accepted submission survives a crash before it runs.
     _write_queue_status(path, "queued", started_at)
+    receipt = _read_reset_ledger(path)
+    if receipt is not None and not receipt["attempt_started"]:
+        _write_reset_ledger(path, {**receipt, "attempt_started": True})
     _submission_tasks[key] = task
 
     def clear_submitted(completed: asyncio.Task[dict[str, Any]]) -> None:
@@ -2787,6 +2790,11 @@ def _note_paper_progress_recovery(work: dict[str, Any]) -> None:
 
 
 def _load_work(path: str) -> dict[str, Any] | None:
+    # The reset receipt is authoritative until another Play is accepted;
+    # stale disk checkpoints must not resurrect the previous generation.
+    receipt = _read_reset_ledger(path)
+    if receipt is not None and not receipt["attempt_started"]:
+        return None
     file = _work_file(path, create=False)
     if not file.exists() and not file.is_symlink():
         return None
@@ -3308,6 +3316,73 @@ def _clear_work(path: str) -> None:
     _clear_progress_status(path)
 
 
+
+def _reset_ledger_file(path: str) -> Path:
+    """Small attempt-accounting receipt, NOT a resumable paper checkpoint."""
+    return _work_file(path, create=False).with_name("reset-ledger.json")
+
+
+def _read_reset_ledger(path: str) -> dict[str, Any] | None:
+    file = _reset_ledger_file(path)
+    if not file.exists() and not file.is_symlink():
+        return None
+    if file.is_symlink() or not file.is_file() or file.stat().st_size > 65536:
+        raise ProjectError("Paper reset accounting is unsafe")
+    try:
+        value = json.loads(file.read_text(encoding="utf-8"))
+        runs = value["prior_runs"]
+        if (
+            value.get("schema_version") != 1
+            or not isinstance(value.get("project_id"), str)
+            or type(value.get("provider_calls_total")) is not int
+            or value["provider_calls_total"] < 0
+            or type(value.get("attempt_started")) is not bool
+            or not isinstance(runs, list)
+            or len(runs) > 100
+            or any(
+                not isinstance(run, dict)
+                or type(run.get("provider_calls_attempted")) is not int
+                or not 0 <= run["provider_calls_attempted"] <= MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
+                or not isinstance(run.get("reset_at"), str)
+                for run in runs
+            )
+        ):
+            raise ValueError("invalid reset accounting")
+        return value
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise ProjectError("Paper reset accounting is unreadable") from exc
+
+
+def _write_reset_ledger(path: str, value: dict[str, Any]) -> None:
+    file = _work_file(path, create=True).with_name("reset-ledger.json")
+    encoded = _json(value)
+    if len(encoded) > 65536:
+        raise ProjectError("Paper reset accounting exceeds its safety bound")
+    staged = _stage(file.parent, encoded)
+    try:
+        os.replace(staged, file)
+        fd = os.open(file.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def _clear_reset_ledger(path: str) -> None:
+    file = _reset_ledger_file(path)
+    if file.is_symlink():
+        raise ProjectError("Paper reset accounting is unsafe")
+    file.unlink(missing_ok=True)
+    if file.parent.exists():
+        fd = os.open(file.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
 def _queue_status_file(path: str, *, create: bool = False) -> Path:
     """Queue receipts are small, private files alongside paper checkpoints."""
     return _work_file(path, create=create).with_name("queue-status.json")
@@ -3412,6 +3487,9 @@ def activity_status(path: str) -> Literal["queued", "active", "interrupted", "fa
 
 def progress_status(path: str) -> dict[str, Any] | None:
     """Cheap, restart-aware status; don't load huge checkpoints on heartbeats."""
+    receipt = _read_reset_ledger(path)
+    if receipt is not None and not receipt["attempt_started"]:
+        return None
     key = str(project_path(path).resolve())
     queued = _queued_progress.get(key)
     waiters = tuple(_paper_waiters)
@@ -3697,28 +3775,32 @@ async def _restart_work_locked(
                 "reset_at": _now(),
             }
         )
-    restarted = _new_work(
-        snapshot_hash,
-        view.project.id,
-        binding_fingerprint,
-        config["model"],
-        config["reasoning_effort"],
-        provider_calls_total=int(state.get("provider_calls_total", state.get("provider_calls", 0))),
-        prior_runs=history,
-        kind=(
-            "long_form"
-            if _paper_long_form(package, force_long_form=force_long_form)
-            else "one_shot"
-        ),
+    kind = (
+        "long_form"
+        if _paper_long_form(package, force_long_form=force_long_form)
+        else "one_shot"
     )
-    restarted["explicit_restart_pending"] = True
-    _save_work(path, restarted)
+    # Persist only bounded accounting. Once confirmed, NO unpublished draft,
+    # checkpoint or terminal progress receipt survives Start over.
+    _write_reset_ledger(
+        path,
+        {
+            "schema_version": 1,
+            "project_id": view.project.id,
+            "provider_calls_total": int(state.get("provider_calls_total", state.get("provider_calls", 0))),
+            "prior_runs": history,
+            "attempt_started": False,
+        },
+    )
+    _clear_work(path)
+    _clear_queue_status(path)
+    _active_progress.pop(str(project_path(path).resolve()), None)
     return {
         "provider_calls_attempted": 0,
         "provider_calls_previous_runs": sum(item["provider_calls_attempted"] for item in history),
         "maximum_provider_calls": (
             MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
-            if restarted["kind"] == "long_form"
+            if kind == "long_form"
             else 1 + MAX_PROOFREAD_CALLS
         ),
         "snapshot_bytes": len(_json(package)),
@@ -3739,6 +3821,7 @@ async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
             raise ProjectError("Paper project identity changed")
         _clear_work(path)
         _clear_queue_status(path)
+        _clear_reset_ledger(path)
         return {"discarded": True}
 
 
@@ -7978,6 +8061,7 @@ async def _generate_impl(
         # Otherwise a restart sees an incomplete work record and loses the
         # already selected sources and attempted-call accounting.
         if checkpoint is None:
+            reset_ledger = _read_reset_ledger(path)
             work = _new_work(
                 snapshot_hash,
                 view.project.id,
@@ -7985,10 +8069,16 @@ async def _generate_impl(
                 config["model"],
                 config["reasoning_effort"],
                 kind=expected_kind,
+                provider_calls_total=int(reset_ledger["provider_calls_total"]) if reset_ledger else 0,
+                prior_runs=list(reset_ledger["prior_runs"]) if reset_ledger else None,
             )
             work["frozen_package"] = package
             work["include_diagrams"] = include_diagrams
             _save_work(path, work)
+            # New work is durable before consuming reset accounting; a crash
+            # here can be retried without losing prior attempted-call totals.
+            if reset_ledger is not None:
+                _clear_reset_ledger(path)
         # Choose sources before authoring; never modify the frozen research.
         await report(
             "publication_compilation", None, None, detail="Selecting publication references…"
@@ -8911,11 +9001,12 @@ async def _generate_impl(
             + max(0, (datetime.now(UTC) - datetime.fromisoformat(started_at)).total_seconds())
         )
         _save(path, record, pdf)
+        # The published PDF is durable. Drop the entire generation checkpoint
+        # BEFORE notifying clients; never rewrite it with a completed status.
+        _clear_work(path)
+        _clear_reset_ledger(path)
+        work.clear()
         await report("complete", None, None, "complete")
-        try:
-            _clear_work(path)
-        except OSError:
-            pass
         return {
             key: record[key]
             for key in (
@@ -9056,6 +9147,7 @@ def preflight(
     """Estimate bounded long-paper calls without contacting an inference provider."""
     view = inspect_project(path)
     existing = _load_work(path)
+    reset_ledger = _read_reset_ledger(path)
     # A running or resumable paper uses the original saved evidence. Avoid
     # refreshing live research at all when a frozen checkpoint is available.
     frozen = existing.get("frozen_package") if existing is not None else None
@@ -9090,7 +9182,7 @@ def preflight(
         else None
     )
     work = existing
-    work_state = work if work is not None else {}
+    work_state = work if work is not None else (reset_ledger or {})
     same_project_and_snapshot = bool(
         work_state
         and work_state.get("project_id") == view.project.id
@@ -9311,6 +9403,7 @@ def preflight(
         "provider_calls_lifetime_total": work_state.get("provider_calls_total", 0),
         "provider_calls_remaining": calls_remaining,
         "checkpoint_can_restart": work is not None,
+        "restart_ready": bool(reset_ledger is not None and not reset_ledger["attempt_started"]),
         # A previous long-form planning attempt should not trap an eligible
         # small-scope project in repeated paid planning calls. Offer an
         # explicit, no-provider reset only before a valid plan or section exists.
