@@ -60,9 +60,12 @@ def main() -> None:
                 "Paused by user. A request may still finish.",
                 "Simulated research paused. No provider was called.",
             ):
-                assert progress_notifications.eligible_session_event(
-                    {"status": "paused", "message": message}
-                ) is None
+                assert (
+                    progress_notifications.eligible_session_event(
+                        {"status": "paused", "message": message}
+                    )
+                    is None
+                )
             for invalid in ("true", 1, None):
                 try:
                     progress_notifications.update_preference(first, cast(bool, invalid))
