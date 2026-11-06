@@ -50,6 +50,7 @@ def check_memory_telemetry() -> None:
                     {
                         "SIGMA_CLOUD_AUTH_ENABLED": "true",
                         "SIGMA_CLOUD_AUTH_HOME": temp,
+                        "SIGMA_MEMORY_LOG_INTERVAL_SECONDS": "30",
                     },
                 ),
                 patch("sys.stderr", stderr),
@@ -89,9 +90,7 @@ def check_memory_telemetry() -> None:
             patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "true"}),
             patch("sys.stderr", stderr),
             patch.object(production_observability, "_STARTED", False),
-            patch.object(
-                production_observability, "TimedRotatingFileHandler", side_effect=OSError
-            ),
+            patch.object(production_observability, "TimedRotatingFileHandler", side_effect=OSError),
             patch.object(production_observability.threading, "Thread") as worker,
         ):
             production_observability.start()
