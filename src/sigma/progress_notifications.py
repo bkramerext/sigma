@@ -309,9 +309,15 @@ def _deliver_pending() -> None:
             if changed != 1:
                 continue
             key = (row["subject"], row["event_hash"])
-            if not row["access_active"] or not row["opted_in"] or row["role"] == "guest":
-                state = "cancelled"
-            elif row["event"] in {"session_paused", "paper_paused"} and not _pause_still_actionable(row):
+            if (
+                not row["access_active"]
+                or not row["opted_in"]
+                or row["role"] == "guest"
+                or (
+                    row["event"] in {"session_paused", "paper_paused"}
+                    and not _pause_still_actionable(row)
+                )
+            ):
                 state = "cancelled"
             else:
                 state = "unknown"
