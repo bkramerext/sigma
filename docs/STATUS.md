@@ -1,5 +1,34 @@
 # SIGMA status
 
+## 2026-11-06 — Issue #590 release IAM setup; v0.2.1 deployment held
+
+PR [#589](https://github.com/bkramerext/sigma/pull/589) fixed the local scored
+sample migration test path and merged as
+`994f714f299cb380e92f27753c4da8516e319d10`. Exact-merge Actions passed
+[SIGMA verification](https://github.com/bkramerext/sigma/actions/runs/42242564357),
+[browser verification](https://github.com/bkramerext/sigma/actions/runs/42242564360),
+and [Ruff](https://github.com/bkramerext/sigma/actions/runs/42242564407).
+`./sigma test` passed all configured steps on that SHA.
+
+Issue #590 established keyless, separate `sigma-release-operator` and
+`sigma-release-ssh` identities. The owner's project Owner grant was preserved;
+neither release identity has Owner/Editor or user-managed keys. The recovery
+identity is scoped to snapshots from `sigma-state`, release-prefixed temporary
+recovery resources, and OS Login on recovery VMs. The host-only identity has
+IAP/OS Login access to `sigma-gce-01` and `roles/iam.serviceAccountUser` on
+`sigma-runtime` only; it has no Compute creation, deletion, attachment, or
+service-account-change permission. Both use short-lived impersonation. Effective
+permission checks and a five-minute-SSH-key IAP/OS Login session passed. Full
+role boundaries and observed checks are in
+[Operations Runbook](OPERATION_RUNBOOK.md#sigma-keyless-release-identities-2026-11-06-issue-590).
+
+**Deployment is held at the operator's direction.** No production preflight,
+recovery snapshot, isolated restore resources, or cutover was run. The
+recovery-creation conditional permissions are configured but have not yet been
+exercised with temporary resources. Select and freeze the release SHA only
+after the owner updates the branch intended for deployment; then complete the
+usual fresh snapshot/restore and exact-SHA release gates.
+
 ## SIGMA v0.2.0 production deployment (2026-11-04 PDT)
 
 Production is running the approved `main` release at

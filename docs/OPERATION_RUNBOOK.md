@@ -669,6 +669,73 @@ Rollback action or follow-up issue:
 
 **Maintenance rule:** Any recurring operational action discovered during Cloud deployment or incidents gets a tested step here before it is considered operationally handed off.
 
+## SIGMA keyless release identities (2026-11-06; Issue #590)
+
+The release operator uses short-lived service-account impersonation, not
+downloadable service-account keys. The human operator's existing project
+`roles/owner` binding is preserved. The two release service accounts have no
+project Owner/Editor binding and no user-managed keys:
+
+| Identity | Scope and purpose |
+| --- | --- |
+| `sigma-release-operator@sigma-research-prod.iam.gserviceaccount.com` | Snapshot `sigma-state`, build and inspect isolated recovery resources, and use OS Login on release-prefixed recovery VMs. |
+| `sigma-release-ssh@sigma-research-prod.iam.gserviceaccount.com` | IAP and OS Login administrative access to `sigma-gce-01` only. It cannot create, delete, attach to, or change the service account on Compute resources. |
+
+The active human operator has `roles/iam.serviceAccountTokenCreator` on each
+release service account resource only. This permits short-lived impersonation
+tokens; it does not create a key file. The host-only `sigma-release-ssh`
+principal has `roles/iam.serviceAccountUser` on
+`sigma-runtime@sigma-research-prod.iam.gserviceaccount.com` only. OS Login
+requires this grant because the production VM runs as `sigma-runtime`. The
+host-only identity has no instance creation or service-account attachment
+permission, so it cannot attach `sigma-runtime` to another VM. The recovery
+operator has no `iam.serviceAccounts.actAs` grant on `sigma-runtime`.
+
+Project custom roles and IAM Conditions enforce the following boundaries:
+
+- `sigmaGceSnapshotOperator` can read `sigma-state`, create a snapshot from
+  that disk, and inspect/list snapshots. IAM permission alone does not make a
+  snapshot application-consistent; the documented backup procedure must stop
+  writers and sync the mounted state disk first. Its condition allows snapshot
+  creation only from `sigma-state` and snapshot resources whose names start
+  `sigma-state-v021-pre-`.
+- `sigmaGceRecoveryCreator` can create only `sigma-state-restore-*` or
+  `sigma-v021-recovery-*` disks and `sigma-v021-recovery-*` instances.
+- `sigmaGceRecoveryOperator` can attach/detach/use/delete only those
+  release-prefixed disks and instances and use only a matching pre-release
+  snapshot. It cannot delete the production state disk or production VM.
+- `sigmaGceRecoveryDiscovery` and `sigmaGceProjectReader` provide read-only
+  project, network, subnet, image, machine type, zone, operation, instance, and
+  disk inventory needed by the guarded operator workflow.
+- `sigmaGceRemoteAdmin` grants `compute.instances.osLogin` and
+  `compute.instances.osAdminLogin` to the host-only identity for `sigma-gce-01`
+  and to the recovery identity only for `sigma-v021-recovery-*` instances.
+- `sigmaIapSshOperator` grants only `iap.tunnelInstances.accessViaIAP`. The
+  host identity is scoped to `sigma-gce-01` by name and instance ID. Because
+  future recovery instance IDs are assigned by GCE, the recovery identity's
+  IAP binding is limited to the `us-west1-b` tunnel zone. OS Login remains
+  limited to recovery-prefixed instances, and recovery VMs have no service
+  account or external IP.
+
+For the 2026-11-06 setup, checks using the actual impersonated identities
+confirmed: no service-account keys; no Owner/Editor role on either release
+identity; the owner's Owner grant remains; snapshot permission on `sigma-state`
+granted to the recovery identity and denied to the host-only identity; disk
+delete permission on `sigma-state` denied; OS Admin Login granted to the
+host-only identity on `sigma-gce-01` and denied to the recovery identity; VM
+delete and service-account-change permissions denied to the host-only identity
+on production; service-account-change permission denied to the recovery
+identity on production; and IAP permission granted for the host. An SSH key
+with a five-minute OS Login TTL was removed locally after an actual IAP + OS
+Login SSH session succeeded, including `sudo -n true`.
+
+This setup resolves the IAM blocker; it is not evidence of a release snapshot
+or recovery drill. In keeping with the operator's instruction to hold after
+fixing IAM, no production preflight, snapshot, clone disk, recovery VM, cutover,
+or deployment was performed. Positive authorization for creating future
+recovery-prefixed resources is defined by IAM Conditions but remains to be
+exercised during the next release restore drill.
+
 ## SIGMA v0.2.0 deployment outcome (2026-11-04 PDT)
 
 **Operator:** Red, acting under the operator's explicit authorization in this
