@@ -2638,6 +2638,17 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setRestartableCheckpoint(null); setRestartReady(false); setResetConfirm(false); setContinuationAvailable(false); setResumeDetails(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
+        // An ordinary open has no pending paper work. Avoid rebuilding and
+        // hashing the complete research snapshot until the user presses Play.
+        // Keep the existing preflight for checkpoints, reset receipts, and
+        // servers that do not advertise this optimization.
+        if (progressResponse.ok && savedProgress?.preflight_needed === false) {
+          setCheckpointMismatch(null);
+          setRestartableCheckpoint(null);
+          setRestartReady(false);
+          setContinuationAvailable(false);
+          setResumeDetails(null);
+        } else {
         const params = new URLSearchParams({
           path, long_form: 'false', expected_project_id: projectId, expected_binding: config.binding,
           mode: config.mode, model: config.model, reasoning_effort: config.reasoning_effort,
@@ -2657,6 +2668,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
           !generationRunning && preflightResponse.ok && preflight.checkpoint_exists &&
           preflight.checkpoint_can_restart ? preflight : null
         );
+        }
       }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
       if (nextId) {
@@ -6300,7 +6312,9 @@ function App() {
     const timer = window.setInterval(() => void poll(), 10000);
     window.addEventListener("focus", poll);
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", poll); };
-  }, [location, cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
+  // Page navigation does not change the workspace identity or running jobs.
+  // Do not trigger an extra full Saved-project scan every time a project opens.
+  }, [cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
   useEffect(() => globalActivity === 'active' ? runningFavicon() : globalActivity === 'queued' ? runningFavicon('yellow') : undefined, [globalActivity]);
   useEffect(() => {
     if (cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')) return;

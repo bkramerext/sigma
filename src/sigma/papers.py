@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from functools import lru_cache
 from itertools import pairwise
 from pathlib import Path
 from time import monotonic
@@ -2819,7 +2820,7 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
 
 
 def _work_file(path: str, *, create: bool) -> Path:
-    root = _paper_dir(path)
+    root = _paper_dir(path, create=create)
     directory = root / ".long-paper-work"
     if directory.is_symlink():
         raise ProjectError("Long-paper checkpoint directory must not be a symbolic link")
@@ -2832,6 +2833,19 @@ def _work_file(path: str, *, create: bool) -> Path:
         raise ProjectError("Long-paper checkpoint directory is unsafe")
     os.chmod(directory, 0o700)
     return directory / "checkpoint.json"
+
+
+def needs_preflight_on_open(path: str) -> bool:
+    """Only saved paper work requires the expensive evidence preflight on navigation.
+
+    A new paper always receives a full, authoritative preflight when Play is
+    pressed. Existing checkpoints and reset receipts still get the normal
+    validation/resume guidance on project opening. Include unsafe symlinks so
+    the usual preflight reports them rather than silently treating them as absent.
+    """
+    checkpoint = _work_file(path, create=False)
+    receipt = checkpoint.with_name("reset-ledger.json")
+    return any(item.exists() or item.is_symlink() for item in (checkpoint, receipt))
 
 
 _PAPER_PROGRESS_RECOVERY_ISSUE = (
@@ -10215,6 +10229,23 @@ def delete_paper(path: str, paper_id: str) -> None:
         os.close(descriptor)
 
 
+@lru_cache(maxsize=256)
+def _cached_pdf_digest(
+    filename: str, expected_sha256: str, signature: tuple[int, int, int, int]
+) -> bool:
+    """Verify each unchanged PDF once across Home, Papers, and project reopening.
+
+    Re-check whenever inode, size, mtime, or ctime changes, including atomic
+    replacements and same-size edits. Cache only the boolean, never PDF bytes.
+    """
+    del signature  # Cache invalidation key; the caller already validated the stat.
+    checksum = hashlib.sha256()
+    with Path(filename).open("rb") as stored_pdf:
+        for chunk in iter(lambda: stored_pdf.read(1024 * 1024), b""):
+            checksum.update(chunk)
+    return checksum.hexdigest() == expected_sha256
+
+
 def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
     target = project_path(path)
     try:
@@ -10235,13 +10266,14 @@ def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
             stat.S_ISREG(info.st_mode)
             and info.st_size == record.get("pdf_size_bytes")
             and info.st_size <= 80_000_000
+            and isinstance(record.get("pdf_sha256"), str)
         ):
             return False
-        checksum = hashlib.sha256()
-        with file.open("rb") as stored_pdf:
-            for chunk in iter(lambda: stored_pdf.read(1024 * 1024), b""):
-                checksum.update(chunk)
-        return checksum.hexdigest() == record.get("pdf_sha256")
+        return _cached_pdf_digest(
+            str(file),
+            record["pdf_sha256"],
+            (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns),
+        )
     except (OSError, ProjectError):
         return False
 

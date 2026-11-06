@@ -449,7 +449,7 @@ def recent_projects() -> dict:
                         best_paper_score=paper_metadata["best_paper_score"],
                         paper_activity=papers.activity_status(view.path),
                         difficulty=view.project.difficulty,
-                        research_running=has_active_session(view.path),
+                        research_running=has_active_session(view.path, project_id=view.project.id),
                         available=True,
                         pinned=(view.project.id in pins.values()),
                         pin_state=(

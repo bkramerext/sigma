@@ -69,6 +69,121 @@ def check_project_metadata_cache_invalidation(root: Path) -> None:
     paper_scores._project_metadata_cached.cache_clear()
 
 
+def check_home_session_status_cache(root: Path) -> None:
+    """Home listing must not repeatedly decode multi-MB research histories."""
+    from sigma import cloud_research, research_sessions
+
+    view = initialize_project(
+        root / "recent-status-cache-test.sigma", "Status cache test", "Check status caching."
+    )
+    directory = Path(view.path) / "research-sessions"
+    directory.mkdir(mode=0o700)
+    session_id = str(uuid4())
+    file = directory / f"{session_id}.json"
+    record = {
+        "id": session_id,
+        "project_id": view.project.id,
+        "project_path": view.path,
+        "status": "ended",
+        "large_history": "historical prompt " * 100_000,
+    }
+    file.write_text(json.dumps(record), encoding="utf-8")
+    research_sessions._recent_session_status.cache_clear()
+    original_read_text = Path.read_text
+    reads: list[int] = []
+
+    def tracked_read_text(path: Path, *args, **kwargs) -> str:
+        if path == file:
+            reads.append(1)
+        return original_read_text(path, *args, **kwargs)
+
+    with (
+        patch.object(Path, "read_text", tracked_read_text),
+        patch.object(
+            research_sessions,
+            "read_session_snapshot",
+            side_effect=AssertionError("Home must not decode full session snapshots"),
+        ),
+        patch.object(cloud_research, "billing_enabled", return_value=True),
+    ):
+        for _ in range(3):
+            assert not research_sessions.has_active_session(view.path, project_id=view.project.id)
+        assert len(reads) == 1, "Unchanged 1+ MB session must be parsed just once"
+        assert not research_sessions.has_active_session(view.path, project_id=str(uuid4()))
+        assert len(reads) == 2, "Foreign workspace identity must not share cached status"
+        record["status"] = "queued"
+        file.write_text(json.dumps(record), encoding="utf-8")
+        assert research_sessions.has_active_session(view.path, project_id=view.project.id)
+        assert len(reads) == 3, "A changed session must invalidate cached status"
+        file.unlink()
+        assert not research_sessions.has_active_session(view.path, project_id=view.project.id)
+    research_sessions._recent_session_status.cache_clear()
+
+
+def check_paper_preflight_presence(root: Path) -> None:
+    """New projects do not need startup preflight; checkpoints still do."""
+    from sigma import papers
+
+    view = initialize_project(
+        root / "paper-preflight-status-test.sigma", "Paper preflight test", "Check recovery."
+    )
+    root_path = Path(view.path)
+    assert not papers.needs_preflight_on_open(view.path)
+    assert not (root_path / "papers").exists(), "Read-only check must not create paper storage"
+    work = root_path / "papers" / ".long-paper-work"
+    work.mkdir(parents=True, mode=0o700)
+    checkpoint = work / "checkpoint.json"
+    checkpoint.write_text("{}", encoding="utf-8")
+    assert papers.needs_preflight_on_open(view.path)
+    checkpoint.unlink()
+    reset = work / "reset-ledger.json"
+    reset.write_text("{}", encoding="utf-8")
+    assert papers.needs_preflight_on_open(view.path), "Reset receipts need recovery preflight"
+    reset.unlink()
+    assert not papers.needs_preflight_on_open(view.path)
+
+
+def check_pdf_verification_cache(root: Path) -> None:
+    """Opening a listed project must reuse its verified PDF without another hash."""
+    from sigma import papers
+
+    view = initialize_project(
+        root / "pdf-verification-cache-test.sigma", "PDF cache test", "Check integrity."
+    )
+    paper_dir = Path(view.path) / "papers"
+    paper_dir.mkdir(mode=0o700)
+    file = paper_dir / "paper-test.pdf"
+    original = b"%PDF-verified-test"
+    file.write_bytes(original)
+    record = {
+        "paper_id": "paper-test",
+        "pdf_size_bytes": len(original),
+        "pdf_sha256": hashlib.sha256(original).hexdigest(),
+    }
+    papers._cached_pdf_digest.cache_clear()
+    original_open = Path.open
+    reads: list[int] = []
+
+    def tracked_open(path: Path, *args, **kwargs):
+        if path == file and args and args[0] == "rb":
+            reads.append(1)
+        return original_open(path, *args, **kwargs)
+
+    with patch.object(Path, "open", tracked_open):
+        assert papers._valid_pdf_file(view.path, record)
+        assert papers._valid_pdf_file(view.path, record)
+        assert len(reads) == 1, "Project reopening should not hash an unchanged PDF"
+        file.write_bytes(b"%PDX-verified-test")
+        assert not papers._valid_pdf_file(view.path, record)
+        assert len(reads) == 2, "Same-sized content changes must invalidate cached hashes"
+        file.write_bytes(original)
+        assert papers._valid_pdf_file(view.path, record)
+        assert len(reads) == 3
+        file.unlink()
+        assert not papers._valid_pdf_file(view.path, record)
+    papers._cached_pdf_digest.cache_clear()
+
+
 def check(root: Path, base: Path) -> None:
     sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
@@ -547,6 +662,9 @@ def check(root: Path, base: Path) -> None:
         backup.rename(index_path)
     assert recent_projects()["projects"]
     check_project_metadata_cache_invalidation(root)
+    check_home_session_status_cache(root)
+    check_paper_preflight_presence(root)
+    check_pdf_verification_cache(root)
     print(
         "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and unlimited recents"
     )
