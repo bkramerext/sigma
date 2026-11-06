@@ -2645,6 +2645,30 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     const timer = window.setInterval(() => void poll(), 1000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [path, paperProgress?.status]);
+  // Notification deep links expand the exact saved paper (or the paused
+  // draft) after initial hydration. Do not repeat this scroll on polling.
+  const paperDeepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (loading || paperDeepLinkHandled.current) return;
+    const requested = new URLSearchParams(window.location.search).get('reveal_paper');
+    if (!requested) return;
+    paperDeepLinkHandled.current = true;
+    onSectionOpened();
+    setExpanded(true);
+    window.localStorage.setItem(`sigma.papersPane:${path}`, 'true');
+    if (requested === 'draft') setDraftPaperExpanded(true);
+    else if (papers.some(paper => paper.paper_id === requested)) {
+      setExpandedPaperId(requested);
+      void openPaper(requested);
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const element = requested === 'draft'
+        ? document.querySelector<HTMLElement>('.paper-draft-card')
+        : Array.from(document.querySelectorAll<HTMLElement>('[data-paper-id]'))
+            .find(item => item.dataset.paperId === requested);
+      (element ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
+    }));
+  }, [loading, papers, path, onSectionOpened]);
   async function openPaper(id: string) {
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
