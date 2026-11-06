@@ -18,8 +18,12 @@ from urllib.parse import urlencode
 from sigma import cloud_auth
 
 Event = Literal[
-    "session_finished", "session_failed", "session_paused",
-    "paper_finished", "paper_failed", "paper_paused",
+    "session_finished",
+    "session_failed",
+    "session_paused",
+    "paper_finished",
+    "paper_failed",
+    "paper_paused",
 ]
 _LOG = logging.getLogger("sigma.lifecycle")
 
@@ -93,20 +97,26 @@ def update_preference(principal: cloud_auth.Principal, enabled: bool) -> dict:
 _COPY = {
     "session_finished": (
         "Session {number} completed",
-        "Research session {number} completed successfully.\n"
-        "Review the findings, outcome, and remaining questions.",
+        (
+            "Research session {number} completed successfully.\n"
+            "Review the findings, outcome, and remaining questions."
+        ),
         "View session",
     ),
     "session_failed": (
         "Session {number} failed",
-        "Research session {number} stopped because of an error.\n"
-        "Open the session to review the problem and any saved progress.",
+        (
+            "Research session {number} stopped because of an error.\n"
+            "Open the session to review the problem and any saved progress."
+        ),
         "View session",
     ),
     "session_paused": (
         "Session {number} paused",
-        "Research session {number} was paused because SIGMA could not continue automatically.\n"
-        "Your research progress has been preserved. Open the session to review its status.",
+        (
+            "Research session {number} was paused because SIGMA could not continue automatically.\n"
+            "Your research progress has been preserved. Open the session to review its status."
+        ),
         "View session",
     ),
     "paper_finished": (
@@ -116,14 +126,18 @@ _COPY = {
     ),
     "paper_failed": (
         "Paper {number} failed",
-        "Paper generation stopped because of an error.\n"
-        "Open the project to review the problem and any saved work.",
+        (
+            "Paper generation stopped because of an error.\n"
+            "Open the project to review the problem and any saved work."
+        ),
         "View paper",
     ),
     "paper_paused": (
         "Paper {number} paused",
-        "Paper generation has been paused.\nYour completed work has been preserved. "
-        "Open the paper to review its status and resume when possible.",
+        (
+            "Paper generation has been paused.\nYour completed work has been preserved. "
+            "Open the paper to review its status and resume when possible."
+        ),
         "View paper",
     ),
 }
@@ -210,7 +224,7 @@ def dispatch(
             from sigma.mail_transport import send_message
 
             send_message(message, recipients=[recipient])
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Delivery could have succeeded before the connection failed.
             with cloud_auth._db(cfg) as db:
                 db.execute(
@@ -230,7 +244,7 @@ def dispatch(
                 "WHERE subject=? AND event_hash=?",
                 (principal.subject, digest),
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         _LOG.warning(
             "progress_email.dispatch_unavailable event=%s error_type=%s",
             event,
@@ -241,15 +255,32 @@ def dispatch(
 def schedule(
     principal: cloud_auth.Principal | None,
     event: Event,
-    **kwargs: object,
+    *,
+    event_id: str,
+    project_title: str,
+    number: int,
+    path: str,
+    session_id: str | None = None,
+    paper_id: str | None = None,
 ) -> None:
-    """Detached nonblocking transport: never hold up a provider or persistence."""
+    """Detached nonblocking delivery: never hold up provider execution or persistence."""
     if principal is None:
         return
     try:
-        task = asyncio.create_task(asyncio.to_thread(dispatch, principal, event, **kwargs))
-        # Consume exceptions from a detached task; dispatch itself is fail-safe.
+        task = asyncio.create_task(
+            asyncio.to_thread(
+                dispatch,
+                principal,
+                event,
+                event_id=event_id,
+                project_title=project_title,
+                number=number,
+                path=path,
+                session_id=session_id,
+                paper_id=paper_id,
+            )
+        )
         task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
     except RuntimeError:
-        # No running loop: this is not a background worker.
+        # No running event loop: no background worker is available.
         return
