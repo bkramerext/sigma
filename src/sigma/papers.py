@@ -6126,7 +6126,7 @@ async def _generate_long_draft(
     project_path_value: str | None = None,
     structured_fast_path: bool = False,
     include_diagrams: bool = True,
-    on_output_delta: Callable[[], Awaitable[None]] | None = None,
+    on_output_delta: Callable[[int], Awaitable[None]] | None = None,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     writing_methodology = publication_reference_compiler.guidance(
@@ -6212,7 +6212,14 @@ async def _generate_long_draft(
                     schema_name=schema_name,
                     response_model=response_model,
                     max_input_bytes=max_input_bytes,
-                    on_output_delta=on_output_delta,
+                    on_output_delta=(
+                        (lambda number=input_value["section_number"]: on_output_delta(number))
+                        if on_output_delta is not None
+                        and schema_name == "sigma_long_paper_section"
+                        and isinstance(input_value, dict)
+                        and type(input_value.get("section_number")) is int
+                        else None
+                    ),
                     project_id=project_id,
                     project_path_value=project_path_value,
                     include_diagrams=(
@@ -7963,7 +7970,9 @@ async def _generate_impl(
         last_logged_stage: tuple[str, str] | None = None
         last_output_write = 0.0
 
-        async def report_activity(stage: Literal["writing", "sections"]) -> None:
+        async def report_activity(
+            stage: Literal["writing", "sections"], section_number: int | None = None
+        ) -> None:
             """Persist actual output activity; never rewrite the full draft for text deltas."""
             nonlocal last_output_write
             active = _active_progress.get(project_key)
@@ -7977,7 +7986,11 @@ async def _generate_impl(
             if active.get("stage") == "retry":
                 updated["current"] = len(work.get("section_drafts", {})) if stage == "sections" else None
                 updated["total"] = updated.get("sections_total") if stage == "sections" else None
-            if str(active.get("detail", "")).lower().startswith("retrying"):
+            retry_detail = str(active.get("detail", ""))
+            retry_section = re.search(r"Retrying section (\d+)", retry_detail, re.IGNORECASE)
+            if retry_detail.lower().startswith("retrying") and (
+                retry_section is None or section_number == int(retry_section.group(1))
+            ):
                 updated.pop("detail", None)
             _active_progress[project_key] = updated
             if work:
@@ -8585,7 +8598,7 @@ async def _generate_impl(
                 path,
                 structured_fast_path=True,
                 include_diagrams=include_diagrams,
-                on_output_delta=lambda: report_activity("sections"),
+                on_output_delta=lambda number: report_activity("sections", number),
             )
             model = config["model"]
             long_form = True
