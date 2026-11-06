@@ -190,6 +190,11 @@ def main() -> None:
                 path="/tmp/my project.sigma",
                 paper_id="draft",
             )
+            assert _event_state(cfg, "event:retry")["retry_after"] > int(time.time())
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "UPDATE progress_email_dispatches SET retry_after=0 WHERE event='paper_paused'"
+                )
             with patch(
                 "sigma.mail_transport.send_message",
                 side_effect=cloud_auth.SMTPDeliveryError("not delivered", state="failed"),
@@ -237,6 +242,29 @@ def main() -> None:
                     "SELECT COUNT(*) AS total FROM progress_email_dispatches WHERE event='session_failed'"
                 ).fetchone()
             assert row is not None and row["total"] == 0
+            # A delayed pause that recovered before mail delivery is noise.
+            progress_notifications.enqueue(
+                "session:123",
+                "session_paused",
+                event_id="event:recovered",
+                project_title="Project Alpha",
+                number=3,
+                path="/tmp/my project.sigma",
+                session_id="session-123",
+            )
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "UPDATE progress_email_dispatches SET retry_after=0 "
+                    "WHERE event_hash=?",
+                    (__import__("hashlib").sha256(b"event:recovered").hexdigest(),),
+                )
+            with patch(
+                "sigma.progress_notifications._pause_still_actionable", return_value=False
+            ):
+                progress_notifications._deliver_pending()
+            assert _event_state(cfg, "event:recovered")["state"] == "cancelled"
+            assert len(sent) == 2
+
             # Opt-out before a queued send suppresses the existing event too.
             progress_notifications.enqueue(
                 "session:123",
@@ -248,6 +276,11 @@ def main() -> None:
                 session_id="session-123",
             )
             progress_notifications.update_preference(first, False)
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "UPDATE progress_email_dispatches SET retry_after=0 "
+                    "WHERE state='pending'"
+                )
             progress_notifications._deliver_pending()
             assert _event_state(cfg, "event:optout")["state"] == "cancelled"
             assert len(sent) == 2
