@@ -66,9 +66,13 @@ def require_capacity() -> None:
     from sigma.projects import ProjectError
 
     snapshot = memory_snapshot()
-    if not capacity_verified(snapshot):
+    if (
+        os.getenv("SIGMA_CLOUD_AUTH_ENABLED", "").lower() == "true"
+        and not capacity_verified(snapshot)
+    ):
         # Do not cancel active work just because metrics are unavailable, but
-        # do not admit another resource-intensive task without an OOM boundary.
+        # do not admit another hosted job without an OOM boundary. Local
+        # development often has no cgroup memory limit and must still work.
         raise ProjectError(
             "Backend memory capacity cannot be verified. Existing work is preserved, "
             "but new AI jobs are paused. Check memory.read_failed in backend logs."
