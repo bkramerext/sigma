@@ -31,6 +31,8 @@ Event = Literal[
 _LOG = logging.getLogger("sigma.lifecycle")
 _MAX_ATTEMPTS = 3
 _PAUSE_SETTLE_SECONDS = 60
+# Base64/MIME overhead must fit within Gmail's 25 MB message limit.
+_MAX_PDF_ATTACHMENT_BYTES = 15 * 1024 * 1024
 _PUMP: asyncio.Task[None] | None = None
 
 
@@ -159,7 +161,13 @@ _COPY: dict[Event, tuple[str, str, str]] = {
 
 
 def message_for(
-    event: Event, project: str, number: int, link: str, *, incomplete: bool = False
+    event: Event,
+    project: str,
+    number: int,
+    link: str,
+    *,
+    incomplete: bool = False,
+    paper_attachment_note: str | None = None,
 ) -> EmailMessage:
     if event not in _COPY or type(number) is not int or number < 1:
         raise ValueError("Unsupported notification.")
@@ -175,6 +183,8 @@ def message_for(
         )
     message = EmailMessage()
     message["Subject"] = f"SIGMA: {subject.format(number=number)} · {clean}"
+    if event == "paper_finished" and paper_attachment_note:
+        body = f"{body}\n{paper_attachment_note}"
     message.set_content(f"{body.format(number=number)}\n\n{action}: {link}\n")
     return message
 
@@ -317,6 +327,44 @@ def _pause_still_actionable(row: sqlite3.Row) -> bool:
     return True
 
 
+def _attach_completed_paper(message: EmailMessage, path: str, paper_id: str, number: int) -> None:
+    """Attach an integrity-checked published PDF without jeopardizing notification delivery.
+
+    This runs inside the outbox's background thread. If the file is absent,
+    unsafe, or too large for Gmail, the email still links to the paper.
+    """
+    from sigma import papers
+
+    try:
+        record = papers.get_paper(path, paper_id, include_tex=False)
+        size = record.get("pdf_size_bytes")
+        if type(size) is not int or size <= 0 or size > _MAX_PDF_ATTACHMENT_BYTES:
+            reason = "too_large" if type(size) is int and size > _MAX_PDF_ATTACHMENT_BYTES else "unavailable"
+            _LOG.warning("progress_email.paper_pdf_not_attached reason=%s", reason)
+            note = "The PDF is too large to attach. Download it using the link below." if reason == "too_large" else "The PDF could not be attached. You can download it using the link below."
+        else:
+            contents = papers.get_pdf(path, paper_id)
+            if len(contents) != size or not contents.startswith(b"%PDF-"):
+                raise ValueError("Invalid published PDF")
+            message.add_attachment(
+                contents,
+                maintype="application",
+                subtype="pdf",
+                filename=f"SIGMA-Paper-{number}.pdf",
+            )
+            note = "A PDF copy of your paper is attached."
+    except (OSError, ValueError, TypeError, KeyError, papers.ProjectError) as exc:
+        _LOG.warning("progress_email.paper_pdf_not_attached error_type=%s", type(exc).__name__)
+        note = "The PDF could not be attached. You can download it using the link below."
+    # The body must never claim an attachment that was not added.
+    original_body = message.get_body(preferencelist=("plain",))
+    if original_body is None:
+        return
+    body_text = original_body.get_content()
+    phrase = "Your paper is ready to review."
+    message.set_content(body_text.replace(phrase, f"{phrase}\n{note}", 1))
+
+
 def _deliver_pending() -> None:
     """Claim one pending delivery atomically; preserve ambiguous outcomes."""
     cfg = cloud_auth.config()
@@ -376,6 +424,19 @@ def _deliver_pending() -> None:
                         link,
                         incomplete=bool(row["incomplete"]),
                     )
+                    if row["event"] == "paper_finished":
+                        if row["paper_id"]:
+                            _attach_completed_paper(
+                                message, row["path"], row["paper_id"], row["number"]
+                            )
+                        else:
+                            message.set_content(
+                                message.get_content().replace(
+                                    "Your paper is ready to review.",
+                                    "Your paper is ready to review.\nThe PDF could not be attached; open SIGMA to download it.",
+                                    1,
+                                )
+                            )
                     send_message(message, recipients=[recipient])
                     state = "sent"
                 except cloud_auth.SMTPDeliveryError as exc:
