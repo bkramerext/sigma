@@ -44,7 +44,7 @@ export default function SessionLogPage() {
     try {
       // Never copy the filtered or incrementally loaded preview. Download and
       // Copy fetch the exact same full, current server-rendered export.
-      const response = await fetch(downloadUrl, { credentials: 'same-origin', cache: 'no-store' });
+      const response = await fetch(downloadUrl, { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
       if (!response.ok) throw new Error('Could not fetch the complete session log.');
       await navigator.clipboard.writeText(await response.text());
       setCopyState('copied');

@@ -2521,8 +2521,8 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     try {
       const query = new URLSearchParams({ path });
       const [listResponse, configResponse, progressResponse] = await Promise.all([
-        fetch(`/api/projects/papers?${query}`, { cache: 'no-store' }),
-        fetch(`/api/projects/proposals/config?${query}`, { cache: 'no-store' }),
+        fetch(`/api/projects/papers?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
+        fetch(`/api/projects/proposals/config?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
         fetch(`/api/projects/papers/progress?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
       ]);
       const list = await listResponse.json(); const config = await configResponse.json();
@@ -2553,7 +2553,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
       if (nextId) {
-        const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store' });
+        const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
         setSelected(record as PaperRecord);
       } else setSelected(null);
@@ -2586,7 +2586,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   }, [path, paperProgress?.status]);
   async function openPaper(id: string) {
     try {
-      const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
       const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
@@ -2708,7 +2708,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     if (!binding || (!busy && !['active', 'queued'].includes(paperProgress?.status ?? ''))) return;
     try {
       const response = await fetch('/api/projects/papers/cancel', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
       });
       const result = await response.json();
@@ -2734,7 +2734,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     setBusy(true); setError('');
     try {
       const response = await fetch('/api/projects/papers/discard', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, confirm_discard: true }),
       });
       const result = await response.json();
@@ -2753,7 +2753,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     setBusy(true); setError(''); setSuccess(''); setPhase('Clearing unfinished paper work…');
     try {
       const response = await fetch('/api/projects/papers/restart', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: JSON.stringify({
           path, expected_project_id: projectId, expected_binding: binding,
           expected_snapshot_sha256: restartSource.snapshot_sha256, confirm_restart: true,
@@ -4499,7 +4499,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
       }
       if (initial && exclusiveSectionsLoaded && exclusiveSections !== savedExclusiveSections) {
         const response = await fetch("/api/user-preferences/section-layout", {
-          method: "PUT", headers: { "Content-Type": "application/json" },
+          method: "PUT", headers: { "Content-Type": "application/json", "X-Sigma-Error-Handled": "true" },
           body: JSON.stringify({ expand_one_project_section_at_a_time: exclusiveSections }),
         });
         const data = await response.json();
