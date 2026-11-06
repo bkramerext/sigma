@@ -2349,7 +2349,7 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
     if (progress.current === 3) return 'Proofreading one more time';
     return 'Proofreading';
   }
-  return completed ? 'PDF ready' : current ? 'Generating PDF' : 'Generate PDF';
+  return completed ? 'Generated PDF' : current ? 'Generating PDF' : 'Generate PDF';
 }
 
 function paperProgressOperation(progress: PaperProgress): string {
