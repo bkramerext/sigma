@@ -2278,6 +2278,75 @@ def test_table_cross_section_claim_is_omitted_without_losing_authored_prose() ->
     assert papers._validate(repaired, {"sources": [{"id": "project:pid", "data": {}}]})
 
 
+def test_optional_table_tex_failure_keeps_paper_and_publishes_text_pdf() -> None:
+    """Broken optional table typesetting must not discard paid scientific prose."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "table-render-recovery.sigma"
+        view = initialize_project(
+            path, "Table recovery", "Review the saved objective.", research_mode="mathematical"
+        )
+        credential = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        author_calls = 0
+        compile_attempts = 0
+
+        async def author(context, _account, _config, *_args):
+            nonlocal author_calls
+            author_calls += 1
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            paper = draft(source)
+            table = papers.PaperTable(
+                caption="The optional candidate-discriminator comparison.",
+                headers=["Candidate", "Status"],
+                rows=[["Temporal coupling", "Not independently verified"]],
+                evidence_refs=[source],
+                claim_ids=["C1"],
+            )
+            return paper.model_copy(
+                update={
+                    "sections": [
+                        paper.sections[0].model_copy(update={"tables": [table]}),
+                        paper.sections[1],
+                    ]
+                }
+            ), config["model"]
+
+        def compile_tex(tex, **_kwargs):
+            nonlocal compile_attempts
+            compile_attempts += 1
+            if r"\begin{tabular}" in tex or r"\begin{longtable}" in tex:
+                raise RuntimeError("Fixture table alignment failure")
+            return b"%PDF-fixture"
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=author),
+            patch.object(papers, "_compile_pdf", new=compile_tex),
+            mock_pdf_inspection(),
+        ):
+            result = asyncio.run(papers.generate(str(path), credential["identity"], view.project.id))
+
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert author_calls == 1
+        assert compile_attempts >= 2
+        assert saved["pdf_available"] is True
+        assert all(not section["tables"] for section in saved["draft"]["sections"])
+        assert r"\begin{tabular}" not in saved["tex_source"]
+        assert saved["generation"]["publication_status"] == "needs_review"
+        assert any(
+            "text-only rendering" in issue for issue in saved["generation"]["sigma_issues"]
+        )
+        assert papers._load_work(str(path)) is None
+
+
 def test_persistent_invalid_paper_validation_still_blocks_publication() -> None:
     """A repeatable integrity error is not silently downgraded to an accepted paper."""
     original = draft()
