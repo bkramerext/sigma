@@ -1439,6 +1439,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [resumeAuthorization, setResumeAuthorization] = useState<ResumeAuthorization | null>(null);
   const resumeApprovalResolver = useRef<((approved: boolean) => void) | null>(null);
+  const resumePlayAnchor = useRef<HTMLButtonElement | null>(null);
   useEffect(() => () => {
     const resolve = resumeApprovalResolver.current;
     resumeApprovalResolver.current = null;
@@ -1760,9 +1761,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     setAnnouncement('Human feedback added for a later agent step. No provider call was made.');
   }, [load]);
 
-  function requestResume(target: ResearchSession) {
-    // Resume reuses the saved checkpoint. Paid-attempt or duration extensions
-    // require a separate explicit confirmation before any provider dispatch.
+  function requestResume(target: ResearchSession, playButton: HTMLButtonElement) {
+    // Anchor any explicit authorization prompt to the Play button that initiated it.
+    resumePlayAnchor.current = playButton;
     void control('resume', target);
   }
 
@@ -1910,7 +1911,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const runningCount = activeSessionCount;
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
-    <ResumeAuthorizationDialog request={resumeAuthorization} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
+    <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
       <h2 id="missing-type-heading">Project type unavailable</h2>
       {safeSavedTypeSettings
@@ -1947,7 +1948,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session {item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {sessionOffersResume(item) && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
+                  {sessionOffersResume(item) && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
                   {!['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
