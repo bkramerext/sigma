@@ -516,3 +516,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 @media (prefers-reduced-motion: reduce) {
   .home-page .home-recents .paper-queued-indicator { animation: none; }
 }
+
+/* The Most Recent tab reuses Saved project rows without type accordions. */
+.home-page .home-recents .recent-flat-group > summary { display: none; }
+.home-page .home-recents .recent-flat-group > ul { margin-left: 0; }
