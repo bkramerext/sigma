@@ -10,6 +10,7 @@ import asyncio
 import fcntl
 import json
 import os
+from functools import lru_cache
 from typing import Any, TypedDict
 
 import pypdfium2
@@ -131,12 +132,60 @@ class ProjectPaperMetadata(TypedDict):
     best_paper_score: int | None
 
 
-def project_metadata(path: str) -> ProjectPaperMetadata:
-    """One canonical aggregate for the project-list and TeX tooltip."""
+@lru_cache(maxsize=256)
+def _project_metadata_cached(
+    path: str, signature: tuple[tuple[str, int, int, int, int], ...]
+) -> ProjectPaperMetadata:
+    """Hash the saved PDFs only when their metadata or paper records changed."""
     from sigma import papers
 
     available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
     return {"paper_count": len(available), "best_paper_score": best_score(available)}
+
+
+def project_metadata(path: str) -> ProjectPaperMetadata:
+    """One canonical aggregate for lists, invalidated by filesystem changes.
+
+    Every unchanged list poll used to re-read every paper JSON and hash entire
+    PDFs. Stat signatures include ctime and inode, so edits, replacements,
+    score updates, and PDF deletion invalidate the cached verification.
+    Bundled projects retain their original verification path.
+    """
+    from sigma import papers
+
+    target = project_path(path)
+    if target.suffix == ".json":
+        available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
+        return {"paper_count": len(available), "best_paper_score": best_score(available)}
+    directory = papers._paper_dir(path, create=False)
+    state = target / "project.json"
+    try:
+        candidates = [state]
+        if directory.exists():
+            candidates.extend(
+                entry
+                for entry in directory.iterdir()
+                if entry.suffix in {".json", ".pdf"}
+            )
+        signature = tuple(
+            sorted(
+                (
+                    str(entry),
+                    stat.st_ino,
+                    stat.st_size,
+                    stat.st_mtime_ns,
+                    stat.st_ctime_ns,
+                )
+                for entry in candidates
+                if not entry.is_symlink()
+                for stat in [entry.stat()]
+            )
+        )
+    except OSError:
+        # Do not serve an old result if the filesystem cannot be inspected.
+        available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
+        return {"paper_count": len(available), "best_paper_score": best_score(available)}
+    return _project_metadata_cached(str(target), signature)
 
 
 def _pdf_excerpts(pdf: bytes) -> dict[str, Any]:

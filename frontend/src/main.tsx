@@ -4908,7 +4908,7 @@ function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
 
-function RecentProjects({ onOpen, flat = false }: { onOpen: (view: ProjectView) => void; flat?: boolean }) {
+function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (view: ProjectView) => void; flat?: boolean; active?: boolean }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState('');
@@ -4925,6 +4925,7 @@ function RecentProjects({ onOpen, flat = false }: { onOpen: (view: ProjectView) 
     setProjects(data.projects); setError(''); setLoading(false);
   }, []);
   useEffect(() => {
+    if (!active) return;
     const controller = new AbortController();
     let requestPending = false;
     const refresh = async () => {
@@ -4943,7 +4944,9 @@ function RecentProjects({ onOpen, flat = false }: { onOpen: (view: ProjectView) 
         requestPending = false;
       }
     };
-    const interval = window.setInterval(() => void refresh(), 2000);
+    // Only the selected Home tab polls. The other tab remains mounted but
+    // inactive, avoiding duplicate full-project scans and index-lock pressure.
+    const interval = window.setInterval(() => void refresh(), 5000);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
     void refresh();
@@ -4953,7 +4956,7 @@ function RecentProjects({ onOpen, flat = false }: { onOpen: (view: ProjectView) 
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [load]);
+  }, [load, active]);
   async function open(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
     try { onOpen(await post<ProjectView>('open', { path: entry.path })); }
@@ -5151,8 +5154,8 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>Saved</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen}/>}</div>
-    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat/>}</div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'}/>}</div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'}/>}</div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
   </div>;
 }

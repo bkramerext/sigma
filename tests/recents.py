@@ -35,7 +35,42 @@ from sigma.recents import (
 from sigma.samples import open_sample_project, sample_projects
 
 
+def check_project_metadata_cache_invalidation(root: Path) -> None:
+    """Unchanged Saved-list polls must not read full paper records repeatedly."""
+    from sigma import paper_scores, papers
+
+    project_dir = root / "metadata-cache-test.sigma"
+    project_dir.mkdir()
+    (project_dir / "project.json").write_text("{}", encoding="utf-8")
+    paper_dir = project_dir / "papers"
+    paper_dir.mkdir()
+    record = paper_dir / "paper-one.json"
+    record.write_text('{"paper":1}', encoding="utf-8")
+    pdf = paper_dir / "paper-one.pdf"
+    pdf.write_bytes(b"%PDF-test")
+    paper_scores._project_metadata_cached.cache_clear()
+    calls: list[int] = []
+
+    def mock_list(_path: str) -> list[dict]:
+        calls.append(1)
+        return [{"pdf_available": True, "score": None}]
+
+    with patch.object(papers, "list_papers", new=mock_list):
+        first = paper_scores.project_metadata(str(project_dir))
+        assert first["paper_count"] == 1
+        assert paper_scores.project_metadata(str(project_dir)) == first
+        assert len(calls) == 1, "Unchanged Saved polls must reuse verified metadata"
+        record.write_text('{"paper":2, "updated":true}', encoding="utf-8")
+        assert paper_scores.project_metadata(str(project_dir)) == first
+        assert len(calls) == 2, "Updating a paper must invalidate the cache"
+        pdf.unlink()
+        paper_scores.project_metadata(str(project_dir))
+        assert len(calls) == 3, "Deleting a PDF must invalidate the cache"
+    paper_scores._project_metadata_cached.cache_clear()
+
+
 def check(root: Path, base: Path) -> None:
+    check_project_metadata_cache_invalidation(root)
     sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
     assert len(catalog) == len(sources)
