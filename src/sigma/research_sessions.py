@@ -5708,19 +5708,16 @@ async def _frozen_session_configuration(
     return await configuration(view=pinned, context=credential)
 
 
-def _validate_imported_transport_change(record: dict[str, Any], *, next_model: str) -> None:
-    """Fail closed when a recipient rebinds an imported, stopped session.
+def _validate_provider_transport_change(record: dict[str, Any], *, next_model: str) -> None:
+    """Validate rebinding a stopped session, whether native or imported.
 
     No previous request or reservation is replayed, released, or re-funded.
     Existing paid usage must be fully settled before a new transport is used.
     """
-    if record.get("imported_via_bundle") is not True or record.get("status") not in {
-        "paused",
-        "stopped",
-    }:
+    if record.get("status") not in {"paused", "stopped"}:
         raise ProjectError(
-            "AI provider transport changed. Only imported, stopped sessions "
-            "may switch to a new provider type."
+            "AI provider transport can change only while a session is stopped. "
+            "Saved research and provider attempts are unchanged."
         )
     if any(
         item.get("status") in {"running", "interrupted"}
@@ -5743,28 +5740,27 @@ def _validate_imported_transport_change(record: dict[str, Any], *, next_model: s
     if reserved > 0:
         raise ProjectError("Cannot change provider transport with outstanding cost reservations.")
     ledger = record.get("hard_budget_ledger")
-    if ledger is not None:
-        if (
-            not isinstance(ledger, dict)
-            or ledger.get("blocked_reason")
-            or not isinstance(ledger.get("calls"), list)
-            or any(
-                not isinstance(call, dict) or call.get("status") not in {"settled", "rejected"}
-                for call in ledger["calls"]
-            )
-        ):
-            raise ProjectError(
-                "Cannot change provider transport with unsettled provider billing reservations."
-            )
-        if ledger["calls"] and next_model != record.get("model"):
-            raise ProjectError("Cannot change the frozen model when prior hard-budget calls exist.")
+    if ledger is not None and (
+        not isinstance(ledger, dict)
+        or ledger.get("blocked_reason")
+        or not isinstance(ledger.get("calls"), list)
+        or any(
+            not isinstance(call, dict) or call.get("status") not in {"settled", "rejected"}
+            for call in ledger["calls"]
+        )
+    ):
+        raise ProjectError(
+            "Cannot change provider transport with unsettled provider billing reservations."
+        )
+    # Settled/rejected calls retain original per-call cost bounds.
+    # A new model's prices apply only to future reservations.
 
 
-def _rebind_imported_transport(
+def _rebind_provider_transport(
     record: dict[str, Any], credential: Mapping[str, Any], config: Mapping[str, Any]
 ) -> None:
-    """Audit a recipient-owned transport switch before any new request starts."""
-    _validate_imported_transport_change(record, next_model=str(config["model"]))
+    """Audit a provider transport switch before any new request starts."""
+    _validate_provider_transport_change(record, next_model=str(config["model"]))
     prior_mode = record["mode"]
     prior_model = record["model"]
     prior_identity = record.get("identity_hash")
@@ -5775,7 +5771,7 @@ def _rebind_imported_transport(
     if paid and str(config["model"]) not in TOKEN_PRICES_PER_MILLION:
         raise ProjectError("No reviewed price is available for the recipient's provider model.")
     ledger = record.get("hard_budget_ledger")
-    if isinstance(ledger, dict) and not ledger["calls"] and config["model"] != prior_model:
+    if isinstance(ledger, dict) and config["model"] != prior_model:
         prices = TOKEN_PRICES_PER_MILLION.get(str(config["model"]))
         if prices is None:
             raise ProjectError("Cannot reprice the frozen hard budget for the recipient's model.")
@@ -5799,14 +5795,18 @@ def _rebind_imported_transport(
             "to_model": config["model"],
             "previous_identity_hash": prior_identity,
             "new_identity_hash": record["identity_hash"],
-            "reason": "recipient_import_resume",
+            "reason": (
+                "recipient_import_resume"
+                if record.get("imported_via_bundle") is True
+                else "stopped_session_provider_change"
+            ),
         }
     )
     _event(
         record,
-        "session.imported_transport_rebound",
-        "An imported stopped session changed to the recipient's provider "
-        "connection. Past calls and billing reservations were preserved.",
+        "session.provider_transport_rebound",
+        "A stopped session changed its provider connection. "
+        "Past calls and billing reservations were preserved.",
     )
 
 
@@ -7243,11 +7243,11 @@ async def control_session(
     )
     config = await _frozen_session_configuration(view, credential, record)
     if switch_transport:
-        # Imported research can use the recipient's explicitly configured
-        # provider/model, without fabricating a response from the old account.
+        # Native and imported stopped sessions may use the selected provider.
+        # No historical call is replayed or re-funded.
         if not config["available"] or config["model"] != record["model"]:
             config = await configuration(view=view, context=credential)
-        _validate_imported_transport_change(record, next_model=str(config.get("model", "")))
+        _validate_provider_transport_change(record, next_model=str(config.get("model", "")))
     if not config["available"] or (
         not switch_transport
         and (
@@ -7289,7 +7289,7 @@ async def control_session(
             if switch_transport:
                 # Stage the transfer only in memory. Never commit a new owner
                 # before capacity, billing and worker admission succeed.
-                _rebind_imported_transport(record, credential, config)
+                _rebind_provider_transport(record, credential, config)
             if record.get("stopped_at"):
                 stopped_for = datetime.now(UTC) - datetime.fromisoformat(record["stopped_at"])
                 record["stopped_duration_seconds"] = (

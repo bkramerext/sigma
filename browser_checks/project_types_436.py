@@ -946,7 +946,7 @@ with sync_playwright() as playwright:
     # provider-free; refreshing tests durable progress exactly as a reconnect.
     step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
     expect(step.locator("strong")).to_have_text("Writing sections (1/3)", timeout=10000)
-    expect(step.locator(".paper-activity-line")).to_have_text("Making progress · Just now")
+    expect(step.locator(".paper-activity-line")).to_contain_text("Writing in progress ·")
     expect(page.locator(".paper-draft-card .paper-draft-pulse")).to_have_count(0)
     page.unroute("**/api/projects/papers/progress?*")
     stale_output_at = (datetime.now(UTC) - timedelta(minutes=6)).isoformat()
@@ -970,7 +970,7 @@ with sync_playwright() as playwright:
     page.reload()
     step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
     expect(step.locator("strong")).to_have_text("Writing sections (2/3)", timeout=10000)
-    expect(step.locator(".paper-activity-line")).to_contain_text("No new progress for")
+    expect(step.locator(".paper-activity-line")).to_contain_text("No recent writing activity for")
     page.unroute("**/api/projects/papers/progress?*")
     page.route(
         "**/api/projects/papers/progress?*",
