@@ -563,6 +563,9 @@ async def configuration(
     path: str | None = None,
     view: ProjectView | None = None,
     context: Mapping[str, Any] | None = None,
+    *,
+    frozen_model: str | None = None,
+    frozen_effort: str | None = None,
 ) -> dict[str, Any]:
     snapshot = view or (inspect_project(path) if path else None)
     # Future research is configured by the current user, never the project.
@@ -570,8 +573,8 @@ async def configuration(
     from sigma import global_research_settings
 
     user_settings = global_research_settings.load_config()
-    model = user_settings["ai_model"]
-    effort = user_settings["reasoning_effort"]
+    model = frozen_model if frozen_model is not None else user_settings["ai_model"]
+    effort = frozen_effort if frozen_effort is not None else user_settings["reasoning_effort"]
     if context is None:
         context = await auth_context()
     discovery = await models(context=context)
