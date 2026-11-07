@@ -6699,9 +6699,9 @@ async def _generate_long_draft(
             try:
                 async with asyncio.timeout(remaining):
                     response = await _provider_structured(
-                            input_value,
-                            binding,
-                            config,
+                        input_value,
+                        binding,
+                        config,
                         instructions=instructions,
                         schema_name=schema_name,
                         response_model=response_model,
@@ -6724,7 +6724,7 @@ async def _generate_long_draft(
                             include_diagrams
                             and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
                         ),
-                )
+                    )
             except TimeoutError as exc:
                 # An already-dispatched paid attempt may have consumed allowance.
                 # Never start another paid request after the shared deadline.
