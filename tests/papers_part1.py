@@ -3582,17 +3582,24 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
     """Only resolved Project Types publication links may reach the paper writer."""
     from sigma import paper_writing_sources, project_types
 
-    common = project_types.common_references()["publication_standards_references"]
-    default_type = project_types.get_type("mathematical")
-    assert default_type is not None
-    # Shared publication manuals are now off by default, but this fixture
-    # explicitly opts in to cover multi-source selection and ranking.
-    assert len(default_type.publication_standards_references) == 1
-    with patch.object(project_types, "reference_preferences", return_value={}):
+    # Reference usage is user-scoped. This multi-source fixture must not
+    # inherit the logged-in developer's enabled/disabled reference switches
+    # or their private additions to the curated catalog.
+    with (
+        patch.object(project_types, "reference_preferences", return_value={}),
+        patch.object(
+            project_types,
+            "common_custom_references",
+            return_value={field: [] for field in project_types.REFERENCE_FIELDS},
+        ),
+        patch.object(project_types, "builtin_custom_references", return_value={}),
+    ):
+        common = project_types.common_references()["publication_standards_references"]
         resolved = project_types.get_type("mathematical")
     assert resolved is not None
     official = list(resolved.publication_standards_references)
-    assert len(official) >= len(common) + 1
+    assert len(common) == 2
+    assert len(official) == 3
     math_only = {item["url"] for item in official} - {item["url"] for item in common}
     assert math_only
     project = {
