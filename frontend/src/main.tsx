@@ -25,6 +25,7 @@ import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } f
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
+import GlobalSettingsDialog from './GlobalSettingsDialog';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // A failure while presenting historical research must never unmount the app.
@@ -4687,6 +4688,61 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
   </div>;
 }
 
+function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
+  initial: ProjectView; onSaved: (next: ProjectView) => void; onCancel: () => void;
+}) {
+  useDocumentScrollLock();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
+  const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const previous = settingsOf(initial);
+      const next = await post<ProjectView>('update', {
+        path: initial.path, ...previous,
+        investigation_type: projectType, difficulty,
+        expected: previous,
+      });
+      onSaved(next);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-settings-dialog sigma-project-classification-dialog"
+    aria-labelledby="sigma-project-classification-title"
+    onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <form onSubmit={save}>
+      <header className="settings-header">
+        <h2 id="sigma-project-classification-title">Project Settings</h2>
+        <div className="settings-actions">
+          <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          <DialogDismissButton label="Close Project Settings" disabled={busy} onClick={onCancel}/>
+        </div>
+      </header>
+      <div className="settings-body">
+        <fieldset disabled={busy}>
+          <label id="sigma-project-type-label">Project Type</label>
+          <ResearchTypePicker fieldLabel="Project Type" value={projectType} onChange={setProjectType}/>
+          <label htmlFor="sigma-project-difficulty">Difficulty</label>
+          <select id="sigma-project-difficulty" value={difficulty ?? ''}
+            onChange={event => setDifficulty((event.target.value || null) as ProjectDifficulty | null)}>
+            {difficulty === null && <option value="">Not set</option>}
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </fieldset>
+        {error && <p role="alert" className="error">{error}</p>}
+      </div>
+    </form>
+  </dialog>;
+}
+
 function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void; onAdjustReferences?: () => void }) {
   useDocumentScrollLock();
   const ai = useAI();
@@ -5440,7 +5496,7 @@ function Home({ initialPath, onOpen }: {
           {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
             <button type="button" ref={newButton} className="home-project-action home-icon-action" aria-label="New project" data-tooltip="New project" onClick={() => setEntry('new')}><CirclePlusIcon/></button>
           <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>
-          <button type="button" className="home-project-action home-icon-action" aria-label="Project Types settings" data-tooltip="Project Types" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
+          <button type="button" className="home-project-action home-icon-action" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
           </>}
         </div>
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
@@ -5451,7 +5507,7 @@ function Home({ initialPath, onOpen }: {
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
+      {projectTypesOpen && <GlobalSettingsDialog onClose={() => setProjectTypesOpen(false)}/>}
     </div>
   </div>;
 }
@@ -6293,7 +6349,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setAnnouncement('Advanced Outcome enabled.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
     <PapersPane path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
-    {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onAdjustReferences={() => { setProjectTypesFocusTypeId(view.project.investigation_type); /* Keep Settings mounted behind Project Types so draft edits survive. */ setProjectTypesOpen(true); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
+    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
       onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
