@@ -27,7 +27,21 @@ sys.path.insert(0, str(code_root / "tests"))
 import httpx
 import research_sessions as fixture
 
-from sigma import research_sessions
+from sigma import project_types, research_sessions
+
+# Parity isolates scheduler behavior. The application intentionally enables
+# references for new users, unlike the old revision, so pin both comparisons
+# to the same historical reference preference baseline.
+def parity_reference_defaults():
+    return {
+        "common": {
+            field: [ref["url"] for ref in refs]
+            for field, refs in project_types.curated_common_references().items()
+        }
+    }
+
+
+project_types._default_reference_preferences = parity_reference_defaults
 from sigma.projects import ProjectError, create_strategy, set_strategy_enabled
 
 UUID_RE = re.compile(
