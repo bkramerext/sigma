@@ -814,6 +814,104 @@ def test_sov_ai_structured_graph_uses_vector_layout_not_relationship_list() -> N
     assert not any("could not be laid out" in warning for warning in warnings)
 
 
+def test_authorized_section_recovery_reuses_saved_siblings_and_preserves_dispatches() -> None:
+    """One explicit paid recovery may write only the missing section."""
+    package, plan = fast_package(section_count=4)
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "medium")
+    attempts: list[int] = []
+
+    async def initial(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        attempts.append(number)
+        if number == 1:
+            raise papers.PaperTransientFailure("HTTP 503 before section authorship")
+        return papers.LongSectionDraft(
+            paragraphs=[f"Authored and durably saved section {number}."]
+        ), "fixture-model"
+
+    async def first_run():
+        with patch.object(papers, "_provider_structured", new=initial):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "medium"},
+                    state,
+                    lambda _value: None,
+                    structured_fast_path=True,
+                )
+            except ProjectError as exc:
+                assert "Paper section 1" in str(exc)
+            else:
+                raise AssertionError("Missing section should block publication")
+
+    asyncio.run(first_run())
+    assert set(state["section_drafts"]) == {"2", "3", "4"}
+    assert papers._recoverable_dispatched_sections(state) == [1]
+    original_drafts = copy.deepcopy(state["section_drafts"])
+    original_dispatches = copy.deepcopy(state["section_dispatches"])
+    call_count = state["provider_calls_total"]
+    assert attempts.count(1) == 1
+
+    async def recovered(input_value, _binding, _config, *, schema_name, **_kwargs):
+        assert schema_name == "sigma_long_paper_section"
+        number = input_value["section_number"]
+        attempts.append(number)
+        assert number == 1, "Saved siblings must never be requested again"
+        return papers.LongSectionDraft(
+            paragraphs=["Recovered first section, supported by the frozen research."]
+        ), "fixture-model"
+
+    async def attempt(authorization):
+        with patch.object(papers, "_provider_structured", new=recovered):
+            return await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "medium"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+                authorized_recovery_section=authorization,
+            )
+
+    for authorization in (None, 2):
+        try:
+            asyncio.run(attempt(authorization))
+        except ProjectError as exc:
+            assert "no authored text" in str(exc)
+        else:
+            raise AssertionError("Unsanctioned or wrong-section replay must be rejected")
+        assert state["provider_calls_total"] == call_count
+        assert state["section_drafts"] == original_drafts
+        assert state["section_dispatches"] == original_dispatches
+
+    paper, total_calls, batches = asyncio.run(attempt(1))
+    assert len(paper.sections) == 4
+    assert batches == 0
+    assert total_calls == call_count + 1
+    assert state["provider_calls_total"] == call_count + 1
+    assert set(state["section_drafts"]) == {"1", "2", "3", "4"}
+    assert all(state["section_drafts"][key] == value for key, value in original_drafts.items())
+    assert state["section_dispatches"]["1"] == [
+        *original_dispatches["1"], call_count + 1
+    ]
+    assert all(
+        state["section_dispatches"][key] == original_dispatches[key]
+        for key in ("2", "3", "4")
+    )
+    assert attempts.count(1) == 2
+    assert attempts.count(2) == attempts.count(3) == attempts.count(4) == 1
+    assert papers._recoverable_dispatched_sections(state) == []
+    try:
+        asyncio.run(attempt(1))
+    except ProjectError as exc:
+        assert "authorization is stale" in str(exc)
+    else:
+        raise AssertionError("Already-completed recovery cannot be replayed")
+
+
 def test_interrupted_section_dispatch_records_block_ambiguous_resume() -> None:
     package, plan = fast_package(section_count=5)
     state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")

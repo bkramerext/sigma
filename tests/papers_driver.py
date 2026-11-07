@@ -109,6 +109,7 @@ def main_part1() -> None:
     test_paper_diagram_layout_selection_and_vector_rendering()
     test_graph_atlas_sample_has_four_exact_research_diagrams()
     test_sov_ai_structured_graph_uses_vector_layout_not_relationship_list()
+    test_authorized_section_recovery_reuses_saved_siblings_and_preserves_dispatches()
     test_interrupted_section_dispatch_records_block_ambiguous_resume()
     test_legacy_retry_checkpoint_requires_recovery_for_logged_section()
     test_legacy_unknown_section_dispatch_stops_before_paid_replay()

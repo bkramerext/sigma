@@ -691,6 +691,9 @@ class PaperGenerateRequest(OpenRequest):
     include_sigma_issues: bool = False
     # Keep the request name for compatibility; this selects both visual types.
     include_diagrams: bool = True
+    # Only an affirmative, section-specific user action may replay a paid
+    # request that was dispatched but not saved. This is never a default.
+    authorized_recovery_section: int | None = Field(default=None, ge=1, le=48)
 
 
 class PaperCancelRequest(OpenRequest):
@@ -1014,6 +1017,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             include_research_excerpts=body.include_research_excerpts,
             include_sigma_issues=body.include_sigma_issues,
             include_diagrams=body.include_diagrams,
+            authorized_recovery_section=body.authorized_recovery_section,
             **presence_kwargs,
         )
     )

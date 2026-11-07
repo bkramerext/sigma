@@ -2868,6 +2868,28 @@ _PAPER_PROGRESS_RECOVERY_ISSUE = (
 )
 
 
+def _recoverable_dispatched_sections(state: Mapping[str, Any]) -> list[int]:
+    """Previously dispatched, unsaved sections of a validated long-form plan.
+
+    Never infer dispatch from absent counters. Legacy unknown histories still
+    require explicit investigation rather than offering a blind paid replay.
+    """
+    if state.get("kind") != "long_form" or not isinstance(state.get("plan"), dict):
+        return []
+    sections = state["plan"].get("sections")
+    dispatches = state.get("section_dispatches")
+    saved = state.get("section_drafts", {})
+    if not isinstance(sections, list) or not isinstance(dispatches, dict):
+        return []
+    if not isinstance(saved, dict):
+        return []
+    return [
+        number
+        for number in range(1, len(sections) + 1)
+        if str(number) in dispatches and str(number) not in saved
+    ]
+
+
 def _paper_progress_counts_valid(current: Any, total: Any) -> bool:
     """Zero completed work is valid; a nonempty total is required for numbered stages."""
     if current is None or total is None:
@@ -6788,6 +6810,7 @@ async def _generate_long_draft(
     structured_fast_path: bool = False,
     include_diagrams: bool = True,
     on_output_delta: Callable[[int], Awaitable[None]] | None = None,
+    authorized_recovery_section: int | None = None,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     writing_methodology = publication_reference_compiler.guidance(
@@ -7718,14 +7741,31 @@ or document markup."""
         and is_unwritten_placeholder(LongSectionDraft.model_validate(saved_sections[str(number)]))
     ]
     if uncertain or placeholders:
-        detail = ", ".join([*uncertain, *placeholders])
-        raise ProjectError(
-            "Paper writing cannot Resume as complete: section(s) "
-            + detail
-            + " have no authored text. Previously dispatched calls may have consumed "
-            "AI allowance; no additional call has been made. Saved authored sections "
-            "remain intact. Explicitly review the incomplete work before paid recovery."
+        permitted = (
+            type(authorized_recovery_section) is int
+            and not placeholders
+            and len(uncertain) == 1
+            and _recoverable_dispatched_sections(state) == [authorized_recovery_section]
         )
+        if not permitted:
+            detail = ", ".join([*uncertain, *placeholders])
+            raise ProjectError(
+                "Paper writing cannot Resume as complete: section(s) "
+                + detail
+                + " have no authored text. Previously dispatched calls may have consumed "
+                "AI allowance; no additional call has been made. Saved authored sections "
+                "remain intact. Explicitly review the incomplete work before paid recovery."
+            )
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.section_recovery_authorized project_id=%s section=%d "
+            "saved_sections=%d prior_dispatches=%d",
+            project_id or "unknown",
+            authorized_recovery_section,
+            len(saved_sections),
+            len(dispatches[str(authorized_recovery_section)]),
+        )
+    elif authorized_recovery_section is not None:
+        raise ProjectError("Paper section recovery authorization is stale; no AI call was made")
 
     if fast_path:
         pending = [
@@ -8867,6 +8907,7 @@ async def _generate_impl(
     frozen_snapshot: dict[str, Any] | None = None,
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
+    authorized_recovery_section: int | None = None,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -9203,6 +9244,25 @@ async def _generate_impl(
             # here can be retried without losing prior attempted-call totals.
             if reset_ledger is not None:
                 _clear_reset_ledger(path)
+        # A recovery authorization is single-request and section-specific.
+        # Validate against durable dispatch history before any new paid work
+        # (including optional publication reference compilation) can begin.
+        if authorized_recovery_section is not None:
+            eligible = _recoverable_dispatched_sections(work)
+            if (
+                type(authorized_recovery_section) is not int
+                or not long_form
+                or checkpoint is None
+                or not compatible
+                or eligible != [authorized_recovery_section]
+                or not work.get("plan")
+                or len(work.get("section_drafts", {})) == 0
+            ):
+                raise ProjectError(
+                    "Paper section recovery authorization does not match the saved "
+                    "checkpoint; no additional AI request was made."
+                )
+
         # Choose sources before authoring; never modify the frozen research.
         await report(
             "publication_compilation", None, None, detail="Selecting publication references…"
@@ -9548,6 +9608,7 @@ async def _generate_impl(
                 structured_fast_path=True,
                 include_diagrams=include_diagrams,
                 on_output_delta=lambda number: report_activity("sections", number),
+                authorized_recovery_section=authorized_recovery_section,
             )
             model = config["model"]
             long_form = True
@@ -10240,6 +10301,7 @@ async def generate(
     frozen_snapshot: dict[str, Any] | None = None,
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
+    authorized_recovery_section: int | None = None,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     from sigma.memory_guard import require_capacity
@@ -10265,6 +10327,7 @@ async def generate(
             frozen_snapshot,
             include_sigma_issues,
             browser_presence_required,
+            authorized_recovery_section,
         )
     )
     _generation_tasks[key] = task
@@ -10600,6 +10663,9 @@ def preflight(
         "outline_complete": bool(work_state.get("plan")) if resume_available else False,
         "planning_fallback_available": planning_fallback_available,
         "completed_sections": len(work_state.get("section_drafts", {})) if resume_available else 0,
+        "recovery_sections": (
+            _recoverable_dispatched_sections(work_state) if resume_available else []
+        ),
         "evidence_fields_omitted": (
             len(work_state.get("omitted_evidence", [])) if resume_available else 0
         ),

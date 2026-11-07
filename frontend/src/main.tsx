@@ -2608,8 +2608,9 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
   const [confirmRestartDraft, setConfirmRestartDraft] = useState(false);
   const [confirmPlayRestartDraft, setConfirmPlayRestartDraft] = useState(false);
+  const [confirmRecoverDraft, setConfirmRecoverDraft] = useState(false);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
-  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; proofreading_status?: string; publication_status?: string } | null>(null);
+  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; recovery_sections?: number[]; proofreading_status?: string; publication_status?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [restartingCheckpoint, setRestartingCheckpoint] = useState(false);
   const [phase, setPhase] = useState('');
@@ -2640,7 +2641,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     bottom: paperPopupPlacement.above ? 'calc(100% + 5px)' : 'auto',
   };
   useEffect(() => {
-    if (!confirmDeleteId && !confirmDiscardDraft && !confirmRestartDraft && !confirmPlayRestartDraft) return;
+    if (!confirmDeleteId && !confirmDiscardDraft && !confirmRestartDraft && !confirmPlayRestartDraft && !confirmRecoverDraft) return;
     const cancelOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -2648,13 +2649,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         setConfirmDiscardDraft(false);
         setConfirmRestartDraft(false);
         setConfirmPlayRestartDraft(false);
+        setConfirmRecoverDraft(false);
       }
     };
     document.addEventListener('keydown', cancelOnEscape);
     return () => document.removeEventListener('keydown', cancelOnEscape);
-  }, [confirmDeleteId, confirmDiscardDraft, confirmRestartDraft, confirmPlayRestartDraft]);
+  }, [confirmDeleteId, confirmDiscardDraft, confirmRestartDraft, confirmPlayRestartDraft, confirmRecoverDraft]);
   useEffect(() => {
-    if (!confirmRestartDraft && !confirmDiscardDraft && !confirmPlayRestartDraft) return;
+    if (!confirmRestartDraft && !confirmDiscardDraft && !confirmPlayRestartDraft && !confirmRecoverDraft) return;
     const dismissOutside = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return;
       if (!event.target.closest('.paper-remove-anchor')) {
@@ -2663,11 +2665,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       }
       // Play's confirmation closes when another paper action is chosen;
       // Start over's existing confirmation remains completely unchanged.
-      if (!event.target.closest('.paper-play-tooltip')) setConfirmPlayRestartDraft(false);
+      if (!event.target.closest('.paper-play-tooltip')) {
+        setConfirmPlayRestartDraft(false);
+        setConfirmRecoverDraft(false);
+      }
     };
     document.addEventListener('pointerdown', dismissOutside);
     return () => document.removeEventListener('pointerdown', dismissOutside);
-  }, [confirmRestartDraft, confirmDiscardDraft, confirmPlayRestartDraft]);
+  }, [confirmRestartDraft, confirmDiscardDraft, confirmPlayRestartDraft, confirmRecoverDraft]);
   useEffect(() => { if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest, path]);
   useEffect(() => {
     if (!paperMenu) return;
@@ -3016,7 +3021,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRestartingCheckpoint(false); setBusy(false); }
   }
-  async function generatePaper(restartBeforePlay = false) {
+  async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null) {
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
@@ -3062,13 +3067,21 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         setCheckpointMismatch(preflight);
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
+      const pendingRecovery: number[] = preflight.recovery_sections ?? [];
+      if (recoverSection !== null) {
+        if (pendingRecovery.length !== 1 || pendingRecovery[0] !== recoverSection)
+          throw new Error('The saved section recovery changed. Refresh before authorizing another AI call.');
+      } else if (pendingRecovery.length) {
+        throw new Error('An unfinished section needs explicit recovery authorization. Use Play and review the recovery confirmation.');
+      }
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.draft_recovery_available
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
         : 'Compiling publication references…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
+          ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}) }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -3145,6 +3158,8 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   // The brief transition after Stop is not a second-paper conflict. A Play
   // control can only advertise concurrency as its disabled reason when a
   // still-active job really blocks dispatch.
+  const recoverySection = resumeDetails?.recovery_sections?.length === 1
+    ? (resumeDetails.recovery_sections[0] ?? null) : null;
   const paperPlayBlocked = !generationRunning &&
     ['active', 'queued'].includes(paperProgress?.status ?? '');
   const paperPlayDisabled = generating || loading || !binding || paperPlayBlocked;
@@ -3156,6 +3171,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       : loading ? 'Loading paper controls'
       : !binding ? 'Connect an AI provider to generate a paper'
       : checkpointMismatch ? 'Start a new paper attempt (confirmation required)'
+      : recoverySection !== null ? 'Recover unfinished paper section (authorization required)'
       : continuationAvailable ? 'Resume paper generation' : 'Generate paper';
   const canStartOver = !restartReady && !generationRunning &&
     (Boolean(checkpointMismatch?.checkpoint_can_restart || restartableCheckpoint?.checkpoint_can_restart) ||
@@ -3230,7 +3246,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
               badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} title={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'}/> : undefined}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
-                {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
+                {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
+                  {confirmRecoverDraft && recoverySection !== null && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Authorize unfinished paper section recovery">
+                    <p>Retry Section {recoverySection}? Its previous AI call was dispatched but no section was saved and allowance may have been consumed. Completed sections will be reused. This authorizes a new section generation with bounded pre-stream retries.</p>
+                    <div className="session-remove-confirm-actions">
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => { setConfirmRecoverDraft(false); void generatePaper(false, recoverySection); }}>Authorize</button>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRecoverDraft(false)}>Cancel</button>
+                    </div>
+                  </div></div>}
                   {confirmPlayRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm new paper generation attempt">
                     <p>The previous attempt cannot resume. Start a new attempt? This may use additional AI calls. Saved research and papers remain.</p>
                     <div className="session-remove-confirm-actions">
