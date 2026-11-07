@@ -1061,7 +1061,7 @@ _MATH_SPAN = re.compile(
 
 def _math_body_and_display(token: str) -> tuple[str, bool]:
     """Recognize math without permitting TeX commands in ordinary prose."""
-    if token.startswith("$" * 2) or token.startswith(r"\["):
+    if token.startswith(("$" * 2, r"\[")):
         return token[2:-2], True
     if token.startswith(r"\("):
         return token[2:-2], False
