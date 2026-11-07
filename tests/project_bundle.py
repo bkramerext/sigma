@@ -36,10 +36,10 @@ def main() -> None:
         (source / "artifacts" / "evidence.bin").write_bytes(bytes(range(256)))
         bundle = snapshot(source)
         exported = json.loads(encode(source))
-        assert exported["version"] == 2
+        assert exported["version"] == 3
         assert exported["files"]["project.json"]["id"] == "example"
         assert exported["files"]["research-sessions/session.json"] == {"status": "complete"}
-        assert exported["files"]["artifacts/evidence.bin"]["$sigma_bundle_encoding"] == "base64"
+        assert exported["files"]["artifacts/evidence.bin"]["$sigma_bundle_encoding"] == "zstd+base64"
         migrated = root / "portable.json"
         assert migrate(source, migrated) == migrated
         assert json.loads(migrated.read_text()) == bundle
@@ -146,11 +146,14 @@ def main() -> None:
         # Ten regression checks for the portable project interchange boundary.
         assert read_bundle(migrated)["format"] == bundle["format"]
         downloaded = json.loads(download_bytes(migrated))
-        assert downloaded["version"] == 2
+        assert downloaded["version"] == 3
         assert downloaded["files"]["project.json"]["id"] == "example"
-        assert read_bundle(migrated)["files"]["artifacts/evidence.bin"] == base64.b64encode(
-            original_evidence
-        ).decode("ascii")
+        compressed_evidence = read_bundle(migrated)["files"]["artifacts/evidence.bin"]
+        assert compressed_evidence["$sigma_bundle_encoding"] == "zstd+base64"
+        assert compressed_evidence["size"] == len(original_evidence)
+        from sigma.zstd_codec import decompress
+
+        assert decompress(base64.b64decode(compressed_evidence["data"]), len(original_evidence)) == original_evidence
         imported = root / "imported.json"
         assert import_bundle(read_bundle(migrated), imported) == imported
         assert read_bundle(imported) == read_bundle(migrated)
@@ -417,7 +420,7 @@ def main() -> None:
             else:
                 raise AssertionError("Corrupted imported execution artifact was accepted")
             assert created.project.id in {item.project.id for item in list_json_projects()}
-            assert json.loads(export_complete_project(created.path))["version"] == 2
+            assert json.loads(export_complete_project(created.path))["version"] == 3
             try:
                 create_json_project("Portable Experiment", "Another experiment")
             except ProjectError:
@@ -437,7 +440,7 @@ def main() -> None:
             assert (legacy / "project.json").exists()
             assert read_file(migrated.path, "research-sessions/result.json") == b'{"done":true}'
             assert read_file(migrated.path, "artifacts/binary.dat") == bytes(range(256))
-            assert json.loads(export_complete_project(legacy))["version"] == 2
+            assert json.loads(export_complete_project(legacy))["version"] == 3
             try:
                 migrate_project(legacy)
             except ProjectError:
@@ -715,7 +718,7 @@ def main() -> None:
             } <= set(list_files(created.path))
             exported = json.loads(export_complete_project(created.path))
             assert exported["format"] == "sigma.project.bundle"
-            assert exported["version"] == 2
+            assert exported["version"] == 3
             imported_path = root / "copy.json"
             import_bundle(exported, imported_path)
             assert get_limits(str(imported_path)) == saved_limits
