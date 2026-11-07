@@ -18,6 +18,7 @@ import './recents.css';
 import './copper-controls.css';
 import './text-views.css';
 import './papers-pane.css';
+import './action-icons.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRequest, watchResearchProviderActivity, useAI } from './ai-connection';
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
@@ -1964,7 +1965,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
         {sessionControls.confirming ? <>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.start}>Start Session {sessionControls.nextSessionNumber}</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
-        </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action" disabled={controlsDisabled || sessionControls.playDisabled} onClick={guest ? onGuestPlay : sessionControls.play}>New</button>}
+        </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || sessionControls.playDisabled} aria-label="New session" data-tooltip="New session" onClick={guest ? onGuestPlay : sessionControls.play}><CirclePlusIcon/></button>}
       </div>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>
@@ -3179,9 +3180,9 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); void generatePaper(); }}>Start Paper {draftVersion}</button>
           <button type="button" className="text-view-link session-start-link" onClick={() => setConfirmNewPaper(false)}>Cancel</button>
         </> : <>
-        <button type="button" className="text-view-link papers-header-action papers-new-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}>New</button>
+        <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
         <span className="paper-includes-anchor">
-          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}>Include</button>
+          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
           {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className="paper-includes-dialog" role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset }}>
       <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><button type="button" className="text-view-link paper-includes-close" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}>Close</button></div>
       <fieldset className="ai-paper-includes">
@@ -3529,8 +3530,20 @@ function FloatingTooltip() {
   return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, dialogTarget ?? document.body);
 }
 
-function SettingsGearIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 1.72l-.08.54a2 2 0 0 1-1 1.44l-.47.27a2 2 0 0 1-1.74 0l-.44-.22a2 2 0 0 0-2.72.73l-.22.38a2 2 0 0 0 .73 2.73l.44.25a2 2 0 0 1 1 1.73v.54a2 2 0 0 1-1 1.73l-.44.25a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.72.73l.44-.22a2 2 0 0 1 1.74 0l.47.27a2 2 0 0 1 1 1.44l.08.54a2 2 0 0 0 2 1.72h.44a2 2 0 0 0 2-1.72l.08-.54a2 2 0 0 1 1-1.44l.47-.27a2 2 0 0 1 1.74 0l.44.22a2 2 0 0 0 2.72-.73l.22-.38a2 2 0 0 0-.73-2.73l-.44-.25a2 2 0 0 1-1-1.73v-.54a2 2 0 0 1 1-1.73l.44-.25a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.72-.73l-.44.22a2 2 0 0 1-1.74 0l-.47-.27a2 2 0 0 1-1-1.44l-.08-.54A2 2 0 0 0 12.22 2z"/><circle cx="12" cy="12" r="3"/></svg>;
+function CirclePlusIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M7.5 12h9"/></svg>;
+}
+
+function SparklesActionIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m10 3 1.9 5.9L18 11l-6.1 2.1L10 19l-1.9-5.9L2 11l6.1-2.1L10 3Z M19 2v6 M16 5h6 M19 18v4 M17 20h4"/></svg>;
+}
+
+function SlidersSettingsIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5.5h4m4 0h10M3 12h11m4 0h3M3 18.5h6m4 0h8"/><circle cx="9" cy="5.5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="11" cy="18.5" r="2"/></svg>;
+}
+
+function UploadProjectIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V3m-4.5 4.5L12 3l4.5 4.5M3 16v4.5h18V16"/></svg>;
 }
 
 const NEW_PROJECT_VALUES_KEY = 'sigma.newProjectValues';
@@ -3688,7 +3701,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
 
     {!hideProjectActions && scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-export-trigger workspace-icon-button" aria-label="Export project" title="Export project" data-tooltip="Export project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
-    {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" title="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><SettingsGearIcon /></button>}
+    {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><SlidersSettingsIcon/></button>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     {markdownPortalTarget && createPortal(markdownControl, markdownPortalTarget)}
@@ -4379,14 +4392,14 @@ function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView)
         body: JSON.stringify({ bundle }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Project import failed');
+      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Project upload failed');
       onOpen(result as ProjectView);
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setBusy(false); }
   }
   return <dialog ref={dialog} className="project-entry-dialog import-project-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Importing…' : 'Import'}</button><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
-    <p className="entry-help">Import a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
+    <header className="entry-dialog-header"><h2 id="import-project-heading">Upload Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Uploading…' : 'Upload'}</button><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
+    <p className="entry-help">Upload a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
     <form id="import-project-form" onSubmit={submit}><fieldset disabled={busy}><div className="import-project-label-row"><label htmlFor="import-project-file">Project file</label><button className="choose-project-file" type="button" onClick={() => fileInput.current?.click()}>Choose</button></div>
       <input ref={fileInput} className="sr-only" id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
       <div className="import-project-file-row"><div className="import-project-selected-file" aria-live="polite">{file?.name ?? 'No file chosen'}</div></div>
@@ -5152,7 +5165,7 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
     return groups;
   }, []).sort((a, b) => flat ? 0 : researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents" data-opening={!!opening || !!removing}>
-    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading saved projects...'}</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
+    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading saved projects...'}</p> : !projects.length && <p>No recent projects yet. Upload a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
@@ -5425,8 +5438,8 @@ function Home({ initialPath, onOpen }: {
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
-            <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
-          <button type="button" className="home-project-action" data-tooltip="Import a portable JSON project" onClick={() => setEntry('import')}>Import</button>
+            <button type="button" ref={newButton} className="home-project-action home-icon-action" aria-label="New project" data-tooltip="New project" onClick={() => setEntry('new')}><CirclePlusIcon/></button>
+          <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>
           </>}
         </div>
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
@@ -5550,8 +5563,8 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
   buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; hideNew?: boolean; onManual: () => void; onAI: () => void;
 }) {
   return <div className="strategy-heading-actions">
-    {!hideNew && <button type="button" className="text-view-link" ref={buttonRef} title="Create a new strategy" disabled={disabled} onClick={onManual}>New</button>}
-    <button type="button" className="text-view-link" data-tooltip="Uses AI exploration and critique to develop a strategy proposal. You review or edit it before saving. It also considers existing research." disabled={disabled} onClick={onAI}>Generate</button>
+    {!hideNew && <button type="button" className="text-view-link sigma-heading-icon-action" ref={buttonRef} aria-label="New strategy" data-tooltip="New strategy" disabled={disabled} onClick={onManual}><CirclePlusIcon/></button>}
+    <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Generate strategy" data-tooltip="Generate strategy with AI. Review before saving." disabled={disabled} onClick={onAI}><SparklesActionIcon/></button>
   </div>;
 }
 
@@ -6170,8 +6183,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
         </svg>
       </button>
-      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
-        <SettingsGearIcon />
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" data-tooltip="Project settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+        <SlidersSettingsIcon/>
       </button>
     </div>
   </div>;
