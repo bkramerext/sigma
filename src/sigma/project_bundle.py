@@ -246,10 +246,13 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
                 except (ValueError, binascii.Error, ZstdCodecError) as exc:
                     raise BundleError("Invalid compressed project member") from exc
             elif (
-                version == LEGACY_PORTABLE_VERSION
+                version in {LEGACY_PORTABLE_VERSION, VERSION}
                 and set(value) == {_PORTABLE_ENCODING_FIELD, "data"}
-                and encoding in {"base64", "text"}
                 and isinstance(value["data"], str)
+                and (
+                    encoding == "text"
+                    or (version == LEGACY_PORTABLE_VERSION and encoding == "base64")
+                )
             ):
                 if encoding == "text":
                     data = value["data"].encode("utf-8")
@@ -260,6 +263,14 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
                         data = base64.b64decode(value["data"], validate=True)
                     except (ValueError, binascii.Error) as exc:
                         raise BundleError("Invalid encoded file") from exc
+            elif (
+                name.endswith(".json")
+                and version == LEGACY_PORTABLE_VERSION
+                and set(value) != {_PORTABLE_ENCODING_FIELD, "data"}
+            ):
+                # In v2, this key may be ordinary JSON content. Only exact
+                # two-field v2 wrappers were reserved as encodings.
+                data = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
             else:
                 raise BundleError("Invalid project member encoding")
         elif name.endswith(".json"):
