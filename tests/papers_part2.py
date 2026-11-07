@@ -380,7 +380,13 @@ def test_long_paper_section_retries_share_one_hour_budget() -> None:
         assert calls == 3  # one plan + one exhausted section + one successful sibling
         return draft
 
-    draft = asyncio.run(generate())
+    with patch.object(papers.logging.getLogger("sigma.lifecycle"), "info") as info_log:
+        draft = asyncio.run(generate())
+    event_names = [call.args[0] for call in info_log.call_args_list if call.args]
+    assert any(name.startswith("paper.section_queue ") for name in event_names)
+    assert any(name.startswith("paper.section_slot_acquired ") for name in event_names)
+    assert any(name.startswith("paper.section_input_prepared ") for name in event_names)
+    assert any(name.startswith("paper.section_saved ") for name in event_names)
     assert attempts == {1: 1, 2: 1}
     assert "Editorial notice" in draft.sections[0].paragraphs[0]
     assert draft.sections[1].paragraphs == ["Saved section 2."]
@@ -1540,7 +1546,20 @@ def test_fast_checkpoint_resume_preserves_ambiguous_section_without_replay() -> 
         assert result.diagrams == []
         assert all(not section.tables for section in result.sections)
 
-    asyncio.run(resume())
+    lifecycle_logger = papers.logging.getLogger("sigma.lifecycle")
+    with (
+        patch.object(lifecycle_logger, "info") as info_log,
+        patch.object(lifecycle_logger, "warning") as warning_log,
+    ):
+        asyncio.run(resume())
+    assert any(
+        call.args and call.args[0].startswith("paper.section_checkpoint ")
+        for call in info_log.call_args_list
+    )
+    assert any(
+        call.args and call.args[0].startswith("paper.section_checkpoint_fallback ")
+        for call in warning_log.call_args_list
+    )
     assert attempts.count(("sigma_long_paper_plan", None)) == 1
     assert attempts.count(("sigma_long_paper_section", 1)) == 1
     assert attempts.count(("sigma_long_paper_section", 2)) == 1

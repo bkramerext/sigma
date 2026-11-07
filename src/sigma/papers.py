@@ -6228,6 +6228,8 @@ async def _provider_structured(
         payload["input"] = [{"role": "user", "content": input_text}]
         headers["Accept"] = "text/event-stream"
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
+    request_started = monotonic()
+    diagnostic_section = input_value.get("section_number") if isinstance(input_value, dict) else None
     attempt = None
     try:
         if cloud_workspaces.enabled():
@@ -6251,6 +6253,14 @@ async def _provider_structured(
                 "POST", "https://api.openai.com/v1/responses", headers=headers, json=payload
             ) as response,
         ):
+            if schema_name == "sigma_long_paper_section":
+                logging.getLogger("sigma.lifecycle").info(
+                    "paper.provider_headers project_id=%s section=%s status=%d elapsed_s=%.1f",
+                    project_id or "unknown",
+                    diagnostic_section,
+                    response.status_code,
+                    monotonic() - request_started,
+                )
             if response.status_code == 200 and binding["mode"] == "chatgpt":
                 raw = await completed(
                     response,
@@ -6299,6 +6309,28 @@ async def _provider_structured(
         if len(texts) != 1:
             raise ProjectError("Provider returned no single structured long-paper stage")
         parsed_response = response_model.model_validate_json(texts[0])
+        if schema_name == "sigma_long_paper_section":
+            usage_data = raw.get("usage")
+            if not isinstance(usage_data, dict):
+                usage_data = {}
+            output_details = usage_data.get("output_tokens_details")
+            if not isinstance(output_details, dict):
+                output_details = {}
+            input_tokens = usage_data.get("input_tokens")
+            output_tokens = usage_data.get("output_tokens")
+            reasoning_tokens = output_details.get("reasoning_tokens")
+            logging.getLogger("sigma.lifecycle").info(
+                "paper.provider_response_validated project_id=%s section=%s "
+                "elapsed_s=%.1f text_bytes=%d input_tokens=%d "
+                "output_tokens=%d reasoning_tokens=%d",
+                project_id or "unknown",
+                diagnostic_section,
+                monotonic() - request_started,
+                len(texts[0].encode("utf-8")),
+                input_tokens if type(input_tokens) is int else -1,
+                output_tokens if type(output_tokens) is int else -1,
+                reasoning_tokens if type(reasoning_tokens) is int else -1,
+            )
         if usage_sink is not None:
             usage = raw.get("usage")
             if isinstance(usage, dict):
@@ -6698,6 +6730,7 @@ async def _generate_long_draft(
                 _provider_input_text(input_value, schema_name, max_input_bytes).encode("utf-8")
             )
             output_delta_events = 0
+            last_delta_log_at = started
 
             async def observe_section_output(
                 *,
@@ -6706,9 +6739,15 @@ async def _generate_long_draft(
                 started_at: float = started,
                 logger: logging.Logger = log,
             ) -> None:
-                nonlocal output_delta_events
+                nonlocal output_delta_events, last_delta_log_at
                 output_delta_events += 1
-                if output_delta_events == 1 or output_delta_events % 1000 == 0:
+                now = monotonic()
+                if (
+                    output_delta_events == 1
+                    or output_delta_events % 1000 == 0
+                    or now - last_delta_log_at >= 30.0
+                ):
+                    last_delta_log_at = now
                     logger.info(
                         "paper.provider_output project_id=%s section=%s attempt=%d "
                         "delta_events=%d elapsed_s=%.1f",
@@ -7369,6 +7408,17 @@ or document markup."""
                 section.heading + " " + section.purpose,
                 headroom,
             )
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.section_input_prepared project_id=%s section=%d notes=%d "
+            "evidence_refs=%d claims=%d payload_bytes=%d",
+            project_id or "unknown",
+            section_number,
+            len(relevant),
+            len(section.evidence_refs),
+            len(section.claim_ids),
+            len(_json(section_input).encode("utf-8")),
+        )
+        used_fallback = False
         try:
             body, _ = await call_with_safe_retry(
                 section_input,
@@ -7400,12 +7450,23 @@ or document markup."""
         except (ProjectError, ValidationError) as exc:
             if not recoverable_section_failure(exc):
                 raise
+            used_fallback = True
             section_draft = fallback_section(section_number, section, exc)
         # No await between registering a completed result and saving the
         # checkpoint: concurrent tasks cannot interleave and lose a section.
         saved_sections[section_key] = section_draft.model_dump()
         state["provider_calls"] = calls
         save_state(state)
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.section_saved project_id=%s section=%d kind=%s "
+            "saved_count=%d total=%d payload_bytes=%d",
+            project_id or "unknown",
+            section_number,
+            "fallback" if used_fallback else "authored",
+            len(saved_sections),
+            len(long_plan.sections),
+            len(_json(section_draft.model_dump()).encode("utf-8")),
+        )
         if progress:
             # Count persisted completions, not the author's section number.
             # Independent section jobs can finish in any order and Resume
@@ -7422,6 +7483,24 @@ or document markup."""
         )
 
     dispatches = state.get("section_dispatches")
+    numbered_sections = set(range(1, len(long_plan.sections) + 1))
+    persisted_sections = {
+        number for number in numbered_sections if str(number) in saved_sections
+    }
+    recorded_dispatches = {
+        number for number in numbered_sections
+        if isinstance(dispatches, dict) and str(number) in dispatches
+    }
+    logging.getLogger("sigma.lifecycle").info(
+        "paper.section_checkpoint project_id=%s total=%d saved=%s "
+        "dispatched_unsaved=%s other_unsaved=%s dispatch_records_available=%s",
+        project_id or "unknown",
+        len(long_plan.sections),
+        sorted(persisted_sections),
+        sorted(recorded_dispatches - persisted_sections),
+        sorted(numbered_sections - persisted_sections - recorded_dispatches),
+        isinstance(dispatches, dict),
+    )
     if dispatches is None:
         legacy_ambiguous = set(
             state.get("legacy_ambiguous_sections", [])
@@ -7440,6 +7519,13 @@ or document markup."""
     for number, section in enumerate(long_plan.sections, start=1):
         key = str(number)
         if key not in saved_sections and key in dispatches:
+            logging.getLogger("sigma.lifecycle").warning(
+                "paper.section_checkpoint_fallback project_id=%s section=%d "
+                "prior_dispatches=%d reason=ambiguous_paid_attempt",
+                project_id or "unknown",
+                number,
+                len(dispatches[key]),
+            )
             saved_sections[key] = fallback_section(
                 number,
                 section,
@@ -7455,6 +7541,13 @@ or document markup."""
             for number, section in enumerate(long_plan.sections, start=1)
             if str(number) not in saved_sections
         ]
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.section_queue project_id=%s pending=%s saved=%s concurrency=%d",
+            project_id or "unknown",
+            [number for number, _ in pending],
+            sorted(int(key) for key in saved_sections),
+            FAST_SECTION_CONCURRENCY,
+        )
         if pending and progress:
             await progress("sections", len(saved_sections), len(long_plan.sections), "active")
         semaphore = asyncio.Semaphore(FAST_SECTION_CONCURRENCY)
@@ -7464,18 +7557,46 @@ or document markup."""
             section_number: int, section: LongSectionPlan
         ) -> tuple[int, PaperSection] | None:
             nonlocal first_failure
+            queued_at = monotonic()
             async with semaphore:
+                slot_started = monotonic()
+                logging.getLogger("sigma.lifecycle").info(
+                    "paper.section_slot_acquired project_id=%s section=%d queue_wait_s=%.1f",
+                    project_id or "unknown",
+                    section_number,
+                    slot_started - queued_at,
+                )
                 # A failed request may have consumed provider allowance. Do
                 # not start waiting sections after a known failure, but let
                 # already-dispatched siblings finish and save their drafts.
                 if first_failure is not None:
+                    logging.getLogger("sigma.lifecycle").info(
+                        "paper.section_not_dispatched project_id=%s section=%d prior_failure=true",
+                        project_id or "unknown",
+                        section_number,
+                    )
                     return None
                 try:
                     return section_number, await write_section(section_number, section)
                 except Exception as exc:
                     if first_failure is None:
                         first_failure = exc
+                    logging.getLogger("sigma.lifecycle").warning(
+                        "paper.section_failed project_id=%s section=%d "
+                        "error_type=%s elapsed_s=%.1f",
+                        project_id or "unknown",
+                        section_number,
+                        type(exc).__name__,
+                        monotonic() - slot_started,
+                    )
                     raise
+                finally:
+                    logging.getLogger("sigma.lifecycle").info(
+                        "paper.section_slot_released project_id=%s section=%d elapsed_s=%.1f",
+                        project_id or "unknown",
+                        section_number,
+                        monotonic() - slot_started,
+                    )
 
         tasks = [
             asyncio.create_task(bounded_section(number, section)) for number, section in pending
