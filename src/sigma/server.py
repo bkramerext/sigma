@@ -65,8 +65,31 @@ def _report_configuration_issues() -> None:
         )
 
 
+def _enable_lifecycle_diagnostics() -> None:
+    """Deliver provider/section timing diagnostics to the actual backend console.
+
+    Uvicorn's console configuration does not forward arbitrary application
+    INFO loggers. Hosted deployments separately retain propagated records in
+    the durable backend log; avoid duplicate console handlers on app reloads.
+    """
+    log = logging.getLogger("sigma.lifecycle")
+    log.setLevel(logging.INFO)
+    if any(handler.name == "sigma.lifecycle.console" for handler in log.handlers):
+        return
+    console = logging.StreamHandler()
+    console.set_name("sigma.lifecycle.console")
+    console.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+    )
+    log.addHandler(console)
+
+
 def create_app() -> FastAPI:
     load_local_config()
+    _enable_lifecycle_diagnostics()
     _label_access_log()
     from sigma.storage import validate_startup
 

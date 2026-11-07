@@ -365,6 +365,120 @@ def test_paper_sse_accepts_standard_line_endings_across_byte_chunks() -> None:
             assert result["output"][0]["content"][0]["text"] == "café"
 
 
+def test_long_paper_json_whitespace_guard_respects_strings_and_chunks() -> None:
+    """Legitimate whitespace in strings is never treated as JSON formatting."""
+    from sigma.paper_stream_guard import JSONWhitespaceGuard, JSONWhitespaceStall
+
+    safe = JSONWhitespaceGuard(limit=64)
+    for delta in (
+        '{"paragraphs":["This is a prose value ',
+        " " * 5000,
+        ' still inside string"],"tables":[],"examples":[]}',
+    ):
+        safe.observe(delta)
+    assert not safe.in_string and safe.consecutive == 0
+
+    runaway = JSONWhitespaceGuard(limit=64)
+    runaway.observe('{"paragraphs":["Finished prose."],"tables":[]')
+    try:
+        for _ in range(100):
+            runaway.observe(" \n")
+    except JSONWhitespaceStall:
+        assert runaway.consecutive == 65
+    else:
+        raise AssertionError("A whitespace-output stall was not detected")
+
+
+def test_long_paper_section_provider_stops_runaway_without_paid_replay() -> None:
+    """A 2,049-character whitespace suffix is not a completed paper section."""
+    from sigma.paper_stream_guard import JSONWhitespaceStall
+
+    events = [
+        {"type": "response.created", "sequence_number": 0, "response": {"id": "paper-loop"}},
+        {
+            "type": "response.output_text.delta",
+            "sequence_number": 1,
+            "delta": '{"paragraphs":["A complete, evidence-linked paragraph."],"tables":[]',
+        },
+        *[
+            {"type": "response.output_text.delta", "sequence_number": n, "delta": " \n" * 80}
+            for n in range(2, 25)
+        ],
+    ]
+    dispatched: list[dict[str, Any]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        dispatched.append(json.loads(request.content))
+        stream = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=stream.encode()
+        )
+
+    actual_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kw: actual_client(transport=httpx.MockTransport(handler), **kw),
+    ):
+        try:
+            asyncio.run(
+                papers._provider_structured(
+                    {"section_number": 2},
+                    {"mode": "chatgpt", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "medium"},
+                    instructions="Write this paper section.",
+                    schema_name="sigma_long_paper_section",
+                    response_model=papers.LongSectionDraft,
+                )
+            )
+        except JSONWhitespaceStall as exc:
+            assert "No automatic paid retry" in str(exc)
+        else:
+            raise AssertionError("Runaway section incorrectly accepted as complete")
+
+    assert len(dispatched) == 1
+    assert "max_output_tokens" not in dispatched[0]
+
+
+def test_long_paper_section_provider_accepts_large_quoted_whitespace() -> None:
+    """A substantial quoted paragraph must pass the same guarded SSE path."""
+    body = json.dumps(
+        {"paragraphs": ["The result is " + " " * 5000 + "supported."], "tables": [], "examples": []}
+    )
+    events = [
+        {"type": "response.created", "sequence_number": 0, "response": {"id": "normal"}},
+        {"type": "response.output_text.delta", "sequence_number": 1, "delta": body},
+        {
+            "type": "response.completed",
+            "sequence_number": 2,
+            "response": {"id": "normal", "status": "completed", "output": []},
+        },
+    ]
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        stream = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=stream.encode()
+        )
+
+    actual_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kw: actual_client(transport=httpx.MockTransport(handler), **kw),
+    ):
+        parsed, _ = asyncio.run(
+            papers._provider_structured(
+                {"section_number": 2},
+                {"mode": "chatgpt", "token": "fixture"},
+                {"model": "gpt-6.1-sol", "reasoning_effort": "medium"},
+                instructions="Write this paper section.",
+                schema_name="sigma_long_paper_section",
+                response_model=papers.LongSectionDraft,
+            )
+        )
+    assert isinstance(parsed, papers.LongSectionDraft)
+    assert parsed.paragraphs[0].endswith("supported.")
+
+
 def test_paper_terminal_sse_event_without_final_separator() -> None:
     """A complete EOF terminal is valid; a truncated final JSON is not."""
     created = (
@@ -1234,6 +1348,50 @@ def test_strict_paper_schemas_require_all_properties() -> None:
     # Do not change the application's Pydantic parsing/default semantics.
     parsed = papers.EvidenceBatchResult(notes=[], conflicts_or_gaps=[])
     assert parsed.covered_field_refs == [] and parsed.omitted_fields == []
+
+
+def test_long_section_wire_schema_finishes_with_primary_prose() -> None:
+    """Keep the simple typed contract established by the isolated live probe.
+
+    With prose first, Sol/Medium twice generated a complete paragraphs array,
+    then tables=[], followed by unbounded formatting whitespace before the
+    required examples field. Emitting supporting fields first completed cleanly.
+    """
+    with_visuals = papers._paper_response_schema(papers.LongSectionDraft, include_diagrams=True)
+    without_visuals = papers._paper_response_schema(papers.LongSectionDraft, include_diagrams=False)
+    assert list(with_visuals["properties"]) == ["tables", "examples", "paragraphs"]
+    assert with_visuals["required"] == list(with_visuals["properties"])
+    assert list(without_visuals["properties"]) == ["examples", "paragraphs"]
+    assert without_visuals["required"] == list(without_visuals["properties"])
+    assert "PaperTable" in with_visuals.get("$defs", {})
+    assert "PaperTable" not in without_visuals.get("$defs", {})
+
+    # Persisted drafts and explicitly authored examples remain ordinary
+    # validated models, with no synthesized or discarded content.
+    draft = papers.LongSectionDraft(
+        paragraphs=["An evidence-linked section explains the result."],
+        tables=[
+            papers.PaperTable(
+                caption="Source-linked comparison of allowed and denied requests",
+                headers=["Decision", "Outcome"],
+                rows=[["Allowed", "Admitted"], ["Denied", "Rejected"]],
+                evidence_refs=["source:R1"],
+                claim_ids=["C3"],
+            )
+        ],
+        examples=[
+            papers.PaperExample(
+                title="Illustration",
+                text="This is a concrete, source-linked illustrative example.",
+                claim_ids=["C3"],
+                after_paragraph=1,
+            )
+        ],
+    )
+    restored = papers.LongSectionDraft.model_validate_json(draft.model_dump_json())
+    assert restored == draft
+    assert len(restored.tables) == len(restored.examples) == 1
+    assert list(json.loads(draft.model_dump_json())) == ["tables", "examples", "paragraphs"]
 
 
 def test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage() -> None:
@@ -2155,7 +2313,9 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 include_research_excerpts,
                 include_diagrams,
                 include_sigma_issues,
+                authorized_recovery_section,
             ):
+                assert authorized_recovery_section is None
                 assert include_sigma_issues is False
                 assert include_research_details is False
                 assert include_claim_details is False
@@ -3426,17 +3586,24 @@ def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
     """Only resolved Project Types publication links may reach the paper writer."""
     from sigma import paper_writing_sources, project_types
 
-    common = project_types.common_references()["publication_standards_references"]
-    default_type = project_types.get_type("mathematical")
-    assert default_type is not None
-    # Shared publication manuals are now off by default, but this fixture
-    # explicitly opts in to cover multi-source selection and ranking.
-    assert len(default_type.publication_standards_references) == 1
-    with patch.object(project_types, "reference_preferences", return_value={}):
+    # Reference usage is user-scoped. This multi-source fixture must not
+    # inherit the logged-in developer's enabled/disabled reference switches
+    # or their private additions to the curated catalog.
+    with (
+        patch.object(project_types, "reference_preferences", return_value={}),
+        patch.object(
+            project_types,
+            "common_custom_references",
+            return_value={field: [] for field in project_types.REFERENCE_FIELDS},
+        ),
+        patch.object(project_types, "builtin_custom_references", return_value={}),
+    ):
+        common = project_types.common_references()["publication_standards_references"]
         resolved = project_types.get_type("mathematical")
     assert resolved is not None
     official = list(resolved.publication_standards_references)
-    assert len(official) >= len(common) + 1
+    assert len(common) == 2
+    assert len(official) == 3
     math_only = {item["url"] for item in official} - {item["url"] for item in common}
     assert math_only
     project = {

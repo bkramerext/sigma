@@ -2049,12 +2049,12 @@ function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { nam
 }
 function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
   const titleLabel = `${expanded ? 'Collapse' : 'Expand'} ${itemLabel}: ${title}`;
-  if (inlineTitleActions) return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title"><span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span>{badge}<span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
+  if (inlineTitleActions) return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
   return <div className="saved-paper-title-line">
     <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button>
     <div className="saved-paper-title-content">
       <div className="saved-paper-title-first-line">
-        <h4 className="saved-paper-title"><span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span>{badge}</h4>
+        <h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span></h4>
         <span className="saved-paper-title-tools">{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span>
       </div>
       {beforeCopy && <div className="saved-paper-second-line">{beforeCopy}</div>}
@@ -2356,16 +2356,17 @@ const paperScoreCategories: { key: keyof PaperScore['categories']; title: string
   { key: 'visuals', title: 'Useful visuals', standard: 'Accurate figures or tables clarify difficult relationships, with clear captions and provenance.' },
 ];
 
-function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () => void }) {
+function PaperScoreDialog({ score, onRescore, canRescore, rescoring, error, onClose }: { score: PaperScore; onRescore: () => void; canRescore: boolean; rescoring: boolean; error: string; onClose: () => void }) {
   const element = useRef<HTMLDialogElement>(null);
   useEffect(() => { element.current?.showModal(); }, []);
   return <dialog ref={element} className="project-settings-dialog paper-score-dialog" aria-labelledby="paper-score-title"
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header paper-score-header">
       <h2 id="paper-score-title">Paper Score</h2>
-      <div className="settings-actions"><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
+      <div className="settings-actions"><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" data-tooltip={canRescore ? "Evaluate again using an AI call" : "Connect an AI provider to rescore"} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
     </header>
     <div className="settings-body paper-score-body">
+      {error && <p className="error" role="alert">{error}</p>}
       <div className="paper-score-overall" aria-label={`Weighted paper score ${score.total} out of 100`}>
         <strong>Weighted score</strong><strong className="paper-score-points">{score.total}/100</strong>
       </div>
@@ -2387,7 +2388,7 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
 }
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[]; sigma_issues?: string[]; sigma_issues_included?: boolean } };
-type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
+type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; output_delta_count?: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 const PAPER_STAGES = [
@@ -2399,7 +2400,7 @@ const PAPER_STAGES = [
   { label: 'Validate', stages: ['validation'] },
   { label: 'Proofread', stages: ['proofreading'] },
   { label: 'Generate PDF', stages: ['compile', 'pdf_check'] },
-  { label: 'Score paper', stages: ['scoring', 'score_failed'] },
+  { label: 'Score', stages: ['scoring', 'score_failed'] },
   { label: 'Finish', stages: ['finishing', 'complete'] },
 ] as const;
 
@@ -2431,7 +2432,7 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
   if (step === 7) return completed ? 'Generated PDF' : current ? 'Generating PDF' : 'Generate PDF';
   if (step === 8) {
     if (progress.detail?.includes('scoring did not finish')) return 'Score unavailable';
-    return completed ? 'Scored paper' : current ? 'Scoring paper' : 'Score paper';
+    return completed ? 'Scored' : current ? 'Scoring' : 'Score';
   }
   return completed ? 'Finished' : current ? 'Finishing' : 'Finish';
 }
@@ -2468,10 +2469,15 @@ function paperActivityLabel(progress: PaperProgress, now: number): string {
   const timestamp = progress.last_progress_at ? Date.parse(progress.last_progress_at) : NaN;
   if (!Number.isFinite(timestamp)) return 'Starting…';
   const elapsed = Math.max(0, Math.floor((now - timestamp) / 1000));
-  if (elapsed < 60) return 'Making progress · Just now';
+  if (elapsed < 60) {
+    const recent = elapsed < 5 ? 'Just now' : `${elapsed} sec ago`;
+    return (progress.output_delta_count ?? 0) > 0
+      ? `Receiving text · ${recent}`
+      : `Writing in progress · ${recent}`;
+  }
   const minutes = Math.floor(elapsed / 60);
-  if (minutes >= 5) return `No new progress for ${minutes} min`;
-  return `Last progress · ${minutes} min ago`;
+  if (minutes >= 5) return `No recent writing activity for ${minutes} min`;
+  return `Last writing activity · ${minutes} min ago`;
 }
 
 function PaperActivityLine({ progress }: { progress: PaperProgress }) {
@@ -2500,6 +2506,13 @@ function paperReviewLabel(generation: PaperSummary['generation']): string {
   return generation.layout_status === 'needs_review'
     ? 'Needs review · PDF layout warnings remain after three passes'
     : 'Needs review · TeX verification incomplete';
+}
+
+function savedPaperElapsed(seconds: number): string {
+  const totalMinutes = Math.max(0, Math.ceil(seconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours}hr${minutes ? ` ${minutes}m` : ""}` : `${minutes}m`;
 }
 
 function paperElapsed(seconds: number): string {
@@ -2580,7 +2593,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const deliberatePaperStop = useRef(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [scoringId, setScoringId] = useState('');
-  const [scoreDialog, setScoreDialog] = useState<PaperScore | null>(null);
+  const [scoreDialog, setScoreDialog] = useState<{ paperId: string; score: PaperScore } | null>(null);
   const [scoreError, setScoreError] = useState('');
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
@@ -2603,8 +2616,9 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
   const [confirmRestartDraft, setConfirmRestartDraft] = useState(false);
   const [confirmPlayRestartDraft, setConfirmPlayRestartDraft] = useState(false);
+  const [confirmRecoverDraft, setConfirmRecoverDraft] = useState(false);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
-  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; proofreading_status?: string; publication_status?: string } | null>(null);
+  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; recovery_sections?: number[]; proofreading_status?: string; publication_status?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [restartingCheckpoint, setRestartingCheckpoint] = useState(false);
   const [phase, setPhase] = useState('');
@@ -2635,7 +2649,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     bottom: paperPopupPlacement.above ? 'calc(100% + 5px)' : 'auto',
   };
   useEffect(() => {
-    if (!confirmDeleteId && !confirmDiscardDraft && !confirmRestartDraft && !confirmPlayRestartDraft) return;
+    if (!confirmDeleteId && !confirmDiscardDraft && !confirmRestartDraft && !confirmPlayRestartDraft && !confirmRecoverDraft) return;
     const cancelOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -2643,13 +2657,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         setConfirmDiscardDraft(false);
         setConfirmRestartDraft(false);
         setConfirmPlayRestartDraft(false);
+        setConfirmRecoverDraft(false);
       }
     };
     document.addEventListener('keydown', cancelOnEscape);
     return () => document.removeEventListener('keydown', cancelOnEscape);
-  }, [confirmDeleteId, confirmDiscardDraft, confirmRestartDraft, confirmPlayRestartDraft]);
+  }, [confirmDeleteId, confirmDiscardDraft, confirmRestartDraft, confirmPlayRestartDraft, confirmRecoverDraft]);
   useEffect(() => {
-    if (!confirmRestartDraft && !confirmDiscardDraft && !confirmPlayRestartDraft) return;
+    if (!confirmRestartDraft && !confirmDiscardDraft && !confirmPlayRestartDraft && !confirmRecoverDraft) return;
     const dismissOutside = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return;
       if (!event.target.closest('.paper-remove-anchor')) {
@@ -2658,11 +2673,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       }
       // Play's confirmation closes when another paper action is chosen;
       // Start over's existing confirmation remains completely unchanged.
-      if (!event.target.closest('.paper-play-tooltip')) setConfirmPlayRestartDraft(false);
+      if (!event.target.closest('.paper-play-tooltip')) {
+        setConfirmPlayRestartDraft(false);
+        setConfirmRecoverDraft(false);
+      }
     };
     document.addEventListener('pointerdown', dismissOutside);
     return () => document.removeEventListener('pointerdown', dismissOutside);
-  }, [confirmRestartDraft, confirmDiscardDraft, confirmPlayRestartDraft]);
+  }, [confirmRestartDraft, confirmDiscardDraft, confirmPlayRestartDraft, confirmRecoverDraft]);
   useEffect(() => { if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest, path]);
   useEffect(() => {
     if (!paperMenu) return;
@@ -2861,7 +2879,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   async function scorePaper(paper: PaperSummary, force = false) {
     setScoreError('');
     // Reading an existing score never depends on ongoing generation/scoring.
-    if (paper.score && !force) { setScoreDialog(paper.score); return; }
+    if (paper.score && !force) { setScoreDialog({ paperId: paper.paper_id, score: paper.score }); return; }
     if (scoringRef.current) return;
     if (!paper.pdf_available) { setScoreError('A saved PDF is required before this paper can be scored.'); return; }
     if (!binding) { setScoreError('Connect an eligible AI provider before scoring.'); return; }
@@ -2876,7 +2894,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       if (!response.ok) throw new Error(result.error ?? 'Could not score the paper.');
       const score = result.score as PaperScore;
       setPapers(current => current.map(item => item.paper_id === paper.paper_id ? { ...item, score } : item));
-      setScoreDialog(score);
+      setScoreDialog({ paperId: paper.paper_id, score });
       setPaperProgress(current => current?.stage === 'score_failed'
         ? { ...current, stage: 'complete', status: 'complete' } : current);
       window.dispatchEvent(new Event('sigma-paper-scores-updated'));
@@ -3011,7 +3029,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRestartingCheckpoint(false); setBusy(false); }
   }
-  async function generatePaper(restartBeforePlay = false) {
+  async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null) {
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
@@ -3057,13 +3075,21 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         setCheckpointMismatch(preflight);
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
+      const pendingRecovery: number[] = preflight.recovery_sections ?? [];
+      if (recoverSection !== null) {
+        if (pendingRecovery.length !== 1 || pendingRecovery[0] !== recoverSection)
+          throw new Error('The saved section recovery changed. Refresh before authorizing another AI call.');
+      } else if (pendingRecovery.length) {
+        throw new Error('An unfinished section needs explicit recovery authorization. Use Play and review the recovery confirmation.');
+      }
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.draft_recovery_available
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
         : 'Compiling publication references…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
+          ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}) }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -3140,6 +3166,8 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   // The brief transition after Stop is not a second-paper conflict. A Play
   // control can only advertise concurrency as its disabled reason when a
   // still-active job really blocks dispatch.
+  const recoverySection = resumeDetails?.recovery_sections?.length === 1
+    ? (resumeDetails.recovery_sections[0] ?? null) : null;
   const paperPlayBlocked = !generationRunning &&
     ['active', 'queued'].includes(paperProgress?.status ?? '');
   const paperPlayDisabled = generating || loading || !binding || paperPlayBlocked;
@@ -3151,6 +3179,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       : loading ? 'Loading paper controls'
       : !binding ? 'Connect an AI provider to generate a paper'
       : checkpointMismatch ? 'Start a new paper attempt (confirmation required)'
+      : recoverySection !== null ? 'Recover unfinished paper section (authorization required)'
       : continuationAvailable ? 'Resume paper generation' : 'Generate paper';
   const canStartOver = !restartReady && !generationRunning &&
     (Boolean(checkpointMismatch?.checkpoint_can_restart || restartableCheckpoint?.checkpoint_can_restart) ||
@@ -3225,7 +3254,14 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
               badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} title={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'}/> : undefined}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
-                {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
+                {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
+                  {confirmRecoverDraft && recoverySection !== null && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Authorize unfinished paper section recovery">
+                    <p>Retry Section {recoverySection}? Its previous AI call was dispatched but no section was saved and allowance may have been consumed. Completed sections will be reused. This authorizes a new section generation with bounded pre-stream retries.</p>
+                    <div className="session-remove-confirm-actions">
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => { setConfirmRecoverDraft(false); void generatePaper(false, recoverySection); }}>Authorize</button>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRecoverDraft(false)}>Cancel</button>
+                    </div>
+                  </div></div>}
                   {confirmPlayRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm new paper generation attempt">
                     <p>The previous attempt cannot resume. Start a new attempt? This may use additional AI calls. Saved research and papers remain.</p>
                     <div className="session-remove-confirm-actions">
@@ -3282,7 +3318,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP}>★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View ${paper.title} PDF in a browser tab`} data-tooltip="View PDF in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
@@ -3295,7 +3331,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     {paper.pdf_available && <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.pdf`} onClick={() => setPaperMenu(null)}>Download PDF</a>}
                   </span>}
                 </span>
-                {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label="View PDF in a new browser tab" data-tooltip="View PDF in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
+                {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label="View paper in a new browser tab" data-tooltip="View paper in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
                 <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
@@ -3307,7 +3343,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   </div></div>}
                 </span>
               </>}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score paper'}</button>{paper.score && <button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" disabled={!!scoringId || !binding} data-tooltip="Evaluate again using an AI call" onClick={() => void scorePaper(paper, true)}>Rescore</button>}</div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score paper'}</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
@@ -3361,7 +3397,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       {success && <p className="ai-paper-status" role="status">{success}</p>}
 
       </>}
-      {scoreDialog && <PaperScoreDialog score={scoreDialog} onClose={() => setScoreDialog(null)}/>}
+      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={!!binding && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
       </div>
     </div>
   </section>;

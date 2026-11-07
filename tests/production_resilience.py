@@ -229,7 +229,37 @@ def check_memory_sources() -> None:
         assert not memory_guard._CRITICAL
 
 
+def check_paper_diagnostics_console() -> None:
+    """A live section diagnostic must reach stderr even with root INFO muted."""
+    import io
+    import logging
+
+    from sigma.server import _enable_lifecycle_diagnostics
+
+    log = logging.getLogger("sigma.lifecycle")
+    root = logging.getLogger()
+    before_handlers = tuple(log.handlers)
+    before_level, before_root_level = log.level, root.level
+    stderr = io.StringIO()
+    try:
+        root.setLevel(logging.WARNING)
+        with patch("sys.stderr", stderr):
+            _enable_lifecycle_diagnostics()
+            _enable_lifecycle_diagnostics()  # Repeated app setup must not double-log.
+            log.info("paper.section_slot_acquired section=%d queue_wait_s=%.1f", 3, 0.1)
+        assert stderr.getvalue().count("paper.section_slot_acquired") == 1
+        assert "section=3" in stderr.getvalue()
+    finally:
+        for handler in tuple(log.handlers):
+            if handler not in before_handlers:
+                log.removeHandler(handler)
+                handler.close()
+        log.setLevel(before_level)
+        root.setLevel(before_root_level)
+
+
 def main() -> None:
+    check_paper_diagnostics_console()
     check_memory_telemetry()
     check_memory_change_logging()
     check_memory_sources()

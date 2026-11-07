@@ -44,6 +44,7 @@ from sigma import (
     reference_efficiency,
 )
 from sigma.openai_connection import auth_context, cloud_credential
+from sigma.paper_stream_guard import JSONWhitespaceGuard, JSONWhitespaceStall
 from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
 from sigma.project_reports import _compile_pdf, _latex
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
@@ -80,6 +81,14 @@ MAX_RESPONSE_BYTES = 1_000_000
 # Responses SSE contains event envelopes and can repeat an entire completed output.
 # Keep a finite transport bound separate from the validated 1 MB API response.
 MAX_CHATGPT_STREAM_BYTES = 16_000_000
+# Keep actionable attempt/section outcomes at INFO; opt in to periodic stream
+# counters when investigating runaway paper output. No prompts or model text logged.
+_PAPER_VERBOSE_DIAGNOSTICS = os.getenv("SIGMA_PAPER_VERBOSE_DIAGNOSTICS", "").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 MAX_PAPER_BYTES = 100_000_000
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
@@ -117,6 +126,7 @@ class PaperProgressEvent(TypedDict):
     detail: str | None
     sections_total: NotRequired[int | None]
     last_progress_at: NotRequired[str | None]
+    output_delta_count: NotRequired[int]
 
 
 PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
@@ -352,15 +362,23 @@ def _require_browser_presence(path: str, required: bool) -> None:
         )
 
 
-class PaperConnectionFailure(ProjectError):
+class PaperSafeRetryFailure(ProjectError):
+    """Definite connection failure or pre-stream HTTP rejection, not a partial generation."""
+
+
+class PaperConnectionFailure(PaperSafeRetryFailure):
     """Provider connection failed before request delivery; safe for bounded retry."""
 
 
-class PaperTransientFailure(ProjectError):
-    """A transient provider failure eligible for bounded, accounted replay.
+class PaperServiceUnavailable(PaperSafeRetryFailure):
+    """An explicit HTTP 503 arrived before output streaming; limited retry is allowed."""
 
-    The prior attempt may have consumed model allowance. Retried responses
-    only commit once a complete validated paper stage has been received.
+
+class PaperTransientFailure(ProjectError):
+    """The provider request may have consumed work or allowance.
+
+    Never automatically replay a partially delivered or incomplete request.
+    Only PaperConnectionFailure is known to precede provider dispatch.
     """
 
 
@@ -614,9 +632,11 @@ class FastLongPaperPlan(LongPaperPlan):
 
 class LongSectionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    paragraphs: list[LongText] = Field(min_length=1, max_length=80)
+    # Strict structured output follows declaration order. Keep supporting
+    # material first so the final field is the section's primary prose.
     tables: list[PaperTable] = Field(default_factory=list, max_length=4)
     examples: list[PaperExample] = Field(default_factory=list, max_length=2)
+    paragraphs: list[LongText] = Field(min_length=1, max_length=80)
 
 
 def _without_optional_visuals(draft: PaperDraft) -> PaperDraft:
@@ -2856,6 +2876,28 @@ _PAPER_PROGRESS_RECOVERY_ISSUE = (
 )
 
 
+def _recoverable_dispatched_sections(state: Mapping[str, Any]) -> list[int]:
+    """Previously dispatched, unsaved sections of a validated long-form plan.
+
+    Never infer dispatch from absent counters. Legacy unknown histories still
+    require explicit investigation rather than offering a blind paid replay.
+    """
+    if state.get("kind") != "long_form" or not isinstance(state.get("plan"), dict):
+        return []
+    sections = state["plan"].get("sections")
+    dispatches = state.get("section_dispatches")
+    saved = state.get("section_drafts", {})
+    if not isinstance(sections, list) or not isinstance(dispatches, dict):
+        return []
+    if not isinstance(saved, dict):
+        return []
+    return [
+        number
+        for number in range(1, len(sections) + 1)
+        if str(number) in dispatches and str(number) not in saved
+    ]
+
+
 def _paper_progress_counts_valid(current: Any, total: Any) -> bool:
     """Zero completed work is valid; a nonempty total is required for numbered stages."""
     if current is None or total is None:
@@ -2968,6 +3010,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "publication_compilation",
         "publication_compiler_calls",
         "generation_issues",
+        "provider_change_history",
     }
     generation_issues = value.get("generation_issues", [])
     if (
@@ -2978,6 +3021,36 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Saved paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
+    history = value.get("provider_change_history", [])
+    history_keys = {
+        "at",
+        "from_binding_fingerprint",
+        "to_binding_fingerprint",
+        "from_model",
+        "to_model",
+        "reason",
+    }
+    if (
+        not isinstance(history, list)
+        or len(history) > 100
+        or any(
+            not isinstance(item, dict)
+            or set(item) != history_keys
+            or not isinstance(item["at"], str)
+            or len(item["at"]) > 64
+            or not all(
+                isinstance(item[key], str) and re.fullmatch(r"[0-9a-f]{64}", item[key])
+                for key in ("from_binding_fingerprint", "to_binding_fingerprint")
+            )
+            or not all(
+                isinstance(item[key], str) and len(item[key]) <= 128
+                for key in ("from_model", "to_model")
+            )
+            or item["reason"] != "paper_checkpoint_resume"
+            for item in history
+        )
+    ):
+        raise ProjectError("Paper checkpoint provider-change history is invalid")
     if "frozen_package_ref" in value:
         digest = value["frozen_package_ref"]
         if not isinstance(digest, str) or "frozen_package" in value:
@@ -3281,7 +3354,13 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 set(progress_state)
                 - (
                     required_progress_keys
-                    | {"failure_reason", "detail", "sections_total", "last_progress_at"}
+                    | {
+                        "failure_reason",
+                        "detail",
+                        "sections_total",
+                        "last_progress_at",
+                        "output_delta_count",
+                    }
                 )
             )
             or (
@@ -3289,6 +3368,13 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 and (
                     type(progress_state["sections_total"]) is not int
                     or not 1 <= progress_state["sections_total"] <= 100
+                )
+            )
+            or (
+                "output_delta_count" in progress_state
+                and (
+                    type(progress_state["output_delta_count"]) is not int
+                    or not 0 <= progress_state["output_delta_count"] <= 1_000_000
                 )
             )
             or (
@@ -3401,6 +3487,7 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "failure_reason",
         "sections_total",
         "last_progress_at",
+        "output_delta_count",
     )
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
@@ -3450,6 +3537,13 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
                 and (
                     type(state["sections_total"]) is not int
                     or not 1 <= state["sections_total"] <= 100
+                )
+            )
+            or (
+                "output_delta_count" in state
+                and (
+                    type(state["output_delta_count"]) is not int
+                    or not 0 <= state["output_delta_count"] <= 1_000_000
                 )
             )
         ):
@@ -3801,6 +3895,12 @@ def progress_status(path: str) -> dict[str, Any] | None:
             else {}
         ),
         **(
+            {"output_delta_count": state["output_delta_count"]}
+            if type(state.get("output_delta_count")) is int
+            and 0 <= state["output_delta_count"] <= 1_000_000
+            else {}
+        ),
+        **(
             {"sections_total": state["sections_total"]}
             if type(state.get("sections_total")) is int and 1 <= state["sections_total"] <= 100
             else {}
@@ -3900,6 +4000,41 @@ def _new_work(
         "one_shot_draft": None,
         "publication_compiler_calls": 0,
     }
+
+
+def _rebind_paper_checkpoint_provider(
+    checkpoint: dict[str, Any], binding_fingerprint: str, model: str, reasoning_effort: str
+) -> bool:
+    """Rebind only future authoring calls, preserving all saved drafts and dispatches.
+
+    The caller validates the same project/snapshot/paper kind and owns the paper
+    operation lock. No old call reservation or completed work is cleared.
+    """
+    old = (
+        checkpoint.get("binding_fingerprint"),
+        checkpoint.get("model"),
+        checkpoint.get("reasoning_effort"),
+    )
+    new = (binding_fingerprint, model, reasoning_effort)
+    if old == new:
+        return False
+    history = checkpoint.setdefault("provider_change_history", [])
+    history.append(
+        {
+            "at": _now(),
+            "from_binding_fingerprint": old[0],
+            "to_binding_fingerprint": binding_fingerprint,
+            "from_model": old[1],
+            "to_model": model,
+            "reason": "paper_checkpoint_resume",
+        }
+    )
+    # Keep the saved audit bounded even when a project travels repeatedly.
+    del history[:-100]
+    checkpoint["binding_fingerprint"] = binding_fingerprint
+    checkpoint["model"] = model
+    checkpoint["reasoning_effort"] = reasoning_effort
+    return True
 
 
 def _can_rebase_explicit_restart(checkpoint: Mapping[str, Any], project_id: str) -> bool:
@@ -6200,6 +6335,68 @@ async def _provider_structured(
         payload["input"] = [{"role": "user", "content": input_text}]
         headers["Accept"] = "text/event-stream"
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
+    request_started = monotonic()
+    diagnostic_section = (
+        input_value.get("section_number") if isinstance(input_value, dict) else None
+    )
+    # Separate actual text from reasoning/status frames in each section stream.
+    # These diagnostics contain no model text or project source data.
+    stream_events = 0
+    stream_text_events = 0
+    stream_text_bytes = 0
+    stream_reasoning_events = 0
+    stream_last_text_at: float | None = None
+    stream_last_logged_at = request_started
+    stream_log = logging.getLogger("sigma.lifecycle")
+    whitespace_guard = JSONWhitespaceGuard() if schema_name == "sigma_long_paper_section" else None
+
+    def observe_section_text(delta: str) -> None:
+        if whitespace_guard is None:
+            return
+        try:
+            whitespace_guard.observe(delta)
+        except JSONWhitespaceStall:
+            stream_log.warning(
+                "paper.provider_whitespace_stall project_id=%s section=%s "
+                "elapsed_s=%.1f text_events=%d text_bytes=%d consecutive_whitespace=%d",
+                project_id or "unknown",
+                diagnostic_section,
+                monotonic() - request_started,
+                stream_text_events,
+                stream_text_bytes,
+                whitespace_guard.consecutive,
+            )
+            raise
+
+    def observed_stream_event(kind: str, text_bytes: int) -> None:
+        nonlocal stream_events, stream_text_events, stream_text_bytes
+        nonlocal stream_reasoning_events, stream_last_text_at, stream_last_logged_at
+        stream_events += 1
+        if kind == "response.output_text.delta":
+            stream_text_events += 1
+            stream_text_bytes += text_bytes
+            stream_last_text_at = monotonic()
+        elif kind.startswith("response.reasoning"):
+            stream_reasoning_events += 1
+        now = monotonic()
+        if _PAPER_VERBOSE_DIAGNOSTICS and (
+            now - stream_last_logged_at >= 30.0 or stream_events % 10_000 == 0
+        ):
+            stream_last_logged_at = now
+            stream_log.info(
+                "paper.provider_stream_activity project_id=%s section=%s "
+                "elapsed_s=%.1f events=%d reasoning_events=%d text_events=%d "
+                "text_bytes=%d last_text_age_s=%.1f",
+                project_id or "unknown",
+                diagnostic_section,
+                now - request_started,
+                stream_events,
+                stream_reasoning_events,
+                stream_text_events,
+                stream_text_bytes,
+                now - stream_last_text_at if stream_last_text_at is not None else -1.0,
+            )
+
     attempt = None
     try:
         if cloud_workspaces.enabled():
@@ -6223,6 +6420,14 @@ async def _provider_structured(
                 "POST", "https://api.openai.com/v1/responses", headers=headers, json=payload
             ) as response,
         ):
+            if schema_name == "sigma_long_paper_section":
+                logging.getLogger("sigma.lifecycle").info(
+                    "paper.provider_headers project_id=%s section=%s status=%d elapsed_s=%.1f",
+                    project_id or "unknown",
+                    diagnostic_section,
+                    response.status_code,
+                    monotonic() - request_started,
+                )
             if response.status_code == 200 and binding["mode"] == "chatgpt":
                 raw = await completed(
                     response,
@@ -6235,6 +6440,10 @@ async def _provider_structured(
                     max_events=100_000,
                     max_text_bytes=MAX_RESPONSE_BYTES,
                     on_output_delta=on_output_delta,
+                    on_text_delta=observe_section_text if whitespace_guard is not None else None,
+                    on_event_observed=(
+                        observed_stream_event if schema_name == "sigma_long_paper_section" else None
+                    ),
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
                         "Completed work is saved; transient errors may be retried up to three attempts."
@@ -6251,7 +6460,30 @@ async def _provider_structured(
                 except ValueError:
                     raw = {}
                 if response.status_code != 200:
-                    failure(response.status_code, raw, binding["mode"], guard)
+                    try:
+                        failure(response.status_code, raw, binding["mode"], guard)
+                    except ProjectError as exc:
+                        # A definite HTTP 503 response with no generated stream
+                        # is unlike a broken HTTP 200 SSE stream. Only this
+                        # pre-stream rejection may use the bounded retry loop;
+                        # quota/billing rejections never qualify.
+                        error = raw.get("error") if isinstance(raw, dict) else None
+                        code = error.get("code") if isinstance(error, dict) else None
+                        if (
+                            response.status_code == 503
+                            and code
+                            not in {
+                                "subscription_sharing_usage_limit_exceeded",
+                                "insufficient_quota",
+                                "billing_hard_limit_reached",
+                            }
+                            and _retryable_paper_response_failure(exc)
+                        ):
+                            raise PaperServiceUnavailable(
+                                "Provider returned HTTP 503 before output streaming; "
+                                "a bounded retry is permitted."
+                            ) from exc
+                        raise
         cloud_research.settle_provider_attempt(attempt, raw)
         if (
             not isinstance(raw, dict)
@@ -6271,6 +6503,28 @@ async def _provider_structured(
         if len(texts) != 1:
             raise ProjectError("Provider returned no single structured long-paper stage")
         parsed_response = response_model.model_validate_json(texts[0])
+        if schema_name == "sigma_long_paper_section":
+            usage_data = raw.get("usage")
+            if not isinstance(usage_data, dict):
+                usage_data = {}
+            output_details = usage_data.get("output_tokens_details")
+            if not isinstance(output_details, dict):
+                output_details = {}
+            input_tokens = usage_data.get("input_tokens")
+            output_tokens = usage_data.get("output_tokens")
+            reasoning_tokens = output_details.get("reasoning_tokens")
+            logging.getLogger("sigma.lifecycle").info(
+                "paper.provider_response_validated project_id=%s section=%s "
+                "elapsed_s=%.1f text_bytes=%d input_tokens=%d "
+                "output_tokens=%d reasoning_tokens=%d",
+                project_id or "unknown",
+                diagnostic_section,
+                monotonic() - request_started,
+                len(texts[0].encode("utf-8")),
+                input_tokens if type(input_tokens) is int else -1,
+                output_tokens if type(output_tokens) is int else -1,
+                reasoning_tokens if type(reasoning_tokens) is int else -1,
+            )
         if usage_sink is not None:
             usage = raw.get("usage")
             if isinstance(usage, dict):
@@ -6322,6 +6576,18 @@ async def _provider_structured(
     except cloud_research.CloudResearchUnavailable as exc:
         raise ProjectError(str(exc)) from exc
     finally:
+        if schema_name == "sigma_long_paper_section" and binding["mode"] == "chatgpt":
+            stream_log.info(
+                "paper.provider_stream_finished project_id=%s section=%s "
+                "elapsed_s=%.1f events=%d reasoning_events=%d text_events=%d text_bytes=%d",
+                project_id or "unknown",
+                diagnostic_section,
+                monotonic() - request_started,
+                stream_events,
+                stream_reasoning_events,
+                stream_text_events,
+                stream_text_bytes,
+            )
         if attempt is not None:
             try:
                 cloud_research.finish_provider_attempt(attempt)
@@ -6559,6 +6825,7 @@ async def _generate_long_draft(
     structured_fast_path: bool = False,
     include_diagrams: bool = True,
     on_output_delta: Callable[[int], Awaitable[None]] | None = None,
+    authorized_recovery_section: int | None = None,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     writing_methodology = publication_reference_compiler.guidance(
@@ -6637,14 +6904,23 @@ async def _generate_long_draft(
         max_input_bytes: int,
         legacy: bool = False,
     ) -> tuple[BaseModel, str]:
-        """Retry a stage at most three times for transient provider failures.
+        """Retry only definite pre-generation failures, at most three attempts.
 
-        Every attempt is checkpointed and accounted for before dispatch.
-        Replays may consume allowance, but successful section drafts are never
-        regenerated and permanent provider rejections are not retried.
+        Each attempt is checkpointed and accounted before dispatch. An explicit
+        pre-stream HTTP 503 can be retried, but a partial stream or ambiguous
+        post-dispatch failure cannot. Saved authored sections are never replayed.
         """
         maximum = 3
+        # Retries share the stage's one-hour budget. Previously, three attempts
+        # each received another full hour and a single section could hang for
+        # nearly three hours before its saved siblings could advance.
+        stage_deadline = monotonic() + CALL_SECONDS
         for attempt_number in range(1, maximum + 1):
+            remaining = stage_deadline - monotonic()
+            if remaining <= 0:
+                raise PaperTransientFailure(
+                    "Paper stage exhausted its one-hour total attempt budget; saved work is intact."
+                )
             before_provider_call(
                 reserve,
                 input_value=input_value,
@@ -6656,44 +6932,93 @@ async def _generate_long_draft(
             )
             started = monotonic()
             log = logging.getLogger("sigma.lifecycle")
+            # Diagnostic metadata only: never log frozen research text or credentials.
+            input_bytes = len(
+                _provider_input_text(input_value, schema_name, max_input_bytes).encode("utf-8")
+            )
+            output_delta_events = 0
+            last_delta_log_at = started
+
+            async def observe_section_output(
+                *,
+                section: int | None = section_number,
+                attempt: int = attempt_number,
+                started_at: float = started,
+                logger: logging.Logger = log,
+            ) -> None:
+                nonlocal output_delta_events, last_delta_log_at
+                output_delta_events += 1
+                now = monotonic()
+                if _PAPER_VERBOSE_DIAGNOSTICS and (
+                    output_delta_events == 1
+                    or output_delta_events % 1000 == 0
+                    or now - last_delta_log_at >= 30.0
+                ):
+                    last_delta_log_at = now
+                    logger.info(
+                        "paper.provider_output project_id=%s section=%s attempt=%d "
+                        "delta_events=%d elapsed_s=%.1f",
+                        project_id or "unknown",
+                        section,
+                        attempt,
+                        output_delta_events,
+                        monotonic() - started_at,
+                    )
+                if type(section) is int:
+                    await section_output_observed(section)
+
             log.info(
                 "paper.provider_attempt_started project_id=%s schema=%s section=%s "
-                "attempt=%d call_index=%d",
+                "attempt=%d call_index=%d input_bytes=%d instructions_chars=%d effort=%s",
                 project_id or "unknown",
                 schema_name,
                 section_number if type(section_number) is int else "none",
                 attempt_number,
                 calls,
+                input_bytes,
+                len(instructions),
+                str(config.get("reasoning_effort", "unspecified")),
             )
             try:
-                response = await _provider_structured(
-                    input_value,
-                    binding,
-                    config,
-                    instructions=instructions,
-                    schema_name=schema_name,
-                    response_model=response_model,
-                    max_input_bytes=max_input_bytes,
-                    on_output_delta=(
-                        (
-                            lambda number=input_value["section_number"]: section_output_observed(
-                                number
-                            )
-                        )
-                        if on_output_delta is not None
-                        and schema_name == "sigma_long_paper_section"
-                        and isinstance(input_value, dict)
-                        and type(input_value.get("section_number")) is int
-                        else None
-                    ),
-                    project_id=project_id,
-                    project_path_value=project_path_value,
-                    include_diagrams=(
-                        include_diagrams
-                        and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
-                    ),
+                async with asyncio.timeout(remaining):
+                    response = await _provider_structured(
+                        input_value,
+                        binding,
+                        config,
+                        instructions=instructions,
+                        schema_name=schema_name,
+                        response_model=response_model,
+                        max_input_bytes=max_input_bytes,
+                        on_output_delta=(
+                            observe_section_output
+                            if on_output_delta is not None
+                            and schema_name == "sigma_long_paper_section"
+                            and type(section_number) is int
+                            else None
+                        ),
+                        project_id=project_id,
+                        project_path_value=project_path_value,
+                        include_diagrams=(
+                            include_diagrams
+                            and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
+                        ),
+                    )
+            except TimeoutError as exc:
+                log.warning(
+                    "paper.provider_stage_budget_exhausted project_id=%s section=%s "
+                    "attempt=%d elapsed_s=%.1f delta_events=%d",
+                    project_id or "unknown",
+                    section_number if type(section_number) is int else "none",
+                    attempt_number,
+                    monotonic() - started,
+                    output_delta_events,
                 )
-            except (PaperConnectionFailure, PaperTransientFailure) as exc:
+                # An already-dispatched paid attempt may have consumed allowance.
+                # Never start another paid request after the shared deadline.
+                raise PaperTransientFailure(
+                    "Paper stage reached its one-hour total attempt budget; saved work is intact."
+                ) from exc
+            except (PaperSafeRetryFailure, PaperTransientFailure) as exc:
                 log.info(
                     "paper.provider_attempt_ended project_id=%s schema=%s section=%s "
                     "attempt=%d elapsed_s=%.1f outcome=%s",
@@ -6704,7 +7029,15 @@ async def _generate_long_draft(
                     monotonic() - started,
                     type(exc).__name__,
                 )
-                if attempt_number == maximum:
+                # Late/incomplete streams may consume allowance: never replay.
+                # Only pre-delivery connection failure or explicit pre-stream
+                # HTTP 503 service rejection can be retried.
+                if isinstance(exc, PaperTransientFailure):
+                    raise
+                if (
+                    attempt_number == maximum
+                    or monotonic() + 0.4 * attempt_number >= stage_deadline
+                ):
                     raise
                 if progress:
                     detail = (
@@ -7194,11 +7527,11 @@ or document markup."""
 
     def recoverable_section_failure(exc: Exception) -> bool:
         # Never paper over declined requests, account/quota failures, local
-        # safety caps, or an explicit cancellation. Only provider transport
-        # and malformed authoring content can produce a labeled placeholder.
+        # safety caps, or an explicit cancellation. Only classify errors that
+        # can be retried after the user reviews potential paid consumption.
         if isinstance(exc, ChatGPTProviderRejection):
             return False
-        if isinstance(exc, (PaperConnectionFailure, PaperTransientFailure, ValidationError)):
+        if isinstance(exc, (PaperSafeRetryFailure, PaperTransientFailure, ValidationError)):
             return True
         if not isinstance(exc, ProjectError):
             return False
@@ -7211,32 +7544,26 @@ or document markup."""
             )
         )
 
-    def fallback_section(
-        section_number: int, section: LongSectionPlan, exc: Exception
-    ) -> LongSectionDraft:
-        _record_paper_generation_issue(
-            state,
-            f"Paper section {section_number} ({section.heading}) was incomplete after "
-            f"{type(exc).__name__}; a clearly labeled fallback was published.",
-        )
-        return LongSectionDraft(
-            paragraphs=[
-                (
-                    "Editorial notice: The writing for this section was interrupted or invalid. "
-                    "The missing analysis is not supplied by SIGMA, and no claim is "
-                    "established by this placeholder."
-                ),
-                "The intended subject of this section was: "
-                + section.purpose
-                + " The original saved evidence and claim register are retained "
-                "in the paper archive for independent inspection.",
-            ]
+    # Older versions stored this editorial notice as an authored section.
+    # Never reuse it or count it as successfully completed paper content.
+    def is_unwritten_placeholder(draft: LongSectionDraft) -> bool:
+        return bool(
+            draft.paragraphs
+            and draft.paragraphs[0].startswith(
+                "Editorial notice: The writing for this section was interrupted or invalid."
+            )
         )
 
     async def write_section(section_number: int, section: LongSectionPlan) -> PaperSection:
         section_key = str(section_number)
         if section_key in saved_sections:
             section_draft = LongSectionDraft.model_validate(saved_sections[section_key])
+            if is_unwritten_placeholder(section_draft):
+                raise ProjectError(
+                    f"Paper section {section_number} ({section.heading}) is an unfinished "
+                    "editorial placeholder from an older attempt, not authored research. "
+                    "Saved work is intact; explicitly review recovery before making new paid calls."
+                )
             section_draft = sanitize_section_tables(section, section_draft)
             return PaperSection(
                 heading=section.heading,
@@ -7287,6 +7614,16 @@ or document markup."""
                 section.heading + " " + section.purpose,
                 headroom,
             )
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.section_input_prepared project_id=%s section=%d notes=%d "
+            "evidence_refs=%d claims=%d payload_bytes=%d",
+            project_id or "unknown",
+            section_number,
+            len(relevant),
+            len(section.evidence_refs),
+            len(section.claim_ids),
+            len(_json(section_input)),
+        )
         try:
             body, _ = await call_with_safe_retry(
                 section_input,
@@ -7316,14 +7653,46 @@ or document markup."""
                     "Provider returned malformed long-paper stage content: section size"
                 )
         except (ProjectError, ValidationError) as exc:
+            if isinstance(exc, JSONWhitespaceStall):
+                _record_paper_generation_issue(
+                    state,
+                    f"Paper section {section_number} ({section.heading}) entered a JSON "
+                    "whitespace-output stall. The incomplete attempt was stopped; "
+                    "completed sections remain saved. No automatic replay is permitted.",
+                )
+                save_state(state)
+                raise
             if not recoverable_section_failure(exc):
                 raise
-            section_draft = fallback_section(section_number, section, exc)
+            # A failed or malformed AI response is *not* authored prose. Preserve
+            # already completed siblings, but do not checkpoint a fabricated
+            # section or let later stages report a successful publication.
+            _record_paper_generation_issue(
+                state,
+                f"Paper section {section_number} ({section.heading}) was not authored "
+                f"after {type(exc).__name__}; completed sections remain saved.",
+            )
+            save_state(state)
+            raise ProjectError(
+                f"Paper section {section_number} ({section.heading}) did not finish. "
+                "Already authored sections are preserved. The failed request may "
+                "have consumed allowance; review before authorizing another paid attempt."
+            ) from exc
         # No await between registering a completed result and saving the
         # checkpoint: concurrent tasks cannot interleave and lose a section.
         saved_sections[section_key] = section_draft.model_dump()
         state["provider_calls"] = calls
         save_state(state)
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.section_saved project_id=%s section=%d kind=%s "
+            "saved_count=%d total=%d payload_bytes=%d",
+            project_id or "unknown",
+            section_number,
+            "authored",
+            len(saved_sections),
+            len(long_plan.sections),
+            len(_json(section_draft.model_dump())),
+        )
         if progress:
             # Count persisted completions, not the author's section number.
             # Independent section jobs can finish in any order and Resume
@@ -7340,6 +7709,23 @@ or document markup."""
         )
 
     dispatches = state.get("section_dispatches")
+    numbered_sections = set(range(1, len(long_plan.sections) + 1))
+    persisted_sections = {number for number in numbered_sections if str(number) in saved_sections}
+    recorded_dispatches = {
+        number
+        for number in numbered_sections
+        if isinstance(dispatches, dict) and str(number) in dispatches
+    }
+    logging.getLogger("sigma.lifecycle").info(
+        "paper.section_checkpoint project_id=%s total=%d saved=%s "
+        "dispatched_unsaved=%s other_unsaved=%s dispatch_records_available=%s",
+        project_id or "unknown",
+        len(long_plan.sections),
+        sorted(persisted_sections),
+        sorted(recorded_dispatches - persisted_sections),
+        sorted(numbered_sections - persisted_sections - recorded_dispatches),
+        isinstance(dispatches, dict),
+    )
     if dispatches is None:
         legacy_ambiguous = set(
             state.get("legacy_ambiguous_sections", [])
@@ -7355,17 +7741,46 @@ or document markup."""
                 "sections. Their paid-call state is uncertain; inspect the checkpoint before Resume."
             )
         dispatches = {key: [] for key in legacy_ambiguous}
-    for number, section in enumerate(long_plan.sections, start=1):
-        key = str(number)
-        if key not in saved_sections and key in dispatches:
-            saved_sections[key] = fallback_section(
-                number,
-                section,
-                ProjectError("An earlier section call was interrupted after dispatch"),
-            ).model_dump()
-    if any(key in saved_sections for key in dispatches):
-        state.pop("legacy_ambiguous_sections", None)
-        save_state(state)
+    # An unsaved previously dispatched section might already have incurred
+    # provider charges. Resume must not replay it, manufacture its contents,
+    # or continue to publication as if it had been authored.
+    uncertain = [
+        f"{number} ({section.heading})"
+        for number, section in enumerate(long_plan.sections, start=1)
+        if str(number) not in saved_sections and str(number) in dispatches
+    ]
+    placeholders = [
+        f"{number} ({section.heading})"
+        for number, section in enumerate(long_plan.sections, start=1)
+        if str(number) in saved_sections
+        and is_unwritten_placeholder(LongSectionDraft.model_validate(saved_sections[str(number)]))
+    ]
+    if uncertain or placeholders:
+        permitted = (
+            type(authorized_recovery_section) is int
+            and not placeholders
+            and len(uncertain) == 1
+            and _recoverable_dispatched_sections(state) == [authorized_recovery_section]
+        )
+        if not permitted:
+            detail = ", ".join([*uncertain, *placeholders])
+            raise ProjectError(
+                "Paper writing cannot Resume as complete: section(s) "
+                + detail
+                + " have no authored text. Previously dispatched calls may have consumed "
+                "AI allowance; no additional call has been made. Saved authored sections "
+                "remain intact. Explicitly review the incomplete work before paid recovery."
+            )
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.section_recovery_authorized project_id=%s section=%d "
+            "saved_sections=%d prior_dispatches=%d",
+            project_id or "unknown",
+            authorized_recovery_section,
+            len(saved_sections),
+            len(dispatches[str(authorized_recovery_section)]),
+        )
+    elif authorized_recovery_section is not None:
+        raise ProjectError("Paper section recovery authorization is stale; no AI call was made")
 
     if fast_path:
         pending = [
@@ -7373,6 +7788,13 @@ or document markup."""
             for number, section in enumerate(long_plan.sections, start=1)
             if str(number) not in saved_sections
         ]
+        logging.getLogger("sigma.lifecycle").info(
+            "paper.section_queue project_id=%s pending=%s saved=%s concurrency=%d",
+            project_id or "unknown",
+            [number for number, _ in pending],
+            sorted(int(key) for key in saved_sections),
+            FAST_SECTION_CONCURRENCY,
+        )
         if pending and progress:
             await progress("sections", len(saved_sections), len(long_plan.sections), "active")
         semaphore = asyncio.Semaphore(FAST_SECTION_CONCURRENCY)
@@ -7382,18 +7804,46 @@ or document markup."""
             section_number: int, section: LongSectionPlan
         ) -> tuple[int, PaperSection] | None:
             nonlocal first_failure
+            queued_at = monotonic()
             async with semaphore:
+                slot_started = monotonic()
+                logging.getLogger("sigma.lifecycle").info(
+                    "paper.section_slot_acquired project_id=%s section=%d queue_wait_s=%.1f",
+                    project_id or "unknown",
+                    section_number,
+                    slot_started - queued_at,
+                )
                 # A failed request may have consumed provider allowance. Do
                 # not start waiting sections after a known failure, but let
                 # already-dispatched siblings finish and save their drafts.
                 if first_failure is not None:
+                    logging.getLogger("sigma.lifecycle").info(
+                        "paper.section_not_dispatched project_id=%s section=%d prior_failure=true",
+                        project_id or "unknown",
+                        section_number,
+                    )
                     return None
                 try:
                     return section_number, await write_section(section_number, section)
                 except Exception as exc:
                     if first_failure is None:
                         first_failure = exc
+                    logging.getLogger("sigma.lifecycle").warning(
+                        "paper.section_failed project_id=%s section=%d "
+                        "error_type=%s elapsed_s=%.1f",
+                        project_id or "unknown",
+                        section_number,
+                        type(exc).__name__,
+                        monotonic() - slot_started,
+                    )
                     raise
+                finally:
+                    logging.getLogger("sigma.lifecycle").info(
+                        "paper.section_slot_released project_id=%s section=%d elapsed_s=%.1f",
+                        project_id or "unknown",
+                        section_number,
+                        monotonic() - slot_started,
+                    )
 
         tasks = [
             asyncio.create_task(bounded_section(number, section)) for number, section in pending
@@ -7435,12 +7885,6 @@ or document markup."""
         ]
 
     warning_items = [*long_plan.validation_warnings[:8]]
-    if any(issue.startswith("Paper section ") for issue in state.get("generation_issues", [])):
-        warning_items.insert(
-            0,
-            "One or more paper sections could not be completed. They contain "
-            "explicit editorial placeholders, not scientific findings; review before publication.",
-        )
     if conflict_note_count:
         warning_items.append(
             f"Evidence indexing recorded {conflict_note_count} potential conflict or gap note(s); inspect the frozen source records directly."
@@ -8478,6 +8922,7 @@ async def _generate_impl(
     frozen_snapshot: dict[str, Any] | None = None,
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
+    authorized_recovery_section: int | None = None,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -8494,20 +8939,30 @@ async def _generate_impl(
         work: dict[str, Any] = {}
         last_logged_stage: tuple[str, str] | None = None
         last_output_write = 0.0
+        output_delta_count = 0
 
         async def report_activity(
             stage: Literal["writing", "sections"], section_number: int | None = None
         ) -> None:
             """Persist actual output activity; never rewrite the full draft for text deltas."""
-            nonlocal last_output_write
+            nonlocal last_output_write, output_delta_count
             active = _active_progress.get(project_key)
             if active is None or active.get("run_id") != run_id:
                 return
+            # Only actual nonempty output_text.delta events reach this callback;
+            # do not count timer ticks, HTTP heartbeats or reasoning-only events.
+            output_delta_count = min(1_000_000, output_delta_count + 1)
             if monotonic() - last_output_write < 3.0:
                 return
             last_output_write = monotonic()
             now = _now()
-            updated = {**active, "stage": stage, "updated_at": now, "last_progress_at": now}
+            updated = {
+                **active,
+                "stage": stage,
+                "updated_at": now,
+                "last_progress_at": now,
+                "output_delta_count": output_delta_count,
+            }
             if active.get("stage") == "retry":
                 updated["current"] = (
                     len(work.get("section_drafts", {})) if stage == "sections" else None
@@ -8577,6 +9032,7 @@ async def _generate_impl(
                 "started_at": started_at,
                 "updated_at": now,
                 "elapsed_seconds": elapsed,
+                "output_delta_count": output_delta_count,
             }
             previous_active = _active_progress.get(project_key)
             if state in {"milestone", "complete"}:
@@ -8635,6 +9091,7 @@ async def _generate_impl(
                         "detail": detail,
                         "sections_total": saved_progress.get("sections_total"),
                         "last_progress_at": saved_progress.get("last_progress_at"),
+                        "output_delta_count": saved_progress.get("output_delta_count", 0),
                     }
                 )
 
@@ -8721,11 +9178,12 @@ async def _generate_impl(
                     ("kind", expected_kind),
                     ("snapshot_sha256", snapshot_hash),
                     ("project_id", view.project.id),
-                    ("binding_fingerprint", binding_fingerprint),
-                    ("model", config["model"]),
-                    ("reasoning_effort", config["reasoning_effort"]),
                 )
             )
+            if compatible and _rebind_paper_checkpoint_provider(
+                checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
+            ):
+                _save_work(path, checkpoint)
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
@@ -8741,7 +9199,7 @@ async def _generate_impl(
                 work = checkpoint
             else:
                 raise ProjectError(
-                    "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
+                    "A paper checkpoint exists for different frozen evidence or paper type. Resume using the saved evidence or explicitly restart while preserving prior attempt accounting."
                 )
         if checkpoint is not None and work.get("include_diagrams") != include_diagrams:
             # The combined diagrams-and-tables preference changes only what is
@@ -8801,6 +9259,25 @@ async def _generate_impl(
             # here can be retried without losing prior attempted-call totals.
             if reset_ledger is not None:
                 _clear_reset_ledger(path)
+        # A recovery authorization is single-request and section-specific.
+        # Validate against durable dispatch history before any new paid work
+        # (including optional publication reference compilation) can begin.
+        if authorized_recovery_section is not None:
+            eligible = _recoverable_dispatched_sections(work)
+            if (
+                type(authorized_recovery_section) is not int
+                or not long_form
+                or checkpoint is None
+                or not compatible
+                or eligible != [authorized_recovery_section]
+                or not work.get("plan")
+                or len(work.get("section_drafts", {})) == 0
+            ):
+                raise ProjectError(
+                    "Paper section recovery authorization does not match the saved "
+                    "checkpoint; no additional AI request was made."
+                )
+
         # Choose sources before authoring; never modify the frozen research.
         await report(
             "publication_compilation", None, None, detail="Selecting publication references…"
@@ -9146,6 +9623,7 @@ async def _generate_impl(
                 structured_fast_path=True,
                 include_diagrams=include_diagrams,
                 on_output_delta=lambda number: report_activity("sections", number),
+                authorized_recovery_section=authorized_recovery_section,
             )
             model = config["model"]
             long_form = True
@@ -9838,6 +10316,7 @@ async def generate(
     frozen_snapshot: dict[str, Any] | None = None,
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
+    authorized_recovery_section: int | None = None,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     from sigma.memory_guard import require_capacity
@@ -9863,6 +10342,7 @@ async def generate(
             frozen_snapshot,
             include_sigma_issues,
             browser_presence_required,
+            authorized_recovery_section,
         )
     )
     _generation_tasks[key] = task
@@ -10010,12 +10490,14 @@ def preflight(
         and not one_shot_draft_available
     )
     resume_available = bool(
-        same_project_and_snapshot
+        work is not None
+        and same_project_and_snapshot
         and checkpoint_kind_matches
         and binding_fingerprint
-        and work_state.get("binding_fingerprint") == binding_fingerprint
-        and work_state.get("model") == model
-        and work_state.get("reasoning_effort") == reasoning_effort
+        and model
+        and reasoning_effort
+        # Future calls can use the current provider/model; the original
+        # frozen evidence and paid-call dispatch markers remain unchanged.
         and (long_form or one_shot_draft_available or work_state.get("provider_calls", 0) == 0)
     )
     if not resume_available and _can_rebase_explicit_restart(work_state, view.project.id):
@@ -10196,6 +10678,9 @@ def preflight(
         "outline_complete": bool(work_state.get("plan")) if resume_available else False,
         "planning_fallback_available": planning_fallback_available,
         "completed_sections": len(work_state.get("section_drafts", {})) if resume_available else 0,
+        "recovery_sections": (
+            _recoverable_dispatched_sections(work_state) if resume_available else []
+        ),
         "evidence_fields_omitted": (
             len(work_state.get("omitted_evidence", [])) if resume_available else 0
         ),
