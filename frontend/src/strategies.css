@@ -36,7 +36,7 @@
 .workspace-page .strategy-detail > summary::-webkit-details-marker { display: none; }
 .workspace-page .strategy-detail h3 { margin: 0; font: 500 16px/1.6 Inter, ui-sans-serif, system-ui, sans-serif; color: #e4ebf3; overflow-wrap: anywhere; }
 .workspace-page .strategy-detail > summary:hover h3 { color: var(--sigma-copper-foreground); text-decoration: underline; text-underline-offset: 4px; }
-.workspace-page .strategy-expand-arrow { margin-left: 8px; color: #a98d68; vertical-align: -2px; transition: transform .15s; }
+.workspace-page .strategy-expand-arrow { margin-left: 8px; color: var(--sigma-copper-foreground); vertical-align: -2px; transition: transform .15s; }
 .workspace-page .strategy-detail[open] .strategy-expand-arrow { transform: rotate(90deg); }
 .workspace-page .strategy-preview { display: block; font-size: 13px; line-height: 1.6; color: #adbecf; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .workspace-page .strategy-detail[open] > summary .strategy-preview { display: none; }
@@ -389,7 +389,7 @@
 .workspace-page .project-pane-disclosure { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; max-width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; box-shadow: none; color: inherit; font: inherit; text-align: left; white-space: normal; cursor: pointer; }
 .workspace-page .project-pane-disclosure > span { min-width: 0; overflow-wrap: anywhere; }
 .workspace-page .project-pane-disclosure:hover { color: var(--sigma-copper-foreground); text-decoration: underline; text-underline-offset: 4px; }
-.workspace-page .project-pane-chevron { width: 16px; height: 16px; flex: 0 0 16px; fill: currentColor; color: #a98d68; transition: transform .15s; }
+.workspace-page .project-pane-chevron { width: 16px; height: 16px; flex: 0 0 16px; fill: currentColor; color: var(--sigma-copper-foreground); transition: transform .15s; }
 .workspace-page .project-pane-chevron.is-expanded { transform: rotate(90deg); }
 .workspace-page .project-title-pencil, .workspace-page .strategy-title-pencil { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--sigma-copper-foreground); }
 .workspace-page .project-title-pencil svg, .workspace-page .strategy-title-pencil svg { width: 17px; height: 17px; }
