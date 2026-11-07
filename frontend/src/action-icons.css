@@ -30,14 +30,14 @@
   border-radius: 4px;
   background: transparent;
   box-shadow: none;
-  color: #e0c4a0;
+  color: var(--sigma-copper-foreground);
   text-decoration: none;
   cursor: pointer;
 }
 .workspace-page .strategy-heading-actions button.sigma-heading-icon-action:hover:not(:disabled),
 .workspace-page .sessions-pane-heading button.sigma-heading-icon-action:hover:not(:disabled),
 .workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action:hover:not(:disabled) {
-  color: #ffe1ad;
+  color: var(--sigma-copper-foreground);
   background: #3b3029;
   text-decoration: none;
 }
@@ -76,11 +76,11 @@
   background: transparent;
   box-shadow: none;
   text-decoration: none;
-  color: #e6af92;
+  color: var(--sigma-copper-foreground);
   cursor: pointer;
 }
 .home-page .home-projects-heading button.home-icon-action:hover:not(:disabled) {
-  color: #ffe0ab;
+  color: var(--sigma-copper-foreground);
   background: #302418;
 }
 .home-page .home-projects-heading button.home-icon-action:focus-visible {
