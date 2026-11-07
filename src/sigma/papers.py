@@ -6229,7 +6229,9 @@ async def _provider_structured(
         headers["Accept"] = "text/event-stream"
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
     request_started = monotonic()
-    diagnostic_section = input_value.get("section_number") if isinstance(input_value, dict) else None
+    diagnostic_section = (
+        input_value.get("section_number") if isinstance(input_value, dict) else None
+    )
     attempt = None
     try:
         if cloud_workspaces.enabled():
@@ -7416,7 +7418,7 @@ or document markup."""
             len(relevant),
             len(section.evidence_refs),
             len(section.claim_ids),
-            len(_json(section_input).encode("utf-8")),
+            len(_json(section_input)),
         )
         used_fallback = False
         try:
@@ -7465,7 +7467,7 @@ or document markup."""
             "fallback" if used_fallback else "authored",
             len(saved_sections),
             len(long_plan.sections),
-            len(_json(section_draft.model_dump()).encode("utf-8")),
+            len(_json(section_draft.model_dump())),
         )
         if progress:
             # Count persisted completions, not the author's section number.
@@ -7484,11 +7486,10 @@ or document markup."""
 
     dispatches = state.get("section_dispatches")
     numbered_sections = set(range(1, len(long_plan.sections) + 1))
-    persisted_sections = {
-        number for number in numbered_sections if str(number) in saved_sections
-    }
+    persisted_sections = {number for number in numbered_sections if str(number) in saved_sections}
     recorded_dispatches = {
-        number for number in numbered_sections
+        number
+        for number in numbered_sections
         if isinstance(dispatches, dict) and str(number) in dispatches
     }
     logging.getLogger("sigma.lifecycle").info(

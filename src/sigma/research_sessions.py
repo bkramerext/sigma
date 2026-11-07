@@ -5207,7 +5207,7 @@ def _recent_session_status(
     project_path: str,
     project_id: str,
     signature: tuple[int, int, int, int],
-) -> tuple[str, str] | None:
+) -> tuple[str, str, bool] | None:
     """Cache only Home status, not massive session histories or worker liveness.
 
     The per-file inode, size, mtime and ctime signature changes on atomic
@@ -5228,7 +5228,11 @@ def _recent_session_status(
         ):
             return None
         status = raw.get("status")
-        return file.stem, status if isinstance(status, str) else ""
+        completed = (
+            status in {"ended", "completed"}
+            and raw.get("termination_reason_code") == "protocol_complete"
+        )
+        return file.stem, status if isinstance(status, str) else "", completed
     except OSError:
         # A transient filesystem error must be retried rather than cached.
         raise
@@ -5236,8 +5240,10 @@ def _recent_session_status(
         return None
 
 
-def has_active_session(path: str, *, project_id: str | None = None) -> bool:
-    """Cheap, read-only Home status; never restart/rewrite research history.
+def recent_session_overview(
+    path: str, *, project_id: str | None = None
+) -> tuple[bool, int]:
+    """Cheap, read-only Home activity and completed-session count.
 
     Cached file status is invalidated by durable record changes. A persisted
     running state without an active worker is stale after a crash; the
@@ -5249,12 +5255,19 @@ def has_active_session(path: str, *, project_id: str | None = None) -> bool:
         # A portable bundle has no individual session files to stat; retain
         # the validated full-record implementation for this legacy format.
         records, _unavailable = read_session_snapshot(path)
-        statuses: list[tuple[str, str]] = []
+        statuses: list[tuple[str, str, bool]] = []
         for record in records:
             session_id = record.get("id")
             status = record.get("status")
             if isinstance(session_id, str) and isinstance(status, str):
-                statuses.append((session_id, status))
+                statuses.append(
+                    (
+                        session_id,
+                        status,
+                        status in {"ended", "completed"}
+                        and record.get("termination_reason_code") == "protocol_complete",
+                    )
+                )
     else:
         if project_id is None:
             project_id = inspect_project(target).project.id
@@ -5262,7 +5275,7 @@ def has_active_session(path: str, *, project_id: str | None = None) -> bool:
         if directory.is_symlink():
             raise ProjectError("Research session directory must not be a symbolic link")
         if not directory.exists():
-            return False
+            return False, 0
         if not directory.is_dir():
             raise ProjectError("Research session history is not a directory")
         statuses = []
@@ -5289,14 +5302,15 @@ def has_active_session(path: str, *, project_id: str | None = None) -> bool:
                 continue
             if status is not None:
                 statuses.append(status)
-    for session_id, status in statuses:
+    completed_count = sum(completed for _, _, completed in statuses)
+    for session_id, status, _completed in statuses:
         if status not in {"queued", "running"}:
             continue
         task = _tasks.get(session_id)
         if task is not None and not task.done():
-            return True
+            return True, completed_count
         if status == "queued" and cloud_research.billing_enabled():
-            return True
+            return True, completed_count
         lock_path = _worker_lock_path(path, session_id)
         try:
             fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -5306,13 +5320,18 @@ def has_active_session(path: str, *, project_id: str | None = None) -> bool:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                return True
+                return True, completed_count
             else:
                 fcntl.flock(fd, fcntl.LOCK_UN)
         finally:
             os.close(fd)
-    return False
+    return False, completed_count
 
+
+
+def has_active_session(path: str, *, project_id: str | None = None) -> bool:
+    """Preserve the existing cheap activity check for other callers."""
+    return recent_session_overview(path, project_id=project_id)[0]
 
 async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
