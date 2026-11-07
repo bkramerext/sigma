@@ -8159,7 +8159,11 @@ def _tex_semantic_signature(tex: str) -> tuple[tuple[str, ...], tuple[tuple[str,
 
 
 _ESCAPED_MATH_SPAN = re.compile(r"\\\$([^\n]*?)\\\$")
+_ESCAPED_DISPLAY_MATH_SPAN = re.compile(
+    r"\\textbackslash\{\}\[[\s\S]{1,4000}?\\textbackslash\{\}\]"
+)
 _LATEX_ESCAPE_INVERSE = (
+    (r"\_\allowbreak{}", "_"),
     (r"\textbackslash{}", "\\"),
     (r"\textasciicircum{}", "^"),
     (r"\textasciitilde{}", "~"),
@@ -8201,7 +8205,25 @@ def _restore_escaped_math_in_tex(tex: str) -> tuple[str, int]:
         restored += 1
         return _latex_prose(original, display_long_math=True)
 
-    return _ESCAPED_MATH_SPAN.sub(repair, tex), restored
+    repaired_tex = _ESCAPED_MATH_SPAN.sub(repair, tex)
+
+    def repair_display(match: re.Match[str]) -> str:
+        nonlocal restored
+        escaped = match.group(0)
+        original = escaped
+        for encoded, literal in _LATEX_ESCAPE_INVERSE:
+            original = original.replace(encoded, literal)
+        if (
+            not original.startswith(r"\[")
+            or not original.endswith(r"\]")
+            or _latex(original).replace(r"\_", r"\_\allowbreak{}") != escaped
+            or not _safe_math(original[2:-2])
+        ):
+            return escaped
+        restored += 1
+        return _latex_prose(original, display_long_math=True)
+
+    return _ESCAPED_DISPLAY_MATH_SPAN.sub(repair_display, repaired_tex), restored
 
 
 def _tex_static_diagnostics(tex: str) -> list[str]:
@@ -8243,6 +8265,8 @@ def _tex_static_diagnostics(tex: str) -> list[str]:
         diagnostics.append("A math delimiter is unclosed.")
     if re.search(r"\\\\(?:textbackslash|verb|begin|end)\b", tex):
         diagnostics.append("A literal TeX command may be double-escaped into printable text.")
+    if r"\textbackslash{}[" in tex or r"\textbackslash{}]" in tex:
+        diagnostics.append("A display-math delimiter was escaped into printable text.")
     for index, line in enumerate(tex.splitlines(), start=1):
         if len(line) > 180 and (r"\node" in line or r"&" in line):
             diagnostics.append(
