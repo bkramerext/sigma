@@ -1,5 +1,5 @@
 /* One copper foreground setting for app text, underlined actions, and icons. */
-:root { --sigma-copper-foreground: #c49d70; }
+:root { --sigma-copper-foreground: #e0c4a0; }
 /* Shared copper actions and AI status across Home and project workspaces. */
 :is(.home-page, .workspace-page) {
   --copper-deep: #75402f;
