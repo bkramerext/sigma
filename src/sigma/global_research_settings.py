@@ -23,14 +23,21 @@ def _path() -> Path:
     # hosted, local signed-in, and single-user anonymous deployment modes.
     return project_types._store_path().parent / _FILENAME
 
-def load() -> dict[str, Any]:
+def _defaults() -> dict[str, Any]:
+    from sigma.model_catalog import DEFAULT_MODEL
+    from sigma.research_sessions import NEW_DEFAULT_LIMITS
+    return {"limits": dict(NEW_DEFAULT_LIMITS), "ai_model": DEFAULT_MODEL,
+            "reasoning_effort": "high", "show_advanced_outcome_details": False}
+
+
+def load_config() -> dict[str, Any]:
     from sigma.research_sessions import NEW_DEFAULT_LIMITS, _validate_limits
 
     target = _path()
     try:
         fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     except FileNotFoundError:
-        return dict(NEW_DEFAULT_LIMITS)
+        return _defaults()
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_size > 4096:
@@ -45,16 +52,50 @@ def load() -> dict[str, Any]:
         raise ProjectError("Global research settings are invalid")
     if set(raw["limits"]) - set(NEW_DEFAULT_LIMITS):
         raise ProjectError("Global research settings contain unknown limits")
-    return _validate_limits({**NEW_DEFAULT_LIMITS, **raw["limits"]})
+    settings = _defaults()
+    settings["limits"] = _validate_limits({**NEW_DEFAULT_LIMITS, **raw["limits"]})
+    from sigma.model_catalog import validate_pair
+    model = raw.get("ai_model", settings["ai_model"])
+    effort = raw.get("reasoning_effort", settings["reasoning_effort"])
+    if type(model) is not str or type(effort) is not str:
+        raise ProjectError("Global research model settings are invalid")
+    try:
+        validate_pair(model, effort)
+    except ValueError as exc:
+        raise ProjectError("Global research model settings are invalid") from exc
+    settings["ai_model"] = model
+    settings["reasoning_effort"] = effort
+    advanced = raw.get("show_advanced_outcome_details", False)
+    if type(advanced) is not bool:
+        raise ProjectError("Global Outcome display preference is invalid")
+    settings["show_advanced_outcome_details"] = advanced
+    return settings
 
-def save(raw: dict[str, Any]) -> dict[str, Any]:
+def load() -> dict[str, Any]:
+    return load_config()["limits"]
+
+
+def save_config(raw: dict[str, Any]) -> dict[str, Any]:
     from sigma.research_sessions import NEW_DEFAULT_LIMITS, _validate_limits
 
-    limits = _validate_limits({**NEW_DEFAULT_LIMITS, **raw})
+    from sigma.model_catalog import validate_pair
+    current = load_config()
+    if "limits" in raw:
+        current["limits"] = _validate_limits({**NEW_DEFAULT_LIMITS, **raw["limits"]})
+    model = raw.get("ai_model", current["ai_model"])
+    effort = raw.get("reasoning_effort", current["reasoning_effort"])
+    try:
+        validate_pair(model, effort)
+    except ValueError as exc:
+        raise ProjectError("Unsupported research model or thinking level") from exc
+    current["ai_model"] = model
+    current["reasoning_effort"] = effort
+    if "show_advanced_outcome_details" in raw:
+        if type(raw["show_advanced_outcome_details"]) is not bool:
+            raise ProjectError("Outcome preference must be a boolean")
+        current["show_advanced_outcome_details"] = raw["show_advanced_outcome_details"]
     target = _path()
-    # Validate existing data instead of overwriting corruption.
-    load()
-    encoded = json.dumps({"version": 1, "limits": limits}, separators=(",", ":")).encode()
+    encoded = json.dumps({"version": 1, **current}, separators=(",", ":")).encode()
     fd, tmp = tempfile.mkstemp(prefix=".sigma-global-research-", dir=target.parent)
     try:
         with os.fdopen(fd, "wb") as handle:
@@ -70,4 +111,8 @@ def save(raw: dict[str, Any]) -> dict[str, Any]:
             os.close(parent_fd)
     finally:
         Path(tmp).unlink(missing_ok=True)
-    return limits
+    return current
+
+
+def save(raw: dict[str, Any]) -> dict[str, Any]:
+    return save_config({"limits": raw})["limits"]
