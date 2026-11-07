@@ -211,7 +211,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     total_size = 0
     for name, value in files.items():
-        if not isinstance(name, str) or not name or "\\\\" in name:
+        if not isinstance(name, str) or not name or "\\" in name:
             raise BundleError("Unsafe bundle path")
         path = Path(name)
         if path.is_absolute() or any(part in ("", ".", "..") for part in name.split("/")):
@@ -264,7 +264,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
                 raise BundleError("Invalid project member encoding")
         elif name.endswith(".json"):
             try:
-                data = (json.dumps(value, ensure_ascii=False, indent=2) + "\\n").encode(
+                data = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode(
                     "utf-8"
                 )
             except (TypeError, ValueError) as exc:
@@ -286,6 +286,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     if not 1 <= document["schema_version"] <= 11:
         raise BundleError("Unsupported project schema version")
     return result
+
 
 def restore(bundle: dict[str, Any], destination: str | Path) -> None:
     """Restore only to a nonexistent directory; never overwrite live project data."""
