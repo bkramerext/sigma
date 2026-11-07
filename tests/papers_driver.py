@@ -101,6 +101,7 @@ def main_part1() -> None:
     test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
     test_paper_pdf_source_reader_accepts_only_substantial_extractable_text()
     test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence()
+    test_pre_stream_http_503_has_bounded_retry_without_replaying_partial_output()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_long_paper_section_retries_share_one_hour_budget()
     test_transient_paper_failures_preserve_authored_sections_and_block_publication()

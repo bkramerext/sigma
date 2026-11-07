@@ -354,8 +354,16 @@ def _require_browser_presence(path: str, required: bool) -> None:
         )
 
 
-class PaperConnectionFailure(ProjectError):
+class PaperSafeRetryFailure(ProjectError):
+    """Definite connection failure or pre-stream HTTP rejection, not a partial generation."""
+
+
+class PaperConnectionFailure(PaperSafeRetryFailure):
     """Provider connection failed before request delivery; safe for bounded retry."""
+
+
+class PaperServiceUnavailable(PaperSafeRetryFailure):
+    """An explicit HTTP 503 arrived before output streaming; limited retry is allowed."""
 
 
 class PaperTransientFailure(ProjectError):
@@ -6416,7 +6424,29 @@ async def _provider_structured(
                 except ValueError:
                     raw = {}
                 if response.status_code != 200:
-                    failure(response.status_code, raw, binding["mode"], guard)
+                    try:
+                        failure(response.status_code, raw, binding["mode"], guard)
+                    except ProjectError as exc:
+                        # A definite HTTP 503 response with no generated stream
+                        # is unlike a broken HTTP 200 SSE stream. Only this
+                        # pre-stream rejection may use the bounded retry loop;
+                        # quota/billing rejections never qualify.
+                        error = raw.get("error") if isinstance(raw, dict) else None
+                        code = error.get("code") if isinstance(error, dict) else None
+                        if (
+                            response.status_code == 503
+                            and code not in {
+                                "subscription_sharing_usage_limit_exceeded",
+                                "insufficient_quota",
+                                "billing_hard_limit_reached",
+                            }
+                            and _retryable_paper_response_failure(exc)
+                        ):
+                            raise PaperServiceUnavailable(
+                                "Provider returned HTTP 503 before output streaming; "
+                                "a bounded retry is permitted."
+                            ) from exc
+                        raise
         cloud_research.settle_provider_attempt(attempt, raw)
         if (
             not isinstance(raw, dict)
@@ -6836,11 +6866,11 @@ async def _generate_long_draft(
         max_input_bytes: int,
         legacy: bool = False,
     ) -> tuple[BaseModel, str]:
-        """Retry a stage at most three times for transient provider failures.
+        """Retry only definite pre-generation failures, at most three attempts.
 
-        Every attempt is checkpointed and accounted for before dispatch.
-        Replays may consume allowance, but successful section drafts are never
-        regenerated and permanent provider rejections are not retried.
+        Each attempt is checkpointed and accounted before dispatch. An explicit
+        pre-stream HTTP 503 can be retried, but a partial stream or ambiguous
+        post-dispatch failure cannot. Saved authored sections are never replayed.
         """
         maximum = 3
         # Retries share the stage's one-hour budget. Previously, three attempts
@@ -6950,7 +6980,7 @@ async def _generate_long_draft(
                 raise PaperTransientFailure(
                     "Paper stage reached its one-hour total attempt budget; saved work is intact."
                 ) from exc
-            except (PaperConnectionFailure, PaperTransientFailure) as exc:
+            except (PaperSafeRetryFailure, PaperTransientFailure) as exc:
                 log.info(
                     "paper.provider_attempt_ended project_id=%s schema=%s section=%s "
                     "attempt=%d elapsed_s=%.1f outcome=%s",
@@ -6961,9 +6991,9 @@ async def _generate_long_draft(
                     monotonic() - started,
                     type(exc).__name__,
                 )
-                # Late provider failures may follow substantial model work and
-                # allowance consumption. A repeat is not a harmless retry.
-                # Only an undelivered connection attempt may be replayed.
+                # Late/incomplete streams may consume allowance: never replay.
+                # Only pre-delivery connection failure or explicit pre-stream
+                # HTTP 503 service rejection can be retried.
                 if isinstance(exc, PaperTransientFailure):
                     raise
                 if (
@@ -7463,7 +7493,7 @@ or document markup."""
         # can be retried after the user reviews potential paid consumption.
         if isinstance(exc, ChatGPTProviderRejection):
             return False
-        if isinstance(exc, (PaperConnectionFailure, PaperTransientFailure, ValidationError)):
+        if isinstance(exc, (PaperSafeRetryFailure, PaperTransientFailure, ValidationError)):
             return True
         if not isinstance(exc, ProjectError):
             return False

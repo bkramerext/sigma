@@ -256,6 +256,85 @@ def test_military_style_guidance_reaches_all_authoring_paths() -> None:
     assert "The project type is mathematics" not in instructions
 
 
+def test_pre_stream_http_503_has_bounded_retry_without_replaying_partial_output() -> None:
+    """An explicit unavailable HTTP response is not an ambiguous SSE failure."""
+    package, plan = fast_package(section_count=2)
+    state = papers._new_work("1" * 64, "fast-fixture", "2" * 64, "fixture-model", "medium")
+    attempts: dict[int, int] = {}
+    events: list[tuple[str, int | None, int | None]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        attempts[number] = attempts.get(number, 0) + 1
+        if number == 1 and attempts[number] == 1:
+            raise papers.PaperServiceUnavailable("HTTP 503 before any output")
+        return papers.LongSectionDraft(
+            paragraphs=[f"Evidence-supported section {number}."]
+        ), "fixture-model"
+
+    async def progress(stage, current, total, state="active", *, detail=None):
+        del state, detail
+        events.append((stage, current, total))
+
+    async def run():
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "medium"},
+                state,
+                lambda _checkpoint: None,
+                progress,
+                structured_fast_path=True,
+            )
+        assert len(result.sections) == 2
+        assert calls == 4  # plan + rejected 503 + retried section + sibling section
+        assert batches == 0
+
+    asyncio.run(run())
+    assert attempts == {1: 2, 2: 1}
+    assert state["provider_calls_total"] == 4
+    assert set(state["section_drafts"]) == {"1", "2"}
+    assert ("retry", 1, 3) in events
+
+    # The real adapter must classify only an explicit HTTP 503 as safe;
+    # quota-coded 503s and post-200 partial streams remain non-replayable.
+    real_client = httpx.AsyncClient
+
+    async def check_http_error(code):
+        async def handler(_request):
+            return httpx.Response(503, json={"error": {"code": code}})
+        with (
+            patch.object(papers.cloud_workspaces, "enabled", return_value=False),
+            patch.object(
+                papers.httpx,
+                "AsyncClient",
+                side_effect=lambda **kwargs: real_client(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            try:
+                await papers._provider_structured(
+                    {"section_number": 1, "evidence_notes": []},
+                    {"mode": "chatgpt", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "medium"},
+                    instructions="Write a factual section using saved evidence only.",
+                    schema_name="sigma_long_paper_section",
+                    response_model=papers.LongSectionDraft,
+                )
+            except papers.PaperServiceUnavailable:
+                return "safe"
+            except ProjectError:
+                return "blocked"
+        raise AssertionError("HTTP error must never produce a section")
+
+    assert asyncio.run(check_http_error("server_error")) == "safe"
+    assert asyncio.run(check_http_error("insufficient_quota")) == "blocked"
+
+
 def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None:
     package, plan = fast_package()
     state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
