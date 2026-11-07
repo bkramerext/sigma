@@ -371,7 +371,8 @@ def test_long_paper_json_whitespace_guard_respects_strings_and_chunks() -> None:
 
     safe = JSONWhitespaceGuard(limit=64)
     for delta in (
-        '{"paragraphs":["This is a prose value ', " " * 5000,
+        '{"paragraphs":["This is a prose value ',
+        " " * 5000,
         ' still inside string"],"tables":[],"examples":[]}',
     ):
         safe.observe(delta)
@@ -394,11 +395,13 @@ def test_long_paper_section_provider_stops_runaway_without_paid_replay() -> None
 
     events = [
         {"type": "response.created", "sequence_number": 0, "response": {"id": "paper-loop"}},
-        {"type": "response.output_text.delta", "sequence_number": 1,
-         "delta": '{"paragraphs":["A complete, evidence-linked paragraph."],"tables":[]'},
+        {
+            "type": "response.output_text.delta",
+            "sequence_number": 1,
+            "delta": '{"paragraphs":["A complete, evidence-linked paragraph."],"tables":[]',
+        },
         *[
-            {"type": "response.output_text.delta", "sequence_number": n,
-             "delta": " \n" * 80}
+            {"type": "response.output_text.delta", "sequence_number": n, "delta": " \n" * 80}
             for n in range(2, 25)
         ],
     ]
@@ -439,14 +442,16 @@ def test_long_paper_section_provider_stops_runaway_without_paid_replay() -> None
 def test_long_paper_section_provider_accepts_large_quoted_whitespace() -> None:
     """A substantial quoted paragraph must pass the same guarded SSE path."""
     body = json.dumps(
-        {"paragraphs": ["The result is " + " " * 5000 + "supported."],
-         "tables": [], "examples": []}
+        {"paragraphs": ["The result is " + " " * 5000 + "supported."], "tables": [], "examples": []}
     )
     events = [
         {"type": "response.created", "sequence_number": 0, "response": {"id": "normal"}},
         {"type": "response.output_text.delta", "sequence_number": 1, "delta": body},
-        {"type": "response.completed", "sequence_number": 2,
-         "response": {"id": "normal", "status": "completed", "output": []}},
+        {
+            "type": "response.completed",
+            "sequence_number": 2,
+            "response": {"id": "normal", "status": "completed", "output": []},
+        },
     ]
 
     async def handler(_request: httpx.Request) -> httpx.Response:
@@ -470,6 +475,7 @@ def test_long_paper_section_provider_accepts_large_quoted_whitespace() -> None:
                 response_model=papers.LongSectionDraft,
             )
         )
+    assert isinstance(parsed, papers.LongSectionDraft)
     assert parsed.paragraphs[0].endswith("supported.")
 
 
@@ -1351,12 +1357,8 @@ def test_long_section_wire_schema_finishes_with_primary_prose() -> None:
     then tables=[], followed by unbounded formatting whitespace before the
     required examples field. Emitting supporting fields first completed cleanly.
     """
-    with_visuals = papers._paper_response_schema(
-        papers.LongSectionDraft, include_diagrams=True
-    )
-    without_visuals = papers._paper_response_schema(
-        papers.LongSectionDraft, include_diagrams=False
-    )
+    with_visuals = papers._paper_response_schema(papers.LongSectionDraft, include_diagrams=True)
+    without_visuals = papers._paper_response_schema(papers.LongSectionDraft, include_diagrams=False)
     assert list(with_visuals["properties"]) == ["tables", "examples", "paragraphs"]
     assert with_visuals["required"] == list(with_visuals["properties"])
     assert list(without_visuals["properties"]) == ["examples", "paragraphs"]
