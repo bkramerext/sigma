@@ -241,10 +241,14 @@ async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
                     ]
                     if len(items) != 1:
                         raise ValueError("Provider completed without one JSON output text")
+                    decoded = json.loads(items[0])
+                    if not isinstance(decoded, dict) or set(decoded) != set(schema["required"]):
+                        raise ValueError("Provider output missing or adding strict schema fields")
                     parsed = papers.LongSectionDraft.model_validate_json(items[0])
                     outcome = "validated"
                     emit("provider_validated", usage=result.get("usage"),
                          paragraphs=len(parsed.paragraphs),
+                         paragraph_words=sum(len(part.split()) for part in parsed.paragraphs),
                          tables=len(parsed.tables), examples=len(parsed.examples))
     except SampleComplete:
         outcome = "sample_limit"
