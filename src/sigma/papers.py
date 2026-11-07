@@ -7211,32 +7211,26 @@ or document markup."""
             )
         )
 
-    def fallback_section(
-        section_number: int, section: LongSectionPlan, exc: Exception
-    ) -> LongSectionDraft:
-        _record_paper_generation_issue(
-            state,
-            f"Paper section {section_number} ({section.heading}) was incomplete after "
-            f"{type(exc).__name__}; a clearly labeled fallback was published.",
-        )
-        return LongSectionDraft(
-            paragraphs=[
-                (
-                    "Editorial notice: The writing for this section was interrupted or invalid. "
-                    "The missing analysis is not supplied by SIGMA, and no claim is "
-                    "established by this placeholder."
-                ),
-                "The intended subject of this section was: "
-                + section.purpose
-                + " The original saved evidence and claim register are retained "
-                "in the paper archive for independent inspection.",
-            ]
+    # Older versions stored this editorial notice as an authored section.
+    # Never reuse it or count it as successfully completed paper content.
+    def is_unwritten_placeholder(draft: LongSectionDraft) -> bool:
+        return bool(
+            draft.paragraphs
+            and draft.paragraphs[0].startswith(
+                "Editorial notice: The writing for this section was interrupted or invalid."
+            )
         )
 
     async def write_section(section_number: int, section: LongSectionPlan) -> PaperSection:
         section_key = str(section_number)
         if section_key in saved_sections:
             section_draft = LongSectionDraft.model_validate(saved_sections[section_key])
+            if is_unwritten_placeholder(section_draft):
+                raise ProjectError(
+                    f"Paper section {section_number} ({section.heading}) is an unfinished "
+                    "editorial placeholder from an older attempt, not authored research. "
+                    "Saved work is intact; explicitly review recovery before making new paid calls."
+                )
             section_draft = sanitize_section_tables(section, section_draft)
             return PaperSection(
                 heading=section.heading,
@@ -7318,7 +7312,20 @@ or document markup."""
         except (ProjectError, ValidationError) as exc:
             if not recoverable_section_failure(exc):
                 raise
-            section_draft = fallback_section(section_number, section, exc)
+            # A failed or malformed AI response is *not* authored prose. Preserve
+            # already completed siblings, but do not checkpoint a fabricated
+            # section or let later stages report a successful publication.
+            _record_paper_generation_issue(
+                state,
+                f"Paper section {section_number} ({section.heading}) was not authored "
+                f"after {type(exc).__name__}; completed sections remain saved.",
+            )
+            save_state(state)
+            raise ProjectError(
+                f"Paper section {section_number} ({section.heading}) did not finish. "
+                "Already authored sections are preserved. The failed request may "
+                "have consumed allowance; review before authorizing another paid attempt."
+            ) from exc
         # No await between registering a completed result and saving the
         # checkpoint: concurrent tasks cannot interleave and lose a section.
         saved_sections[section_key] = section_draft.model_dump()
@@ -7355,17 +7362,31 @@ or document markup."""
                 "sections. Their paid-call state is uncertain; inspect the checkpoint before Resume."
             )
         dispatches = {key: [] for key in legacy_ambiguous}
-    for number, section in enumerate(long_plan.sections, start=1):
-        key = str(number)
-        if key not in saved_sections and key in dispatches:
-            saved_sections[key] = fallback_section(
-                number,
-                section,
-                ProjectError("An earlier section call was interrupted after dispatch"),
-            ).model_dump()
-    if any(key in saved_sections for key in dispatches):
-        state.pop("legacy_ambiguous_sections", None)
-        save_state(state)
+    # An unsaved previously dispatched section might already have incurred
+    # provider charges. Resume must not replay it, manufacture its contents,
+    # or continue to publication as if it had been authored.
+    uncertain = [
+        f"{number} ({section.heading})"
+        for number, section in enumerate(long_plan.sections, start=1)
+        if str(number) not in saved_sections and str(number) in dispatches
+    ]
+    placeholders = [
+        f"{number} ({section.heading})"
+        for number, section in enumerate(long_plan.sections, start=1)
+        if str(number) in saved_sections
+        and is_unwritten_placeholder(
+            LongSectionDraft.model_validate(saved_sections[str(number)])
+        )
+    ]
+    if uncertain or placeholders:
+        detail = ", ".join([*uncertain, *placeholders])
+        raise ProjectError(
+            "Paper writing cannot Resume as complete: section(s) "
+            + detail
+            + " have no authored text. Previously dispatched calls may have consumed "
+            "AI allowance; no additional call has been made. Saved authored sections "
+            "remain intact. Explicitly review the incomplete work before paid recovery."
+        )
 
     if fast_path:
         pending = [
@@ -7435,12 +7456,6 @@ or document markup."""
         ]
 
     warning_items = [*long_plan.validation_warnings[:8]]
-    if any(issue.startswith("Paper section ") for issue in state.get("generation_issues", [])):
-        warning_items.insert(
-            0,
-            "One or more paper sections could not be completed. They contain "
-            "explicit editorial placeholders, not scientific findings; review before publication.",
-        )
     if conflict_note_count:
         warning_items.append(
             f"Evidence indexing recorded {conflict_note_count} potential conflict or gap note(s); inspect the frozen source records directly."
