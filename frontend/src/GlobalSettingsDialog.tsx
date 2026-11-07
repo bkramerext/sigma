@@ -4,6 +4,8 @@ import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog
 import './global-settings.css';
 
 type Tab = 'types' | 'research' | 'limits' | 'preferences';
+type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
+const unitMinutes: Record<Exclude<DurationUnit, 'unlimited'>, number> = { minutes: 1, hours: 60, days: 1440 };
 type LimitSettings = {
   research_rounds: number;
   turns_per_round: number;
@@ -50,6 +52,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const [tab, setTab] = useState<Tab>('types');
   const [config, setConfig] = useState<ResearchConfig | null>(null);
   const [models, setModels] = useState<CatalogModel[]>([]);
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>('minutes');
   const [prefs, setPrefs] = useState<Preference>({
     allow_unattended_background_execution: false,
     expand_one_project_section_at_a_time: false,
@@ -72,6 +75,9 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     ]).then(([research, unattended, layout, progress, catalog]) => {
       if (controller.signal.aborted) return;
       setConfig(research as ResearchConfig);
+      const minutes = (research as ResearchConfig).limits.session_duration_minutes;
+      setDurationUnit(minutes === null ? 'unlimited'
+        : minutes % 1440 === 0 ? 'days' : minutes % 60 === 0 ? 'hours' : 'minutes');
       setPrefs({
         allow_unattended_background_execution: !!unattended.allow_unattended_background_execution,
         expand_one_project_section_at_a_time: !!layout.expand_one_project_section_at_a_time,
@@ -185,11 +191,28 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           <input id="sigma-global-turns" type="number" min={1} max={20} value={config.limits.turns_per_round}
             onChange={e => setLimit('turns_per_round', e.target.value)}/>
           <p className="settings-hint">Maximum agent calls per strategy: {Number(config.limits.research_rounds || 0) * Number(config.limits.turns_per_round || 0) * 2} (Investigator + Skeptic per turn).</p>
-          <label htmlFor="sigma-global-duration">Maximum session duration (minutes)</label>
-          <input id="sigma-global-duration" type="number" min={1} max={10080} placeholder="Unlimited"
-            value={textValue(config.limits.session_duration_minutes)}
-            onChange={e => setLimit('session_duration_minutes', e.target.value)}/>
-          <p className="settings-hint">Leave blank for Unlimited.</p>
+          <label htmlFor="sigma-global-duration">Maximum session duration</label>
+          <div className="sigma-global-duration-controls">
+            <input id="sigma-global-duration" type="number" min={1}
+              max={durationUnit === 'unlimited' ? undefined : Math.floor(10080 / unitMinutes[durationUnit])}
+              readOnly={durationUnit === 'unlimited'}
+              value={durationUnit === 'unlimited' ? '' : String(Number(config.limits.session_duration_minutes || 0) / unitMinutes[durationUnit])}
+              onChange={e => setLimit('session_duration_minutes',
+                e.target.value === '' ? '' : Number(e.target.value) * unitMinutes[durationUnit as Exclude<DurationUnit, 'unlimited'>])}/>
+            <select aria-label="Maximum session duration unit" value={durationUnit}
+              onChange={e => {
+                const next = e.target.value as DurationUnit;
+                setDurationUnit(next);
+                if (next === 'unlimited') setLimit('session_duration_minutes', null);
+                else if (durationUnit === 'unlimited') setLimit('session_duration_minutes', unitMinutes[next]);
+              }}>
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
+          </div>
+          <p className="settings-hint">1 minute to 7 days, or Unlimited. Call and usage limits still apply.</p>
           <label htmlFor="sigma-global-input">Maximum input tokens per session</label>
           <input id="sigma-global-input" type="number" min={4096} max={1000000} placeholder="Unlimited"
             value={textValue(config.limits.maximum_input_tokens_per_session)}
