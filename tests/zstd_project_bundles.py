@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from sigma import project_bundle, zstd_codec
 from sigma.project_bundle import (
     BundleError,
     _decode,
@@ -20,7 +21,6 @@ from sigma.project_bundle import (
     stored_bundle,
     write_file,
 )
-from sigma import project_bundle, zstd_codec
 from sigma.zstd_codec import MAX_MEMBER_BYTES, ZstdCodecError, compress, decompress
 
 ENCODING = "$sigma_bundle_encoding"
