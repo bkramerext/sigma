@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import DialogDismissButton from './DialogDismissButton';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import './global-settings.css';
@@ -92,8 +92,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     setConfig(current => current ? { ...current, ...patch } : current);
   };
   const setPref = (patch: Partial<Preference>) => { setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
-  async function save(event: FormEvent) {
-    event.preventDefault();
+  async function save() {
     if (!config || busy) return;
     const limits = { ...config.limits };
     const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
@@ -123,7 +122,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       await putJson('/api/user-preferences/section-layout', {
         expand_one_project_section_at_a_time: prefs.expand_one_project_section_at_a_time,
       });
-      if (progressAvailable || !prefs.progress_email) {
+      if (progressAvailable) {
         await putJson('/api/user-preferences/progress-email', { enabled: prefs.progress_email });
       }
       window.dispatchEvent(new CustomEvent('sigma-section-layout-preference-changed', {
@@ -137,11 +136,11 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
   return <dialog ref={dialog} className="project-settings-dialog sigma-global-settings" aria-labelledby="sigma-global-settings-title"
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
-    <form onSubmit={save}>
+    <div className="sigma-global-settings-content">
       <header className="settings-header">
         <h2 id="sigma-global-settings-title">Settings</h2>
         <div className="settings-actions">
-          {tab !== 'types' && <button type="submit" disabled={!loaded || busy}>{busy ? 'Saving…' : 'Save'}</button>}
+          {tab !== 'types' && <button type="button" disabled={!loaded || busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>}
           <DialogDismissButton label="Close Settings" disabled={busy} onClick={onClose}/>
         </div>
       </header>
@@ -218,6 +217,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         {error && <p role="alert" className="error">{error}</p>}
         {saved && <p role="status" className="settings-hint">Settings saved.</p>}
       </div>}
-    </form>
+    </div>
   </dialog>;
 }
