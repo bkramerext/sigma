@@ -1344,6 +1344,54 @@ def test_strict_paper_schemas_require_all_properties() -> None:
     assert parsed.covered_field_refs == [] and parsed.omitted_fields == []
 
 
+def test_long_section_wire_schema_finishes_with_primary_prose() -> None:
+    """Keep the simple typed contract established by the isolated live probe.
+
+    With prose first, Sol/Medium twice generated a complete paragraphs array,
+    then tables=[], followed by unbounded formatting whitespace before the
+    required examples field. Emitting supporting fields first completed cleanly.
+    """
+    with_visuals = papers._paper_response_schema(
+        papers.LongSectionDraft, include_diagrams=True
+    )
+    without_visuals = papers._paper_response_schema(
+        papers.LongSectionDraft, include_diagrams=False
+    )
+    assert list(with_visuals["properties"]) == ["tables", "examples", "paragraphs"]
+    assert with_visuals["required"] == list(with_visuals["properties"])
+    assert list(without_visuals["properties"]) == ["examples", "paragraphs"]
+    assert without_visuals["required"] == list(without_visuals["properties"])
+    assert "PaperTable" in with_visuals.get("$defs", {})
+    assert "PaperTable" not in without_visuals.get("$defs", {})
+
+    # Persisted drafts and explicitly authored examples remain ordinary
+    # validated models, with no synthesized or discarded content.
+    draft = papers.LongSectionDraft(
+        paragraphs=["An evidence-linked section explains the result."],
+        tables=[
+            papers.PaperTable(
+                caption="Source-linked comparison of allowed and denied requests",
+                headers=["Decision", "Outcome"],
+                rows=[["Allowed", "Admitted"], ["Denied", "Rejected"]],
+                evidence_refs=["source:R1"],
+                claim_ids=["C3"],
+            )
+        ],
+        examples=[
+            papers.PaperExample(
+                title="Illustration",
+                text="This is a concrete, source-linked illustrative example.",
+                claim_ids=["C3"],
+                after_paragraph=1,
+            )
+        ],
+    )
+    restored = papers.LongSectionDraft.model_validate_json(draft.model_dump_json())
+    assert restored == draft
+    assert len(restored.tables) == len(restored.examples) == 1
+    assert list(json.loads(draft.model_dump_json())) == ["tables", "examples", "paragraphs"]
+
+
 def test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage() -> None:
     """Trailing usage bookkeeping must not invalidate a paid completed stage."""
     stage_text = json.dumps(

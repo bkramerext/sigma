@@ -616,9 +616,12 @@ class FastLongPaperPlan(LongPaperPlan):
 
 class LongSectionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    paragraphs: list[LongText] = Field(min_length=1, max_length=80)
+    # Strict structured output emits fields in schema order. Generate supporting
+    # material first so the primary section prose is the final field; two live
+    # Sol/Medium runs stalled after tables and before examples with prose first.
     tables: list[PaperTable] = Field(default_factory=list, max_length=4)
     examples: list[PaperExample] = Field(default_factory=list, max_length=2)
+    paragraphs: list[LongText] = Field(min_length=1, max_length=80)
 
 
 def _without_optional_visuals(draft: PaperDraft) -> PaperDraft:

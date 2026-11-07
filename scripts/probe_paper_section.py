@@ -152,16 +152,17 @@ def recurrence(text: str) -> dict[str, Any]:
 
 
 def section_wire_schema(visuals: bool, layout: str) -> dict[str, Any]:
-    """Reorder only keys, preserving the exact production field contracts."""
+    """Use production's canonical contract or reconstruct the historical order."""
     schema = papers._paper_response_schema(papers.LongSectionDraft, include_diagrams=visuals)
-    if layout == "prose-last":
+    if layout == "legacy":
+        # Diagnostic only. Never add legacy ordering to production authoring.
         original = schema["properties"]
-        order = [key for key in ("tables", "examples", "paragraphs") if key in original]
+        order = [key for key in ("paragraphs", "tables", "examples") if key in original]
         if set(order) != set(original):
-            raise ValueError("Unexpected section schema fields; refusing changed-shape diagnostic")
+            raise ValueError("Unexpected section schema fields; refusing altered contract")
         schema["properties"] = {key: original[key] for key in order}
         schema["required"] = order
-    elif layout != "production":
+    elif layout not in {"production", "prose-last"}:
         raise ValueError(f"Unknown diagnostic layout: {layout}")
     return schema
 
@@ -274,8 +275,8 @@ async def main() -> None:
     parser.add_argument("--section", type=int, default=2)
     parser.add_argument("--execute", action="store_true", help="One potentially paid AI call")
     parser.add_argument("--self-test", action="store_true", help="Test guard and schema without AI")
-    parser.add_argument("--schema-layout", choices=("production", "prose-last"), default="production",
-                        help="Diagnostic wire-field order; production behavior unchanged")
+    parser.add_argument("--schema-layout", choices=("production", "prose-last", "legacy"), default="production",
+                        help="Canonical production order; legacy reproduces old failing schema")
     parser.add_argument("--max-seconds", type=int, default=90)
     parser.add_argument("--max-deltas", type=int, default=4000)
     parser.add_argument("--max-bytes", type=int, default=80000)
@@ -286,13 +287,17 @@ async def main() -> None:
     if not 4000 <= args.max_bytes <= 200000:
         parser.error("--max-bytes must be 4000..200000")
     if args.self_test:
-        baseline = section_wire_schema(True, "production")
-        changed = section_wire_schema(True, "prose-last")
-        assert list(baseline["properties"]) == ["paragraphs", "tables", "examples"]
-        assert list(changed["properties"]) == ["tables", "examples", "paragraphs"]
-        assert changed["required"] == list(changed["properties"])
-        assert all(baseline["properties"][key] == changed["properties"][key]
-                   for key in changed["properties"])
+        canonical = section_wire_schema(True, "production")
+        original = section_wire_schema(True, "legacy")
+        assert list(canonical["properties"]) == ["tables", "examples", "paragraphs"]
+        assert list(original["properties"]) == ["paragraphs", "tables", "examples"]
+        assert canonical["required"] == list(canonical["properties"])
+        assert original["required"] == list(original["properties"])
+        assert all(canonical["properties"][key] == original["properties"][key]
+                   for key in canonical["properties"])
+        assert list(section_wire_schema(False, "production")["properties"]) == [
+            "examples", "paragraphs"
+        ]
         guard = JSONWhitespaceGuard()
         guard.observe('{"paragraphs":["Valid paragraph"],"tables":[]')
         try:
