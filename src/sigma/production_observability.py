@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import resource
+import sys
 import threading
 import traceback
 from logging.handlers import TimedRotatingFileHandler
@@ -114,7 +115,26 @@ def safe_exception_trace(error: BaseException) -> str:
 
 
 def memory_snapshot() -> dict[str, int | None]:
-    """Process RSS and cgroup OOM counters, supporting Linux cgroup v1/v2."""
+    """Memory counters with explicit platform boundaries.
+
+    Linux supplies process RSS, cgroup pressure and host availability. macOS
+    does not expose Linux procfs or cgroups; its resource.ru_maxrss is bytes,
+    not the KiB reported on Linux, and describes peak rather than current RSS.
+    Do not invent unsupported current/available memory measurements.
+    """
+    if sys.platform != "linux":
+        peak_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        peak_mib = _to_mib(peak_bytes) if sys.platform == "darwin" else None
+        return {
+            "rss_mib": None,
+            "rss_peak_mib": peak_mib,
+            "cgroup_used_mib": None,
+            "cgroup_limit_mib": None,
+            "cgroup_peak_mib": None,
+            "host_available_mib": None,
+            "host_free_mib": None,
+        }
+
     group = Path("/sys/fs/cgroup")
     usage = _integer(group / "memory.current")
     limit = _integer(group / "memory.max")
