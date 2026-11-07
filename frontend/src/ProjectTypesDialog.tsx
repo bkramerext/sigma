@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import './project-types.css';
 import DialogDismissButton from './DialogDismissButton';
 
@@ -15,7 +15,15 @@ export type ProjectTypeRecord = {
   behavior?: Record<string, boolean>;
 };
 
-type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode; initialOpenTypeId?: string | null; embedded?: boolean };
+export type ProjectTypesSaveState = { dirty: boolean; valid: boolean; busy: boolean };
+type Props = {
+  onClose: () => void;
+  renderIcon: (item: ProjectTypeRecord) => ReactNode;
+  initialOpenTypeId?: string | null;
+  embedded?: boolean;
+  onSaveStateChange?: (state: ProjectTypesSaveState) => void;
+  saveHandleRef?: MutableRefObject<(() => Promise<boolean>) | null>;
+};
 type Reference = { name: string; url: string };
 type ReferenceField = 'research_standards_references' | 'publication_standards_references';
 type ReferenceFields = Pick<ProjectTypeRecord, ReferenceField>;
@@ -156,7 +164,7 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   </div>;
 }
 
-export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null, embedded = false }: Props) {
+export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null, embedded = false, onSaveStateChange, saveHandleRef }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const explicitlyClosing = useRef(false);
   const first = useRef<HTMLButtonElement>(null);
@@ -407,8 +415,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     setAddingId(previous => previous === id ? null : previous);
     setOpen(previous => previous === id ? null : previous);
   }
-  async function save() {
-    if (!hasChanges || invalidDraft) return;
+  async function save(): Promise<boolean> {
+    if (!hasChanges || invalidDraft || busy) return false;
     setBusy(true); setError('');
     try {
       // Validate changed domains, even when Save is clicked before the title
@@ -455,7 +463,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         const usage = await usageResponse.json() as { project_count: number };
         if (!usageResponse.ok) throw new Error('Could not check which projects use a removed type.');
         confirmedRemovals[id] = usage.project_count;
-        if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return;
+        if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return false;
       }
       const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, common_custom_references: commonCustomReferences, builtin_custom_references: builtinCustomReferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
@@ -479,7 +487,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       window.dispatchEvent(new Event('sigma-project-types-updated'));
       setAddingId(null);
       if (!embedded) close();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false; }
     finally { setBusy(false); }
   }
   const listEditor = (owner: string, field: ReferenceField, references: Reference[], readonly: boolean, immutableCount = 0) => {
@@ -589,9 +598,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
           </>}
         </div></td></tr>;
       })}
-      {!readonly && <tr className="pt-reference-new-row"><td>
-        <button type="button" disabled={busy || references.length - immutableCount >= 100 ||
-          references.some((reference, index) => index >= immutableCount && !reference.url.trim())}
+      {!readonly && references.length - immutableCount < 100 &&
+        !references.some((reference, index) => index >= immutableCount && !reference.url.trim()) &&
+        <tr className="pt-reference-new-row"><td>
+        <button type="button" disabled={busy}
           onClick={() => {
             const newKey = `${owner}:${field}:${references.length}`;
             referenceEditOrigins.current.set(newKey, null);
@@ -644,8 +654,17 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     [...item.research_standards_references, ...item.publication_standards_references].some(ref =>
       !!referenceUrlError(ref.url) || urlValidation[ref.url] === 'invalid')
   );
+  // Expose the existing validation and save operation to the unified Settings header.
+  useEffect(() => {
+    if (!saveHandleRef) return;
+    saveHandleRef.current = save;
+    return () => { saveHandleRef.current = null; };
+  });
+  useEffect(() => {
+    onSaveStateChange?.({ dirty: hasChanges, valid: !invalidDraft && !!revision, busy });
+  }, [hasChanges, invalidDraft, revision, busy, onSaveStateChange]);
   const content = <>
-    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>{!embedded && <DialogDismissButton ref={first} label="Close Project Types" disabled={busy} onClick={close}/>}</div></header>
+    {!embedded && <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton ref={first} label="Close Project Types" disabled={busy} onClick={close}/></div></header>}
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
