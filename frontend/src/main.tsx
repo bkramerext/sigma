@@ -1950,15 +1950,14 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
-      <h2 id="missing-type-heading">Project type unavailable</h2>
+      <div className="sigma-dialog-heading"><h2 id="missing-type-heading">Project type unavailable</h2><DialogDismissButton label="Cancel project type selection" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}/></div>
       {safeSavedTypeSettings
         ? <p>This project refers to “{savedTypeName}”, which is no longer available. You can continue with its complete saved settings or choose a replacement.</p>
         : <p>This project refers to “{savedTypeName}”, which is no longer available, and it does not have a complete saved type snapshot. Choose a replacement before starting a new research session.</p>}
       <div className="project-type-warning-actions">
         {safeSavedTypeSettings && <button type="button" autoFocus disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); setConfirmStart(false); void begin(undefined, true); }}>Continue with saved settings</button>}
         <button type="button" autoFocus={!safeSavedTypeSettings} disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); onChooseReplacement(); }}>Choose a replacement</button>
-        <DialogDismissButton label="Cancel project type selection" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}/>
-      </div>
+        </div>
     </dialog>
     <header className="workspace-pane-heading sessions-pane-heading">
       <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
@@ -5605,12 +5604,11 @@ function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => 
     onSignIn();
   }
   return <dialog ref={dialog} className="project-settings-dialog guest-research-dialog" aria-labelledby="guest-research-heading" aria-describedby="guest-research-message" onCancel={event => { event.preventDefault(); dismiss(); }}>
-    <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2></header>
+    <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2><DialogDismissButton label="Close sign-in prompt" onClick={dismiss}/></header>
     <div className="settings-body">
       <p id="guest-research-message">Sign in to run a research session.</p>
       <div className="settings-actions session-remove-confirm-actions">
         <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in with Google</button>
-        <DialogDismissButton label="Close sign-in prompt" onClick={dismiss}/>
       </div>
     </div>
   </dialog>;
