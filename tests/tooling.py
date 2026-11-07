@@ -20,13 +20,19 @@ def check_zstd_setup() -> None:
     """Local setup installs zstd through the platform package manager."""
     with (
         patch("sigma.tooling.sys.platform", "darwin"),
-        patch("sigma.tooling.shutil.which", side_effect=lambda tool: "/brew" if tool == "brew" else None),
+        patch(
+            "sigma.tooling.shutil.which",
+            side_effect=lambda tool: "/brew" if tool == "brew" else None,
+        ),
     ):
         assert _zstd_setup_steps() == [["brew", "install", "zstd"]]
     with (
         patch("sigma.tooling.sys.platform", "linux"),
         patch("sigma.tooling.os.geteuid", return_value=500),
-        patch("sigma.tooling.shutil.which", side_effect=lambda tool: "/usr/bin/tool" if tool in {"apt-get", "sudo"} else None),
+        patch(
+            "sigma.tooling.shutil.which",
+            side_effect=lambda tool: "/usr/bin/tool" if tool in {"apt-get", "sudo"} else None,
+        ),
     ):
         assert _zstd_setup_steps() == [
             ["sudo", "apt-get", "update", "-qq"],
