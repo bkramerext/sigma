@@ -63,3 +63,8 @@ def test_legacy_save_limits_api_no_longer_writes_into_project(tmp_path, monkeypa
     assert updated["research_rounds"] == 5
     assert research_sessions.get_limits(str(project))["research_rounds"] == 5
     assert not (project / "research-sessions" / "limits.json").exists()
+
+
+def test_new_users_start_with_all_standards_references_enabled():
+    # Preferences record disabled reference URLs, so empty means enabled.
+    assert project_types._default_reference_preferences() == {}
