@@ -582,7 +582,10 @@ async def configuration(
         selected = next(c for c in discovery["models"] if c["id"] == model)
         available = selected["availability"] == "available"
         if not available and discovery["connection"]["status"] == "connected":
-            message = "Selected research model is unavailable to this API account. Change it in Home Settings → Research; no fallback will be used."
+            message = (
+                "Selected research model is unavailable to this API account. "
+                "Change it in Home Settings → Research; no fallback will be used."
+            )
     except ValueError as exc:
         message = str(exc)
     return {
