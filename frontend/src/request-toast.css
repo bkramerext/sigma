@@ -61,3 +61,19 @@
   .request-toast-item,
   .request-toast { transition-duration: 0.01ms; }
 }
+
+/* Same dismiss X as session removal; preserve toast exit animation and scroll. */
+.request-toast { position: relative; padding-right: 48px; }
+.request-toast button.request-toast-dismiss {
+  position: absolute; top: 9px; right: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px;
+  margin: 0; padding: 4px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; box-shadow: none; color: var(--sigma-copper-foreground);
+  text-decoration: none; cursor: pointer;
+}
+.request-toast button.request-toast-dismiss svg { display: block; width: 20px; height: 20px; }
+.request-toast button.request-toast-dismiss:hover {
+  background: #3b3029; border-color: #ac7054; color: var(--sigma-copper-foreground);
+  text-decoration: none;
+}
