@@ -38,3 +38,9 @@
   .sigma-global-settings .settings-body { padding-inline: 14px; }
   .sigma-global-settings .project-types-embedded .project-types-body { padding-inline: 14px; }
 }
+
+.sigma-global-settings .project-types-embedded:not([open]) { display: flex; }
+.sigma-project-classification-dialog { width: min(475px, calc(100vw - 32px)); }
+.sigma-project-classification-dialog .settings-body { padding: 20px 24px 25px; }
+.sigma-project-classification-dialog .settings-body fieldset { border: 0; margin: 0; padding: 0; }
+.sigma-project-classification-dialog .settings-body label { display: block; margin: 10px 0 6px; }
