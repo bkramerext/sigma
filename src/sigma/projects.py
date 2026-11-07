@@ -313,9 +313,9 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 11)")
+        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 12)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
@@ -324,11 +324,11 @@ def _decode(raw: Any) -> Project:
         fields.add("investigation_type" if "investigation_type" in raw else "research_mode")
     if version >= 5:
         fields.add("active_order")
-    if version >= 6:
+    if 6 <= version < 12:
         fields.update({"ai_model", "reasoning_effort"})
     if version >= 8:
         fields.add("difficulty")
-    if version >= 9:
+    if 9 <= version < 12:
         fields.add("show_advanced_outcome_details")
     if "project_type_snapshot" in raw:
         fields.add("project_type_snapshot")
@@ -344,7 +344,7 @@ def _decode(raw: Any) -> Project:
         raise ProjectError("Invalid project fields")
     if version == 8 and raw["difficulty"] is None:
         raise ProjectError("Schema v8 projects must have an Easy, Medium, or Hard difficulty")
-    if version >= 9 and type(raw["show_advanced_outcome_details"]) is not bool:
+    if 9 <= version < 12 and type(raw["show_advanced_outcome_details"]) is not bool:
         raise ProjectError("Advanced Outcome preference must be a boolean")
     for key in ("id", "title", "problem"):
         if not isinstance(raw[key], str) or not raw[key].strip():
@@ -665,7 +665,7 @@ def _document(project: Project) -> bytes:
         del raw["backend_build_commit"]
     if project.schema_version < 8:
         del raw["difficulty"]
-    if project.schema_version < 9:
+    if project.schema_version < 9 or project.schema_version >= 12:
         del raw["show_advanced_outcome_details"]
     if project.schema_version < 10:
         for strategy in raw["strategies"]:
@@ -676,9 +676,10 @@ def _document(project: Project) -> bytes:
     if project.schema_version < 7:
         for strategy in raw["strategies"]:
             del strategy["enabled"]
-    if project.schema_version < 6:
+    if project.schema_version < 6 or project.schema_version >= 12:
         del raw["ai_model"]
         del raw["reasoning_effort"]
+    if project.schema_version < 6:
         for strategy in raw["strategies"]:
             if strategy["provenance"] is not None:
                 del strategy["provenance"]["reasoning_effort"]
@@ -767,7 +768,7 @@ def initialize_project(
         if not path.parent.is_dir() or path.parent.is_symlink():
             raise ProjectError("Project destination parent is unavailable")
         project = Project(
-            11,
+            12,
             str(uuid4()),
             title.strip(),
             problem.strip(),
@@ -816,7 +817,7 @@ def initialize_project(
         if any(p.name != ".gitkeep" for p in path.iterdir()):
             raise ProjectError("Initialization requires an empty directory (or .gitkeep only)")
         project = Project(
-            11,
+            12,
             str(uuid4()),
             title.strip(),
             problem.strip(),
@@ -1437,7 +1438,7 @@ def update_project(
         )
         return replace(
             project,
-            schema_version=max(11, project.schema_version),
+            schema_version=max(12, project.schema_version),
             title=wanted.title,
             problem=wanted.problem,
             investigation_type=wanted_type_id,
