@@ -919,15 +919,13 @@ def _effective_limits(limits: dict[str, Any]) -> dict[str, Any]:
 
 def get_limits(path: str) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
-        import base64
+        from sigma.project_bundle import _decode, read_bundle
 
-        from sigma.project_bundle import read_bundle
-
-        members = read_bundle(path)["files"]
+        members = _decode(read_bundle(path))
         if "research-sessions/limits.json" not in members:
             limits = dict(NEW_DEFAULT_LIMITS)
         else:
-            data = base64.b64decode(members["research-sessions/limits.json"], validate=True)
+            data = members["research-sessions/limits.json"]
             if len(data) > 4096:
                 raise ProjectError("Research limits file is unsafe or too large")
             try:
@@ -4429,21 +4427,18 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
     """
     view = inspect_project(path)
     if Path(view.path).suffix == ".json":
-        import base64
-
-        from sigma.project_bundle import read_bundle
+        from sigma.project_bundle import _decode, read_bundle
 
         records: list[dict[str, Any]] = []
         unavailable = 0
-        members = read_bundle(view.path)["files"]
-        for name, encoded in members.items():
+        members = _decode(read_bundle(view.path))
+        for name, data in members.items():
             if not name.startswith("research-sessions/") or not name.endswith(".json"):
                 continue
             stem = name.removeprefix("research-sessions/").removesuffix(".json")
             if stem in {"limits", "sequence", "obligation-ids"} or "/" in stem:
                 continue
             try:
-                data = base64.b64decode(encoded, validate=True)
                 if len(data) > MAX_RECORD:
                     raise ValueError("Session record exceeds limit")
                 raw = json.loads(data)
