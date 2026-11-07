@@ -151,11 +151,27 @@ def recurrence(text: str) -> dict[str, Any]:
     }
 
 
+def section_wire_schema(visuals: bool, layout: str) -> dict[str, Any]:
+    """Reorder only keys, preserving the exact production field contracts."""
+    schema = papers._paper_response_schema(papers.LongSectionDraft, include_diagrams=visuals)
+    if layout == "prose-last":
+        original = schema["properties"]
+        order = [key for key in ("tables", "examples", "paragraphs") if key in original]
+        if set(order) != set(original):
+            raise ValueError("Unexpected section schema fields; refusing changed-shape diagnostic")
+        schema["properties"] = {key: original[key] for key in order}
+        schema["required"] = order
+    elif layout != "production":
+        raise ValueError(f"Unknown diagnostic layout: {layout}")
+    return schema
+
+
 async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
                 instructions: str, visuals: bool, emit: Any) -> None:
     auth = await auth_context()
     if auth["mode"] != "chatgpt" or not auth["token"] or auth["status"] != "connected":
         raise ValueError("Connect your ChatGPT account first; no call was dispatched")
+    schema = section_wire_schema(visuals, args.schema_layout)
     request = {
         "model": work["model"], "store": False,
         "reasoning": {"effort": work["reasoning_effort"]},
@@ -163,8 +179,7 @@ async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
         "input": [{"role": "user", "content": payload}],
         "text": {"format": {"type": "json_schema", "name": "sigma_long_paper_section",
                             "strict": True,
-                            "schema": papers._paper_response_schema(
-                                papers.LongSectionDraft, include_diagrams=visuals)}},
+                            "schema": schema}},
         "stream": True,
     }
     fragments: list[str] = []
@@ -198,6 +213,7 @@ async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
 
     outcome = "unknown"
     emit("dispatch", model=request["model"], effort=work["reasoning_effort"],
+         schema_layout=args.schema_layout, schema_fields=list(schema["properties"]),
          max_seconds=args.max_seconds, max_deltas=args.max_deltas, max_bytes=args.max_bytes)
     try:
         async with asyncio.timeout(args.max_seconds):
@@ -216,9 +232,20 @@ async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
                         max_events=100000, max_text_bytes=papers.MAX_RESPONSE_BYTES,
                         on_event_observed=event_seen, on_text_delta=text_seen,
                     )
-                    outcome = "completed"
-                    emit("provider_complete", usage=result.get("usage"),
-                         status=result.get("status"))
+                    items = [
+                        part["text"]
+                        for item in result.get("output", [])
+                        if isinstance(item, dict) and item.get("type") == "message"
+                        for part in item.get("content", [])
+                        if isinstance(part, dict) and part.get("type") == "output_text"
+                    ]
+                    if len(items) != 1:
+                        raise ValueError("Provider completed without one JSON output text")
+                    parsed = papers.LongSectionDraft.model_validate_json(items[0])
+                    outcome = "validated"
+                    emit("provider_validated", usage=result.get("usage"),
+                         paragraphs=len(parsed.paragraphs),
+                         tables=len(parsed.tables), examples=len(parsed.examples))
     except SampleComplete:
         outcome = "sample_limit"
     except JSONWhitespaceStall:
@@ -242,17 +269,26 @@ async def main() -> None:
     parser.add_argument("--project", help="Path to original project; auto-detects Graph Atlas")
     parser.add_argument("--section", type=int, default=2)
     parser.add_argument("--execute", action="store_true", help="One potentially paid AI call")
-    parser.add_argument("--self-test", action="store_true", help="Test guard without AI")
+    parser.add_argument("--self-test", action="store_true", help="Test guard and schema without AI")
+    parser.add_argument("--schema-layout", choices=("production", "prose-last"), default="production",
+                        help="Diagnostic wire-field order; production behavior unchanged")
     parser.add_argument("--max-seconds", type=int, default=90)
     parser.add_argument("--max-deltas", type=int, default=4000)
     parser.add_argument("--max-bytes", type=int, default=80000)
-    parser.add_argument("--report", default=str(Path.home() / "Desktop" / "sigma-section-probe-guard.jsonl"))
+    parser.add_argument("--report", default=None, help="Unique diagnostic JSONL output path")
     args = parser.parse_args()
     if not 10 <= args.max_seconds <= 240 or not 200 <= args.max_deltas <= 10000:
         parser.error("Invalid diagnostic bounds")
     if not 4000 <= args.max_bytes <= 200000:
         parser.error("--max-bytes must be 4000..200000")
     if args.self_test:
+        baseline = section_wire_schema(True, "production")
+        changed = section_wire_schema(True, "prose-last")
+        assert list(baseline["properties"]) == ["paragraphs", "tables", "examples"]
+        assert list(changed["properties"]) == ["tables", "examples", "paragraphs"]
+        assert changed["required"] == list(changed["properties"])
+        assert all(baseline["properties"][key] == changed["properties"][key]
+                   for key in changed["properties"])
         guard = JSONWhitespaceGuard()
         guard.observe('{"paragraphs":["Valid paragraph"],"tables":[]')
         try:
@@ -301,11 +337,17 @@ async def main() -> None:
                 "NOTE: reconstructed payload differs from original by "
                 f"+{input_bytes - ORIGINAL_BYTES} bytes; not a bitwise-identical replay."
             )
+    schema = section_wire_schema(visuals, args.schema_layout)
+    schema_sha256 = hashlib.sha256(json.dumps(schema, separators=(",", ":")).encode()).hexdigest()
+    print(f"Diagnostic schema layout: {args.schema_layout}; fields={list(schema['properties'])}")
     if not args.execute:
         print("DRY RUN PASSED: no provider request, no files or checkpoint changed.")
         print("Repeat with --execute to run one bounded paid diagnostic.")
         return
-    report = Path(args.report).expanduser()
+    report = Path(
+        args.report or str(Path.home() / "Desktop" /
+                           f"sigma-section-probe-{args.schema_layout}.jsonl")
+    ).expanduser()
     report.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(report, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as stream:
@@ -317,7 +359,8 @@ async def main() -> None:
             stream.flush()
         emit("preflight", project_id=TARGET_ID, section=args.section,
              model=work["model"], effort=work["reasoning_effort"],
-             input_bytes=input_bytes, original_logged_bytes=ORIGINAL_BYTES,
+             schema_layout=args.schema_layout, schema_fields=list(schema["properties"]),
+             schema_sha256=schema_sha256, input_bytes=input_bytes, original_logged_bytes=ORIGINAL_BYTES,
              input_byte_drift=input_bytes - ORIGINAL_BYTES,
              instructions_chars=len(instructions),
              input_sha256=hashlib.sha256(payload.encode()).hexdigest(),
