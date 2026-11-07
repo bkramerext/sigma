@@ -95,6 +95,8 @@ def save_config(raw: dict[str, Any]) -> dict[str, Any]:
 
     current = load_config()
     if "limits" in raw:
+        if not isinstance(raw["limits"], dict) or set(raw["limits"]) - set(NEW_DEFAULT_LIMITS):
+            raise ProjectError("Global research settings contain unknown limits")
         current["limits"] = _validate_limits({**NEW_DEFAULT_LIMITS, **raw["limits"]})
     model = raw.get("ai_model", current["ai_model"])
     effort = raw.get("reasoning_effort", current["reasoning_effort"])
