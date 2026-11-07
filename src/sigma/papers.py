@@ -45,6 +45,7 @@ from sigma import (
 )
 from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
+from sigma.paper_stream_guard import JSONWhitespaceGuard, JSONWhitespaceStall
 from sigma.project_reports import _compile_pdf, _latex
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
@@ -6307,6 +6308,21 @@ async def _provider_structured(
     stream_last_text_at: float | None = None
     stream_last_logged_at = request_started
     stream_log = logging.getLogger("sigma.lifecycle")
+    whitespace_guard = JSONWhitespaceGuard() if schema_name == "sigma_long_paper_section" else None
+
+    def observe_section_text(delta: str) -> None:
+        if whitespace_guard is None:
+            return
+        try:
+            whitespace_guard.observe(delta)
+        except JSONWhitespaceStall:
+            stream_log.warning(
+                "paper.provider_whitespace_stall project_id=%s section=%s "
+                "elapsed_s=%.1f text_events=%d text_bytes=%d consecutive_whitespace=%d",
+                project_id or "unknown", diagnostic_section, monotonic() - request_started,
+                stream_text_events, stream_text_bytes, whitespace_guard.consecutive,
+            )
+            raise
 
     def observed_stream_event(kind: str, text_bytes: int) -> None:
         nonlocal stream_events, stream_text_events, stream_text_bytes
@@ -6378,6 +6394,7 @@ async def _provider_structured(
                     max_events=100_000,
                     max_text_bytes=MAX_RESPONSE_BYTES,
                     on_output_delta=on_output_delta,
+                    on_text_delta=observe_section_text if whitespace_guard is not None else None,
                     on_event_observed=(
                         observed_stream_event if schema_name == "sigma_long_paper_section" else None
                     ),
@@ -7566,6 +7583,15 @@ or document markup."""
                     "Provider returned malformed long-paper stage content: section size"
                 )
         except (ProjectError, ValidationError) as exc:
+            if isinstance(exc, JSONWhitespaceStall):
+                _record_paper_generation_issue(
+                    state,
+                    f"Paper section {section_number} ({section.heading}) entered a JSON "
+                    "whitespace-output stall. The incomplete attempt was stopped; "
+                    "completed sections remain saved. No automatic replay is permitted.",
+                )
+                save_state(state)
+                raise
             if not recoverable_section_failure(exc):
                 raise
             # A failed or malformed AI response is *not* authored prose. Preserve

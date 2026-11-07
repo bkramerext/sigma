@@ -28,6 +28,7 @@ from sigma import papers, publication_reference_compiler
 from sigma.local_config import load_local_config
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import completed
+from sigma.paper_stream_guard import JSONWhitespaceGuard, JSONWhitespaceStall
 
 TARGET_ID = "b546bb60-845b-4afb-a9b8-ad2b8748a832"
 ORIGINAL_BYTES = 74271
@@ -167,6 +168,7 @@ async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
         "stream": True,
     }
     fragments: list[str] = []
+    whitespace_guard = JSONWhitespaceGuard()
     types: Counter[str] = Counter()
     seen = 0
     size = 0
@@ -180,6 +182,13 @@ async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
         seen += 1
         size += len(delta.encode())
         fragments.append(delta)
+        try:
+            whitespace_guard.observe(delta)
+        except JSONWhitespaceStall:
+            emit("whitespace_stall", deltas=seen, bytes=size,
+                 consecutive_whitespace=whitespace_guard.consecutive,
+                 elapsed_s=round(monotonic()-begin, 1))
+            raise
         if seen == 1 or seen % 500 == 0:
             joined = "".join(fragments)
             emit("progress", deltas=seen, bytes=size, elapsed_s=round(monotonic()-begin, 1),
@@ -212,6 +221,8 @@ async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
                          status=result.get("status"))
     except SampleComplete:
         outcome = "sample_limit"
+    except JSONWhitespaceStall:
+        outcome = "whitespace_stall"
     except TimeoutError:
         outcome = "time_limit"
     except Exception as exc:
@@ -231,15 +242,26 @@ async def main() -> None:
     parser.add_argument("--project", help="Path to original project; auto-detects Graph Atlas")
     parser.add_argument("--section", type=int, default=2)
     parser.add_argument("--execute", action="store_true", help="One potentially paid AI call")
+    parser.add_argument("--self-test", action="store_true", help="Test guard without AI")
     parser.add_argument("--max-seconds", type=int, default=90)
     parser.add_argument("--max-deltas", type=int, default=4000)
     parser.add_argument("--max-bytes", type=int, default=80000)
-    parser.add_argument("--report", default=str(Path.home() / "Desktop" / "sigma-section-probe.jsonl"))
+    parser.add_argument("--report", default=str(Path.home() / "Desktop" / "sigma-section-probe-guard.jsonl"))
     args = parser.parse_args()
     if not 10 <= args.max_seconds <= 240 or not 200 <= args.max_deltas <= 10000:
         parser.error("Invalid diagnostic bounds")
     if not 4000 <= args.max_bytes <= 200000:
         parser.error("--max-bytes must be 4000..200000")
+    if args.self_test:
+        guard = JSONWhitespaceGuard()
+        guard.observe('{"paragraphs":["Valid paragraph"],"tables":[]')
+        try:
+            for _ in range(1500):
+                guard.observe(" " * 3)
+        except JSONWhitespaceStall:
+            print(f"SELF TEST PASSED: aborted after {guard.consecutive} JSON whitespace characters.")
+            return
+        raise AssertionError("Whitespace guard did not fire on the synthetic stall")
     load_local_config()
     path = find_project(args.project)
     work = papers._load_work(str(path))

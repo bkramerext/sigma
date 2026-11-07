@@ -365,6 +365,114 @@ def test_paper_sse_accepts_standard_line_endings_across_byte_chunks() -> None:
             assert result["output"][0]["content"][0]["text"] == "café"
 
 
+def test_long_paper_json_whitespace_guard_respects_strings_and_chunks() -> None:
+    """Legitimate whitespace in strings is never treated as JSON formatting."""
+    from sigma.paper_stream_guard import JSONWhitespaceGuard, JSONWhitespaceStall
+
+    safe = JSONWhitespaceGuard(limit=64)
+    for delta in (
+        '{"paragraphs":["This is a prose value ', " " * 5000,
+        ' still inside string"],"tables":[],"examples":[]}',
+    ):
+        safe.observe(delta)
+    assert not safe.in_string and safe.consecutive == 0
+
+    runaway = JSONWhitespaceGuard(limit=64)
+    runaway.observe('{"paragraphs":["Finished prose."],"tables":[]')
+    try:
+        for _ in range(100):
+            runaway.observe(" \n")
+    except JSONWhitespaceStall:
+        assert runaway.consecutive == 65
+    else:
+        raise AssertionError("A whitespace-output stall was not detected")
+
+
+def test_long_paper_section_provider_stops_runaway_without_paid_replay() -> None:
+    """A 2,049-character whitespace suffix is not a completed paper section."""
+    from sigma.paper_stream_guard import JSONWhitespaceStall
+
+    events = [
+        {"type": "response.created", "sequence_number": 0, "response": {"id": "paper-loop"}},
+        {"type": "response.output_text.delta", "sequence_number": 1,
+         "delta": '{"paragraphs":["A complete, evidence-linked paragraph."],"tables":[]'},
+        *[
+            {"type": "response.output_text.delta", "sequence_number": n,
+             "delta": " \n" * 80}
+            for n in range(2, 25)
+        ],
+    ]
+    dispatched: list[dict[str, Any]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        dispatched.append(json.loads(request.content))
+        stream = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=stream.encode()
+        )
+
+    actual_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kw: actual_client(transport=httpx.MockTransport(handler), **kw),
+    ):
+        try:
+            asyncio.run(
+                papers._provider_structured(
+                    {"section_number": 2},
+                    {"mode": "chatgpt", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "medium"},
+                    instructions="Write this paper section.",
+                    schema_name="sigma_long_paper_section",
+                    response_model=papers.LongSectionDraft,
+                )
+            )
+        except JSONWhitespaceStall as exc:
+            assert "No automatic paid retry" in str(exc)
+        else:
+            raise AssertionError("Runaway section incorrectly accepted as complete")
+
+    assert len(dispatched) == 1
+    assert "max_output_tokens" not in dispatched[0]
+
+
+def test_long_paper_section_provider_accepts_large_quoted_whitespace() -> None:
+    """A substantial quoted paragraph must pass the same guarded SSE path."""
+    body = json.dumps(
+        {"paragraphs": ["The result is " + " " * 5000 + "supported."],
+         "tables": [], "examples": []}
+    )
+    events = [
+        {"type": "response.created", "sequence_number": 0, "response": {"id": "normal"}},
+        {"type": "response.output_text.delta", "sequence_number": 1, "delta": body},
+        {"type": "response.completed", "sequence_number": 2,
+         "response": {"id": "normal", "status": "completed", "output": []}},
+    ]
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        stream = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=stream.encode()
+        )
+
+    actual_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kw: actual_client(transport=httpx.MockTransport(handler), **kw),
+    ):
+        parsed, _ = asyncio.run(
+            papers._provider_structured(
+                {"section_number": 2},
+                {"mode": "chatgpt", "token": "fixture"},
+                {"model": "gpt-6.1-sol", "reasoning_effort": "medium"},
+                instructions="Write this paper section.",
+                schema_name="sigma_long_paper_section",
+                response_model=papers.LongSectionDraft,
+            )
+        )
+    assert parsed.paragraphs[0].endswith("supported.")
+
+
 def test_paper_terminal_sse_event_without_final_separator() -> None:
     """A complete EOF terminal is valid; a truncated final JSON is not."""
     created = (
