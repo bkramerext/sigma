@@ -5709,18 +5709,15 @@ async def _frozen_session_configuration(
 
 
 def _validate_imported_transport_change(record: dict[str, Any], *, next_model: str) -> None:
-    """Fail closed when a recipient rebinds an imported, stopped session.
+    """Validate rebinding a stopped session, whether native or imported.
 
     No previous request or reservation is replayed, released, or re-funded.
     Existing paid usage must be fully settled before a new transport is used.
     """
-    if record.get("imported_via_bundle") is not True or record.get("status") not in {
-        "paused",
-        "stopped",
-    }:
+    if record.get("status") not in {"paused", "stopped"}:
         raise ProjectError(
-            "AI provider transport changed. Only imported, stopped sessions "
-            "may switch to a new provider type."
+            "AI provider transport can change only while a session is stopped. "
+            "Saved research and provider attempts are unchanged."
         )
     if any(
         item.get("status") in {"running", "interrupted"}
@@ -5763,7 +5760,7 @@ def _validate_imported_transport_change(record: dict[str, Any], *, next_model: s
 def _rebind_imported_transport(
     record: dict[str, Any], credential: Mapping[str, Any], config: Mapping[str, Any]
 ) -> None:
-    """Audit a recipient-owned transport switch before any new request starts."""
+    """Audit a provider transport switch before any new request starts."""
     _validate_imported_transport_change(record, next_model=str(config["model"]))
     prior_mode = record["mode"]
     prior_model = record["model"]
@@ -5799,14 +5796,18 @@ def _rebind_imported_transport(
             "to_model": config["model"],
             "previous_identity_hash": prior_identity,
             "new_identity_hash": record["identity_hash"],
-            "reason": "recipient_import_resume",
+            "reason": (
+                "recipient_import_resume"
+                if record.get("imported_via_bundle") is True
+                else "stopped_session_provider_change"
+            ),
         }
     )
     _event(
         record,
-        "session.imported_transport_rebound",
-        "An imported stopped session changed to the recipient's provider "
-        "connection. Past calls and billing reservations were preserved.",
+        "session.provider_transport_rebound",
+        "A stopped session changed its provider connection. "
+        "Past calls and billing reservations were preserved.",
     )
 
 
