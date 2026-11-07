@@ -332,16 +332,22 @@ class ProjectEmailTests(unittest.TestCase):
                 ),
                 patch.object(research_sessions.session_log, "append"),
             ):
-                research_sessions._rebind_imported_transport(imported, credential, settings)
+                research_sessions._rebind_provider_transport(imported, credential, settings)
             self.assertEqual(imported["mode"], "api_key")
             self.assertEqual(imported["model"], model)
             self.assertEqual(imported["steps"], initial["steps"])
             self.assertEqual(len(imported["transport_change_history"]), 1)
             self.assertFalse(imported["imported_via_bundle"])
-            with self.assertRaises(ProjectError):
-                research_sessions._rebind_imported_transport(
+            # Imported projects remain portable after their first switch.
+            with patch.object(
+                research_sessions.cloud_research, "billing_enabled", return_value=False
+            ):
+                research_sessions._rebind_provider_transport(
                     imported, {"mode": "chatgpt", "identity": "other"}, settings
                 )
+            self.assertEqual(imported["mode"], "chatgpt")
+            self.assertEqual(imported["steps"], initial["steps"])
+            self.assertEqual(len(imported["transport_change_history"]), 2)
 
     def test_unsettled_provider_reservations_block_cross_account_handoff(self):
         record = {
@@ -352,14 +358,14 @@ class ProjectEmailTests(unittest.TestCase):
             "hard_budget_ledger": None,
         }
         with self.assertRaisesRegex(ProjectError, "interrupted"):
-            research_sessions._validate_imported_transport_change(record, next_model="gpt-5")
+            research_sessions._validate_provider_transport_change(record, next_model="gpt-5")
         record["steps"] = []
         record["hard_budget_ledger"] = {
             "blocked_reason": "Provider call outcome or usage is unknown",
             "calls": [{"status": "unknown"}],
         }
         with self.assertRaisesRegex(ProjectError, "unsettled"):
-            research_sessions._validate_imported_transport_change(record, next_model="gpt-5")
+            research_sessions._validate_provider_transport_change(record, next_model="gpt-5")
 
     def test_rebased_imports_have_private_session_ids_and_repaired_links(self):
         with tempfile.TemporaryDirectory() as directory:

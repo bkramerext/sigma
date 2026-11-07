@@ -2463,7 +2463,6 @@ def test_fallback_abstract_uses_complete_result_and_keeps_proposals_out_of_findi
     ]
 
 
-
 def test_paper_checkpoint_portability_keeps_saved_sections_and_call_history() -> None:
     """Provider changes reuse the exact frozen paper, not a new charged draft."""
     import hashlib
@@ -2471,12 +2470,18 @@ def test_paper_checkpoint_portability_keeps_saved_sections_and_call_history() ->
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "portable-paper.sigma"
         project = initialize_project(
-            path, "Portable paper", "A bounded mathematical question.",
+            path,
+            "Portable paper",
+            "A bounded mathematical question.",
             research_mode="mathematical",
         ).project
         package, snapshot_sha = papers._snapshot(str(path))
         original = papers._new_work(
-            snapshot_sha, project.id, "old-fingerprint", "old-model", "high",
+            snapshot_sha,
+            project.id,
+            "a" * 64,
+            "old-model",
+            "high",
             kind="long_form",
         )
         original["frozen_package"] = package
@@ -2485,18 +2490,22 @@ def test_paper_checkpoint_portability_keeps_saved_sections_and_call_history() ->
         original["section_drafts"] = {
             "1": papers.LongSectionDraft(paragraphs=["Saved section."]).model_dump()
         }
-        original["section_dispatches"] = {"2": {"status": "unknown", "attempts": 1}}
+        original["section_dispatches"] = {"2": [2]}
         papers._save_work(str(path), original)
         binding = "chatgpt:replacement"
         preflight = papers.preflight(
-            str(path), force_long_form=True, expected_project_id=project.id,
-            expected_binding=binding, mode="chatgpt",
-            model="replacement-model", reasoning_effort="medium",
+            str(path),
+            force_long_form=True,
+            expected_project_id=project.id,
+            expected_binding=binding,
+            mode="chatgpt",
+            model="replacement-model",
+            reasoning_effort="medium",
         )
         assert preflight["resume_available"] is True
         assert preflight["completed_sections"] == 1
         assert preflight["provider_calls_attempted"] == 2
-        new_fingerprint = hashlib.sha256(("chatgpt" + "\\0" + binding).encode()).hexdigest()
+        new_fingerprint = hashlib.sha256(("chatgpt" + "\0" + binding).encode()).hexdigest()
         checkpoint = papers._load_work(str(path))
         assert checkpoint is not None
         old_drafts = copy.deepcopy(checkpoint["section_drafts"])
@@ -2519,7 +2528,11 @@ def test_paper_checkpoint_portability_keeps_saved_sections_and_call_history() ->
 
         # A dispatched one-shot request with no saved draft stays nonreplayable.
         uncertain = papers._new_work(
-            snapshot_sha, project.id, "old-fingerprint", "old-model", "high",
+            snapshot_sha,
+            project.id,
+            "a" * 64,
+            "old-model",
+            "high",
             kind="one_shot",
         )
         uncertain["frozen_package"] = package
@@ -2527,8 +2540,12 @@ def test_paper_checkpoint_portability_keeps_saved_sections_and_call_history() ->
         uncertain["provider_calls_total"] = 1
         papers._save_work(str(path), uncertain)
         preview = papers.preflight(
-            str(path), expected_project_id=project.id, expected_binding=binding,
-            mode="chatgpt", model="replacement-model", reasoning_effort="medium",
+            str(path),
+            expected_project_id=project.id,
+            expected_binding=binding,
+            mode="chatgpt",
+            model="replacement-model",
+            reasoning_effort="medium",
         )
         assert preview["resume_available"] is False
         assert preview["incomplete_one_shot"] is True

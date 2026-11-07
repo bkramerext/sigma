@@ -5740,21 +5740,20 @@ def _validate_provider_transport_change(record: dict[str, Any], *, next_model: s
     if reserved > 0:
         raise ProjectError("Cannot change provider transport with outstanding cost reservations.")
     ledger = record.get("hard_budget_ledger")
-    if ledger is not None:
-        if (
-            not isinstance(ledger, dict)
-            or ledger.get("blocked_reason")
-            or not isinstance(ledger.get("calls"), list)
-            or any(
-                not isinstance(call, dict) or call.get("status") not in {"settled", "rejected"}
-                for call in ledger["calls"]
-            )
-        ):
-            raise ProjectError(
-                "Cannot change provider transport with unsettled provider billing reservations."
-            )
-        # Settled and rejected calls keep their original per-call cost bounds.
-        # A new model's reviewed price applies only to future reservations.
+    if ledger is not None and (
+        not isinstance(ledger, dict)
+        or ledger.get("blocked_reason")
+        or not isinstance(ledger.get("calls"), list)
+        or any(
+            not isinstance(call, dict) or call.get("status") not in {"settled", "rejected"}
+            for call in ledger["calls"]
+        )
+    ):
+        raise ProjectError(
+            "Cannot change provider transport with unsettled provider billing reservations."
+        )
+    # Settled/rejected calls retain original per-call cost bounds.
+    # A new model's prices apply only to future reservations.
 
 
 def _rebind_provider_transport(

@@ -3933,6 +3933,7 @@ def _rebind_paper_checkpoint_provider(
     checkpoint["reasoning_effort"] = reasoning_effort
     return True
 
+
 def _can_rebase_explicit_restart(checkpoint: Mapping[str, Any], project_id: str) -> bool:
     """Rebind only an explicitly reset checkpoint that has no new research work."""
     return bool(
@@ -10042,7 +10043,8 @@ def preflight(
         and not one_shot_draft_available
     )
     resume_available = bool(
-        same_project_and_snapshot
+        work is not None
+        and same_project_and_snapshot
         and checkpoint_kind_matches
         and binding_fingerprint
         and model
