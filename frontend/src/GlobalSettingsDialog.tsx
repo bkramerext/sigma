@@ -67,8 +67,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       readJson('/api/user-preferences/research-settings'),
       readJson('/api/user-preferences/unattended-execution'),
       readJson('/api/user-preferences/section-layout'),
-      readJson('/api/user-preferences/progress-email'),
-      readJson('/api/ai/models'),
+      readJson('/api/user-preferences/progress-email').catch(() => ({ enabled: false, available: false })),
+      readJson('/api/ai/models').catch(() => ({ models: [] })),
     ]).then(([research, unattended, layout, progress, catalog]) => {
       if (controller.signal.aborted) return;
       setConfig(research as ResearchConfig);
