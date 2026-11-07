@@ -2093,6 +2093,43 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
     assert r"\section*{Evidence and authorship note}" not in concise
 
 
+def test_display_math_is_rendered_and_escaped_equations_are_safely_recovered() -> None:
+    """Regression: nonconsecutive-subset paper printed \[...\] equations as prose."""
+    root_filter = (
+        "\\[\n"
+        r"a_n=\frac{P_n(1)+P_n(\omega)+P_n(\omega^2)}{3}."
+        "\n\\]"
+    )
+    recurrence = (
+        "\\[\n"
+        r"a_{n+12}-5a_{n+9}+2a_{n+6}+5a_{n+3}+a_n=0."
+        "\n\\]"
+    )
+    for source in (root_filter, recurrence):
+        # Render genuine author math before the generic prose escaper runs.
+        assert papers._latex_prose(source, display_long_math=True) == source
+        assert r"\textbackslash{}[" not in papers._latex_prose(source)
+        # The previously shipped PDF had this exact text-escaped shape.
+        escaped = papers._latex(source).replace(r"\_", r"\_\allowbreak{}")
+        assert r"\textbackslash{}[" in escaped
+        restored, count = papers._restore_escaped_math_in_tex(escaped)
+        assert count == 1
+        assert restored == source
+        assert not papers._tex_static_diagnostics(restored)
+        assert any("display-math" in x for x in papers._tex_static_diagnostics(escaped))
+    assert papers._latex_prose(r"The identity \(a_n=3\) holds.") == (
+        r"The identity $a_n=3$ holds."
+    )
+    assert papers._latex_prose(r"$a_n=3$") == r"\[a_n=3\]"
+    # Never activate model-authored arbitrary TeX commands during recovery.
+    unsafe = r"\[\input{private_file}\]"
+    escaped_unsafe = papers._latex(unsafe)
+    assert papers._latex_prose(unsafe) == escaped_unsafe
+    unchanged, count = papers._restore_escaped_math_in_tex(escaped_unsafe)
+    assert unchanged == escaped_unsafe
+    assert count == 0
+
+
 def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
     """Readable PDF prose without losing math or overflowing the evidence appendix."""
     source = " ".join(
