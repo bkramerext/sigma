@@ -32,10 +32,10 @@ from sigma import (
     research_sessions,
     samples,
 )
-from sigma.zstd_codec import compress
 from sigma.api import export_project_view
 from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
 from sigma.recents import home_projects
+from sigma.zstd_codec import compress
 
 MODEL = "gpt-6.1-sol"
 PRIVATE_STRINGS = (
