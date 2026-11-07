@@ -19,7 +19,6 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
