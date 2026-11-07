@@ -600,14 +600,14 @@ def main() -> None:
 
                 saved_as = client.post(
                     "/api/projects/save-as",
-                    json={"path": source_path, "title": "API math v2"},
+                    json={"path": source_path, "title": "API math saved as v2"},
                 )
                 assert saved_as.status_code == 201, saved_as.text
                 clone = saved_as.json()
-                assert clone["project"]["title"] == "API math v2"
+                assert clone["project"]["title"] == "API math saved as v2"
                 assert clone["project"]["id"] != source_id
                 assert clone["path"] != source_path
-                assert inspect_project(clone["path"]).project.title == "API math v2"
+                assert inspect_project(clone["path"]).project.title == "API math saved as v2"
                 assert len(clone["project"]["events"]) == (
                     len(response.json()["project"]["events"]) + 1
                 )
@@ -684,7 +684,7 @@ def main() -> None:
                 # keys, losing audit history or altering source provenance.
                 twice = client.post(
                     "/api/projects/save-as",
-                    json={"path": clone["path"], "title": "API math v3"},
+                    json={"path": clone["path"], "title": "API math saved as v3"},
                 )
                 assert twice.status_code == 201, twice.text
                 third = twice.json()
@@ -735,7 +735,7 @@ def main() -> None:
                 assert (
                     client.post(
                         "/api/projects/save-as",
-                        json={"path": source_path, "title": "API math v2"},
+                        json={"path": source_path, "title": "API math saved as v2"},
                     ).status_code
                     == 400
                 )
