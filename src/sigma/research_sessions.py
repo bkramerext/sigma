@@ -5717,15 +5717,12 @@ async def _frozen_session_configuration(
     view: Any, credential: Mapping[str, Any], record: dict[str, Any]
 ) -> dict[str, Any]:
     """Check provider access for the model selected when the session began."""
-    pinned = replace(
-        view,
-        project=replace(
-            view.project,
-            ai_model=record["model"],
-            reasoning_effort=record["reasoning_effort"],
-        ),
+    return await configuration(
+        view=view,
+        context=credential,
+        frozen_model=record["model"],
+        frozen_effort=record["reasoning_effort"],
     )
-    return await configuration(view=pinned, context=credential)
 
 
 def _validate_imported_transport_change(record: dict[str, Any], *, next_model: str) -> None:
