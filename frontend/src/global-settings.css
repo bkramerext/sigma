@@ -86,3 +86,43 @@
 .sigma-project-classification-dialog .settings-body { padding: 20px 24px 25px; }
 .sigma-project-classification-dialog .settings-body fieldset { border: 0; margin: 0; padding: 0; }
 .sigma-project-classification-dialog .settings-body label { display: block; margin: 10px 0 6px; }
+
+/* Shared Save stays beside the Settings heading; Close remains at the far edge. */
+.sigma-global-settings .settings-header .settings-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: space-between;
+}
+.sigma-global-settings .settings-header .settings-actions > button:first-child {
+  width: auto;
+  flex: 0 0 auto;
+  margin-right: auto;
+}
+/* Classification changes only, so the dialog is content-height, not viewport-height. */
+.project-settings-dialog.sigma-project-classification-dialog {
+  width: min(400px, calc(100vw - 32px));
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
+}
+.sigma-project-classification-dialog > form {
+  height: auto;
+}
+.sigma-project-classification-dialog .settings-body {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.sigma-project-classification-dialog .settings-body .research-type-picker {
+  width: min(100%, 265px);
+}
+.sigma-project-classification-dialog .settings-body #sigma-project-difficulty {
+  width: min(100%, 145px);
+}
+/* Place classification Save beside its title and keep Close at the far edge. */
+.sigma-project-classification-dialog .settings-header .settings-actions {
+  flex: 1 1 auto;
+  justify-content: space-between;
+  min-width: 0;
+}
+.sigma-project-classification-dialog .settings-header .settings-actions > button:first-child {
+  margin-right: auto;
+}
