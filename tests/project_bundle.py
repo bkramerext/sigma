@@ -569,14 +569,11 @@ def main() -> None:
             )
 
             assert get_limits(created.path) == dict(NEW_DEFAULT_LIMITS)
-            # Existing malformed limits must never be mistaken for missing defaults.
+            # Historic project-local limits are inert in the new user-scoped model.
+            # They remain byte-for-byte portable, even when malformed.
             write_file(created.path, "research-sessions/limits.json", b"{invalid")
-            try:
-                get_limits(created.path)
-            except ProjectError:
-                pass
-            else:
-                raise AssertionError("Corrupt limits were silently reset")
+            assert get_limits(created.path) == dict(NEW_DEFAULT_LIMITS)
+            assert read_file(created.path, "research-sessions/limits.json") == b"{invalid"
             delete_file(created.path, "research-sessions/limits.json")
             assert _allocate_session_number(created.path, []) == 2
             assert _allocate_session_number(created.path, []) == 3
