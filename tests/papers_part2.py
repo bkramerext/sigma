@@ -306,6 +306,7 @@ def test_pre_stream_http_503_has_bounded_retry_without_replaying_partial_output(
     async def check_http_error(code):
         async def handler(_request):
             return httpx.Response(503, json={"error": {"code": code}})
+
         with (
             patch.object(papers.cloud_workspaces, "enabled", return_value=False),
             patch.object(
@@ -898,12 +899,9 @@ def test_authorized_section_recovery_reuses_saved_siblings_and_preserves_dispatc
     assert state["provider_calls_total"] == call_count + 1
     assert set(state["section_drafts"]) == {"1", "2", "3", "4"}
     assert all(state["section_drafts"][key] == value for key, value in original_drafts.items())
-    assert state["section_dispatches"]["1"] == [
-        *original_dispatches["1"], call_count + 1
-    ]
+    assert state["section_dispatches"]["1"] == [*original_dispatches["1"], call_count + 1]
     assert all(
-        state["section_dispatches"][key] == original_dispatches[key]
-        for key in ("2", "3", "4")
+        state["section_dispatches"][key] == original_dispatches[key] for key in ("2", "3", "4")
     )
     assert attempts.count(1) == 2
     assert attempts.count(2) == attempts.count(3) == attempts.count(4) == 1
