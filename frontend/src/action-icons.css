@@ -1,0 +1,89 @@
+/* SIGMA action icons. Icon-only controls use SIGMA's data-tooltip hovertext. */
+.sigma-action-glyph {
+  display: block;
+  flex: none;
+  width: 25px;
+  height: 25px;
+}
+.workspace-page .strategy-heading-actions,
+.workspace-page .sessions-pane-heading .sessions-heading-actions,
+.workspace-page .papers-pane-heading .papers-heading-actions,
+.workspace-page .paper-includes-anchor {
+  align-items: center;
+}
+.workspace-page .strategy-heading-actions button.sigma-heading-icon-action,
+.workspace-page .sessions-pane-heading button.sigma-heading-icon-action,
+.workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: #e0c4a0;
+  text-decoration: none;
+  cursor: pointer;
+}
+.workspace-page .strategy-heading-actions button.sigma-heading-icon-action:hover:not(:disabled),
+.workspace-page .sessions-pane-heading button.sigma-heading-icon-action:hover:not(:disabled),
+.workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action:hover:not(:disabled) {
+  color: #ffe1ad;
+  background: #3b3029;
+  text-decoration: none;
+}
+.workspace-page .strategy-heading-actions button.sigma-heading-icon-action:focus-visible,
+.workspace-page .sessions-pane-heading button.sigma-heading-icon-action:focus-visible,
+.workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}
+.workspace-page .strategy-heading-actions button.sigma-heading-icon-action:disabled,
+.workspace-page .sessions-pane-heading button.sigma-heading-icon-action:disabled,
+.workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action:disabled {
+  opacity: .5;
+  cursor: default;
+}
+.workspace-page .project-pane-actions .sigma-action-glyph {
+  width: 25px;
+  height: 25px;
+}
+/* Home page New and Upload have matching icon-only controls. */
+.home-page .home-projects-heading button.home-icon-action {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+  margin: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none;
+  color: #e6af92;
+  cursor: pointer;
+}
+.home-page .home-projects-heading button.home-icon-action:hover:not(:disabled) {
+  color: #ffe0ab;
+  background: #302418;
+}
+.home-page .home-projects-heading button.home-icon-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}
