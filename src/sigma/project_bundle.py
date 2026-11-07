@@ -239,7 +239,7 @@ def _verify_imported_papers(members: dict[str, bytes]) -> None:
     import re
 
     for name, raw in members.items():
-        if re.fullmatch(r"artifacts/papers/[0-9a-f]{32}\\.json", name) is None:
+        if re.fullmatch(r"artifacts/papers/[0-9a-f]{32}\.json", name) is None:
             continue
         paper_id = name.rsplit("/", 1)[1][:-5]
         try:
