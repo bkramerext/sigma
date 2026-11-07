@@ -1437,6 +1437,12 @@ def update_project(
             if wanted_type_id != current_type_id
             else project.project_type_snapshot
         )
+        persisted = replace(
+            wanted,
+            ai_model=legacy_model(),
+            reasoning_effort="high",
+            show_advanced_outcome_details=False,
+        )
         return replace(
             project,
             schema_version=max(12, project.schema_version),
@@ -1455,7 +1461,7 @@ def update_project(
                     len(project.events) + 1,
                     "project.updated",
                     _next_timestamp(project),
-                    project_change=ProjectChange(current, wanted),
+                    project_change=ProjectChange(current, persisted),
                 ),
             ),
         )
