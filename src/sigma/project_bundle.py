@@ -301,9 +301,9 @@ def import_independent_bundle(bundle: dict[str, Any], destination: str | Path) -
         source_id = project["id"]
         copy_id = str(uuid4())
         project["id"] = copy_id
-        members["project.json"] = (
-            json.dumps(project, ensure_ascii=False, indent=2) + "\n"
-        ).encode("utf-8")
+        members["project.json"] = (json.dumps(project, ensure_ascii=False, indent=2) + "\n").encode(
+            "utf-8"
+        )
         prepared = rebase_copy(
             portable_bundle(members),
             source_id=source_id,
