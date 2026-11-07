@@ -185,6 +185,8 @@
   min-width: 0;
 }
 .workspace-page .papers-pane .saved-paper-title-first-line .saved-paper-title {
+  display: inline-flex;
+  align-items: center;
   flex: 0 0 auto;
   width: auto;
   min-width: 0;
