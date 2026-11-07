@@ -11,12 +11,39 @@ from unittest.mock import MagicMock, Mock, call, patch
 
 from sigma.cli import main as cli_main
 from sigma.projects import ROOT
-from sigma.tooling import _safe_independent_test_step, run_tooling
+from sigma.tooling import _safe_independent_test_step, _zstd_setup_steps, run_tooling
 from sigma.ui import local_google_configuration_warning, run_shutdown, run_ui, stop_servers
 from sigma.ui_instance import Instance
 
 
+def check_zstd_setup() -> None:
+    """Local setup installs zstd through the platform package manager."""
+    with (
+        patch("sigma.tooling.sys.platform", "darwin"),
+        patch(
+            "sigma.tooling.shutil.which",
+            side_effect=lambda tool: "/brew" if tool == "brew" else None,
+        ),
+    ):
+        assert _zstd_setup_steps() == [["brew", "install", "zstd"]]
+    with (
+        patch("sigma.tooling.sys.platform", "linux"),
+        patch("sigma.tooling.os.geteuid", return_value=500),
+        patch(
+            "sigma.tooling.shutil.which",
+            side_effect=lambda tool: "/usr/bin/tool" if tool in {"apt-get", "sudo"} else None,
+        ),
+    ):
+        assert _zstd_setup_steps() == [
+            ["sudo", "apt-get", "update", "-qq"],
+            ["sudo", "apt-get", "install", "-y", "zstd"],
+        ]
+    with patch("sigma.tooling.shutil.which", return_value="/usr/bin/zstd"):
+        assert _zstd_setup_steps() == []
+
+
 def check_failures() -> None:
+    check_zstd_setup()
     assert _safe_independent_test_step(
         ["uv", "run", "--locked", "--no-sync", "python", "tests/gce_host.py"]
     )

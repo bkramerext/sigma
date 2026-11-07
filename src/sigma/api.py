@@ -1675,7 +1675,7 @@ def import_project_bundle(body: ImportBundleRequest):
     from sigma.project_bundle import (
         BundleError,
         bundle_project_document,
-        import_bundle,
+        import_independent_bundle,
         rename_bundle_project,
     )
     from sigma.projects import (
@@ -1718,7 +1718,7 @@ def import_project_bundle(body: ImportBundleRequest):
                     if candidate == title
                     else rename_bundle_project(body.bundle, candidate)
                 )
-                imported = import_bundle(payload, destination)
+                imported = import_independent_bundle(payload, destination)
                 break
             if imported is None:
                 raise ProjectError("A unique name for the imported project is unavailable.")

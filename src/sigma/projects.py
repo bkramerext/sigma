@@ -760,7 +760,7 @@ def initialize_project(
     if not title.strip() or not problem.strip():
         raise ProjectError("Title and problem must be nonempty")
     if path.suffix == ".json":
-        from sigma.project_bundle import FORMAT, VERSION
+        from sigma.project_bundle import stored_bundle
 
         if os.path.lexists(path):
             raise ProjectError("Project destination already exists")
@@ -780,13 +780,7 @@ def initialize_project(
             backend_build_commit=_current_build_commit(),
             project_type_snapshot=_type_snapshot(mode),
         )
-        import base64
-
-        bundle = {
-            "format": FORMAT,
-            "version": VERSION,
-            "files": {STATE: base64.b64encode(_document(project)).decode("ascii")},
-        }
+        bundle = stored_bundle({STATE: _document(project)})
         fd, staged_name = tempfile.mkstemp(prefix=".sigma-init-", dir=path.parent)
         staged = Path(staged_name)
         try:

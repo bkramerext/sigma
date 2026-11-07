@@ -67,7 +67,7 @@ A research **session** runs selected strategies through **rounds** of Investigat
 
 ## Run locally
 
-Requires **macOS or Linux**, **Python 3.11+**, **[uv](https://docs.astral.sh/uv/)**, and **Node.js 20.19+** with npm. From a terminal:
+Requires **macOS or Linux**, **Python 3.11+**, **[uv](https://docs.astral.sh/uv/)**, and **Node.js 20.19+** with npm. SIGMA uses Zstandard-compressed project bundles; `./sigma setup` installs `zstd` via Homebrew (macOS) or apt (Debian/Ubuntu Linux) when it is missing. From a terminal:
 
 ```sh
 git clone https://github.com/bkramerext/sigma.git

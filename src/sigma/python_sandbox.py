@@ -901,21 +901,18 @@ def list_executions(path: str | Path) -> list[dict[str, Any]]:
     project_id = inspect_project(path).project.id
     bundle_path = _execution_bundle_path(directory)
     if bundle_path is not None:
-        import base64
-
-        from sigma.project_bundle import read_bundle
+        from sigma.project_bundle import _decode, read_bundle
 
         try:
-            members = read_bundle(bundle_path)["files"]
+            members = _decode(read_bundle(bundle_path))
         except (OSError, ValueError) as exc:
             raise ProjectError("Research execution bundle is unreadable") from exc
         records = []
         prefix = "research-executions/"
-        for name, encoded in members.items():
+        for name, raw in members.items():
             if not name.startswith(prefix) or not name.endswith(".json") or ".artifacts/" in name:
                 continue
             try:
-                raw = base64.b64decode(encoded, validate=True)
                 if len(raw) > MAX_ARTIFACT_BYTES:
                     continue
                 record = json.loads(raw)
