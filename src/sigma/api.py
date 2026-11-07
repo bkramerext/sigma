@@ -1115,6 +1115,36 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     )
 
 
+class GlobalResearchSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    limits: dict[str, Any] | None = None
+    ai_model: str | None = Field(default=None, min_length=1, max_length=128)
+    reasoning_effort: str | None = Field(default=None, min_length=1, max_length=40)
+    show_advanced_outcome_details: bool | None = None
+
+
+@app.get("/api/user-preferences/research-settings")
+def global_research_settings_view():
+    from sigma import global_research_settings
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(403, "Sign in to view research settings.")
+    return global_research_settings.load_config()
+
+
+@app.put("/api/user-preferences/research-settings")
+def global_research_settings_update(body: GlobalResearchSettingsRequest):
+    from sigma import global_research_settings
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(403, "Sign in to change research settings.")
+    changes = body.model_dump(exclude_none=True)
+    # Explicit null limits are not meaningful; omit unchanged fields.
+    return global_research_settings.save_config(changes)
+
+
 @app.get("/api/projects/research-limits")
 def research_limits_view(path: str):
     limits = research_sessions._new_session_limits(research_sessions.get_limits(path))
