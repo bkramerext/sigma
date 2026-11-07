@@ -1,0 +1,223 @@
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import DialogDismissButton from './DialogDismissButton';
+import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
+import './global-settings.css';
+
+type Tab = 'types' | 'research' | 'limits' | 'preferences';
+type LimitSettings = {
+  research_rounds: number;
+  turns_per_round: number;
+  scheduler_version: number;
+  model_calls: number;
+  session_duration_minutes: number | null;
+  output_tokens_per_call: number;
+  maximum_estimated_cost_usd: number | null;
+  maximum_input_tokens_per_session: number | null;
+  max_concurrent_sessions: number | string;
+};
+type ResearchConfig = {
+  limits: LimitSettings;
+  ai_model: string;
+  reasoning_effort: string;
+  show_advanced_outcome_details: boolean;
+};
+type CatalogModel = { id: string; label: string; efforts: string[]; relative_cost: string };
+type Preference = { allow_unattended_background_execution: boolean; expand_one_project_section_at_a_time: boolean; progress_email: boolean };
+const tabs: { id: Tab; title: string }[] = [
+  { id: 'types', title: 'Project Types' },
+  { id: 'research', title: 'Research' },
+  { id: 'limits', title: 'Limits' },
+  { id: 'preferences', title: 'Preferences' },
+];
+const headers = { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' };
+
+async function readJson(url: string): Promise<any> {
+  const response = await fetch(url, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail ?? result.error ?? 'Settings could not be loaded');
+  return result;
+}
+async function putJson(url: string, payload: unknown): Promise<any> {
+  const response = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail ?? result.error ?? 'Settings could not be saved');
+  return result;
+}
+const textValue = (value: number | null | undefined) => value == null ? '' : String(value);
+
+export default function GlobalSettingsDialog({ onClose }: { onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [tab, setTab] = useState<Tab>('types');
+  const [config, setConfig] = useState<ResearchConfig | null>(null);
+  const [models, setModels] = useState<CatalogModel[]>([]);
+  const [prefs, setPrefs] = useState<Preference>({
+    allow_unattended_background_execution: false,
+    expand_one_project_section_at_a_time: false,
+    progress_email: false,
+  });
+  const [progressAvailable, setProgressAvailable] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    dialog.current?.showModal();
+    const controller = new AbortController();
+    void Promise.all([
+      readJson('/api/user-preferences/research-settings'),
+      readJson('/api/user-preferences/unattended-execution'),
+      readJson('/api/user-preferences/section-layout'),
+      readJson('/api/user-preferences/progress-email'),
+      readJson('/api/ai/models'),
+    ]).then(([research, unattended, layout, progress, catalog]) => {
+      if (controller.signal.aborted) return;
+      setConfig(research as ResearchConfig);
+      setPrefs({
+        allow_unattended_background_execution: !!unattended.allow_unattended_background_execution,
+        expand_one_project_section_at_a_time: !!layout.expand_one_project_section_at_a_time,
+        progress_email: !!progress.enabled,
+      });
+      setProgressAvailable(!!progress.available);
+      setModels(catalog.models ?? []);
+      setLoaded(true);
+    }).catch(cause => { if (!controller.signal.aborted) setError(String(cause)); });
+    return () => controller.abort();
+  }, []);
+  const setLimit = (key: keyof LimitSettings, value: number | string | null) => {
+    setSaved(false);
+    setConfig(current => current ? { ...current, limits: { ...current.limits, [key]: value } } : current);
+  };
+  const setResearch = (patch: Partial<ResearchConfig>) => {
+    setSaved(false);
+    setConfig(current => current ? { ...current, ...patch } : current);
+  };
+  const setPref = (patch: Partial<Preference>) => { setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!config || busy) return;
+    const limits = { ...config.limits };
+    const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
+    for (const field of whole) {
+      const value = Number(limits[field]);
+      if (!Number.isInteger(value) || value < 1) { setError('Enter positive whole numbers for research limits.'); setTab('limits'); return; }
+      (limits as any)[field] = value;
+    }
+    limits.scheduler_version = 2;
+    limits.model_calls = limits.research_rounds * limits.turns_per_round * 2;
+    for (const field of ['session_duration_minutes', 'maximum_input_tokens_per_session'] as const) {
+      const raw = limits[field] as number | string | null;
+      (limits as any)[field] = raw === '' || raw === null ? null : Number(raw);
+    }
+    const cost = limits.maximum_estimated_cost_usd as number | string | null;
+    limits.maximum_estimated_cost_usd = cost === '' || cost == null ? null : Number(cost);
+    setBusy(true); setError(''); setSaved(false);
+    try {
+      const next = await putJson('/api/user-preferences/research-settings', {
+        limits, ai_model: config.ai_model, reasoning_effort: config.reasoning_effort,
+        show_advanced_outcome_details: config.show_advanced_outcome_details,
+      });
+      setConfig(next);
+      await putJson('/api/user-preferences/unattended-execution', {
+        allow_unattended_background_execution: prefs.allow_unattended_background_execution,
+      });
+      await putJson('/api/user-preferences/section-layout', {
+        expand_one_project_section_at_a_time: prefs.expand_one_project_section_at_a_time,
+      });
+      if (progressAvailable || !prefs.progress_email) {
+        await putJson('/api/user-preferences/progress-email', { enabled: prefs.progress_email });
+      }
+      window.dispatchEvent(new CustomEvent('sigma-section-layout-preference-changed', {
+        detail: prefs.expand_one_project_section_at_a_time,
+      }));
+      setSaved(true);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
+  }
+  const model = models.find(item => item.id === config?.ai_model);
+  const changeTab = (next: Tab) => { setTab(next); setError(''); };
+  return <dialog ref={dialog} className="project-settings-dialog sigma-global-settings" aria-labelledby="sigma-global-settings-title"
+    onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
+    <form onSubmit={save}>
+      <header className="settings-header">
+        <h2 id="sigma-global-settings-title">Settings</h2>
+        <div className="settings-actions">
+          {tab !== 'types' && <button type="submit" disabled={!loaded || busy}>{busy ? 'Saving…' : 'Save'}</button>}
+          <DialogDismissButton label="Close Settings" disabled={busy} onClick={onClose}/>
+        </div>
+      </header>
+      <nav className="settings-tabs" role="tablist" aria-label="Settings">
+        {tabs.map(item => <button type="button" key={item.id} role="tab" aria-selected={tab === item.id}
+          onClick={() => changeTab(item.id)}>{item.title}</button>)}
+      </nav>
+      <section role="tabpanel" hidden={tab !== 'types'}>
+        <ProjectTypesDialog embedded onClose={() => {}} renderIcon={(item: ProjectTypeRecord) =>
+          item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> :
+          <span className="sigma-settings-type-icon" aria-hidden="true">◈</span>}/>
+      </section>
+      {tab !== 'types' && <div className="settings-body">
+        {!loaded && !error && <p role="status">Loading your settings…</p>}
+        {config && tab === 'research' && <fieldset disabled={busy}>
+          <label htmlFor="sigma-global-model">Model</label>
+          <select id="sigma-global-model" value={config.ai_model} onChange={event => {
+            const selected = models.find(m => m.id === event.target.value);
+            setResearch({ ai_model: event.target.value,
+              reasoning_effort: selected?.efforts.includes(config.reasoning_effort)
+                ? config.reasoning_effort : selected?.efforts[0] ?? config.reasoning_effort });
+          }}>
+            {!model && <option value={config.ai_model}>{config.ai_model}</option>}
+            {models.map(item => <option key={item.id} value={item.id}>{item.label} · {item.relative_cost}</option>)}
+          </select>
+          <label htmlFor="sigma-global-effort">Thinking level</label>
+          <select id="sigma-global-effort" value={config.reasoning_effort}
+            onChange={event => setResearch({ reasoning_effort: event.target.value })}>
+            {(model?.efforts ?? [config.reasoning_effort]).map(effort =>
+              <option key={effort} value={effort}>{effort.charAt(0).toUpperCase() + effort.slice(1)}</option>)}
+          </select>
+          <p className="settings-hint">Applies to future research and AI proposals in every project. Active sessions retain their saved configuration.</p>
+        </fieldset>}
+        {config && tab === 'limits' && <fieldset disabled={busy} className="sigma-global-limits">
+          <label htmlFor="sigma-global-concurrent">Maximum concurrent sessions per project</label>
+          <input id="sigma-global-concurrent" type="number" min={1} max={4} value={config.limits.max_concurrent_sessions}
+            onChange={e => setLimit('max_concurrent_sessions', e.target.value)}/>
+          <label htmlFor="sigma-global-rounds">Research rounds</label>
+          <input id="sigma-global-rounds" type="number" min={1} max={60} value={config.limits.research_rounds}
+            onChange={e => setLimit('research_rounds', e.target.value)}/>
+          <label htmlFor="sigma-global-turns">Turns per round</label>
+          <input id="sigma-global-turns" type="number" min={1} max={20} value={config.limits.turns_per_round}
+            onChange={e => setLimit('turns_per_round', e.target.value)}/>
+          <p className="settings-hint">Maximum agent calls per strategy: {Number(config.limits.research_rounds || 0) * Number(config.limits.turns_per_round || 0) * 2} (Investigator + Skeptic per turn).</p>
+          <label htmlFor="sigma-global-duration">Maximum session duration (minutes)</label>
+          <input id="sigma-global-duration" type="number" min={1} max={10080} placeholder="Unlimited"
+            value={textValue(config.limits.session_duration_minutes)}
+            onChange={e => setLimit('session_duration_minutes', e.target.value)}/>
+          <p className="settings-hint">Leave blank for Unlimited.</p>
+          <label htmlFor="sigma-global-input">Maximum input tokens per session</label>
+          <input id="sigma-global-input" type="number" min={4096} max={1000000} placeholder="Unlimited"
+            value={textValue(config.limits.maximum_input_tokens_per_session)}
+            onChange={e => setLimit('maximum_input_tokens_per_session', e.target.value)}/>
+          <label htmlFor="sigma-global-cost">Maximum estimated session cost (USD)</label>
+          <input id="sigma-global-cost" type="number" min={0.01} max={100} step={0.01} placeholder="Unlimited"
+            value={textValue(config.limits.maximum_estimated_cost_usd)}
+            onChange={e => setLimit('maximum_estimated_cost_usd', e.target.value)}/>
+          <p className="settings-hint">Limits apply to new sessions across all your projects. Existing session history is unchanged.</p>
+        </fieldset>}
+        {config && tab === 'preferences' && <fieldset disabled={busy}>
+          <label className="project-preference-checkbox"><input type="checkbox" checked={config.show_advanced_outcome_details}
+            onChange={e => setResearch({ show_advanced_outcome_details: e.target.checked })}/>Show advanced Outcome details</label>
+          <label className="project-preference-checkbox"><input type="checkbox"
+            checked={prefs.expand_one_project_section_at_a_time}
+            onChange={e => setPref({ expand_one_project_section_at_a_time: e.target.checked })}/>Expand one project section at a time</label>
+          <label className="project-preference-checkbox"><input type="checkbox" checked={prefs.progress_email}
+            disabled={!progressAvailable && !prefs.progress_email}
+            onChange={e => setPref({ progress_email: e.target.checked })}/>Notify me by email on progress</label>
+          <label className="project-preference-checkbox"><input type="checkbox"
+            checked={prefs.allow_unattended_background_execution}
+            onChange={e => setPref({ allow_unattended_background_execution: e.target.checked })}/>Allow unattended background execution</label>
+          <p className="settings-hint">These preferences are yours, across every project. Unattended execution may incur provider usage.</p>
+        </fieldset>}
+        {error && <p role="alert" className="error">{error}</p>}
+        {saved && <p role="status" className="settings-hint">Settings saved.</p>}
+      </div>}
+    </form>
+  </dialog>;
+}
