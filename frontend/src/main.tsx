@@ -4137,7 +4137,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
-      <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
+
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
     <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
@@ -4422,37 +4422,6 @@ type CatalogChoice = { id: string; label: string; description: string; efforts: 
 // Keep preference controls usable when account access cannot be checked.
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
 const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty, show_advanced_outcome_details: view.project.show_advanced_outcome_details });
-
-function ProjectHeaderControls({ view, onSaved, disabled }: {
-  view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const difficultyOrder: ProjectDifficulty[] = ['easy', 'medium', 'hard'];
-  const currentIndex = view.project.difficulty ? difficultyOrder.indexOf(view.project.difficulty) : -1;
-  const nextDifficulty = difficultyOrder[(currentIndex + 1) % difficultyOrder.length];
-  async function cycleDifficulty() {
-    if (disabled || busy) return;
-    setBusy(true); setError('');
-    try {
-      const expected = settingsOf(view);
-      const next = await post<ProjectView>('update', {
-        path: view.path, ...expected, difficulty: nextDifficulty, expected,
-      });
-      onSaved(next);
-    } catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); }
-  }
-  return <div className="project-header-controls" aria-label="Project difficulty">
-    <button type="button" className={`project-control-pill project-difficulty-badge difficulty-${view.project.difficulty ?? 'unset'}`}
-      aria-label={`Project difficulty ${view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'not set'}`}
-      data-tooltip="Click to change this project's difficulty" disabled={disabled || busy}
-      onClick={() => void cycleDifficulty()}>
-      Difficulty · {view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'Not set'}
-    </button>
-    {error && <span role="alert" className="project-controls-message">{error}</span>}
-  </div>;
-}
 
 function ResearchTypeIcon({ type, snapshot }: { type: ResearchMode; snapshot?: ProjectTypeRecord | null }) {
   const definition = snapshot?.id === type ? snapshot : projectTypeCache.find(item => item.id === type);
