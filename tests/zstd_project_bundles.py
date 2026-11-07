@@ -38,7 +38,7 @@ def main() -> None:
     document = {"schema_version": 11, "id": "example"}
     members = {
         "project.json": (json.dumps(document) + "\n").encode(),
-        "research-sessions/notes.json": b'{"notes":"' + b"x" * 40_000 + b'"}',
+        "evidence/notes.json": b'{"notes":"' + b"x" * 40_000 + b'"}',
         "artifacts/papers/paper-a.tex": b"\\\\section{Proof}\n" + b"Text " * 20_000,
         "artifacts/papers/paper-a.pdf": b"%PDF-1.7\n" + os.urandom(100_000),
         "artifacts/papers/paper-a.json": b'{"paper_id":"paper-a"}\n',
@@ -54,7 +54,7 @@ def main() -> None:
         for name, value in stored["files"].items()
     )
     assert _decode(stored) == members
-    assert len(stored["files"]["research-sessions/notes.json"]["data"]) < 2500
+    assert len(stored["files"]["evidence/notes.json"]["data"]) < 2500
 
     exported = portable_bundle(members)
     assert exported["version"] == 3
