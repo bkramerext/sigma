@@ -27,7 +27,10 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
     started = monotonic()
     with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", prefix="sigma-paper-preflight-", suffix=".log",
+        mode="w",
+        encoding="utf-8",
+        prefix="sigma-paper-preflight-",
+        suffix=".log",
         delete=False,
     ) as log:
         path = Path(log.name)
