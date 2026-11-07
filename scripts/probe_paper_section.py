@@ -79,8 +79,7 @@ def exact_base_instructions() -> str:
     node = ast.parse(source).body[0]
     for statement in node.body:
         if isinstance(statement, ast.Assign) and any(
-            isinstance(t, ast.Name) and t.id == "section_instructions"
-            for t in statement.targets
+            isinstance(t, ast.Name) and t.id == "section_instructions" for t in statement.targets
         ):
             return ast.literal_eval(statement.value)
     raise ValueError("Could not locate canonical section instructions")
@@ -254,9 +253,7 @@ async def probe(
     try:
         async with asyncio.timeout(args.max_seconds):
             async with (
-                httpx.AsyncClient(
-                    timeout=None, trust_env=False, follow_redirects=False
-                ) as client,
+                httpx.AsyncClient(timeout=None, trust_env=False, follow_redirects=False) as client,
                 client.stream(
                     "POST",
                     "https://api.openai.com/v1/responses",
