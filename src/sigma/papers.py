@@ -2968,6 +2968,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "publication_compilation",
         "publication_compiler_calls",
         "generation_issues",
+        "provider_change_history",
     }
     generation_issues = value.get("generation_issues", [])
     if (
@@ -2978,6 +2979,36 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Saved paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
+    history = value.get("provider_change_history", [])
+    history_keys = {
+        "at",
+        "from_binding_fingerprint",
+        "to_binding_fingerprint",
+        "from_model",
+        "to_model",
+        "reason",
+    }
+    if (
+        not isinstance(history, list)
+        or len(history) > 100
+        or any(
+            not isinstance(item, dict)
+            or set(item) != history_keys
+            or not isinstance(item["at"], str)
+            or len(item["at"]) > 64
+            or not all(
+                isinstance(item[key], str) and re.fullmatch(r"[0-9a-f]{64}", item[key])
+                for key in ("from_binding_fingerprint", "to_binding_fingerprint")
+            )
+            or not all(
+                isinstance(item[key], str) and len(item[key]) <= 128
+                for key in ("from_model", "to_model")
+            )
+            or item["reason"] != "paper_checkpoint_resume"
+            for item in history
+        )
+    ):
+        raise ProjectError("Paper checkpoint provider-change history is invalid")
     if "frozen_package_ref" in value:
         digest = value["frozen_package_ref"]
         if not isinstance(digest, str) or "frozen_package" in value:
@@ -3918,7 +3949,8 @@ def _rebind_paper_checkpoint_provider(
     new = (binding_fingerprint, model, reasoning_effort)
     if old == new:
         return False
-    checkpoint.setdefault("provider_change_history", []).append(
+    history = checkpoint.setdefault("provider_change_history", [])
+    history.append(
         {
             "at": _now(),
             "from_binding_fingerprint": old[0],
@@ -3928,6 +3960,8 @@ def _rebind_paper_checkpoint_provider(
             "reason": "paper_checkpoint_resume",
         }
     )
+    # Keep the saved audit bounded even when a project travels repeatedly.
+    del history[:-100]
     checkpoint["binding_fingerprint"] = binding_fingerprint
     checkpoint["model"] = model
     checkpoint["reasoning_effort"] = reasoning_effort
