@@ -3902,6 +3902,37 @@ def _new_work(
     }
 
 
+def _rebind_paper_checkpoint_provider(
+    checkpoint: dict[str, Any], binding_fingerprint: str, model: str, reasoning_effort: str
+) -> bool:
+    """Rebind only future authoring calls, preserving all saved drafts and dispatches.
+
+    The caller validates the same project/snapshot/paper kind and owns the paper
+    operation lock. No old call reservation or completed work is cleared.
+    """
+    old = (
+        checkpoint.get("binding_fingerprint"),
+        checkpoint.get("model"),
+        checkpoint.get("reasoning_effort"),
+    )
+    new = (binding_fingerprint, model, reasoning_effort)
+    if old == new:
+        return False
+    checkpoint.setdefault("provider_change_history", []).append(
+        {
+            "at": _now(),
+            "from_binding_fingerprint": old[0],
+            "to_binding_fingerprint": binding_fingerprint,
+            "from_model": old[1],
+            "to_model": model,
+            "reason": "paper_checkpoint_resume",
+        }
+    )
+    checkpoint["binding_fingerprint"] = binding_fingerprint
+    checkpoint["model"] = model
+    checkpoint["reasoning_effort"] = reasoning_effort
+    return True
+
 def _can_rebase_explicit_restart(checkpoint: Mapping[str, Any], project_id: str) -> bool:
     """Rebind only an explicitly reset checkpoint that has no new research work."""
     return bool(
@@ -8721,11 +8752,12 @@ async def _generate_impl(
                     ("kind", expected_kind),
                     ("snapshot_sha256", snapshot_hash),
                     ("project_id", view.project.id),
-                    ("binding_fingerprint", binding_fingerprint),
-                    ("model", config["model"]),
-                    ("reasoning_effort", config["reasoning_effort"]),
                 )
             )
+            if compatible and _rebind_paper_checkpoint_provider(
+                checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
+            ):
+                _save_work(path, checkpoint)
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
@@ -8741,7 +8773,7 @@ async def _generate_impl(
                 work = checkpoint
             else:
                 raise ProjectError(
-                    "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
+                    "A paper checkpoint exists for different frozen evidence or paper type. Resume using the saved evidence or explicitly restart while preserving prior attempt accounting."
                 )
         if checkpoint is not None and work.get("include_diagrams") != include_diagrams:
             # The combined diagrams-and-tables preference changes only what is
@@ -10013,9 +10045,10 @@ def preflight(
         same_project_and_snapshot
         and checkpoint_kind_matches
         and binding_fingerprint
-        and work_state.get("binding_fingerprint") == binding_fingerprint
-        and work_state.get("model") == model
-        and work_state.get("reasoning_effort") == reasoning_effort
+        and model
+        and reasoning_effort
+        # Future calls can use the current provider/model; the original
+        # frozen evidence and paid-call dispatch markers remain unchanged.
         and (long_form or one_shot_draft_available or work_state.get("provider_calls", 0) == 0)
     )
     if not resume_available and _can_rebase_explicit_restart(work_state, view.project.id):
