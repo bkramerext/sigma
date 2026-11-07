@@ -800,7 +800,7 @@ function sessionNoticeKey(session: ResearchSession): string {
 
 function SessionNoticeDismiss({ number, onDismiss, label }: { number: number; onDismiss: () => void; label?: string }) {
   return <button type="button" className="session-notice-dismiss" aria-label={label ?? `Dismiss notices for Session ${number}`}
-    title={label ?? `Dismiss Session ${number} notices`} onClick={onDismiss}>Dismiss</button>;
+    data-tooltip={label ?? `Dismiss Session ${number} notices`} onClick={onDismiss}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>;
 }
 
 // An in-flow exit slot: the notice slides through its own bottom edge
@@ -3216,7 +3216,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       <div className="ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
 
-      {scoreError && <p role="alert" className="error">{scoreError} <button type="button" className="text-view-link" onClick={() => setScoreError('')}>Dismiss</button></p>}
+      {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <button type="button" className="paper-score-error-dismiss" aria-label="Dismiss paper score error" data-tooltip="Dismiss paper score error" onClick={() => setScoreError('')}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button></p>}
       {loading && <p>Loading saved versions…</p>}
 
       {(showDraftPaper || (!loading && papers.length > 0)) && <section className="saved-paper-library" aria-label="Papers">
