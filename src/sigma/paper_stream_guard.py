@@ -4,6 +4,7 @@ Opt-in only for structured section writing. This lexical state machine works
 across SSE text deltas and ignores whitespace inside quoted JSON string values.
 It stores neither the generated content nor the original research input.
 """
+
 from __future__ import annotations
 
 from sigma.projects import ProjectError
