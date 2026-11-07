@@ -281,7 +281,7 @@
 .workspace-page .papers-pane .ai-paper-restart-notice { margin: 0 0 10px; padding: 0; border: 0; background: none; color: #c0cad2; font-size: 13px; }
 
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure { margin: 10px 0 0 28px; border: 0; background: transparent; }
-.workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure > summary { padding: 4px 0; color: #b5a18c; font-size: 12px; }
+.workspace-page .papers-pane .saved-paper-card .paper-diagnostics-disclosure > summary { padding: 4px 0; color: var(--sigma-copper-foreground); font-size: 12px; }
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-content { padding: 4px 10px 8px; }
 
 /* Compact tape-recorder rewind control matches the adjacent Play/Stop icons. */
