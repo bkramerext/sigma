@@ -3547,21 +3547,6 @@ function UploadProjectIcon() {
   return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V3m-4.5 4.5L12 3l4.5 4.5M3 16v4.5h18V16"/></svg>;
 }
 
-const NEW_PROJECT_VALUES_KEY = 'sigma.newProjectValues';
-function savedNewProjectValues(): Settings | null {
-  try {
-    const raw = window.localStorage.getItem(NEW_PROJECT_VALUES_KEY);
-    if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<Settings>;
-    if (typeof value.title !== 'string' || typeof value.problem !== 'string' ||
-        typeof value.investigation_type !== 'string' || typeof value.ai_model !== 'string' ||
-        typeof value.reasoning_effort !== 'string' ||
-        !(value.difficulty === null || value.difficulty === 'easy' || value.difficulty === 'medium' || value.difficulty === 'hard') ||
-        typeof value.show_advanced_outcome_details !== 'boolean') return null;
-    return { ...value, investigation_type: value.investigation_type === 'default' ? '' : value.investigation_type } as Settings;
-  } catch { return null; }
-}
-
 function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
   contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
@@ -4761,7 +4746,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   const [savedExclusiveSections, setSavedExclusiveSections] = useState(false);
   const [exclusiveSectionsLoaded, setExclusiveSectionsLoaded] = useState(false);
   const [sectionLayoutWarning, setSectionLayoutWarning] = useState('');
-  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : savedNewProjectValues() ?? { title: '', problem: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -4884,7 +4869,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   const compatible = selected?.efforts.includes(values.reasoning_effort) || samePair;
   const pairError = selected && !selected.efforts.includes(values.reasoning_effort) && !samePair ? 'This model does not support the selected Thinking level. Choose a supported level explicitly.' : '';
   async function save(event: FormEvent) {
-    event.preventDefault(); if (submitting.current || !compatible || (initial && !limitValidation.value) || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
+    event.preventDefault(); if (submitting.current || (initial && (!compatible || !limitValidation.value)) || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
     submitting.current = true; setBusy(true); setError('');
     try {
       const createValues = {
@@ -4897,9 +4882,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         show_advanced_outcome_details: values.show_advanced_outcome_details,
       };
       const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : createValues);
-      if (!initial) {
-        try { window.localStorage.setItem(NEW_PROJECT_VALUES_KEY, JSON.stringify(values)); } catch { /* Project creation must not depend on browser storage availability. */ }
-      }
       // Unrelated settings changes must not rewrite historical v1 research limits.
       if (initial && loadedLimitDraft && JSON.stringify(limitDraft) !== JSON.stringify(loadedLimitDraft)) {
         const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
@@ -4944,7 +4926,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
       {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their saved research configuration; some limits can be adjusted when resuming.</p>}
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
@@ -4957,7 +4939,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/>{!initial && <p className="settings-hint">Need another project type? Use Project Types to create one.</p>}</div>
       <div><label htmlFor="project-difficulty">Difficulty</label><select id="project-difficulty" value={values.difficulty ?? ''} onChange={event => change('difficulty', (event.target.value || null) as ProjectDifficulty | null)}>{values.difficulty === null && <option value="">Not set</option>}<option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>
-      <div className="settings-model-row">
+      {initial && <div className="settings-model-row">
       <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
@@ -4969,8 +4951,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
       </select>
       <p className="settings-hint">Used for future AI proposals. Higher levels use more time and usage.</p></div>
-      </div>
-      {pairError && <p className="error" role="alert">{pairError}</p>}
+      </div>}
+      {initial && pairError && <p className="error" role="alert">{pairError}</p>}
       <p className="project-destination"><span>Project location</span><code>{initial ? initial.path : previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code><small>{initial ? 'Editing the display name never renames or moves this directory.' : 'The project name determines its directory; existing files are never overwritten.'}</small></p>
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
