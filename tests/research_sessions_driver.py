@@ -127,6 +127,12 @@ def main(part: int = 1):
             )
         )
         asyncio.run(
+            test_native_stopped_session_moves_between_providers(
+                Path(temporary) / "native-provider-travel.sigma"
+            )
+        )
+        test_model_switch_preserves_old_hard_budget_costs()
+        asyncio.run(
             test_emailed_project_import_resumes_under_recipient_provider(
                 Path(temporary) / "email-import-resume.sigma"
             )
