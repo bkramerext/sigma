@@ -118,7 +118,12 @@ async def snapshot():
             }
             pair_slots, expected_calls = 4, 16
         else:
-            limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 3, "turns_per_round": 2, "model_calls": 12}
+            limits = {
+                **research_sessions.DEFAULT_LIMITS,
+                "research_rounds": 3,
+                "turns_per_round": 2,
+                "model_calls": 12,
+            }
             pair_slots, expected_calls = 3, 12
         limits = research_sessions.save_limits(str(path), limits)
         requests = []
