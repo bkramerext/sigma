@@ -1671,7 +1671,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       const validation = validateLimitDraft(draftLimits(currentLimits));
       if (!validation.value) {
         throw new Error(validation.errors.maximum_estimated_cost_usd
-          ?? 'Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
+          ?? 'Saved research limits need attention. Update them in Home Settings → Limits before starting a session.');
       }
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
       if (chosenIds.length > 12) {
@@ -3687,7 +3687,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
 
     {!hideProjectActions && scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-export-trigger workspace-icon-button" aria-label="Export project" title="Export project" data-tooltip="Export project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
-    {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><SlidersSettingsIcon/></button>}
+    {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project Settings" data-tooltip="Project Settings" disabled={settingsDisabled} onClick={onSettings}><SlidersSettingsIcon/></button>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     {markdownPortalTarget && createPortal(markdownControl, markdownPortalTarget)}
