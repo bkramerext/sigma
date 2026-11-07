@@ -398,7 +398,6 @@ class RecentProject:
     error: str | None = None
     project_type_snapshot: dict | None = None
     paper_count: int = 0
-    completed_session_count: int = 0
     best_paper_score: int | None = None
     paper_activity: str | None = None
 
@@ -427,7 +426,7 @@ def recent_projects() -> dict:
                 except ValueError:
                     pass
             entries.append(copied)
-    from sigma.research_sessions import recent_session_overview
+    from sigma.research_sessions import has_active_session
 
     recent = []
     for entry in entries:
@@ -438,9 +437,6 @@ def recent_projects() -> dict:
             from sigma import paper_scores, papers
 
             paper_metadata = paper_scores.project_metadata(view.path)
-            research_running, completed_count = recent_session_overview(
-                view.path, project_id=view.project.id
-            )
             recent.append(
                 asdict(
                     RecentProject(
@@ -450,11 +446,10 @@ def recent_projects() -> dict:
                         project_type_snapshot=view.project.project_type_snapshot,
                         strategy_count=len(view.project.active_order),
                         paper_count=paper_metadata["paper_count"],
-                        completed_session_count=completed_count,
                         best_paper_score=paper_metadata["best_paper_score"],
                         paper_activity=papers.activity_status(view.path),
                         difficulty=view.project.difficulty,
-                        research_running=research_running,
+                        research_running=has_active_session(view.path, project_id=view.project.id),
                         available=True,
                         pinned=(view.project.id in pins.values()),
                         pin_state=(

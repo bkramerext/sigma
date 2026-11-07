@@ -7600,9 +7600,7 @@ or document markup."""
         f"{number} ({section.heading})"
         for number, section in enumerate(long_plan.sections, start=1)
         if str(number) in saved_sections
-        and is_unwritten_placeholder(
-            LongSectionDraft.model_validate(saved_sections[str(number)])
-        )
+        and is_unwritten_placeholder(LongSectionDraft.model_validate(saved_sections[str(number)]))
     ]
     if uncertain or placeholders:
         detail = ", ".join([*uncertain, *placeholders])

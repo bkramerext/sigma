@@ -352,6 +352,7 @@ def test_long_paper_section_retries_share_one_hour_budget() -> None:
     state = papers._new_work("3" * 64, "fast-fixture", "4" * 64, "fixture-model", "high")
     simulated_seconds = [0.0]
     attempts: dict[int, int] = {}
+    second_section_started = asyncio.Event()
 
     async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
         if schema_name == "sigma_long_paper_plan":
@@ -359,8 +360,12 @@ def test_long_paper_section_retries_share_one_hour_budget() -> None:
         number = input_value["section_number"]
         attempts[number] = attempts.get(number, 0) + 1
         if number == 1:
+            # Ensure the sibling has begun before the simulated failure,
+            # so this test actually verifies checkpointed concurrent work.
+            await second_section_started.wait()
             simulated_seconds[0] += papers.CALL_SECONDS
             raise papers.PaperTransientFailure("fixture slow response ended")
+        second_section_started.set()
         return papers.LongSectionDraft(paragraphs=[f"Saved section {number}."]), "fixture-model"
 
     async def generate() -> None:
@@ -395,6 +400,7 @@ def test_long_paper_section_retries_share_one_hour_budget() -> None:
     assert state["section_drafts"]["2"]["paragraphs"] == ["Saved section 2."]
     assert state["provider_calls_total"] == 3
 
+
 def test_transient_paper_failures_preserve_authored_sections_and_block_publication() -> None:
     """Exhausted retries must not turn missing analysis into a successful paper."""
     package, plan = fast_package(section_count=5)
@@ -415,7 +421,7 @@ def test_transient_paper_failures_preserve_authored_sections_and_block_publicati
         stage: papers.PaperProgressStage,
         current: int | None,
         total: int | None,
-        progress_state: papers.PaperProgressState = "active",
+        state: papers.PaperProgressState = "active",
         *,
         detail: str | None = None,
     ) -> None:
@@ -445,9 +451,7 @@ def test_transient_paper_failures_preserve_authored_sections_and_block_publicati
     assert "1" not in state["section_drafts"]
     assert all(
         item["paragraphs"] == [f"Saved section {number}."]
-        for number, item in (
-            (int(key), value) for key, value in state["section_drafts"].items()
-        )
+        for number, item in ((int(key), value) for key, value in state["section_drafts"].items())
     )
     assert all(
         "Editorial notice" not in paragraph
@@ -479,6 +483,7 @@ def test_transient_paper_failures_preserve_authored_sections_and_block_publicati
 
     asyncio.run(resume())
     assert state["provider_calls"] == calls_before
+
 
 def test_unreadable_authored_control_bytes_compile_with_visible_review_marks() -> None:
     source = "\\documentclass{article}\\begin{document}$i=1,\x02ldots,n$ and $R\x1c1+\x1a_{k=1}^n k$\\end{document}"
@@ -791,6 +796,7 @@ def test_interrupted_section_dispatch_records_block_ambiguous_resume() -> None:
             key: value for key, value in saved.items() if key not in {"3", "5"}
         }
 
+
 def test_legacy_retry_checkpoint_requires_recovery_for_logged_section() -> None:
     package, plan = fast_package(section_count=5)
     state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
@@ -832,6 +838,7 @@ def test_legacy_retry_checkpoint_requires_recovery_for_logged_section() -> None:
 
     asyncio.run(resume())
     assert set(state["section_drafts"]) == {"1", "2", "4", "5"}
+
 
 def test_legacy_unknown_section_dispatch_stops_before_paid_replay() -> None:
     package, plan = fast_package(section_count=5)
@@ -906,6 +913,7 @@ def test_oversized_section_stream_blocks_publication_without_retry() -> None:
         for value in state["section_drafts"].values()
         for paragraph in value["paragraphs"]
     )
+
 
 def test_paper_section_invalid_optional_table_is_dropped_without_losing_text() -> None:
     package, plan = fast_package()
@@ -1484,6 +1492,7 @@ def test_parallel_section_failure_drains_dispatched_siblings() -> None:
     assert set(state["section_drafts"]) == {"2", "3", "4"}
     assert dispatched.count(2) == dispatched.count(3) == dispatched.count(4) == 1
 
+
 def test_fast_checkpoint_resume_preserves_ambiguous_section_without_replay() -> None:
     package, plan = fast_package(section_count=2)
     project_ref = "project:fast-fixture"
@@ -1592,6 +1601,7 @@ def test_fast_checkpoint_resume_preserves_ambiguous_section_without_replay() -> 
     ).model_dump()
     asyncio.run(resume())
     assert set(state["section_drafts"]) == {"1", "2"}
+
 
 def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
     with TemporaryDirectory() as temporary:

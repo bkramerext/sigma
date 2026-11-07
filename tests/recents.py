@@ -112,7 +112,6 @@ def check_home_session_status_cache(root: Path) -> None:
         "project_id": view.project.id,
         "project_path": view.path,
         "status": "ended",
-        "termination_reason_code": "protocol_complete",
         "large_history": "historical prompt " * 100_000,
     }
     file.write_text(json.dumps(record), encoding="utf-8")
@@ -136,25 +135,13 @@ def check_home_session_status_cache(root: Path) -> None:
     ):
         for _ in range(3):
             assert not research_sessions.has_active_session(view.path, project_id=view.project.id)
-            assert research_sessions.recent_session_overview(
-                view.path, project_id=view.project.id
-            ) == (False, 1)
         assert len(reads) == 1, "Unchanged 1+ MB session must be parsed just once"
         assert not research_sessions.has_active_session(view.path, project_id=str(uuid4()))
         assert len(reads) == 2, "Foreign workspace identity must not share cached status"
         record["status"] = "queued"
         file.write_text(json.dumps(record), encoding="utf-8")
         assert research_sessions.has_active_session(view.path, project_id=view.project.id)
-        assert research_sessions.recent_session_overview(
-            view.path, project_id=view.project.id
-        ) == (True, 0)
         assert len(reads) == 3, "A changed session must invalidate cached status"
-        record["status"] = "ended"
-        record["termination_reason_code"] = "limit_reached"
-        file.write_text(json.dumps(record), encoding="utf-8")
-        assert research_sessions.recent_session_overview(
-            view.path, project_id=view.project.id
-        ) == (False, 0), "Incomplete sessions must not be counted"
         file.unlink()
         assert not research_sessions.has_active_session(view.path, project_id=view.project.id)
     research_sessions._recent_session_status.cache_clear()
