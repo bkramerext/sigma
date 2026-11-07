@@ -117,6 +117,7 @@ class PaperProgressEvent(TypedDict):
     detail: str | None
     sections_total: NotRequired[int | None]
     last_progress_at: NotRequired[str | None]
+    output_delta_count: NotRequired[int]
 
 
 PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
@@ -3281,7 +3282,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 set(progress_state)
                 - (
                     required_progress_keys
-                    | {"failure_reason", "detail", "sections_total", "last_progress_at"}
+                    | {"failure_reason", "detail", "sections_total", "last_progress_at", "output_delta_count"}
                 )
             )
             or (
@@ -3289,6 +3290,13 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 and (
                     type(progress_state["sections_total"]) is not int
                     or not 1 <= progress_state["sections_total"] <= 100
+                )
+            )
+            or (
+                "output_delta_count" in progress_state
+                and (
+                    type(progress_state["output_delta_count"]) is not int
+                    or not 0 <= progress_state["output_delta_count"] <= 1_000_000
                 )
             )
             or (
@@ -3401,6 +3409,7 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "failure_reason",
         "sections_total",
         "last_progress_at",
+        "output_delta_count",
     )
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
@@ -3450,6 +3459,13 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
                 and (
                     type(state["sections_total"]) is not int
                     or not 1 <= state["sections_total"] <= 100
+                )
+            )
+            or (
+                "output_delta_count" in state
+                and (
+                    type(state["output_delta_count"]) is not int
+                    or not 0 <= state["output_delta_count"] <= 1_000_000
                 )
             )
         ):
@@ -3798,6 +3814,12 @@ def progress_status(path: str) -> dict[str, Any] | None:
         **(
             {"last_progress_at": state["last_progress_at"]}
             if isinstance(state.get("last_progress_at"), str)
+            else {}
+        ),
+        **(
+            {"output_delta_count": state["output_delta_count"]}
+            if type(state.get("output_delta_count")) is int
+            and 0 <= state["output_delta_count"] <= 1_000_000
             else {}
         ),
         **(
@@ -6644,7 +6666,16 @@ async def _generate_long_draft(
         regenerated and permanent provider rejections are not retried.
         """
         maximum = 3
+        # Retries share the stage's one-hour budget. Previously, three attempts
+        # each received another full hour and a single section could hang for
+        # nearly three hours before its saved siblings could advance.
+        stage_deadline = monotonic() + CALL_SECONDS
         for attempt_number in range(1, maximum + 1):
+            remaining = stage_deadline - monotonic()
+            if remaining <= 0:
+                raise PaperTransientFailure(
+                    "Paper stage exhausted its one-hour total attempt budget; saved work is intact."
+                )
             before_provider_call(
                 reserve,
                 input_value=input_value,
@@ -6666,33 +6697,40 @@ async def _generate_long_draft(
                 calls,
             )
             try:
-                response = await _provider_structured(
-                    input_value,
-                    binding,
-                    config,
-                    instructions=instructions,
-                    schema_name=schema_name,
-                    response_model=response_model,
-                    max_input_bytes=max_input_bytes,
-                    on_output_delta=(
-                        (
-                            lambda number=input_value["section_number"]: section_output_observed(
-                                number
+                async with asyncio.timeout(remaining):
+                    response = await _provider_structured(
+                            input_value,
+                            binding,
+                            config,
+                        instructions=instructions,
+                        schema_name=schema_name,
+                        response_model=response_model,
+                        max_input_bytes=max_input_bytes,
+                        on_output_delta=(
+                            (
+                                lambda number=input_value["section_number"]: section_output_observed(
+                                    number
+                                )
                             )
-                        )
-                        if on_output_delta is not None
-                        and schema_name == "sigma_long_paper_section"
-                        and isinstance(input_value, dict)
-                        and type(input_value.get("section_number")) is int
-                        else None
-                    ),
-                    project_id=project_id,
-                    project_path_value=project_path_value,
-                    include_diagrams=(
-                        include_diagrams
-                        and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
-                    ),
+                            if on_output_delta is not None
+                            and schema_name == "sigma_long_paper_section"
+                            and isinstance(input_value, dict)
+                            and type(input_value.get("section_number")) is int
+                            else None
+                        ),
+                        project_id=project_id,
+                        project_path_value=project_path_value,
+                        include_diagrams=(
+                            include_diagrams
+                            and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
+                        ),
                 )
+            except TimeoutError as exc:
+                # An already-dispatched paid attempt may have consumed allowance.
+                # Never start another paid request after the shared deadline.
+                raise PaperTransientFailure(
+                    "Paper stage reached its one-hour total attempt budget; saved work is intact."
+                ) from exc
             except (PaperConnectionFailure, PaperTransientFailure) as exc:
                 log.info(
                     "paper.provider_attempt_ended project_id=%s schema=%s section=%s "
@@ -6704,7 +6742,10 @@ async def _generate_long_draft(
                     monotonic() - started,
                     type(exc).__name__,
                 )
-                if attempt_number == maximum:
+                if (
+                    attempt_number == maximum
+                    or monotonic() + 0.4 * attempt_number >= stage_deadline
+                ):
                     raise
                 if progress:
                     detail = (
@@ -8494,20 +8535,27 @@ async def _generate_impl(
         work: dict[str, Any] = {}
         last_logged_stage: tuple[str, str] | None = None
         last_output_write = 0.0
+        output_delta_count = 0
 
         async def report_activity(
             stage: Literal["writing", "sections"], section_number: int | None = None
         ) -> None:
             """Persist actual output activity; never rewrite the full draft for text deltas."""
-            nonlocal last_output_write
+            nonlocal last_output_write, output_delta_count
             active = _active_progress.get(project_key)
             if active is None or active.get("run_id") != run_id:
                 return
+            # Only actual nonempty output_text.delta events reach this callback;
+            # do not count timer ticks, HTTP heartbeats or reasoning-only events.
+            output_delta_count = min(1_000_000, output_delta_count + 1)
             if monotonic() - last_output_write < 3.0:
                 return
             last_output_write = monotonic()
             now = _now()
-            updated = {**active, "stage": stage, "updated_at": now, "last_progress_at": now}
+            updated = {
+                **active, "stage": stage, "updated_at": now,
+                "last_progress_at": now, "output_delta_count": output_delta_count,
+            }
             if active.get("stage") == "retry":
                 updated["current"] = (
                     len(work.get("section_drafts", {})) if stage == "sections" else None
@@ -8577,6 +8625,7 @@ async def _generate_impl(
                 "started_at": started_at,
                 "updated_at": now,
                 "elapsed_seconds": elapsed,
+                "output_delta_count": output_delta_count,
             }
             previous_active = _active_progress.get(project_key)
             if state in {"milestone", "complete"}:
@@ -8635,6 +8684,7 @@ async def _generate_impl(
                         "detail": detail,
                         "sections_total": saved_progress.get("sections_total"),
                         "last_progress_at": saved_progress.get("last_progress_at"),
+                        "output_delta_count": saved_progress.get("output_delta_count", 0),
                     }
                 )
 

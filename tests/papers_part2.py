@@ -346,6 +346,47 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
     assert uncertain_state["plan"]
 
 
+
+def test_long_paper_section_retries_share_one_hour_budget() -> None:
+    """A slow failed call cannot silently earn two more one-hour attempts."""
+    package, plan = fast_package(section_count=2)
+    state = papers._new_work("3" * 64, "fast-fixture", "4" * 64, "fixture-model", "high")
+    simulated_seconds = [0.0]
+    attempts: dict[int, int] = {}
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        attempts[number] = attempts.get(number, 0) + 1
+        if number == 1:
+            # Simulate the previous provider request consuming the entire budget.
+            simulated_seconds[0] += papers.CALL_SECONDS
+            raise papers.PaperTransientFailure("fixture slow response ended")
+        return papers.LongSectionDraft(paragraphs=[f"Saved section {number}."]), "fixture-model"
+
+    async def generate() -> papers.PaperDraft:
+        with (
+            patch.object(papers, "_provider_structured", new=provider),
+            patch.object(papers, "monotonic", side_effect=lambda: simulated_seconds[0]),
+        ):
+            draft, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert calls == 3  # one plan + one exhausted section + one successful sibling
+        return draft
+
+    draft = asyncio.run(generate())
+    assert attempts == {1: 1, 2: 1}
+    assert "Editorial notice" in draft.sections[0].paragraphs[0]
+    assert draft.sections[1].paragraphs == ["Saved section 2."]
+    assert state["provider_calls_total"] == 3
+
 def test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallback() -> None:
     """Exhausted retries preserve authored sections and publish a visible gap."""
     package, plan = fast_package(section_count=5)
@@ -987,6 +1028,7 @@ def test_active_paper_progress_poll_avoids_checkpoint_deserialization() -> None:
             "updated_at": papers._now(),
             "elapsed_seconds": 3,
             "last_progress_at": papers._now(),
+            "output_delta_count": 123,
         }
         papers._write_progress_status(str(path), progress)
         with (
@@ -1003,12 +1045,14 @@ def test_active_paper_progress_poll_avoids_checkpoint_deserialization() -> None:
         assert status["stage"] == "sections"
         assert (status["current"], status["total"]) == (1, 5)
         assert status["last_progress_at"] == progress["last_progress_at"]
+        assert status["output_delta_count"] == 123
         # A backend restart cannot convert persisted output evidence into live
         # generation. The snapshot remains visible but its state is interrupted.
         recovered = papers.progress_status(str(path))
         assert recovered is not None
         assert recovered["status"] == "interrupted"
         assert recovered["last_progress_at"] == progress["last_progress_at"]
+        assert recovered["output_delta_count"] == 123
 
 
 def test_paper_browser_presence_gates_new_paid_attempts() -> None:
