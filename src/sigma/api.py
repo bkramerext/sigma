@@ -1147,12 +1147,18 @@ def global_research_settings_update(body: GlobalResearchSettingsRequest):
 
 @app.get("/api/projects/research-limits")
 def research_limits_view(path: str):
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(404, "Not found")
     limits = research_sessions._new_session_limits(research_sessions.get_limits(path))
     return {**limits, "max_concurrent_sessions": str(limits["max_concurrent_sessions"])}
 
 
 @app.put("/api/projects/research-limits")
 def research_limits_update(body: ResearchLimitsRequest):
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(404, "Not found")
     if (body.scheduler_version is None) != (body.turns_per_round is None):
         raise ProjectError("Scheduler version and turns per round must be saved together")
     limits = research_sessions.save_limits(
