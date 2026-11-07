@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import stat
 
-from sigma import global_research_settings, project_types, research_sessions
+from sigma import (global_research_settings, project_types, research_sessions, research_preferences, section_layout_preferences)
 
 
 def test_global_research_settings_defaults_and_project_limits_ignored(tmp_path, monkeypatch):
@@ -68,3 +68,16 @@ def test_legacy_save_limits_api_no_longer_writes_into_project(tmp_path, monkeypa
 def test_new_users_start_with_all_standards_references_enabled():
     # Preferences record disabled reference URLs, so empty means enabled.
     assert project_types._default_reference_preferences() == {}
+
+
+def test_unattended_and_section_layout_are_per_user(tmp_path, monkeypatch):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    monkeypatch.setattr(project_types, "_store_path", lambda: first / "types.json")
+    assert research_preferences.update_unattended_background_execution(True)
+    assert section_layout_preferences.update_expand_one_project_section_at_a_time(True)
+    monkeypatch.setattr(project_types, "_store_path", lambda: second / "types.json")
+    assert research_preferences.allow_unattended_background_execution() is False
+    assert section_layout_preferences.expand_one_project_section_at_a_time() is False
