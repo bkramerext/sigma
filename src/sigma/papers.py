@@ -6298,6 +6298,43 @@ async def _provider_structured(
     diagnostic_section = (
         input_value.get("section_number") if isinstance(input_value, dict) else None
     )
+    # Separate actual text from reasoning/status frames in each section stream.
+    # These diagnostics contain no model text or project source data.
+    stream_events = 0
+    stream_text_events = 0
+    stream_text_bytes = 0
+    stream_reasoning_events = 0
+    stream_last_text_at: float | None = None
+    stream_last_logged_at = request_started
+    stream_log = logging.getLogger("sigma.lifecycle")
+
+    def observed_stream_event(kind: str, text_bytes: int) -> None:
+        nonlocal stream_events, stream_text_events, stream_text_bytes
+        nonlocal stream_reasoning_events, stream_last_text_at, stream_last_logged_at
+        stream_events += 1
+        if kind == "response.output_text.delta":
+            stream_text_events += 1
+            stream_text_bytes += text_bytes
+            stream_last_text_at = monotonic()
+        elif kind.startswith("response.reasoning"):
+            stream_reasoning_events += 1
+        now = monotonic()
+        if now - stream_last_logged_at >= 30.0 or stream_events % 10_000 == 0:
+            stream_last_logged_at = now
+            stream_log.info(
+                "paper.provider_stream_activity project_id=%s section=%s "
+                "elapsed_s=%.1f events=%d reasoning_events=%d text_events=%d "
+                "text_bytes=%d last_text_age_s=%.1f",
+                project_id or "unknown",
+                diagnostic_section,
+                now - request_started,
+                stream_events,
+                stream_reasoning_events,
+                stream_text_events,
+                stream_text_bytes,
+                now - stream_last_text_at if stream_last_text_at is not None else -1.0,
+            )
+
     attempt = None
     try:
         if cloud_workspaces.enabled():
@@ -6341,6 +6378,9 @@ async def _provider_structured(
                     max_events=100_000,
                     max_text_bytes=MAX_RESPONSE_BYTES,
                     on_output_delta=on_output_delta,
+                    on_event_observed=(
+                        observed_stream_event if schema_name == "sigma_long_paper_section" else None
+                    ),
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
                         "Completed work is saved; transient errors may be retried up to three attempts."
@@ -6450,6 +6490,18 @@ async def _provider_structured(
     except cloud_research.CloudResearchUnavailable as exc:
         raise ProjectError(str(exc)) from exc
     finally:
+        if schema_name == "sigma_long_paper_section" and binding["mode"] == "chatgpt":
+            stream_log.info(
+                "paper.provider_stream_finished project_id=%s section=%s "
+                "elapsed_s=%.1f events=%d reasoning_events=%d text_events=%d text_bytes=%d",
+                project_id or "unknown",
+                diagnostic_section,
+                monotonic() - request_started,
+                stream_events,
+                stream_reasoning_events,
+                stream_text_events,
+                stream_text_bytes,
+            )
         if attempt is not None:
             try:
                 cloud_research.finish_provider_attempt(attempt)

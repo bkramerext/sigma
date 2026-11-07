@@ -1424,7 +1424,6 @@ def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
     assert attempt_counts == before
 
 
-
 def test_seven_section_writer_advances_after_two_with_slow_siblings() -> None:
     """A displayed 2/7 must not deadlock queued work behind four live sections."""
     package, plan = fast_package(section_count=7)
@@ -1457,12 +1456,12 @@ def test_seven_section_writer_advances_after_two_with_slow_siblings() -> None:
         stage: papers.PaperProgressStage,
         current: int | None,
         total: int | None,
-        progress_state: papers.PaperProgressState = "active",
+        state: papers.PaperProgressState = "active",
         *,
         detail: str | None = None,
     ) -> None:
         del detail
-        if stage == "sections" and progress_state == "milestone":
+        if stage == "sections" and state == "milestone":
             assert total == 7
             assert current is not None
             milestones.append(current)
@@ -4491,6 +4490,7 @@ def test_paper_sse_bounds_generated_text_not_redundant_transport() -> None:
                 b'"response":{"id":"paper","status":"completed","output":[]}}\n\n'
             )
 
+    events: list[tuple[str, int]] = []
     result = asyncio.run(
         completed(
             cast(httpx.Response, ProgressStream()),
@@ -4498,8 +4498,15 @@ def test_paper_sse_bounds_generated_text_not_redundant_transport() -> None:
             max_event_chars=4_000_000,
             max_events=100_000,
             max_text_bytes=papers.MAX_RESPONSE_BYTES,
+            on_event_observed=lambda kind, n: events.append((kind, n)),
         )
     )
+    assert events[0] == ("response.created", 0)
+    assert events[-2:] == [
+        ("response.output_text.delta", len("small section")),
+        ("response.completed", 0),
+    ]
+    assert len(events) == 812
     assert result["status"] == "completed"
     assert result["output"][0]["content"][0]["text"] == "small section"
 

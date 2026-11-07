@@ -329,6 +329,7 @@ async def completed(
     max_text_bytes: int | None = None,
     max_events: int | None = None,
     on_output_delta: Callable[[], Awaitable[None]] | None = None,
+    on_event_observed: Callable[[str, int], None] | None = None,
     incomplete_message: str = (
         "ChatGPT stream ended without a valid response.completed. No strategy was saved."
     ),
@@ -440,6 +441,15 @@ async def completed(
             ):
                 raise ValueError(f"plan_stream:seq(kind={kind},seq={seq},expected>{sequence})")
             sequence = seq
+            # Metadata only. Never inspect or persist the provider's raw content.
+            if on_event_observed is not None:
+                delta = event.get("delta")
+                on_event_observed(
+                    kind,
+                    len(delta.encode("utf-8"))
+                    if kind == "response.output_text.delta" and isinstance(delta, str)
+                    else 0,
+                )
             declared = [line[6:].strip() for line in block.split("\n") if line.startswith("event:")]
             if declared and declared != [kind]:
                 raise ValueError(f"plan_stream:declared_event({declared}!=[{kind}])")
