@@ -49,6 +49,27 @@ def _safe_independent_test_step(step: list[str]) -> bool:
     return step[4:] != ["build"]
 
 
+def _zstd_setup_steps() -> list[list[str]] | None:
+    """Install the zstd executable and native lib needed for bundle storage."""
+    if shutil.which("zstd"):
+        return []
+    if sys.platform == "darwin" and shutil.which("brew"):
+        return [["brew", "install", "zstd"]]
+    if sys.platform.startswith("linux") and shutil.which("apt-get"):
+        privilege = [] if os.geteuid() == 0 else ["sudo"] if shutil.which("sudo") else None
+        if privilege is not None:
+            return [
+                [*privilege, "apt-get", "update", "-qq"],
+                [*privilege, "apt-get", "install", "-y", "zstd"],
+            ]
+    print(
+        "Missing zstd. Install it (macOS: brew install zstd; "
+        "Debian/Ubuntu: sudo apt-get install zstd) and retry ./sigma setup.",
+        file=sys.stderr,
+    )
+    return None
+
+
 def run_tooling(command: str) -> int:
     if not all((ROOT / name).is_file() for name in ("pyproject.toml", "frontend/package.json")):
         print(
@@ -64,7 +85,11 @@ def run_tooling(command: str) -> int:
             )
             return 2
     if command == "setup":
+        install_zstd = _zstd_setup_steps()
+        if install_zstd is None:
+            return 2
         steps = [
+            *install_zstd,
             ["uv", "sync", "--locked", "--group", "dev"],
             ["npm", "--prefix", "frontend", "ci"],
         ]
