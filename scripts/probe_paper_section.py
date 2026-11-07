@@ -250,14 +250,35 @@ async def main() -> None:
     print(f"Project: {path}")
     print(f"Section {args.section}: input={input_bytes} bytes; instructions={len(instructions)} chars")
     print(f"Saved model: {work['model']}, effort: {work['reasoning_effort']}")
-    if args.section == 2 and (
-        input_bytes != ORIGINAL_BYTES or len(instructions) != ORIGINAL_INSTRUCTIONS
-        or work["model"] != "gpt-6.1-sol" or work["reasoning_effort"] != "medium"
-    ):
-        raise ValueError(
-            "Input or model differs from the original Paper 3 log. "
-            "No provider request sent; report these preflight numbers."
+    if args.section == 2:
+        section = papers.LongPaperPlan.model_validate(work["plan"]).sections[1]
+        relevant_note_count = sum(
+            bool(set(n.get("evidence_refs", ())).intersection(section.evidence_refs))
+            for n in work["evidence_notes"]
         )
+        # The checkpoint contains exactly 53 source-linked notes and two claims.
+        # The archived log supplies length, but no original request content hash:
+        # allow ONLY the original size or the observed +34-byte local reconstruction.
+        # The report records this uncertainty. Never describe it as bitwise replay.
+        if (
+            input_bytes not in {ORIGINAL_BYTES, ORIGINAL_BYTES + 34}
+            or len(instructions) != ORIGINAL_INSTRUCTIONS
+            or work["model"] != "gpt-6.1-sol"
+            or work["reasoning_effort"] != "medium"
+            or len(section.evidence_refs) != 2
+            or len(section.claim_ids) != 2
+            or relevant_note_count != 53
+        ):
+            raise ValueError(
+                "Input/model/plan/evidence diverges from original Paper 3. "
+                "No provider request sent; report the preflight counts."
+            )
+        print(f"Section 2: {relevant_note_count} notes; 2 claims; 2 evidence refs")
+        if input_bytes != ORIGINAL_BYTES:
+            print(
+                "NOTE: reconstructed payload differs from original by "
+                f"+{input_bytes - ORIGINAL_BYTES} bytes; not a bitwise-identical replay."
+            )
     if not args.execute:
         print("DRY RUN PASSED: no provider request, no files or checkpoint changed.")
         print("Repeat with --execute to run one bounded paid diagnostic.")
@@ -274,7 +295,9 @@ async def main() -> None:
             stream.flush()
         emit("preflight", project_id=TARGET_ID, section=args.section,
              model=work["model"], effort=work["reasoning_effort"],
-             input_bytes=input_bytes, instructions_chars=len(instructions),
+             input_bytes=input_bytes, original_logged_bytes=ORIGINAL_BYTES,
+             input_byte_drift=input_bytes - ORIGINAL_BYTES,
+             instructions_chars=len(instructions),
              input_sha256=hashlib.sha256(payload.encode()).hexdigest(),
              instructions_sha256=hashlib.sha256(instructions.encode()).hexdigest())
         await probe(args, work, payload, instructions, visuals, emit)
