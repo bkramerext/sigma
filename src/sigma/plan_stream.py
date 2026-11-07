@@ -330,6 +330,7 @@ async def completed(
     max_events: int | None = None,
     on_output_delta: Callable[[], Awaitable[None]] | None = None,
     on_event_observed: Callable[[str, int], None] | None = None,
+    on_text_delta: Callable[[str], None] | None = None,
     incomplete_message: str = (
         "ChatGPT stream ended without a valid response.completed. No strategy was saved."
     ),
@@ -526,6 +527,8 @@ async def completed(
                     raise ProjectError(
                         "Provider generated text exceeds the bounded response capacity."
                     )
+                if delta and on_text_delta is not None:
+                    on_text_delta(delta)
                 delta_chunks.append(delta)
                 if delta and on_output_delta is not None:
                     await on_output_delta()
