@@ -2969,6 +2969,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "publication_compilation",
         "publication_compiler_calls",
         "generation_issues",
+        "provider_change_history",
     }
     generation_issues = value.get("generation_issues", [])
     if (
@@ -2979,6 +2980,36 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Saved paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
+    history = value.get("provider_change_history", [])
+    history_keys = {
+        "at",
+        "from_binding_fingerprint",
+        "to_binding_fingerprint",
+        "from_model",
+        "to_model",
+        "reason",
+    }
+    if (
+        not isinstance(history, list)
+        or len(history) > 100
+        or any(
+            not isinstance(item, dict)
+            or set(item) != history_keys
+            or not isinstance(item["at"], str)
+            or len(item["at"]) > 64
+            or not all(
+                isinstance(item[key], str) and re.fullmatch(r"[0-9a-f]{64}", item[key])
+                for key in ("from_binding_fingerprint", "to_binding_fingerprint")
+            )
+            or not all(
+                isinstance(item[key], str) and len(item[key]) <= 128
+                for key in ("from_model", "to_model")
+            )
+            or item["reason"] != "paper_checkpoint_resume"
+            for item in history
+        )
+    ):
+        raise ProjectError("Paper checkpoint provider-change history is invalid")
     if "frozen_package_ref" in value:
         digest = value["frozen_package_ref"]
         if not isinstance(digest, str) or "frozen_package" in value:
@@ -3928,6 +3959,41 @@ def _new_work(
         "one_shot_draft": None,
         "publication_compiler_calls": 0,
     }
+
+
+def _rebind_paper_checkpoint_provider(
+    checkpoint: dict[str, Any], binding_fingerprint: str, model: str, reasoning_effort: str
+) -> bool:
+    """Rebind only future authoring calls, preserving all saved drafts and dispatches.
+
+    The caller validates the same project/snapshot/paper kind and owns the paper
+    operation lock. No old call reservation or completed work is cleared.
+    """
+    old = (
+        checkpoint.get("binding_fingerprint"),
+        checkpoint.get("model"),
+        checkpoint.get("reasoning_effort"),
+    )
+    new = (binding_fingerprint, model, reasoning_effort)
+    if old == new:
+        return False
+    history = checkpoint.setdefault("provider_change_history", [])
+    history.append(
+        {
+            "at": _now(),
+            "from_binding_fingerprint": old[0],
+            "to_binding_fingerprint": binding_fingerprint,
+            "from_model": old[1],
+            "to_model": model,
+            "reason": "paper_checkpoint_resume",
+        }
+    )
+    # Keep the saved audit bounded even when a project travels repeatedly.
+    del history[:-100]
+    checkpoint["binding_fingerprint"] = binding_fingerprint
+    checkpoint["model"] = model
+    checkpoint["reasoning_effort"] = reasoning_effort
+    return True
 
 
 def _can_rebase_explicit_restart(checkpoint: Mapping[str, Any], project_id: str) -> bool:
@@ -7317,8 +7383,8 @@ or document markup."""
 
     def recoverable_section_failure(exc: Exception) -> bool:
         # Never paper over declined requests, account/quota failures, local
-        # safety caps, or an explicit cancellation. Only provider transport
-        # and malformed authoring content can produce a labeled placeholder.
+        # safety caps, or an explicit cancellation. Only classify errors that
+        # can be retried after the user reviews potential paid consumption.
         if isinstance(exc, ChatGPTProviderRejection):
             return False
         if isinstance(exc, (PaperConnectionFailure, PaperTransientFailure, ValidationError)):
@@ -7334,32 +7400,26 @@ or document markup."""
             )
         )
 
-    def fallback_section(
-        section_number: int, section: LongSectionPlan, exc: Exception
-    ) -> LongSectionDraft:
-        _record_paper_generation_issue(
-            state,
-            f"Paper section {section_number} ({section.heading}) was incomplete after "
-            f"{type(exc).__name__}; a clearly labeled fallback was published.",
-        )
-        return LongSectionDraft(
-            paragraphs=[
-                (
-                    "Editorial notice: The writing for this section was interrupted or invalid. "
-                    "The missing analysis is not supplied by SIGMA, and no claim is "
-                    "established by this placeholder."
-                ),
-                "The intended subject of this section was: "
-                + section.purpose
-                + " The original saved evidence and claim register are retained "
-                "in the paper archive for independent inspection.",
-            ]
+    # Older versions stored this editorial notice as an authored section.
+    # Never reuse it or count it as successfully completed paper content.
+    def is_unwritten_placeholder(draft: LongSectionDraft) -> bool:
+        return bool(
+            draft.paragraphs
+            and draft.paragraphs[0].startswith(
+                "Editorial notice: The writing for this section was interrupted or invalid."
+            )
         )
 
     async def write_section(section_number: int, section: LongSectionPlan) -> PaperSection:
         section_key = str(section_number)
         if section_key in saved_sections:
             section_draft = LongSectionDraft.model_validate(saved_sections[section_key])
+            if is_unwritten_placeholder(section_draft):
+                raise ProjectError(
+                    f"Paper section {section_number} ({section.heading}) is an unfinished "
+                    "editorial placeholder from an older attempt, not authored research. "
+                    "Saved work is intact; explicitly review recovery before making new paid calls."
+                )
             section_draft = sanitize_section_tables(section, section_draft)
             return PaperSection(
                 heading=section.heading,
@@ -7420,7 +7480,6 @@ or document markup."""
             len(section.claim_ids),
             len(_json(section_input)),
         )
-        used_fallback = False
         try:
             body, _ = await call_with_safe_retry(
                 section_input,
@@ -7452,8 +7511,20 @@ or document markup."""
         except (ProjectError, ValidationError) as exc:
             if not recoverable_section_failure(exc):
                 raise
-            used_fallback = True
-            section_draft = fallback_section(section_number, section, exc)
+            # A failed or malformed AI response is *not* authored prose. Preserve
+            # already completed siblings, but do not checkpoint a fabricated
+            # section or let later stages report a successful publication.
+            _record_paper_generation_issue(
+                state,
+                f"Paper section {section_number} ({section.heading}) was not authored "
+                f"after {type(exc).__name__}; completed sections remain saved.",
+            )
+            save_state(state)
+            raise ProjectError(
+                f"Paper section {section_number} ({section.heading}) did not finish. "
+                "Already authored sections are preserved. The failed request may "
+                "have consumed allowance; review before authorizing another paid attempt."
+            ) from exc
         # No await between registering a completed result and saving the
         # checkpoint: concurrent tasks cannot interleave and lose a section.
         saved_sections[section_key] = section_draft.model_dump()
@@ -7464,7 +7535,7 @@ or document markup."""
             "saved_count=%d total=%d payload_bytes=%d",
             project_id or "unknown",
             section_number,
-            "fallback" if used_fallback else "authored",
+            "authored",
             len(saved_sections),
             len(long_plan.sections),
             len(_json(section_draft.model_dump())),
@@ -7517,24 +7588,31 @@ or document markup."""
                 "sections. Their paid-call state is uncertain; inspect the checkpoint before Resume."
             )
         dispatches = {key: [] for key in legacy_ambiguous}
-    for number, section in enumerate(long_plan.sections, start=1):
-        key = str(number)
-        if key not in saved_sections and key in dispatches:
-            logging.getLogger("sigma.lifecycle").warning(
-                "paper.section_checkpoint_fallback project_id=%s section=%d "
-                "prior_dispatches=%d reason=ambiguous_paid_attempt",
-                project_id or "unknown",
-                number,
-                len(dispatches[key]),
-            )
-            saved_sections[key] = fallback_section(
-                number,
-                section,
-                ProjectError("An earlier section call was interrupted after dispatch"),
-            ).model_dump()
-    if any(key in saved_sections for key in dispatches):
-        state.pop("legacy_ambiguous_sections", None)
-        save_state(state)
+    # An unsaved previously dispatched section might already have incurred
+    # provider charges. Resume must not replay it, manufacture its contents,
+    # or continue to publication as if it had been authored.
+    uncertain = [
+        f"{number} ({section.heading})"
+        for number, section in enumerate(long_plan.sections, start=1)
+        if str(number) not in saved_sections and str(number) in dispatches
+    ]
+    placeholders = [
+        f"{number} ({section.heading})"
+        for number, section in enumerate(long_plan.sections, start=1)
+        if str(number) in saved_sections
+        and is_unwritten_placeholder(
+            LongSectionDraft.model_validate(saved_sections[str(number)])
+        )
+    ]
+    if uncertain or placeholders:
+        detail = ", ".join([*uncertain, *placeholders])
+        raise ProjectError(
+            "Paper writing cannot Resume as complete: section(s) "
+            + detail
+            + " have no authored text. Previously dispatched calls may have consumed "
+            "AI allowance; no additional call has been made. Saved authored sections "
+            "remain intact. Explicitly review the incomplete work before paid recovery."
+        )
 
     if fast_path:
         pending = [
@@ -7639,12 +7717,6 @@ or document markup."""
         ]
 
     warning_items = [*long_plan.validation_warnings[:8]]
-    if any(issue.startswith("Paper section ") for issue in state.get("generation_issues", [])):
-        warning_items.insert(
-            0,
-            "One or more paper sections could not be completed. They contain "
-            "explicit editorial placeholders, not scientific findings; review before publication.",
-        )
     if conflict_note_count:
         warning_items.append(
             f"Evidence indexing recorded {conflict_note_count} potential conflict or gap note(s); inspect the frozen source records directly."
@@ -8937,11 +9009,12 @@ async def _generate_impl(
                     ("kind", expected_kind),
                     ("snapshot_sha256", snapshot_hash),
                     ("project_id", view.project.id),
-                    ("binding_fingerprint", binding_fingerprint),
-                    ("model", config["model"]),
-                    ("reasoning_effort", config["reasoning_effort"]),
                 )
             )
+            if compatible and _rebind_paper_checkpoint_provider(
+                checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
+            ):
+                _save_work(path, checkpoint)
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
@@ -8957,7 +9030,7 @@ async def _generate_impl(
                 work = checkpoint
             else:
                 raise ProjectError(
-                    "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
+                    "A paper checkpoint exists for different frozen evidence or paper type. Resume using the saved evidence or explicitly restart while preserving prior attempt accounting."
                 )
         if checkpoint is not None and work.get("include_diagrams") != include_diagrams:
             # The combined diagrams-and-tables preference changes only what is
@@ -10226,12 +10299,14 @@ def preflight(
         and not one_shot_draft_available
     )
     resume_available = bool(
-        same_project_and_snapshot
+        work is not None
+        and same_project_and_snapshot
         and checkpoint_kind_matches
         and binding_fingerprint
-        and work_state.get("binding_fingerprint") == binding_fingerprint
-        and work_state.get("model") == model
-        and work_state.get("reasoning_effort") == reasoning_effort
+        and model
+        and reasoning_effort
+        # Future calls can use the current provider/model; the original
+        # frozen evidence and paid-call dispatch markers remain unchanged.
         and (long_form or one_shot_draft_available or work_state.get("provider_calls", 0) == 0)
     )
     if not resume_available and _can_rebase_explicit_restart(work_state, view.project.id):
