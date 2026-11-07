@@ -39,7 +39,7 @@ def _defaults() -> dict[str, Any]:
 
 
 def load_config() -> dict[str, Any]:
-    from sigma.research_sessions import NEW_DEFAULT_LIMITS, _validate_limits
+    from sigma.research_sessions import DEFAULT_LIMITS, NEW_DEFAULT_LIMITS, _validate_limits
 
     target = _path()
     try:
@@ -65,7 +65,9 @@ def load_config() -> dict[str, Any]:
     if set(raw["limits"]) - set(NEW_DEFAULT_LIMITS):
         raise ProjectError("Global research settings contain unknown limits")
     settings = _defaults()
-    settings["limits"] = _validate_limits({**NEW_DEFAULT_LIMITS, **raw["limits"]})
+    stored_limits = raw["limits"]
+    defaults = NEW_DEFAULT_LIMITS if stored_limits.get("scheduler_version") == 2 else DEFAULT_LIMITS
+    settings["limits"] = _validate_limits({**defaults, **stored_limits})
     from sigma.model_catalog import validate_pair
 
     model = raw.get("ai_model", settings["ai_model"])
@@ -91,7 +93,7 @@ def load() -> dict[str, Any]:
 
 def save_config(raw: dict[str, Any]) -> dict[str, Any]:
     from sigma.model_catalog import validate_pair
-    from sigma.research_sessions import NEW_DEFAULT_LIMITS, _validate_limits
+    from sigma.research_sessions import DEFAULT_LIMITS, NEW_DEFAULT_LIMITS, _validate_limits
 
     current = load_config()
     if "limits" in raw:
@@ -99,7 +101,11 @@ def save_config(raw: dict[str, Any]) -> dict[str, Any]:
             raise ProjectError("Global research settings contain unknown limits")
         # model_calls is derived in scheduler v2; clients editing rounds or turns
         # must not carry a stale display value into validation.
-        candidate = {**NEW_DEFAULT_LIMITS, **raw["limits"]}
+        supplied = raw["limits"]
+        # Legacy callers without an explicit scheduler retain the original
+        # paired-call ceiling; new Settings use scheduler v2 explicitly.
+        defaults = NEW_DEFAULT_LIMITS if supplied.get("scheduler_version") == 2 else DEFAULT_LIMITS
+        candidate = {**defaults, **supplied}
         if candidate.get("scheduler_version") == 2:
             candidate["model_calls"] = 2 * candidate["research_rounds"] * candidate["turns_per_round"]
         current["limits"] = _validate_limits(candidate)
