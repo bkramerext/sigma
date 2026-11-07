@@ -55,6 +55,7 @@ def main_part1() -> None:
     test_maximum_regions_archived_one_session_stays_fast()
     test_easy_paper_avoids_unnecessary_long_form_calls()
     test_fallback_planner_ranks_complete_research_notes_over_operational_fields()
+    test_paper_checkpoint_portability_keeps_saved_sections_and_call_history()
     test_frozen_snapshot_generation_gate_checks_identity_hash_and_source_uniqueness()
     test_invalid_planning_claim_reference_is_recoverable()
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
