@@ -2120,10 +2120,8 @@ def test_display_math_is_rendered_and_escaped_equations_are_safely_recovered() -
             for warning in papers._tex_static_diagnostics(restored)
         )
         assert any("display-math" in x for x in papers._tex_static_diagnostics(escaped))
-    assert papers._latex_prose(r"The identity \(a_n=3\) holds.") == (
-        r"The identity $a_n=3$ holds."
-    )
-    assert papers._latex_prose(r"$a_n=3$") == r"\[a_n=3\]"
+    assert papers._latex_prose(r"The identity \(a_n=3\) holds.") == (r"The identity $a_n=3$ holds.")
+    assert papers._latex_prose("$" * 2 + "a_n=3" + "$" * 2) == r"\[a_n=3\]"
     # Never activate model-authored arbitrary TeX commands during recovery.
     unsafe = r"\[\input{private_file}\]"
     escaped_unsafe = papers._latex(unsafe)
