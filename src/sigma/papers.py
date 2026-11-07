@@ -44,8 +44,8 @@ from sigma import (
     reference_efficiency,
 )
 from sigma.openai_connection import auth_context, cloud_credential
-from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
 from sigma.paper_stream_guard import JSONWhitespaceGuard, JSONWhitespaceStall
+from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
 from sigma.project_reports import _compile_pdf, _latex
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
@@ -6351,8 +6351,12 @@ async def _provider_structured(
             stream_log.warning(
                 "paper.provider_whitespace_stall project_id=%s section=%s "
                 "elapsed_s=%.1f text_events=%d text_bytes=%d consecutive_whitespace=%d",
-                project_id or "unknown", diagnostic_section, monotonic() - request_started,
-                stream_text_events, stream_text_bytes, whitespace_guard.consecutive,
+                project_id or "unknown",
+                diagnostic_section,
+                monotonic() - request_started,
+                stream_text_events,
+                stream_text_bytes,
+                whitespace_guard.consecutive,
             )
             raise
 
@@ -6457,7 +6461,8 @@ async def _provider_structured(
                         code = error.get("code") if isinstance(error, dict) else None
                         if (
                             response.status_code == 503
-                            and code not in {
+                            and code
+                            not in {
                                 "subscription_sharing_usage_limit_exceeded",
                                 "insufficient_quota",
                                 "billing_hard_limit_reached",
