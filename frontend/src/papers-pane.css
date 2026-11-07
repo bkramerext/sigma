@@ -185,6 +185,7 @@
   min-width: 0;
 }
 .workspace-page .papers-pane .saved-paper-title-first-line .saved-paper-title {
+  display: inline-flex; align-items: center; gap: 6px;
   flex: 0 0 auto;
   width: auto;
   min-width: 0;
@@ -292,7 +293,7 @@
 
 /* Numbered paper hover uses underline only, matching numbered sessions. */
 .workspace-page .papers-pane .saved-paper-title-toggle:is(:hover,:focus-visible) { text-decoration: underline; text-underline-offset: 3px; color: inherit; background: transparent; }
-.workspace-page .papers-pane .paper-title-star { display: inline; margin-left: 7px; color: #e5ba69; font-size: .95em; cursor: default; }
+.workspace-page .papers-pane .paper-title-star { cursor: default; }
 
 /* A wrapper owns the hint when browser-disabled Play cannot receive pointer events. */
 .workspace-page .papers-pane .paper-play-tooltip { display: inline-flex; align-items: center; }
