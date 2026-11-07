@@ -21,6 +21,7 @@ from typing import Any
 
 from sigma.zstd_codec import (
     MAX_BUNDLE_BYTES,
+    MAX_COMPRESSED_MEMBER_BYTES,
     MAX_MEMBER_BYTES,
     ZstdCodecError,
     compress,
@@ -253,7 +254,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
                     or type(size) is not int
                     or size < 0
                     or size > MAX_MEMBER_BYTES
-                    or len(encoded) > ((MAX_MEMBER_BYTES + 2) // 3) * 4 + 4
+                    or len(encoded) > ((MAX_COMPRESSED_MEMBER_BYTES + 2) // 3) * 4 + 4
                 ):
                     raise BundleError("Invalid compressed project member size")
                 try:
