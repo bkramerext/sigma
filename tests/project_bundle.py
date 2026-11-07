@@ -697,6 +697,13 @@ def main() -> None:
                 "max_concurrent_sessions": 4,
             }
             save_limits(str(created.path), saved_limits)
+            # Verify import/export preserves historical project-local limits as
+            # inert data; live limits now come exclusively from user preferences.
+            write_file(
+                created.path,
+                "research-sessions/limits.json",
+                json.dumps(saved_limits).encode(),
+            )
             assert {
                 "project.json",
                 f"research-sessions/{session_id}.json",
