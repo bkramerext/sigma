@@ -2363,10 +2363,9 @@ function PaperScoreDialog({ score, onRescore, canRescore, rescoring, error, onCl
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header paper-score-header">
       <h2 id="paper-score-title">Paper Score</h2>
-      <div className="settings-actions"><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
+      <div className="settings-actions"><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" data-tooltip={canRescore ? "Evaluate again using an AI call" : "Connect an AI provider to rescore"} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
     </header>
     <div className="settings-body paper-score-body">
-      <div className="settings-actions"><button type="button" className="text-view-link" data-tooltip={canRescore ? "Evaluate again using an AI call" : "Connect an AI provider to rescore"} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button></div>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="paper-score-overall" aria-label={`Weighted paper score ${score.total} out of 100`}>
         <strong>Weighted score</strong><strong className="paper-score-points">{score.total}/100</strong>
