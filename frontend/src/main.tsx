@@ -4420,174 +4420,37 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
 type Settings = { title: string; problem: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null; show_advanced_outcome_details: boolean };
 type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; relative_cost: '$' | '$$' | '$$$'; availability: 'available' | 'unavailable' | 'unverified' };
 // Keep preference controls usable when account access cannot be checked.
-const reviewedModelPreferences: CatalogChoice[] = [
-  { id: 'gpt-6.1-sol', label: 'Sol · Balanced ($$)', description: 'Balance research capability and cost.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$$', availability: 'unverified' },
-  { id: 'gpt-6-luna', label: 'Luna · Economy ($)', description: 'Lower-cost exploration of focused questions.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$', availability: 'unverified' },
-  { id: 'gpt-6-astra', label: 'Astra · Advanced ($$$)', description: 'For the most demanding research reasoning; higher cost.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$$$', availability: 'unverified' },
-];
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
 const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty, show_advanced_outcome_details: view.project.show_advanced_outcome_details });
 
-function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean }) {
-  const ai = useAI();
-  const cloud = useCloudIdentity();
-  const [models, setModels] = useState<CatalogChoice[]>([]);
-  const [catalogReady, setCatalogReady] = useState(false);
+function ProjectHeaderControls({ view, onSaved, disabled }: {
+  view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean;
+}) {
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const [pendingModel, setPendingModel] = useState<CatalogChoice | null>(null);
-  const [confirmationPosition, setConfirmationPosition] = useState<{ left: number; top: number } | null>(null);
-  const saving = useRef(false);
-  const modelButton = useRef<HTMLButtonElement>(null);
-  const confirmButton = useRef<HTMLButtonElement>(null);
-  const confirmationPopover = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (pendingModel) {
-      const place = () => {
-        const anchor = modelButton.current?.getBoundingClientRect();
-        const popover = confirmationPopover.current?.getBoundingClientRect();
-        if (!anchor) return;
-        const width = popover?.width ?? Math.min(320, window.innerWidth - 16);
-        const height = popover?.height ?? 110;
-        const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
-        const below = anchor.bottom + height + 8 <= window.innerHeight - 8;
-        setConfirmationPosition({ left, top: below ? anchor.bottom + 8 : Math.max(8, anchor.top - height - 8) });
-      };
-      const frame = requestAnimationFrame(() => {
-        place();
-        confirmButton.current?.focus();
-      });
-      const escape = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          setPendingModel(null);
-        }
-      };
-      window.addEventListener('resize', place);
-      window.addEventListener('scroll', place, true);
-      document.addEventListener('keydown', escape, true);
-      return () => {
-        cancelAnimationFrame(frame);
-        window.removeEventListener('resize', place);
-        window.removeEventListener('scroll', place, true);
-        document.removeEventListener('keydown', escape, true);
-      };
-    } else {
-      setConfirmationPosition(null);
-      modelButton.current?.focus();
-    }
-  }, [pendingModel]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setCatalogReady(false);
-    if (cloud?.enabled && !cloud.authenticated) {
-      setModels(reviewedModelPreferences); setMessage('Model access is checked when connected.'); setCatalogReady(true);
-      return () => controller.abort();
-    }
-    fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          if (!controller.signal.aborted) { setModels([]); setMessage('Model availability requires an authorized session. Saved settings are unchanged.'); }
-          return null;
-        }
-        throw new Error(`Model availability check failed (HTTP ${response.status}). Retry after connectivity is restored. Saved settings are unchanged.`);
-      }
-      return response.json();
-    }).then(data => {
-      if (!controller.signal.aborted && data) setModels(Array.isArray(data.models) ? data.models : []);
-    }).catch((error: unknown) => {
-      if (!controller.signal.aborted) {
-        setModels(reviewedModelPreferences);
-        setMessage(error instanceof Error ? `${error.message} Preferences remain configurable; access is checked when connected.` : 'Model availability could not be verified. Preferences remain configurable; access is checked when connected.');
-      }
-    }).finally(() => { if (!controller.signal.aborted) setCatalogReady(true); });
-    return () => controller.abort();
-  }, [ai.info?.mode, ai.info?.active_account, ai.info?.status, cloud?.enabled, cloud?.authenticated]);
-
-  const current = models.find(model => model.id === view.project.ai_model);
-  const costOrder: Record<CatalogChoice['relative_cost'], number> = { '$': 1, '$$': 2, '$$$': 3 };
-  const selectableModels = models.filter(model => model.availability !== 'unavailable').sort((a, b) => costOrder[b.relative_cost] - costOrder[a.relative_cost] || a.label.localeCompare(b.label));
-  const currentSelectableIndex = selectableModels.findIndex(model => model.id === view.project.ai_model);
-  const nextModel = selectableModels.length > 1
-    ? selectableModels[(currentSelectableIndex + 1 + selectableModels.length) % selectableModels.length]
-    : selectableModels.length === 1 && currentSelectableIndex < 0 ? selectableModels[0] : undefined;
-  const efforts = current && current.availability !== 'unavailable' ? current.efforts : [];
-  const currentEffortIndex = efforts.indexOf(view.project.reasoning_effort);
-  const nextEffort = efforts.length > 1
-    ? efforts[(currentEffortIndex + 1 + efforts.length) % efforts.length]
-    : undefined;
-  const effortOrder = ['low', 'medium', 'high', 'xhigh'];
-  const reconciledEffort = (model: CatalogChoice | undefined) => {
-    if (!model?.efforts.length) return undefined;
-    if (model.efforts.includes(view.project.reasoning_effort)) return view.project.reasoning_effort;
-    const oldIndex = effortOrder.indexOf(view.project.reasoning_effort);
-    return [...model.efforts].sort((a, b) => {
-      const distance = Math.abs(effortOrder.indexOf(a) - oldIndex) - Math.abs(effortOrder.indexOf(b) - oldIndex);
-      return distance || effortOrder.indexOf(a) - effortOrder.indexOf(b);
-    })[0];
-  };
-  const nextModelEffort = reconciledEffort(nextModel);
-  const effortWillChange = Boolean(nextModel && nextModelEffort !== view.project.reasoning_effort);
-  const nextModelCostsMore = Boolean(current && nextModel && costOrder[nextModel.relative_cost] > costOrder[current.relative_cost]);
+  const [error, setError] = useState('');
   const difficultyOrder: ProjectDifficulty[] = ['easy', 'medium', 'hard'];
-  const currentDifficultyIndex = view.project.difficulty ? difficultyOrder.indexOf(view.project.difficulty) : -1;
-  const nextDifficulty = difficultyOrder[(currentDifficultyIndex + 1) % difficultyOrder.length];
-  const difficultyText = view.project.difficulty ? difficultyLabels[view.project.difficulty].toLowerCase() : 'not set';
-  const costHelpId = `project-model-cost-help-${view.project.id}`;
-
-  async function update(changes: Partial<Settings>) {
-    if (saving.current || disabled || busy) return;
-    saving.current = true; setBusy(true); setMessage('');
-    const expected = settingsOf(view);
+  const currentIndex = view.project.difficulty ? difficultyOrder.indexOf(view.project.difficulty) : -1;
+  const nextDifficulty = difficultyOrder[(currentIndex + 1) % difficultyOrder.length];
+  async function cycleDifficulty() {
+    if (disabled || busy) return;
+    setBusy(true); setError('');
     try {
-      const saved = await post<ProjectView>('update', {
-        path: view.path, ...expected, ...changes, expected,
+      const expected = settingsOf(view);
+      const next = await post<ProjectView>('update', {
+        path: view.path, ...expected, difficulty: nextDifficulty, expected,
       });
-      onSaved(saved);
-    } catch (error) {
-      setMessage(errorMessage(error));
-    } finally {
-      saving.current = false; setBusy(false);
-    }
+      onSaved(next);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
   }
-
-  const modelLabel = current ? `${current.label.split(' · ')[0]} ${current.relative_cost}` : view.project.ai_model;
-  const modelDisabled = !catalogReady || busy || disabled || !nextModel || !nextModelEffort;
-  const thinkingDisabled = !catalogReady || busy || disabled || !nextEffort;
-  const statusMessage = message || !catalogReady ? message || 'Checking model availability…' : '';
-  const nextEffortNotice = effortWillChange
-    ? ` Switching to ${nextModel?.label.split(' · ')[0]} will also change Thinking from ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort} to ${thinkingLabels[nextModelEffort!]}.`
-    : '';
-  const visibleEffortNotice = effortWillChange ? `Next model uses ${thinkingLabels[nextModelEffort!]}.` : '';
-  const pendingModelName = pendingModel?.label.split(' · ')[0] ?? 'this model';
-  function requestModelChange() {
-    if (!nextModel || !nextModelEffort) return;
-    if (nextModelCostsMore) setPendingModel(nextModel);
-    else void update({ ai_model: nextModel.id, reasoning_effort: nextModelEffort });
-  }
-  function confirmModelChange() {
-    if (!pendingModel) return;
-    const confirmed = pendingModel;
-    setPendingModel(null);
-    const effort = reconciledEffort(confirmed);
-    if (effort) void update({ ai_model: confirmed.id, reasoning_effort: effort });
-  }
-  function cycleDifficulty() {
-    void update({ difficulty: nextDifficulty });
-  }
-  return <div className="project-header-controls" aria-label="Project model, thinking, and difficulty controls">
-    <button type="button" className={`project-control-pill project-difficulty-badge difficulty-${view.project.difficulty ?? 'unset'}`} aria-label={`Project difficulty ${view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'not set'}`} title={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} data-tooltip={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} disabled={disabled || busy || !!pendingModel} onClick={cycleDifficulty}>Difficulty · {view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'Not set'}</button>
-    <button ref={modelButton} type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} data-tooltip={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} disabled={modelDisabled || !!pendingModel} onClick={requestModelChange}>Model · {modelLabel}</button>
-    <button type="button" className="project-control-pill project-thinking-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} data-tooltip={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} disabled={thinkingDisabled || !!pendingModel} onClick={() => nextEffort && void update({ ai_model: view.project.ai_model, reasoning_effort: nextEffort })}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
-    <span id={costHelpId} className="sr-only">Dollar signs show relative published API token price tiers. They are not actual research session charges.</span>
-    {visibleEffortNotice && <span className="project-controls-message" role="status">{visibleEffortNotice}</span>}
-    {statusMessage && <span className="project-controls-message" role="status">{statusMessage}</span>}
-    {pendingModel && createPortal(<div ref={confirmationPopover} className="project-model-confirm-popover" role="group" aria-label={`Confirm switch to ${pendingModelName}`} style={confirmationPosition ? { left: confirmationPosition.left, top: confirmationPosition.top } : { left: -10000, top: -10000 }}>
-      <p><strong>Switch to {pendingModelName}?</strong> {pendingModelName} has a higher relative published API token cost tier ({pendingModel.relative_cost} versus {current?.relative_cost}). Continue to save this model?</p>
-      <div className="project-model-confirm-actions"><button ref={confirmButton} type="button" className="text-view-link" onClick={confirmModelChange}>Confirm</button><DialogDismissButton label="Cancel model change" onClick={() => setPendingModel(null)}/></div>
-    </div>, document.body)}
+  return <div className="project-header-controls" aria-label="Project difficulty">
+    <button type="button" className={`project-control-pill project-difficulty-badge difficulty-${view.project.difficulty ?? 'unset'}`}
+      aria-label={`Project difficulty ${view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'not set'}`}
+      data-tooltip="Click to change this project's difficulty" disabled={disabled || busy}
+      onClick={() => void cycleDifficulty()}>
+      Difficulty · {view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'Not set'}
+    </button>
+    {error && <span role="alert" className="project-controls-message">{error}</span>}
   </div>;
 }
 
