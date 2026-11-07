@@ -826,7 +826,11 @@ def test_authorized_section_recovery_reuses_saved_siblings_and_preserves_dispatc
         number = input_value["section_number"]
         attempts.append(number)
         if number == 1:
+            # Let the other three dispatched requests finish their valid drafts
+            # before the first section reports its provider failure.
+            await asyncio.sleep(0.03)
             raise papers.PaperTransientFailure("HTTP 503 before section authorship")
+        await asyncio.sleep(0.01)
         return papers.LongSectionDraft(
             paragraphs=[f"Authored and durably saved section {number}."]
         ), "fixture-model"
