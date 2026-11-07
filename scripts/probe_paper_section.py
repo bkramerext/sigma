@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
 """Read-only single-section stream diagnosis. DRY RUN unless --execute.
 
 Uses one saved paper checkpoint and the exact production section instructions,
 schema and request payload. --execute dispatches exactly one possibly paid call.
 No paper, research, project, or checkpoint writes occur.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,8 +27,8 @@ import httpx
 from sigma import papers, publication_reference_compiler
 from sigma.local_config import load_local_config
 from sigma.openai_connection import auth_context
-from sigma.plan_stream import completed
 from sigma.paper_stream_guard import JSONWhitespaceGuard, JSONWhitespaceStall
+from sigma.plan_stream import completed
 
 TARGET_ID = "b546bb60-845b-4afb-a9b8-ad2b8748a832"
 ORIGINAL_BYTES = 74271
@@ -78,10 +78,11 @@ def exact_base_instructions() -> str:
     source = textwrap.dedent(inspect.getsource(papers._generate_long_draft))
     node = ast.parse(source).body[0]
     for statement in node.body:
-        if isinstance(statement, ast.Assign):
-            if any(isinstance(t, ast.Name) and t.id == "section_instructions"
-                   for t in statement.targets):
-                return ast.literal_eval(statement.value)
+        if isinstance(statement, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "section_instructions"
+            for t in statement.targets
+        ):
+            return ast.literal_eval(statement.value)
     raise ValueError("Could not locate canonical section instructions")
 
 
@@ -111,7 +112,9 @@ def construct(work: dict[str, Any], number: int) -> tuple[str, str, bool]:
     instructions += "\n\n" + papers._subject_methodology(discipline)
     if visuals:
         instructions += "\n\n" + papers.SECTION_TABLE_INSTRUCTIONS
-    selected = [n.model_dump() for n in notes if set(n.evidence_refs).intersection(section.evidence_refs)]
+    selected = [
+        n.model_dump() for n in notes if set(n.evidence_refs).intersection(section.evidence_refs)
+    ]
     value = {
         "title": plan.title,
         "project_question": str(data.get("problem", ""))[:3000],
@@ -119,9 +122,7 @@ def construct(work: dict[str, Any], number: int) -> tuple[str, str, bool]:
         "publication_references": data.get("publication_references", []),
         "publication_reference_urls": data.get("publication_reference_urls", []),
         "paper_writing_methodology": guidance,
-        "shared_claim_register": [
-            c.model_dump() for c in plan.claims if c.id in section.claim_ids
-        ],
+        "shared_claim_register": [c.model_dump() for c in plan.claims if c.id in section.claim_ids],
         "section_number": number,
         "section_plan": section.model_dump(),
         "paper_wide_thesis": plan.abstract,
@@ -137,16 +138,21 @@ def construct(work: dict[str, Any], number: int) -> tuple[str, str, bool]:
         value["original_research_excerpts"] = papers._section_original_excerpts(
             original, set(section.evidence_refs), section.heading + " " + section.purpose, room
         )
-    return papers._provider_input_text(value, "sigma_long_paper_section", 220000), instructions, visuals
+    return (
+        papers._provider_input_text(value, "sigma_long_paper_section", 220000),
+        instructions,
+        visuals,
+    )
 
 
 def recurrence(text: str) -> dict[str, Any]:
-    slices = [text[i:i + 128] for i in range(0, max(0, len(text) - 127), 32)]
+    slices = [text[i : i + 128] for i in range(0, max(0, len(text) - 127), 32)]
     counts = Counter(slices)
     return {
         "sample_windows": len(slices),
-        "repeat_fraction": round(sum(n - 1 for n in counts.values() if n > 1)
-                                 / max(1, len(slices)), 3),
+        "repeat_fraction": round(
+            sum(n - 1 for n in counts.values() if n > 1) / max(1, len(slices)), 3
+        ),
         "max_repeat": max(counts.values(), default=0),
     }
 
@@ -167,20 +173,32 @@ def section_wire_schema(visuals: bool, layout: str) -> dict[str, Any]:
     return schema
 
 
-async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
-                instructions: str, visuals: bool, emit: Any) -> None:
+async def probe(
+    args: argparse.Namespace,
+    work: dict[str, Any],
+    payload: str,
+    instructions: str,
+    visuals: bool,
+    emit: Any,
+) -> None:
     auth = await auth_context()
     if auth["mode"] != "chatgpt" or not auth["token"] or auth["status"] != "connected":
         raise ValueError("Connect your ChatGPT account first; no call was dispatched")
     schema = section_wire_schema(visuals, args.schema_layout)
     request = {
-        "model": work["model"], "store": False,
+        "model": work["model"],
+        "store": False,
         "reasoning": {"effort": work["reasoning_effort"]},
         "instructions": instructions,
         "input": [{"role": "user", "content": payload}],
-        "text": {"format": {"type": "json_schema", "name": "sigma_long_paper_section",
-                            "strict": True,
-                            "schema": schema}},
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "sigma_long_paper_section",
+                "strict": True,
+                "schema": schema,
+            }
+        },
         "stream": True,
     }
     fragments: list[str] = []
@@ -201,71 +219,110 @@ async def probe(args: argparse.Namespace, work: dict[str, Any], payload: str,
         try:
             whitespace_guard.observe(delta)
         except JSONWhitespaceStall:
-            emit("whitespace_stall", deltas=seen, bytes=size,
-                 consecutive_whitespace=whitespace_guard.consecutive,
-                 elapsed_s=round(monotonic()-begin, 1))
+            emit(
+                "whitespace_stall",
+                deltas=seen,
+                bytes=size,
+                consecutive_whitespace=whitespace_guard.consecutive,
+                elapsed_s=round(monotonic() - begin, 1),
+            )
             raise
         if seen == 1 or seen % 500 == 0:
             joined = "".join(fragments)
-            emit("progress", deltas=seen, bytes=size, elapsed_s=round(monotonic()-begin, 1),
-                 repetition=recurrence(joined[-24000:]), sample_tail=joined[-1200:])
+            emit(
+                "progress",
+                deltas=seen,
+                bytes=size,
+                elapsed_s=round(monotonic() - begin, 1),
+                repetition=recurrence(joined[-24000:]),
+                sample_tail=joined[-1200:],
+            )
         if seen >= args.max_deltas or size >= args.max_bytes:
             raise SampleComplete
 
     outcome = "unknown"
-    emit("dispatch", model=request["model"], effort=work["reasoning_effort"],
-         schema_layout=args.schema_layout, schema_fields=list(schema["properties"]),
-         max_seconds=args.max_seconds, max_deltas=args.max_deltas, max_bytes=args.max_bytes)
+    emit(
+        "dispatch",
+        model=request["model"],
+        effort=work["reasoning_effort"],
+        schema_layout=args.schema_layout,
+        schema_fields=list(schema["properties"]),
+        max_seconds=args.max_seconds,
+        max_deltas=args.max_deltas,
+        max_bytes=args.max_bytes,
+    )
     try:
         async with asyncio.timeout(args.max_seconds):
-            async with httpx.AsyncClient(timeout=None, trust_env=False,
-                                         follow_redirects=False) as client:
-                async with client.stream(
-                    "POST", "https://api.openai.com/v1/responses",
-                    headers={"Authorization": "Bearer " + auth["token"],
-                             "Accept": "text/event-stream"}, json=request,
-                ) as response:
-                    emit("headers", http_status=response.status_code)
-                    if response.status_code != 200:
-                        raise RuntimeError(f"HTTP {response.status_code}")
-                    result = await completed(
-                        response, max_stream_bytes=None, max_event_chars=4000000,
-                        max_events=100000, max_text_bytes=papers.MAX_RESPONSE_BYTES,
-                        on_event_observed=event_seen, on_text_delta=text_seen,
-                    )
-                    items = [
-                        part["text"]
-                        for item in result.get("output", [])
-                        if isinstance(item, dict) and item.get("type") == "message"
-                        for part in item.get("content", [])
-                        if isinstance(part, dict) and part.get("type") == "output_text"
-                    ]
-                    if len(items) != 1:
-                        raise ValueError("Provider completed without one JSON output text")
-                    decoded = json.loads(items[0])
-                    if not isinstance(decoded, dict) or set(decoded) != set(schema["required"]):
-                        raise ValueError("Provider output missing or adding strict schema fields")
-                    parsed = papers.LongSectionDraft.model_validate_json(items[0])
-                    outcome = "validated"
-                    emit("provider_validated", usage=result.get("usage"),
-                         paragraphs=len(parsed.paragraphs),
-                         paragraph_words=sum(len(part.split()) for part in parsed.paragraphs),
-                         tables=len(parsed.tables), examples=len(parsed.examples))
+            async with (
+                httpx.AsyncClient(
+                    timeout=None, trust_env=False, follow_redirects=False
+                ) as client,
+                client.stream(
+                    "POST",
+                    "https://api.openai.com/v1/responses",
+                    headers={
+                        "Authorization": "Bearer " + auth["token"],
+                        "Accept": "text/event-stream",
+                    },
+                    json=request,
+                ) as response,
+            ):
+                emit("headers", http_status=response.status_code)
+                if response.status_code != 200:
+                    raise RuntimeError(f"HTTP {response.status_code}")
+                result = await completed(
+                    response,
+                    max_stream_bytes=None,
+                    max_event_chars=4000000,
+                    max_events=100000,
+                    max_text_bytes=papers.MAX_RESPONSE_BYTES,
+                    on_event_observed=event_seen,
+                    on_text_delta=text_seen,
+                )
+                items = [
+                    part["text"]
+                    for item in result.get("output", [])
+                    if isinstance(item, dict) and item.get("type") == "message"
+                    for part in item.get("content", [])
+                    if isinstance(part, dict) and part.get("type") == "output_text"
+                ]
+                if len(items) != 1:
+                    raise ValueError("Provider completed without one JSON output text")
+                decoded = json.loads(items[0])
+                if not isinstance(decoded, dict) or set(decoded) != set(schema["required"]):
+                    raise ValueError("Provider output missing or adding strict schema fields")
+                parsed = papers.LongSectionDraft.model_validate_json(items[0])
+                outcome = "validated"
+                emit(
+                    "provider_validated",
+                    usage=result.get("usage"),
+                    paragraphs=len(parsed.paragraphs),
+                    paragraph_words=sum(len(part.split()) for part in parsed.paragraphs),
+                    tables=len(parsed.tables),
+                    examples=len(parsed.examples),
+                )
     except SampleComplete:
         outcome = "sample_limit"
     except JSONWhitespaceStall:
         outcome = "whitespace_stall"
     except TimeoutError:
         outcome = "time_limit"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - report diagnostic failures
         outcome = "error"
         emit("exception", error_type=type(exc).__name__, detail=str(exc)[:500])
     finally:
         text = "".join(fragments)
-        emit("final", outcome=outcome, elapsed_s=round(monotonic()-begin, 1),
-             deltas=seen, output_bytes=size, event_types=dict(types),
-             repetition=recurrence(text), output_prefix=text[:64000],
-             output_tail=text[-4000:])
+        emit(
+            "final",
+            outcome=outcome,
+            elapsed_s=round(monotonic() - begin, 1),
+            deltas=seen,
+            output_bytes=size,
+            event_types=dict(types),
+            repetition=recurrence(text),
+            output_prefix=text[:64000],
+            output_tail=text[-4000:],
+        )
         print(f"Probe ended: {outcome}. {seen} deltas, {size} output bytes.")
 
 
@@ -275,8 +332,12 @@ async def main() -> None:
     parser.add_argument("--section", type=int, default=2)
     parser.add_argument("--execute", action="store_true", help="One potentially paid AI call")
     parser.add_argument("--self-test", action="store_true", help="Test guard and schema without AI")
-    parser.add_argument("--schema-layout", choices=("production", "prose-last", "legacy"), default="production",
-                        help="Canonical production order; legacy reproduces old failing schema")
+    parser.add_argument(
+        "--schema-layout",
+        choices=("production", "prose-last", "legacy"),
+        default="production",
+        help="Canonical production order; legacy reproduces old failing schema",
+    )
     parser.add_argument("--max-seconds", type=int, default=90)
     parser.add_argument("--max-deltas", type=int, default=4000)
     parser.add_argument("--max-bytes", type=int, default=80000)
@@ -293,10 +354,13 @@ async def main() -> None:
         assert list(original["properties"]) == ["paragraphs", "tables", "examples"]
         assert canonical["required"] == list(canonical["properties"])
         assert original["required"] == list(original["properties"])
-        assert all(canonical["properties"][key] == original["properties"][key]
-                   for key in canonical["properties"])
+        assert all(
+            canonical["properties"][key] == original["properties"][key]
+            for key in canonical["properties"]
+        )
         assert list(section_wire_schema(False, "production")["properties"]) == [
-            "examples", "paragraphs"
+            "examples",
+            "paragraphs",
         ]
         guard = JSONWhitespaceGuard()
         guard.observe('{"paragraphs":["Valid paragraph"],"tables":[]')
@@ -304,7 +368,9 @@ async def main() -> None:
             for _ in range(1500):
                 guard.observe(" " * 3)
         except JSONWhitespaceStall:
-            print(f"SELF TEST PASSED: aborted after {guard.consecutive} JSON whitespace characters.")
+            print(
+                f"SELF TEST PASSED: aborted after {guard.consecutive} JSON whitespace characters."
+            )
             return
         raise AssertionError("Whitespace guard did not fire on the synthetic stall")
     load_local_config()
@@ -315,7 +381,9 @@ async def main() -> None:
     payload, instructions, visuals = construct(work, args.section)
     input_bytes = len(payload.encode())
     print(f"Project: {path}")
-    print(f"Section {args.section}: input={input_bytes} bytes; instructions={len(instructions)} chars")
+    print(
+        f"Section {args.section}: input={input_bytes} bytes; instructions={len(instructions)} chars"
+    )
     print(f"Saved model: {work['model']}, effort: {work['reasoning_effort']}")
     if args.section == 2:
         section = papers.LongPaperPlan.model_validate(work["plan"]).sections[1]
@@ -354,26 +422,40 @@ async def main() -> None:
         print("Repeat with --execute to run one bounded paid diagnostic.")
         return
     report = Path(
-        args.report or str(Path.home() / "Desktop" /
-                           f"sigma-section-probe-{args.schema_layout}.jsonl")
+        args.report
+        or str(Path.home() / "Desktop" / f"sigma-section-probe-{args.schema_layout}.jsonl")
     ).expanduser()
     report.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(report, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as stream:
+
         def emit(event: str, **items: Any) -> None:
-            stream.write(json.dumps(
-                {"event": event, "utc": datetime.now(UTC).isoformat(), **items},
-                ensure_ascii=False, default=str,
-            ) + "\n")
+            stream.write(
+                json.dumps(
+                    {"event": event, "utc": datetime.now(UTC).isoformat(), **items},
+                    ensure_ascii=False,
+                    default=str,
+                )
+                + "\n"
+            )
             stream.flush()
-        emit("preflight", project_id=TARGET_ID, section=args.section,
-             model=work["model"], effort=work["reasoning_effort"],
-             schema_layout=args.schema_layout, schema_fields=list(schema["properties"]),
-             schema_sha256=schema_sha256, input_bytes=input_bytes, original_logged_bytes=ORIGINAL_BYTES,
-             input_byte_drift=input_bytes - ORIGINAL_BYTES,
-             instructions_chars=len(instructions),
-             input_sha256=hashlib.sha256(payload.encode()).hexdigest(),
-             instructions_sha256=hashlib.sha256(instructions.encode()).hexdigest())
+
+        emit(
+            "preflight",
+            project_id=TARGET_ID,
+            section=args.section,
+            model=work["model"],
+            effort=work["reasoning_effort"],
+            schema_layout=args.schema_layout,
+            schema_fields=list(schema["properties"]),
+            schema_sha256=schema_sha256,
+            input_bytes=input_bytes,
+            original_logged_bytes=ORIGINAL_BYTES,
+            input_byte_drift=input_bytes - ORIGINAL_BYTES,
+            instructions_chars=len(instructions),
+            input_sha256=hashlib.sha256(payload.encode()).hexdigest(),
+            instructions_sha256=hashlib.sha256(instructions.encode()).hexdigest(),
+        )
         await probe(args, work, payload, instructions, visuals, emit)
     print(f"Upload this file: {report}")
     print("Original checkpoint was not modified.")
