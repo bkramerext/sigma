@@ -1,0 +1,40 @@
+/* User-scoped Settings, preserving the existing Project Settings visual language. */
+.sigma-global-settings {
+  width: min(820px, calc(100vw - 32px));
+  max-height: min(90dvh, 860px);
+  overflow-y: auto;
+}
+.sigma-global-settings .settings-tabs { display: flex; flex-wrap: wrap; padding: 12px 24px 0; gap: 18px; }
+.sigma-global-settings .settings-tabs button {
+  background: transparent; border: 0; padding: 5px 1px 8px; min-height: 28px;
+  color: var(--sigma-copper-foreground); cursor: pointer; font: 13px Inter, sans-serif;
+}
+.sigma-global-settings .settings-tabs button[aria-selected="true"] { border-bottom: 2px solid var(--sigma-copper-foreground); }
+.sigma-global-settings .settings-tabs button:focus-visible { outline: 2px solid #edbc77; }
+.sigma-global-settings .settings-body { padding: 20px 24px 26px; }
+.sigma-global-settings .settings-body fieldset { border: 0; padding: 0; margin: 0; }
+.sigma-global-settings .settings-body label { display: block; margin-top: 14px; }
+.sigma-global-settings .settings-body select,
+.sigma-global-settings .settings-body input:not([type="checkbox"]) { max-width: 100%; }
+.sigma-global-settings .project-preference-checkbox { display: flex !important; align-items: center; gap: 10px; }
+.sigma-global-settings .project-preference-checkbox input { flex: 0 0 auto; }
+.sigma-global-settings .project-types-embedded {
+  position: static; width: auto; max-height: none; margin: 0; border: 0; border-radius: 0;
+  box-shadow: none; background: transparent; overflow: visible;
+}
+.sigma-global-settings .project-types-embedded > header {
+  padding: 10px 24px 12px; border-bottom: 0;
+}
+.sigma-global-settings .project-types-embedded > header h2 { display: none; }
+.sigma-global-settings .project-types-embedded .project-types-body {
+  max-height: min(55dvh, 590px); overflow: auto; padding: 8px 24px 22px;
+}
+.sigma-global-settings .project-types-embedded > header .project-types-header-actions {
+  display: flex; gap: 12px;
+}
+.sigma-settings-type-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+@media (max-width: 600px) {
+  .sigma-global-settings .settings-tabs { gap: 10px; padding-inline: 14px; }
+  .sigma-global-settings .settings-body { padding-inline: 14px; }
+  .sigma-global-settings .project-types-embedded .project-types-body { padding-inline: 14px; }
+}
