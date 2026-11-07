@@ -2,6 +2,7 @@ import { Component, createContext, createElement, lazy, Suspense, useCallback, u
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
+import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
 import { friendlyProviderError, providerInterruptionCopy, providerUsageLimitCopy, setSponsoredUsageConnection } from './provider-usage-guidance';
 import { openReusableTab } from './reusable-tabs';
@@ -1956,7 +1957,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       <div className="project-type-warning-actions">
         {safeSavedTypeSettings && <button type="button" autoFocus disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); setConfirmStart(false); void begin(undefined, true); }}>Continue with saved settings</button>}
         <button type="button" autoFocus={!safeSavedTypeSettings} disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); onChooseReplacement(); }}>Choose a replacement</button>
-        <button type="button" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}>Cancel</button>
+        <DialogDismissButton label="Cancel project type selection" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}/>
       </div>
     </dialog>
     <header className="workspace-pane-heading sessions-pane-heading">
@@ -2173,7 +2174,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
         <h2 id="export-project-heading">{demo ? 'Export Demo Project' : 'Export Project'}</h2>
         <div className="settings-actions">
           <button type="submit" className="settings-submit" disabled={busy || !filename.trim()}>{busy ? 'Downloading…' : 'Download'}</button>
-          <button type="button" className="settings-cancel" title="Close without downloading" disabled={busy} onClick={() => cancel()}>Cancel</button>
+          <DialogDismissButton label="Cancel export" disabled={busy} onClick={() => cancel()}/>
         </div>
       </header>
       <div className="settings-body">
@@ -2310,7 +2311,7 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
     <form onSubmit={send}>
       <header className="settings-header">
         <h2 id="email-project-heading">Email Project</h2>
-        <div className="settings-actions"><button type="submit" className="settings-submit" disabled={busy || (!loaded && effectiveMode !== 'project') || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
+        <div className="settings-actions"><button type="submit" className="settings-submit" disabled={busy || (!loaded && effectiveMode !== 'project') || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button><DialogDismissButton label="Cancel email" disabled={busy} onClick={cancel}/></div>
       </header>
       <div className="settings-body">
         <p className="settings-hint">The current project, <strong>{title}</strong>, will be sent as an importable attachment to the email addresses you provide.</p>
@@ -2364,7 +2365,7 @@ function PaperScoreDialog({ score, onClose }: { score: PaperScore; onClose: () =
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header paper-score-header">
       <h2 id="paper-score-title">Paper Score</h2>
-      <div className="settings-actions"><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
+      <div className="settings-actions"><DialogDismissButton label="Close paper score" onClick={onClose}/></div>
     </header>
     <div className="settings-body paper-score-body">
       <div className="paper-score-overall" aria-label={`Weighted paper score ${score.total} out of 100`}>
@@ -3184,7 +3185,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         <span className="paper-includes-anchor">
           <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
           {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className="paper-includes-dialog" role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset }}>
-      <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><button type="button" className="text-view-link paper-includes-close" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}>Close</button></div>
+      <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
 
         <legend className="sr-only">Include</legend>
@@ -4100,7 +4101,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
     closeButton.current?.focus();
   }, []);
   return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
+    <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><DialogDismissButton ref={closeButton} label="Close About SIGMA" onClick={onClose}/></div>
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
       <details className="about-disclosure about-workflow-disclosure" data-about-section="workflow" open={aboutDisclosureState('workflow')} onToggle={event => rememberAboutDisclosure(event, 'workflow')}>
@@ -4357,7 +4358,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
   }
 
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog research-qa-dialog" aria-labelledby="research-qa-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }} onKeyDownCapture={event => { if (event.key === 'Escape' && busy) { event.preventDefault(); event.stopPropagation(); } }}>
-    <header className="settings-header"><h2 id="research-qa-heading">Research Q/A</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+    <header className="settings-header"><h2 id="research-qa-heading">Research Q/A</h2><div className="settings-actions"><DialogDismissButton label="Close research Q/A" disabled={busy} onClick={onCancel}/></div></header>
     <div className="settings-body ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
@@ -4398,7 +4399,7 @@ function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView)
     finally { setBusy(false); }
   }
   return <dialog ref={dialog} className="project-entry-dialog import-project-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="entry-dialog-header"><h2 id="import-project-heading">Upload Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Uploading…' : 'Upload'}</button><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
+    <header className="entry-dialog-header"><h2 id="import-project-heading">Upload Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Uploading…' : 'Upload'}</button><DialogDismissButton label="Cancel upload" disabled={busy} onClick={onCancel}/></header>
     <p className="entry-help">Upload a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
     <form id="import-project-form" onSubmit={submit}><fieldset disabled={busy}><div className="import-project-label-row"><label htmlFor="import-project-file">Project file</label><button className="choose-project-file" type="button" onClick={() => fileInput.current?.click()}>Choose</button></div>
       <input ref={fileInput} className="sr-only" id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
@@ -4425,7 +4426,7 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
     finally { submitting.current = false; setBusy(false); }
   }
   return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="project-entry-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="entry-dialog-header"><h2 id="project-entry-heading">Open Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header><p className="entry-help">Choose an existing local project by its directory path.</p>
+    <header className="entry-dialog-header"><h2 id="project-entry-heading">Open Project</h2><DialogDismissButton label="Cancel opening project" disabled={busy} onClick={onCancel}/></header><p className="entry-help">Choose an existing local project by its directory path.</p>
     <form onSubmit={save}><fieldset disabled={busy}><label htmlFor="open-project-path">Project directory</label><div className="open-project-path-row"><input ref={first} id="open-project-path" required value={path} onChange={event => setPath(event.target.value)} aria-describedby="project-path-help"/><button className="open-project-submit" type="submit">{busy ? 'Opening…' : 'Open'}</button></div><p id="project-path-help" className="entry-hint">Try <code>projects/rh.sigma</code>, or an absolute path such as <code>/Users/you/projects/question.sigma</code>. Paths refer to this local server.</p>
     {error && <p className="error" role="alert">{error}</p>}</fieldset></form>
   </dialog>;
@@ -4888,7 +4889,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></>}</div></header>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
       {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their saved research configuration; some limits can be adjusted when resuming.</p>}
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
@@ -5029,7 +5030,7 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
         <h2 id="save-as-project-heading">Save Copy</h2>
         <div className="settings-actions">
           <button type="submit" className="settings-cancel" disabled={busy || !title.trim()}>{busy ? 'Saving…' : 'Save'}</button>
-          <button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button>
+          <DialogDismissButton label="Cancel save copy" disabled={busy} onClick={onCancel}/>
         </div>
       </header>
       <div className="settings-body">
@@ -5609,7 +5610,7 @@ function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => 
       <p id="guest-research-message">Sign in to run a research session.</p>
       <div className="settings-actions session-remove-confirm-actions">
         <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in with Google</button>
-        <button type="button" className="text-view-link" onClick={dismiss}>Cancel</button>
+        <DialogDismissButton label="Close sign-in prompt" onClick={dismiss}/>
       </div>
     </div>
   </dialog>;
@@ -6740,7 +6741,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
       </>}
     {(!cloud?.authenticated || authenticatedGuest) && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
-      <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
+      <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><DialogDismissButton label="Close invitation request" onClick={() => dialog.current?.close()}/></div>
       {(deniedIdentityAvailable || authenticatedGuest)
         ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
         : <p>Sign in with Google so SIGMA can verify your account before recording an invitation request.</p>}
@@ -7056,7 +7057,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     });
   });
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
-    <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2>{hasDrafts && <button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save</button>}<button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
+    <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2>{hasDrafts && <button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save</button>}<DialogDismissButton label="Close administrator settings" onClick={requestClose}/></div>
     <section className="admin-access-panel">
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
@@ -7488,7 +7489,7 @@ function PrivacyNoticePage() {
     window.location.assign('/');
   }
   return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
-    <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><button type="button" className="privacy-close-button" onClick={closeNotice}>Close</button></div>
+    <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><DialogDismissButton label="Close privacy notice" onClick={closeNotice}/></div>
     <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
     <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
     <h2>Information SIGMA stores</h2>
@@ -7511,7 +7512,7 @@ function TermsOfServicePage() {
   const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
   useEffect(() => { document.title = 'Terms of Service · SIGMA'; }, []);
   return <main className="cloud-auth-shell terms-of-service-shell" onClick={event => { if (event.target === event.currentTarget) window.location.assign('/'); }}><article className="cloud-auth-card privacy-notice-card terms-of-service-card">
-    <div className="privacy-notice-heading"><h1>Terms of Service</h1><button type="button" className="privacy-close-button" onClick={() => { window.location.assign('/'); }}>Close</button></div>
+    <div className="privacy-notice-heading"><h1>Terms of Service</h1><DialogDismissButton label="Close terms of service" onClick={() => { window.location.assign('/'); }}/></div>
     <div className="terms-of-service-copy">
       <p>No terms except to discover something interesting, wonderous, or pioneering.</p>
       <p className="terms-welcome-phrase">{phrase}</p>
