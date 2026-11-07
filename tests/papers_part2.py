@@ -426,6 +426,49 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
     assert uncertain_state["plan"]
 
 
+def test_verbose_paper_output_diagnostics_are_opt_in() -> None:
+    """Keep high-frequency output counters silent by default without hiding outcomes."""
+    package, plan = fast_package(section_count=2)
+
+    async def provider(input_value, _binding, _config, *, schema_name, on_output_delta=None, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        assert schema_name == "sigma_long_paper_section"
+        if on_output_delta is not None:
+            await on_output_delta()
+        return papers.LongSectionDraft(
+            paragraphs=[f"Supported argument for section {input_value['section_number']}."]
+        ), "fixture-model"
+
+    async def on_output_delta(_number: int) -> None:
+        return None
+
+    async def run(enabled: bool) -> list[str]:
+        state = papers._new_work("d" * 64, "fast-fixture", "e" * 64, "fixture-model", "high")
+        with (
+            patch.object(papers, "_provider_structured", new=provider),
+            patch.object(papers, "_PAPER_VERBOSE_DIAGNOSTICS", enabled),
+            patch.object(papers.logging.getLogger("sigma.lifecycle"), "info") as info_log,
+        ):
+            generated, _, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+                on_output_delta=on_output_delta,
+            )
+            assert len(generated.sections) == 2
+        return [call.args[0] for call in info_log.call_args_list if call.args]
+
+    quiet, verbose = asyncio.run(run(False)), asyncio.run(run(True))
+    assert not any(name.startswith("paper.provider_output ") for name in quiet)
+    assert any(name.startswith("paper.provider_output ") for name in verbose)
+    assert any(name.startswith("paper.provider_attempt_ended ") for name in quiet)
+    assert any(name.startswith("paper.section_saved ") for name in quiet)
+
+
 def test_long_paper_section_retries_share_one_hour_budget() -> None:
     """A slow failed call cannot silently earn two more one-hour attempts."""
     package, plan = fast_package(section_count=2)
