@@ -4517,7 +4517,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   useEffect(() => { dialog.current?.showModal(); }, []);
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || (projectType === initial.project.investigation_type && difficulty === initial.project.difficulty)) return;
     setBusy(true); setError('');
     try {
       const previous = settingsOf(initial);
@@ -4537,7 +4537,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       <header className="settings-header">
         <h2 id="sigma-project-classification-title">Project Settings</h2>
         <div className="settings-actions">
-          <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="submit" disabled={busy || (projectType === initial.project.investigation_type && difficulty === initial.project.difficulty)}>{busy ? 'Saving…' : 'Save'}</button>
           <DialogDismissButton label="Close Project Settings" disabled={busy} onClick={onCancel}/>
         </div>
       </header>
