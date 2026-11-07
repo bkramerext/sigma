@@ -81,6 +81,14 @@ MAX_RESPONSE_BYTES = 1_000_000
 # Responses SSE contains event envelopes and can repeat an entire completed output.
 # Keep a finite transport bound separate from the validated 1 MB API response.
 MAX_CHATGPT_STREAM_BYTES = 16_000_000
+# Keep actionable attempt/section outcomes at INFO; opt in to periodic stream
+# counters when investigating runaway paper output. No prompts or model text logged.
+_PAPER_VERBOSE_DIAGNOSTICS = os.getenv("SIGMA_PAPER_VERBOSE_DIAGNOSTICS", "").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 MAX_PAPER_BYTES = 100_000_000
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
@@ -6371,7 +6379,9 @@ async def _provider_structured(
         elif kind.startswith("response.reasoning"):
             stream_reasoning_events += 1
         now = monotonic()
-        if now - stream_last_logged_at >= 30.0 or stream_events % 10_000 == 0:
+        if _PAPER_VERBOSE_DIAGNOSTICS and (
+            now - stream_last_logged_at >= 30.0 or stream_events % 10_000 == 0
+        ):
             stream_last_logged_at = now
             stream_log.info(
                 "paper.provider_stream_activity project_id=%s section=%s "
@@ -6939,7 +6949,7 @@ async def _generate_long_draft(
                 nonlocal output_delta_events, last_delta_log_at
                 output_delta_events += 1
                 now = monotonic()
-                if (
+                if _PAPER_VERBOSE_DIAGNOSTICS and (
                     output_delta_events == 1
                     or output_delta_events % 1000 == 0
                     or now - last_delta_log_at >= 30.0
