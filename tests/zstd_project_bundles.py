@@ -69,6 +69,30 @@ def main() -> None:
         _decode(exported)["artifacts/papers/paper-a.pdf"] == members["artifacts/papers/paper-a.pdf"]
     )
 
+    # Portable v3 may store damaged-but-readable JSON as a plain text
+    # wrapper. That is not Base64 and must survive an exact byte round trip.
+    text_members = {
+        "project.json": members["project.json"],
+        "evidence/unfinished.json": b"Unfinished draft, still valid UTF-8",
+    }
+    text_export = portable_bundle(text_members)
+    assert text_export["files"]["evidence/unfinished.json"][ENCODING] == "text"
+    assert _decode(text_export)["evidence/unfinished.json"] == text_members[
+        "evidence/unfinished.json"
+    ]
+    old_json = {
+        "format": "sigma.project.bundle",
+        "version": 2,
+        "files": {
+            "project.json": document,
+            "evidence/unusual.json": {ENCODING: "custom-field", "note": "ordinary JSON"},
+        },
+    }
+    assert json.loads(_decode(old_json)["evidence/unusual.json"]) == {
+        ENCODING: "custom-field",
+        "note": "ordinary JSON",
+    }
+
     with TemporaryDirectory() as directory:
         root = Path(directory)
         live = root / "new.json"
