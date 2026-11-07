@@ -211,6 +211,111 @@ def rename_bundle_project(bundle: dict[str, Any], title: str) -> dict[str, Any]:
     return portable_bundle(members)
 
 
+def _member_name(name: str) -> str:
+    """Normalize legacy directory project members for single-file storage."""
+    if name.startswith("papers/.snapshots/"):
+        return "artifacts/papers/snapshots/" + name[len("papers/.snapshots/") :]
+    if name.startswith("papers/"):
+        return "artifacts/papers/" + name[len("papers/") :]
+    if name.startswith("agentic-runs/"):
+        return "evidence/agentic-runs/" + name[len("agentic-runs/") :]
+    return name
+
+
+def _normalized_import_members(members: dict[str, bytes]) -> dict[str, bytes]:
+    """Retain *every* input member; reject aliases that would overwrite data."""
+    normalized: dict[str, bytes] = {}
+    for name, data in members.items():
+        target = _member_name(name)
+        if target in normalized:
+            raise BundleError(f"Project bundle contains conflicting artifact paths: {target}")
+        normalized[target] = data
+    return normalized
+
+
+def _verify_imported_papers(members: dict[str, bytes]) -> None:
+    """Fail before publication if any archived paper is incomplete/corrupt."""
+    import hashlib
+    import re
+
+    for name, raw in members.items():
+        if re.fullmatch(r"artifacts/papers/[0-9a-f]{32}\\.json", name) is None:
+            continue
+        paper_id = name.rsplit("/", 1)[1][:-5]
+        try:
+            record = json.loads(raw)
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise BundleError(f"Unreadable paper record in import: {name}") from exc
+        if not isinstance(record, dict) or record.get("paper_id") != paper_id:
+            raise BundleError(f"Invalid paper identity in import: {name}")
+        pdf_name = f"artifacts/papers/{paper_id}.pdf"
+        pdf = members.get(pdf_name)
+        if pdf is None:
+            raise BundleError(f"Paper PDF is missing from import: {paper_id}")
+        expected_pdf_digest = record.get("pdf_sha256")
+        expected_pdf_size = record.get("pdf_size_bytes")
+        if expected_pdf_digest is not None and (
+            not isinstance(expected_pdf_digest, str)
+            or hashlib.sha256(pdf).hexdigest() != expected_pdf_digest
+        ):
+            raise BundleError(f"Paper PDF hash mismatch in import: {paper_id}")
+        if expected_pdf_size is not None and (
+            type(expected_pdf_size) is not int or len(pdf) != expected_pdf_size
+        ):
+            raise BundleError(f"Paper PDF length mismatch in import: {paper_id}")
+        tex_name = f"artifacts/papers/{paper_id}.tex"
+        tex = members.get(tex_name)
+        if record.get("tex_sha256") is not None:
+            if tex is None and isinstance(record.get("tex_source"), str):
+                tex = record["tex_source"].encode("utf-8")
+            if (
+                tex is None
+                or not isinstance(record["tex_sha256"], str)
+                or hashlib.sha256(tex).hexdigest() != record["tex_sha256"]
+            ):
+                raise BundleError(f"Paper LaTeX is missing or corrupt in import: {paper_id}")
+        if record.get("tex_size_bytes") is not None and (
+            tex is None or len(tex) != record["tex_size_bytes"]
+        ):
+            raise BundleError(f"Paper LaTeX length mismatch in import: {paper_id}")
+        snapshot = record.get("snapshot_ref")
+        if snapshot is not None and (
+            not isinstance(snapshot, str)
+            or f"artifacts/papers/snapshots/{snapshot}.json.zlib" not in members
+        ):
+            raise BundleError(f"Paper frozen evidence is missing from import: {paper_id}")
+
+
+def import_independent_bundle(bundle: dict[str, Any], destination: str | Path) -> Path:
+    """Import a separate project, never reusing the original project's identity."""
+    from uuid import uuid4
+
+    from sigma.project_copy import rebase_copy
+    from sigma.projects import ProjectError
+    from sigma.projects import _decode as validate_project
+
+    members = _decode(bundle)
+    try:
+        project = json.loads(members["project.json"])
+        validate_project(project)
+        source_id = project["id"]
+        copy_id = str(uuid4())
+        project["id"] = copy_id
+        members["project.json"] = (
+            json.dumps(project, ensure_ascii=False, indent=2) + "\\n"
+        ).encode("utf-8")
+        prepared = rebase_copy(
+            portable_bundle(members),
+            source_id=source_id,
+            new_id=copy_id,
+            source_path="/sigma-import-source-not-a-live-project",
+            destination_path=str(Path(destination).resolve()),
+        )
+    except (ProjectError, KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
+        raise BundleError(f"Cannot safely reidentify imported project: {exc}") from exc
+    return import_bundle(prepared, destination, rekey_sessions=False)
+
+
 def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     if not isinstance(bundle, dict) or set(bundle) != {"format", "version", "files"}:
         raise BundleError("Invalid project bundle")
@@ -596,7 +701,8 @@ def import_bundle(
     Save As has already rekeyed sessions and depends on that mapping for logs;
     only that internal path skips a second session rekey.
     """
-    members = _decode(payload)
+    members = _normalized_import_members(_decode(payload))
+    _verify_imported_papers(members)
     path = Path(destination)
     if path.suffix != ".json" or path.parent.is_symlink() or not path.parent.is_dir():
         raise BundleError("Invalid JSON project destination")
