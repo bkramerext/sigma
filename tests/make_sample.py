@@ -32,6 +32,7 @@ from sigma import (
     research_sessions,
     samples,
 )
+from sigma.zstd_codec import compress
 from sigma.api import export_project_view
 from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
 from sigma.recents import home_projects
@@ -351,8 +352,9 @@ async def main() -> None:
 
             def install_pdf(files: dict, data: bytes) -> None:
                 files[f"artifacts/papers/{paper_id}.pdf"] = {
-                    "$sigma_bundle_encoding": "base64",
-                    "data": base64.b64encode(data).decode("ascii"),
+                    "$sigma_bundle_encoding": "zstd+base64",
+                    "size": len(data),
+                    "data": base64.b64encode(compress(data)).decode("ascii"),
                 }
                 metadata = files[f"artifacts/papers/{paper_id}.json"]
                 metadata["pdf_size_bytes"] = len(data)
