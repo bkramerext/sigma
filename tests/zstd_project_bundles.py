@@ -85,12 +85,12 @@ def main() -> None:
         "version": 2,
         "files": {
             "project.json": document,
-            "evidence/unusual.json": {ENCODING: "custom-field", "note": "ordinary JSON"},
+            "evidence/unusual.json": {ENCODING: "custom-field", "data": "ordinary JSON"},
         },
     }
     assert json.loads(_decode(old_json)["evidence/unusual.json"]) == {
         ENCODING: "custom-field",
-        "note": "ordinary JSON",
+        "data": "ordinary JSON",
     }
 
     with TemporaryDirectory() as directory:
