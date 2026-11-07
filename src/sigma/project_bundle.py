@@ -281,10 +281,13 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
             elif (
                 name.endswith(".json")
                 and version == LEGACY_PORTABLE_VERSION
-                and set(value) != {_PORTABLE_ENCODING_FIELD, "data"}
+                and (
+                    set(value) != {_PORTABLE_ENCODING_FIELD, "data"}
+                    or encoding not in {"base64", "text"}
+                )
             ):
                 # In v2, this key may be ordinary JSON content. Only exact
-                # two-field v2 wrappers were reserved as encodings.
+                # recognized two-field v2 wrappers were reserved as encodings.
                 data = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
             else:
                 raise BundleError("Invalid project member encoding")
