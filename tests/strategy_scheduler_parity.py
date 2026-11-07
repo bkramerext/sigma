@@ -27,7 +27,14 @@ sys.path.insert(0, str(code_root / "tests"))
 import httpx
 import research_sessions as fixture
 
-from sigma import project_types, research_sessions
+from sigma import research_sessions
+
+try:
+    from sigma import project_types
+except ImportError:
+    # The historical baseline predates Project Types.
+    project_types = None
+
 
 # Parity isolates scheduler behavior. The application intentionally enables
 # references for new users, unlike the old revision, so pin both comparisons
@@ -41,7 +48,8 @@ def parity_reference_defaults():
     }
 
 
-project_types._default_reference_preferences = parity_reference_defaults
+if project_types is not None:
+    project_types._default_reference_preferences = parity_reference_defaults
 from sigma.projects import ProjectError, create_strategy, set_strategy_enabled
 
 UUID_RE = re.compile(
