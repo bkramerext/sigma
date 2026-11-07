@@ -167,3 +167,22 @@
   display: flex;
   align-items: center;
 }
+
+
+/* Consistent home-style visual spacing for project-page action glyphs. */
+.workspace-page .project-primary-actions .project-pane-actions,
+.workspace-page .strategy-heading-actions,
+.workspace-page .sessions-pane-heading .sessions-heading-actions,
+.workspace-page .papers-pane-heading .papers-heading-actions {
+  gap: 7px;
+}
+
+/* Projects replaces the removed upper-left Project Types pill.
+ * Align its heading to the same 12px/26px corner inset.
+ */
+@media (min-width: 701px) {
+  .home-page .home-projects {
+    --home-project-edge: var(--home-side-gap);
+    top: var(--home-corner-gap);
+  }
+}
