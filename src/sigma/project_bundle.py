@@ -19,20 +19,32 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from sigma.zstd_codec import (
+    MAX_BUNDLE_BYTES,
+    MAX_MEMBER_BYTES,
+    ZstdCodecError,
+    compress,
+    decompress,
+)
+
 FORMAT = "sigma.project.bundle"
-VERSION = 1
-PORTABLE_VERSION = 2
+LEGACY_VERSION = 1
+LEGACY_PORTABLE_VERSION = 2
+VERSION = 3
+PORTABLE_VERSION = 3
 _PORTABLE_ENCODING_FIELD = "$sigma_bundle_encoding"
+_COMPRESSED_ENCODING = "zstd+base64"
 
 
 class BundleError(ValueError):
     """A project cannot be bundled or restored safely."""
 
 
-def _files(directory: Path) -> dict[str, str]:
+def _files(directory: Path) -> dict[str, bytes]:
     if directory.is_symlink() or not directory.is_dir():
         raise BundleError("Project source must be a real directory")
-    entries: dict[str, str] = {}
+    entries: dict[str, bytes] = {}
+    total_size = 0
     for root, dirs, files in os.walk(directory, followlinks=False):
         dirs.sort()
         files.sort()
@@ -47,11 +59,15 @@ def _files(directory: Path) -> dict[str, str]:
             if not stat.S_ISREG(child.lstat().st_mode):
                 raise BundleError("Only regular project files can be bundled")
             relative = child.relative_to(directory).as_posix()
-            entries[relative] = base64.b64encode(child.read_bytes()).decode("ascii")
+            data = child.read_bytes()
+            total_size += len(data)
+            if len(data) > MAX_MEMBER_BYTES or total_size > MAX_BUNDLE_BYTES:
+                raise BundleError("Project bundle exceeds allowed member or total size")
+            entries[relative] = data
     if "project.json" not in entries:
         raise BundleError("Project has no project.json")
     try:
-        document = json.loads(base64.b64decode(entries["project.json"]))
+        document = json.loads(entries["project.json"])
     except (ValueError, UnicodeDecodeError) as exc:
         raise BundleError("Invalid source project document") from exc
     if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
@@ -63,17 +79,32 @@ def _files(directory: Path) -> dict[str, str]:
 
 def snapshot(directory: str | Path) -> dict[str, Any]:
     """Capture every project file, without omitting binary evidence or artifacts."""
-    return {"format": FORMAT, "version": VERSION, "files": _files(Path(directory))}
+    return stored_bundle(_files(Path(directory)))
 
 
 def encode(directory: str | Path) -> bytes:
-    members = {
-        name: base64.b64decode(encoded, validate=True)
-        for name, encoded in _files(Path(directory)).items()
-    }
+    members = _files(Path(directory))
     return (
         json.dumps(portable_bundle(members), ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     ).encode("utf-8")
+
+
+def _compressed_member(data: bytes) -> dict[str, Any]:
+    """Every Base64 member in v3 contains one compressed Zstandard frame."""
+    return {
+        _PORTABLE_ENCODING_FIELD: _COMPRESSED_ENCODING,
+        "size": len(data),
+        "data": base64.b64encode(compress(data)).decode("ascii"),
+    }
+
+
+def stored_bundle(members: dict[str, bytes]) -> dict[str, Any]:
+    """Encode *all* single-file project members with zstd before Base64."""
+    return {
+        "format": FORMAT,
+        "version": VERSION,
+        "files": {name: _compressed_member(data) for name, data in sorted(members.items())},
+    }
 
 
 def portable_bundle(members: dict[str, bytes]) -> dict[str, Any]:
@@ -94,20 +125,14 @@ def portable_bundle(members: dict[str, bytes]) -> dict[str, Any]:
                 try:
                     content = data.decode("utf-8")
                 except UnicodeDecodeError:
-                    files[name] = {
-                        _PORTABLE_ENCODING_FIELD: "base64",
-                        "data": base64.b64encode(data).decode("ascii"),
-                    }
+                    files[name] = _compressed_member(data)
                 else:
                     files[name] = {_PORTABLE_ENCODING_FIELD: "text", "data": content}
                 continue
         try:
             files[name] = data.decode("utf-8")
         except UnicodeDecodeError:
-            files[name] = {
-                _PORTABLE_ENCODING_FIELD: "base64",
-                "data": base64.b64encode(data).decode("ascii"),
-            }
+            files[name] = _compressed_member(data)
     return {"format": FORMAT, "version": PORTABLE_VERSION, "files": files}
 
 
@@ -177,54 +202,81 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     if (
         bundle["format"] != FORMAT
         or type(version) is not int
-        or version not in {VERSION, PORTABLE_VERSION}
+        or version not in {LEGACY_VERSION, LEGACY_PORTABLE_VERSION, VERSION}
     ):
         raise BundleError("Unsupported project bundle format")
     files = bundle["files"]
     if not isinstance(files, dict) or "project.json" not in files:
         raise BundleError("Project bundle has no project document")
     result: dict[str, bytes] = {}
+    total_size = 0
     for name, value in files.items():
-        if not isinstance(name, str) or not name or "\\" in name:
+        if not isinstance(name, str) or not name or "\\\\" in name:
             raise BundleError("Unsafe bundle path")
         path = Path(name)
         if path.is_absolute() or any(part in ("", ".", "..") for part in name.split("/")):
             raise BundleError("Unsafe bundle path")
         if any(other != name and other.startswith(name + "/") for other in files):
             raise BundleError("Bundle member conflicts with a directory")
-        if version == VERSION:
+        if version == LEGACY_VERSION:
             if not isinstance(value, str):
                 raise BundleError("Invalid encoded file")
+            if len(value) > ((MAX_MEMBER_BYTES + 2) // 3) * 4 + 4:
+                raise BundleError("Encoded project member exceeds the allowed size")
             try:
-                result[name] = base64.b64decode(value, validate=True)
+                data = base64.b64decode(value, validate=True)
             except (ValueError, binascii.Error) as exc:
                 raise BundleError("Invalid encoded file") from exc
-        elif (
-            isinstance(value, dict)
-            and set(value) == {_PORTABLE_ENCODING_FIELD, "data"}
-            and value[_PORTABLE_ENCODING_FIELD] in {"base64", "text"}
-        ):
-            data = value["data"]
-            if not isinstance(data, str):
-                raise BundleError("Invalid encoded file")
-            if value[_PORTABLE_ENCODING_FIELD] == "text":
-                result[name] = data.encode("utf-8")
-            else:
+        elif isinstance(value, dict) and _PORTABLE_ENCODING_FIELD in value:
+            encoding = value[_PORTABLE_ENCODING_FIELD]
+            if version == VERSION and encoding == _COMPRESSED_ENCODING:
+                if set(value) != {_PORTABLE_ENCODING_FIELD, "data", "size"}:
+                    raise BundleError("Invalid compressed project member")
+                encoded, size = value["data"], value["size"]
+                if (
+                    not isinstance(encoded, str)
+                    or type(size) is not int
+                    or size < 0
+                    or size > MAX_MEMBER_BYTES
+                    or len(encoded) > ((MAX_MEMBER_BYTES + 2) // 3) * 4 + 4
+                ):
+                    raise BundleError("Invalid compressed project member size")
                 try:
-                    result[name] = base64.b64decode(data, validate=True)
-                except (ValueError, binascii.Error) as exc:
-                    raise BundleError("Invalid encoded file") from exc
+                    data = decompress(base64.b64decode(encoded, validate=True), size)
+                except (ValueError, binascii.Error, ZstdCodecError) as exc:
+                    raise BundleError("Invalid compressed project member") from exc
+            elif (
+                version == LEGACY_PORTABLE_VERSION
+                and set(value) == {_PORTABLE_ENCODING_FIELD, "data"}
+                and encoding in {"base64", "text"}
+                and isinstance(value["data"], str)
+            ):
+                if encoding == "text":
+                    data = value["data"].encode("utf-8")
+                else:
+                    if len(value["data"]) > ((MAX_MEMBER_BYTES + 2) // 3) * 4 + 4:
+                        raise BundleError("Encoded project member exceeds the allowed size")
+                    try:
+                        data = base64.b64decode(value["data"], validate=True)
+                    except (ValueError, binascii.Error) as exc:
+                        raise BundleError("Invalid encoded file") from exc
+            else:
+                raise BundleError("Invalid project member encoding")
         elif name.endswith(".json"):
             try:
-                result[name] = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode(
+                data = (json.dumps(value, ensure_ascii=False, indent=2) + "\\n").encode(
                     "utf-8"
                 )
             except (TypeError, ValueError) as exc:
                 raise BundleError("Invalid JSON project member") from exc
         elif isinstance(value, str):
-            result[name] = value.encode("utf-8")
+            data = value.encode("utf-8")
         else:
             raise BundleError("Invalid project file content")
+        total_size += len(data)
+        if len(data) > MAX_MEMBER_BYTES or total_size > MAX_BUNDLE_BYTES:
+            raise BundleError("Project bundle exceeds allowed member or total size")
+        result[name] = data
     try:
         document = json.loads(result["project.json"])
     except (ValueError, UnicodeDecodeError) as exc:
@@ -234,7 +286,6 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     if not 1 <= document["schema_version"] <= 11:
         raise BundleError("Unsupported project schema version")
     return result
-
 
 def restore(bundle: dict[str, Any], destination: str | Path) -> None:
     """Restore only to a nonexistent directory; never overwrite live project data."""
@@ -293,7 +344,7 @@ def migrate(directory: str | Path, destination: str | Path) -> Path:
         # Detect ordinary concurrent mutations before publishing.
         contents = (
             json.dumps(
-                {"format": FORMAT, "version": VERSION, "files": before},
+                stored_bundle(before),
                 sort_keys=True,
                 indent=2,
             )
@@ -307,7 +358,7 @@ def migrate(directory: str | Path, destination: str | Path) -> Path:
                 output.flush()
                 os.fsync(output.fileno())
             decoded = _decode(json.loads(staged.read_text(encoding="utf-8")))
-            if decoded != {key: base64.b64decode(value) for key, value in before.items()}:
+            if decoded != before:
                 raise BundleError("Migration verification failed")
             if _files(source) != before:
                 raise BundleError("Project changed during migration")
@@ -367,13 +418,7 @@ def write_file(bundle_path: str | Path, relative_path: str, contents: bytes) -> 
 
 def _publish_members(path: Path, members: dict[str, bytes], prefix: str) -> None:
     """Replace a validated bundle with one fsynced atomic write."""
-    payload = {
-        "format": FORMAT,
-        "version": VERSION,
-        "files": {
-            name: base64.b64encode(data).decode("ascii") for name, data in sorted(members.items())
-        },
-    }
+    payload = stored_bundle(members)
     fd, name = tempfile.mkstemp(prefix=prefix, dir=path.parent)
     staged = Path(name)
     try:
@@ -623,13 +668,7 @@ def import_bundle(
                 else raw
             )
         members = rebased
-    canonical = {
-        "format": FORMAT,
-        "version": VERSION,
-        "files": {
-            name: base64.b64encode(data).decode("ascii") for name, data in sorted(members.items())
-        },
-    }
+    canonical = stored_bundle(members)
     fd, name = tempfile.mkstemp(prefix=".sigma-import-", dir=path.parent)
     staged = Path(name)
     try:
@@ -691,14 +730,5 @@ def transform_members(
             else:
                 members[name] = value
         if changes:
-            _decode(
-                {
-                    "format": FORMAT,
-                    "version": VERSION,
-                    "files": {
-                        name: base64.b64encode(data).decode("ascii")
-                        for name, data in members.items()
-                    },
-                }
-            )
+            _decode(stored_bundle(members))
             _publish_members(path, members, ".sigma-transaction-")
