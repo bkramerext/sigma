@@ -2513,7 +2513,7 @@ function savedPaperElapsed(seconds: number): string {
   const totalMinutes = Math.max(0, Math.ceil(seconds / 60));
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  return hours ? `${hours} hr${minutes ? ` ${minutes} min` : ""}` : `${minutes} min`;
+  return hours ? `${hours}hr${minutes ? ` ${minutes}m` : ""}` : `${minutes}m`;
 }
 
 function paperElapsed(seconds: number): string {
