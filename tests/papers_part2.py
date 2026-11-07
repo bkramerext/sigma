@@ -430,7 +430,9 @@ def test_verbose_paper_output_diagnostics_are_opt_in() -> None:
     """Keep high-frequency output counters silent by default without hiding outcomes."""
     package, plan = fast_package(section_count=2)
 
-    async def provider(input_value, _binding, _config, *, schema_name, on_output_delta=None, **_kwargs):
+    async def provider(
+        input_value, _binding, _config, *, schema_name, on_output_delta=None, **_kwargs
+    ):
         if schema_name == "sigma_long_paper_plan":
             return plan, "fixture-model"
         assert schema_name == "sigma_long_paper_section"
