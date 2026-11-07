@@ -107,7 +107,9 @@ def save_config(raw: dict[str, Any]) -> dict[str, Any]:
         defaults = NEW_DEFAULT_LIMITS if supplied.get("scheduler_version") == 2 else DEFAULT_LIMITS
         candidate = {**defaults, **supplied}
         if candidate.get("scheduler_version") == 2:
-            candidate["model_calls"] = 2 * candidate["research_rounds"] * candidate["turns_per_round"]
+            candidate["model_calls"] = (
+                2 * candidate["research_rounds"] * candidate["turns_per_round"]
+            )
         current["limits"] = _validate_limits(candidate)
     model = raw.get("ai_model", current["ai_model"])
     effort = raw.get("reasoning_effort", current["reasoning_effort"])
