@@ -87,3 +87,54 @@
   outline: 2px solid #edbc77;
   outline-offset: 2px;
 }
+
+
+/*
+ * Tighten the visible glyph rhythm. Keep accessible hover/focus hit areas,
+ * but use compact inter-control spacing instead of the old text-link gaps.
+ */
+.workspace-page .workspace-pane-heading {
+  column-gap: 9px;
+}
+.workspace-page .strategies-heading-right {
+  gap: 8px;
+}
+.workspace-page .strategy-heading-actions,
+.workspace-page .sessions-pane-heading .sessions-heading-actions,
+.workspace-page .papers-pane-heading .papers-heading-actions {
+  gap: 2px;
+}
+.workspace-page .project-pane-heading .project-primary-actions {
+  margin: 0;
+}
+.workspace-page .project-primary-actions .project-pane-actions {
+  gap: 2px;
+}
+.workspace-page .project-pane-actions .text-view-icon.project-qa-button {
+  width: 42px;
+  min-width: 42px;
+}
+.workspace-page .project-pane-actions .project-download-button svg,
+.workspace-page .project-pane-actions .project-email-button svg {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+.workspace-page .project-pane-actions .project-download-button {
+  padding: 1px;
+}
+.workspace-page .project-pane-actions .sigma-action-glyph {
+  width: 27px;
+  height: 27px;
+}
+.home-page .home-projects-heading {
+  column-gap: 7px;
+}
+@media (max-width: 700px) {
+  .workspace-page .workspace-pane-heading {
+    column-gap: 9px;
+  }
+  .workspace-page .strategies-heading-right {
+    column-gap: 8px;
+  }
+}
