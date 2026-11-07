@@ -4,7 +4,7 @@ SIGMA is a local workspace for investigating difficult questions with multiple r
 
 ## Install and start
 
-On macOS or Linux, install Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20.19+, and npm. From the repository root:
+On macOS or Linux, install Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20.19+, and npm. `./sigma setup` also installs the zstd CLI/native library on macOS with Homebrew or Debian/Ubuntu with apt, if missing; other Linux distributions should install zstd with their package manager first. From the repository root:
 
 ```sh
 ./sigma setup
