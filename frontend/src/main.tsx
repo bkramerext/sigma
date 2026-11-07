@@ -4591,7 +4591,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   </dialog>;
 }
 
-function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void; onAdjustReferences?: () => void }) {
+function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
   useDocumentScrollLock();
   const ai = useAI();
   const cloud = useCloudIdentity();
@@ -4860,9 +4860,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         <label className="project-preference-checkbox" htmlFor="allow-unattended-background-execution"><input id="allow-unattended-background-execution" type="checkbox" checked={userUnattended} disabled={!userPreferenceLoaded} onChange={event => setUserUnattended(event.target.checked)}/>Allow unattended background execution</label>
         <p id="allow-unattended-background-execution-help" className="settings-hint">This user-wide setting applies across all your projects. When enabled, the backend can keep research and paper generation running after you close the browser page, potentially incurring AI-provider costs. When disabled, SIGMA stops new AI stages after the last viewer disconnects and preserves completed research or paper checkpoints for explicit continuation.</p>
       </fieldset>
-      <div className="project-references-usage">
-        <p className="settings-hint">Reference guides for research and authoring papers can be found in <button type="button" className="project-reference-adjust-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Project Types</button>.</p>
-      </div>
       {error && <p role="alert" className="error">{error}</p>}
     </section>}
     </form>
