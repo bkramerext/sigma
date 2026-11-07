@@ -119,6 +119,7 @@ def main_part1() -> None:
     test_paper_paused_progress_preserves_disconnect_reason()
     test_stopped_paper_checkpoint_remains_valid_on_resume()
     test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
+    test_seven_section_writer_advances_after_two_with_slow_siblings()
     test_parallel_section_failure_drains_dispatched_siblings()
     test_fast_checkpoint_resume_preserves_ambiguous_section_without_replay()
     test_fast_long_draft_cancellation_keeps_completed_sections()

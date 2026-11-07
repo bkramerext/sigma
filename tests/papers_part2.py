@@ -1424,6 +1424,89 @@ def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
     assert attempt_counts == before
 
 
+
+def test_seven_section_writer_advances_after_two_with_slow_siblings() -> None:
+    """A displayed 2/7 must not deadlock queued work behind four live sections."""
+    package, plan = fast_package(section_count=7)
+    state = papers._new_work("9" * 64, "fast-fixture", "a" * 64, "fixture-model", "medium")
+    two_saved = asyncio.Event()
+    release_slow = asyncio.Event()
+    started: list[int] = []
+    inflight = 0
+    peak = 0
+    milestones: list[int] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal inflight, peak
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        started.append(number)
+        inflight += 1
+        peak = max(peak, inflight)
+        try:
+            if number > 2:
+                await release_slow.wait()
+            return papers.LongSectionDraft(
+                paragraphs=[f"Authored and saved section {number}."]
+            ), "fixture-model"
+        finally:
+            inflight -= 1
+
+    async def progress(
+        stage: papers.PaperProgressStage,
+        current: int | None,
+        total: int | None,
+        progress_state: papers.PaperProgressState = "active",
+        *,
+        detail: str | None = None,
+    ) -> None:
+        del detail
+        if stage == "sections" and progress_state == "milestone":
+            assert total == 7
+            assert current is not None
+            milestones.append(current)
+            if current == 2:
+                two_saved.set()
+
+    async def exercise() -> None:
+        async def generate() -> tuple[papers.PaperDraft, int, int]:
+            with patch.object(papers, "_provider_structured", new=provider):
+                return await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "medium"},
+                    state,
+                    lambda _value: None,
+                    progress,
+                    structured_fast_path=True,
+                )
+
+        task = asyncio.create_task(generate())
+        try:
+            await asyncio.wait_for(two_saved.wait(), timeout=2)
+            assert set(state["section_drafts"]) == {"1", "2"}
+            assert not task.done()
+            await asyncio.sleep(0)
+            assert peak <= papers.FAST_SECTION_CONCURRENCY
+            assert len(started) >= 4
+            release_slow.set()
+            result, calls, _ = await asyncio.wait_for(task, timeout=2)
+            assert len(result.sections) == 7
+            assert calls == 8  # one plan and seven actual section calls
+        finally:
+            release_slow.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(exercise())
+    assert set(state["section_drafts"]) == {str(number) for number in range(1, 8)}
+    assert milestones == list(range(1, 8))
+    assert peak == papers.FAST_SECTION_CONCURRENCY
+    assert sorted(started) == list(range(1, 8))
+
+
 def test_parallel_section_failure_drains_dispatched_siblings() -> None:
     """One broken stream must not cancel other paid work or fabricate its section."""
     package, plan = fast_package(section_count=5)
