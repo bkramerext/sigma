@@ -12,6 +12,8 @@ import ctypes.util
 from functools import lru_cache
 
 MAX_MEMBER_BYTES = 256 * 1024 * 1024
+# Incompressible Zstandard frames can be slightly larger than raw input.
+MAX_COMPRESSED_MEMBER_BYTES = MAX_MEMBER_BYTES + (MAX_MEMBER_BYTES >> 8) + 65536
 MAX_BUNDLE_BYTES = 1024 * 1024 * 1024
 
 
@@ -74,7 +76,7 @@ def decompress(frame: bytes, expected_size: int) -> bytes:
     """Decode one frame with a fixed allocation, rejecting extra frames/trailers."""
     if not isinstance(frame, bytes) or not _valid_size(expected_size):
         raise ZstdCodecError("Invalid uncompressed project member size")
-    if len(frame) > MAX_MEMBER_BYTES:
+    if len(frame) > MAX_COMPRESSED_MEMBER_BYTES:
         raise ZstdCodecError("Compressed project member exceeds the allowed size")
     library = _library()
     frame_size = library.ZSTD_findFrameCompressedSize(frame, len(frame))
