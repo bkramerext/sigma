@@ -59,7 +59,8 @@
 /* All project glyphs share the scored-star hover treatment, including
    keyboard focus. Keep the background clear rather than showing a button box. */
 .home-page .home-recents :is(.recent-title-star, .recent-pin, .recent-save-as, .recent-forget):is(:hover:not(:disabled), :focus-visible),
-.home-page .home-samples .recent-title-star:is(:hover, :focus-visible) {
+.home-page .home-samples .recent-title-star:is(:hover, :focus-visible),
+.workspace-page .papers-pane .paper-title-star:is(:hover, :focus-visible) {
   color: #f5d593; background: transparent; box-shadow: none; text-decoration: none;
 }
 .home-page .home-recents .recent-remove-actions { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; width: min(300px, calc(100vw - 32px)); margin: 0; }
@@ -410,6 +411,20 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   display: inline-flex; align-items: center; vertical-align: middle;
   flex: 0 0 auto; margin-right: 0; padding: 0; border: 0; background: transparent;
   color: #f4cc69; font-size: 16px; cursor: pointer; text-decoration: none;
+}
+
+/* Keep the scored-star glyph identical in project listings and paper cards.
+   Each title row supplies the same 6px gap immediately after the star. */
+.home-page .home-recents .recent-title-star,
+.home-page .home-samples .recent-title-star,
+.workspace-page .papers-pane .paper-title-star {
+  display: inline-flex; align-items: center; justify-content: center;
+  align-self: center; box-sizing: border-box; flex: 0 0 16px;
+  width: 16px; height: 16px; min-width: 16px; min-height: 16px;
+  margin: 0; padding: 0; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none;
+  color: #f4cc69; font: 400 16px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: none;
 }
 
 /* Save Copy is a compact one-field dialog, not a full Project Settings form. */
