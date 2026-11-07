@@ -6206,8 +6206,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       onSent={count => { setEmailOpen(false); setAnnouncement('Project emailed to ' + count + (count === 1 ? ' recipient.' : ' recipients.')); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}/>}
 
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-/>}
-    {qaOpen && <ResearchQADialog path={view.path} projectId={project.id} guest={guest} onCancel={() => { setQaOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-qa-button')?.focus()); }}/ >}
+    {qaOpen && <ResearchQADialog path={view.path} projectId={project.id} guest={guest} onCancel={() => { setQaOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-qa-button')?.focus()); }}/>
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
       <summary>Project details &amp; history</summary>
       <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research type</dt><dd>{researchTypeLabel(project.investigation_type)}</dd>{project.difficulty && <><dt>Difficulty</dt><dd>{difficultyLabels[project.difficulty]}</dd></>}<dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
