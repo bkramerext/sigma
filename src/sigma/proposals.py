@@ -19,7 +19,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sigma import cloud_research, cloud_workspaces
-from sigma.model_catalog import DEFAULT_MODEL, validate_pair
+from sigma.model_catalog import validate_pair
 from sigma.openai_connection import auth_context, cloud_credential, models, provider_endpoint
 from sigma.plan_stream import completed, failure
 from sigma.projects import (
@@ -1143,9 +1143,7 @@ async def generate_proposal(
                 "AI account or billing mode changed during generation. The draft was discarded; retry explicitly."
             )
         current_view = inspect_project(path)
-        if (
-            current_view.project.id != project_id
-        ):
+        if current_view.project.id != project_id:
             raise ProjectError(
                 "Project identity or selected model changed during generation. The draft was discarded; reopen and retry."
             )
