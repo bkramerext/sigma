@@ -1411,22 +1411,23 @@ def update_project(
 
     def update(project: Project) -> Project:
         current = project_settings(project)
-        if current != prior:
+        # These values were moved to user settings in schema 12. Ignore them
+        # in project optimistic-lock checks and edits, including older callers.
+        # Only title, subject, type, and difficulty are project-local.
+        project_only = lambda setting: (
+            setting.title,
+            setting.problem,
+            setting.investigation_type,
+            setting.difficulty,
+        )
+        if project_only(current) != project_only(prior):
             raise ProjectError(
                 "Project settings changed elsewhere. Refresh/reopen before editing again; your changes have not been saved"
             )
-        if current == wanted:
+        if project_only(current) == project_only(wanted):
             return project
         if wanted.title != current.title:
             _require_available_title(wanted.title, projects_root(), exclude_id=project.id)
-        if (wanted.ai_model, wanted.reasoning_effort) != (
-            current.ai_model,
-            current.reasoning_effort,
-        ):
-            try:
-                validate_pair(wanted.ai_model, wanted.reasoning_effort)
-            except ValueError as exc:
-                raise ProjectError(str(exc)) from exc
         wanted_type_id = str(getattr(wanted.investigation_type, "value", wanted.investigation_type))
         current_type_id = str(
             getattr(current.investigation_type, "value", current.investigation_type)
