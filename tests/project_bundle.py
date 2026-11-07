@@ -39,7 +39,9 @@ def main() -> None:
         assert exported["version"] == 3
         assert exported["files"]["project.json"]["id"] == "example"
         assert exported["files"]["research-sessions/session.json"] == {"status": "complete"}
-        assert exported["files"]["artifacts/evidence.bin"]["$sigma_bundle_encoding"] == "zstd+base64"
+        assert (
+            exported["files"]["artifacts/evidence.bin"]["$sigma_bundle_encoding"] == "zstd+base64"
+        )
         migrated = root / "portable.json"
         assert migrate(source, migrated) == migrated
         assert json.loads(migrated.read_text()) == bundle
@@ -153,7 +155,10 @@ def main() -> None:
         assert compressed_evidence["size"] == len(original_evidence)
         from sigma.zstd_codec import decompress
 
-        assert decompress(base64.b64decode(compressed_evidence["data"]), len(original_evidence)) == original_evidence
+        assert (
+            decompress(base64.b64decode(compressed_evidence["data"]), len(original_evidence))
+            == original_evidence
+        )
         imported = root / "imported.json"
         assert import_bundle(read_bundle(migrated), imported) == imported
         assert read_bundle(imported) == read_bundle(migrated)
