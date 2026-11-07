@@ -97,7 +97,12 @@ def save_config(raw: dict[str, Any]) -> dict[str, Any]:
     if "limits" in raw:
         if not isinstance(raw["limits"], dict) or set(raw["limits"]) - set(NEW_DEFAULT_LIMITS):
             raise ProjectError("Global research settings contain unknown limits")
-        current["limits"] = _validate_limits({**NEW_DEFAULT_LIMITS, **raw["limits"]})
+        # model_calls is derived in scheduler v2; clients editing rounds or turns
+        # must not carry a stale display value into validation.
+        candidate = {**NEW_DEFAULT_LIMITS, **raw["limits"]}
+        if candidate.get("scheduler_version") == 2:
+            candidate["model_calls"] = 2 * candidate["research_rounds"] * candidate["turns_per_round"]
+        current["limits"] = _validate_limits(candidate)
     model = raw.get("ai_model", current["ai_model"])
     effort = raw.get("reasoning_effort", current["reasoning_effort"])
     try:
