@@ -138,3 +138,32 @@
     column-gap: 8px;
   }
 }
+
+
+/* Center icon glyphs against the visible header text rather than its baseline. */
+.workspace-page .workspace-pane-heading,
+.workspace-page .project-pane-heading .project-primary-actions,
+.workspace-page .project-pane-actions,
+.workspace-page .strategies-heading-right,
+.workspace-page .strategy-heading-actions,
+.workspace-page .sessions-pane-heading .sessions-heading-actions,
+.workspace-page .papers-pane-heading .papers-heading-actions {
+  align-items: center;
+}
+.workspace-page .workspace-pane-heading > h2 {
+  display: inline-flex;
+  align-items: center;
+}
+.workspace-page .workspace-pane-heading .workspace-section-disclosure {
+  align-items: center;
+}
+.workspace-page .paper-includes-anchor {
+  align-items: center;
+}
+.home-page .home-projects-heading {
+  align-items: center;
+}
+.home-page .home-projects-heading h1 {
+  display: flex;
+  align-items: center;
+}
