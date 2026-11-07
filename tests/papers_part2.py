@@ -1583,7 +1583,7 @@ def test_fast_checkpoint_resume_preserves_ambiguous_section_without_replay() -> 
         call.args and call.args[0].startswith("paper.section_checkpoint ")
         for call in info_log.call_args_list
     )
-    assert any(
+    assert not any(
         call.args and call.args[0].startswith("paper.section_checkpoint_fallback ")
         for call in warning_log.call_args_list
     )
