@@ -33,9 +33,11 @@ class PlatformMemoryTests(unittest.TestCase):
                 "_host_available_kib",
                 side_effect=AssertionError("Do not read /proc/meminfo on macOS"),
             ),
-            patch.object(telemetry.resource, "getrusage", return_value=SimpleNamespace(
-                ru_maxrss=128 * 1024 * 1024
-            )),
+            patch.object(
+                telemetry.resource,
+                "getrusage",
+                return_value=SimpleNamespace(ru_maxrss=128 * 1024 * 1024),
+            ),
         ):
             snapshot = telemetry.memory_snapshot()
         self.assertEqual(snapshot["rss_peak_mib"], 128)
@@ -47,17 +49,23 @@ class PlatformMemoryTests(unittest.TestCase):
     def test_native_linux_process_metrics(self) -> None:
         snapshot = telemetry.memory_snapshot()
         self.assertIsInstance(snapshot["rss_peak_mib"], int)
-        self.assertGreater(snapshot["rss_peak_mib"], 0)
+        peak = snapshot["rss_peak_mib"]
+        assert peak is not None
+        self.assertGreater(peak, 0)
         # A Linux system without a cgroup limit is valid; do not fake one.
 
     def test_linux_metrics_still_use_linux_contract(self) -> None:
         with (
             patch.object(telemetry.sys, "platform", "linux"),
-            patch.object(telemetry, "_integer", side_effect=[
-                256 * 1024 * 1024,
-                1024 * 1024 * 1024,
-                300 * 1024 * 1024,
-            ]),
+            patch.object(
+                telemetry,
+                "_integer",
+                side_effect=[
+                    256 * 1024 * 1024,
+                    1024 * 1024 * 1024,
+                    300 * 1024 * 1024,
+                ],
+            ),
             patch.object(telemetry, "_process_kib", side_effect=[120 * 1024, 180 * 1024]),
             patch.object(telemetry, "_host_available_kib", return_value=4 * 1024 * 1024),
             patch.object(telemetry, "_host_free_kib", return_value=2 * 1024 * 1024),
