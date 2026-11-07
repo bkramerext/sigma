@@ -280,11 +280,15 @@
 /* These confirmation prompts are not full modals. Anchor to the popup itself. */
 :is(.research-stop-confirm,
     .saved-paper-confirm,
+    .recent-remove-confirm):has(.sigma-dialog-dismiss) {
+  position: relative;
+}
+:is(.research-stop-confirm,
+    .saved-paper-confirm,
     .recent-remove-confirm,
     .project-model-confirm-popover,
     .admin-remove-confirm,
     .resume-authorization-popover):has(.sigma-dialog-dismiss) {
-  position: relative;
   padding-right: 44px;
 }
 :is(.research-stop-confirm,
