@@ -5,10 +5,10 @@
 .workspace-page .papers-pane .papers-heading-actions .papers-header-action {
   appearance: none; display: inline; width: auto; min-width: 0; height: auto; min-height: 0;
   margin: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
-  color: #f1c58d; font: 400 13px Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px;
+  color: var(--sigma-copper-foreground); font: 400 13px Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px;
   cursor: pointer;
 }
-.workspace-page .papers-pane .papers-heading-actions .papers-header-action:hover:not(:disabled) { color: #ffe1ad; border: 0; background: transparent; box-shadow: none; }
+.workspace-page .papers-pane .papers-heading-actions .papers-header-action:hover:not(:disabled) { color: var(--sigma-copper-foreground); border: 0; background: transparent; box-shadow: none; }
 .workspace-page .papers-pane .papers-heading-actions .papers-header-action:disabled { opacity: .5; cursor: default; }
 .workspace-page .papers-pane .papers-heading-actions .papers-header-action:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 .workspace-page .papers-pane-heading .section-count { flex: 0 0 auto; }
@@ -16,8 +16,8 @@
 .workspace-page .papers-pane-content { padding-top: 8px; }
 .workspace-page .papers-pane .ai-paper-body { display: grid; gap: 10px; }
 .workspace-page .paper-includes-disclosure { width: fit-content; max-width: 100%; }
-.workspace-page .paper-includes-disclosure > summary { width: fit-content; padding: 4px 0; color: #d9b17e; font: 13px/1.4 Inter, sans-serif; cursor: pointer; }
-.workspace-page .paper-includes-disclosure > summary:hover { color: #f3cd9e; }
+.workspace-page .paper-includes-disclosure > summary { width: fit-content; padding: 4px 0; color: var(--sigma-copper-foreground); font: 13px/1.4 Inter, sans-serif; cursor: pointer; }
+.workspace-page .paper-includes-disclosure > summary:hover { color: var(--sigma-copper-foreground); }
 .workspace-page .paper-includes-disclosure .ai-paper-includes { min-width: 0; margin: 6px 0 0; padding: 10px 14px; border: 1px solid #667079; border-radius: 6px; }
 .workspace-page .paper-includes-disclosure .ai-paper-details { display: flex; align-items: center; gap: 7px; margin: 0; color: #dce7f0; font: 13px/1.4 Inter, sans-serif; }
 .workspace-page .paper-includes-disclosure .ai-paper-details input { width: auto; margin: 0; accent-color: #d9a66c; }
@@ -35,10 +35,10 @@
 .workspace-page .papers-pane .paper-stage-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
 .workspace-page .papers-pane .paper-stage-list li { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 5px; margin: 0; padding: 1px 0; color: #8598a8; }
 .workspace-page .papers-pane .paper-stage-list li[data-paper-step="Writing sections"] { gap: 11px; }
-.workspace-page .papers-pane .paper-stage-list li.is-queued { color: #d6bd8b; }
+.workspace-page .papers-pane .paper-stage-list li.is-queued { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .paper-stage-list li.is-queued::before { content: ''; width: 8px; height: 8px; flex: 0 0 8px; margin-right: 2px; border-radius: 50%; background: #ffff00; animation: research-running-heartbeat 1.25s ease-in-out infinite; }
 .workspace-page .papers-pane .paper-stage-list li strong { color: inherit; }
-.workspace-page .papers-pane .paper-stage-list li.is-active { color: #d6bd8b; }
+.workspace-page .papers-pane .paper-stage-list li.is-active { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .paper-stage-list li.is-active::before { content: ''; width: 8px; height: 8px; flex: 0 0 8px; margin-right: 2px; border-radius: 50%; background: #55bd70; animation: research-running-heartbeat 1.25s ease-in-out infinite; }
 .workspace-page .papers-pane .paper-stage-list li.is-past { color: #a9b9c6; }
 .workspace-page .papers-pane .paper-stage-list li span { color: #d4e0eb; }
@@ -66,44 +66,44 @@
 .workspace-page .papers-pane .saved-paper-heading { gap: 4px; }
 .workspace-page .papers-pane .saved-paper-heading > p { margin: 3px 0 0 28px; font-size: 12px; }
 .workspace-page .papers-pane .saved-paper-title-tools { display: inline-flex; gap: 9px; align-items: center; margin-left: 12px; vertical-align: middle; }
-.workspace-page .papers-pane .saved-paper-title-tools :is(.paper-remove-button,.paper-download-button,.paper-view-pdf-icon,.ai-paper-eli5-balloon) { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 4px; margin: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #e5ba69; box-shadow: none; text-decoration: none; vertical-align: middle; }
+.workspace-page .papers-pane .saved-paper-title-tools :is(.paper-remove-button,.paper-download-button,.paper-view-pdf-icon,.ai-paper-eli5-balloon) { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 4px; margin: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--sigma-copper-foreground); box-shadow: none; text-decoration: none; vertical-align: middle; }
 .workspace-page .papers-pane .saved-paper-title-tools .paper-view-pdf-icon svg,
 .workspace-page .papers-pane .saved-paper-title-tools .paper-download-button svg { display: block; width: 20px; height: 20px; }
 .workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-balloon svg { display: block; }
-.workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-hooray { width: 20px; height: 20px; color: #f4cc69; }
+.workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-hooray { width: 20px; height: 20px; color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
 .workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-balloon.is-explaining:disabled {
   /* Keep the hourglass in the balloon's original slot; only the label grows rightward. */
   width: auto; min-width: max-content; flex: 0 0 auto; justify-content: flex-start; padding: 0 4px; border-color: transparent; background: transparent; opacity: 1; cursor: progress;
 }
-.workspace-page .papers-pane .saved-paper-title-tools .ai-paper-explaining { display: inline-flex; gap: 4px; align-items: center; color: #e5ba69; font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
-.workspace-page .papers-pane .saved-paper-title-tools .paper-score-link { width: auto; min-width: 0; padding: 3px 4px; margin: 0 0 0 2px; border: 0; background: transparent; box-shadow: none; color: #e5ba69; font: 13px/1.4 Inter, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
-.workspace-page .papers-pane .saved-paper-title-tools .paper-score-link:hover:not(:disabled) { color: #ffe1ad; background: transparent; }
+.workspace-page .papers-pane .saved-paper-title-tools .ai-paper-explaining { display: inline-flex; gap: 4px; align-items: center; color: var(--sigma-copper-foreground); font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+.workspace-page .papers-pane .saved-paper-title-tools .paper-score-link { width: auto; min-width: 0; padding: 3px 4px; margin: 0 0 0 2px; border: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: 13px/1.4 Inter, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
+.workspace-page .papers-pane .saved-paper-title-tools .paper-score-link:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; }
 .workspace-page .papers-pane .saved-paper-title-tools .paper-score-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .papers-pane .saved-paper-title-tools :is(.paper-remove-button,.paper-download-button,.paper-view-pdf-icon,.ai-paper-eli5-balloon):hover,
 .workspace-page .papers-pane .saved-paper-title-tools :is(.paper-remove-button,.paper-download-button,.paper-view-pdf-icon,.ai-paper-eli5-balloon):focus-visible { border-color: #ac7054; background: #3b3029; }
 .workspace-page .papers-pane .saved-paper-title-tools .paper-remove-button svg { display: block; width: 20px; height: 20px; }
 .workspace-page .papers-pane .paper-action-menu { position: relative; display: inline-flex; vertical-align: middle; }
 .workspace-page .papers-pane .paper-action-popover { position: absolute; z-index: 60; left: 0; top: calc(100% + 4px); display: grid; width: max-content; min-width: 180px; max-width: min(290px, 75vw); padding: 5px; border: 1px solid #73583e; border-radius: 8px; background: #101b26; box-shadow: 0 14px 35px #000b; }
-.workspace-page .papers-pane .paper-action-popover :is(a,button) { display: block; width: 100%; min-height: 30px; margin: 0; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: #dfc092; box-shadow: none; text-align: left; text-decoration: none; font: 13px/1.4 Inter, sans-serif; cursor: pointer; }
-.workspace-page .papers-pane .paper-action-popover :is(a,button):is(:hover,:focus-visible) { background: #3b3029; color: #fce0b5; }
-.workspace-page .papers-pane .paper-action-popover button.destructive-action { color: #dfc092; }
+.workspace-page .papers-pane .paper-action-popover :is(a,button) { display: block; width: 100%; min-height: 30px; margin: 0; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--sigma-copper-foreground); box-shadow: none; text-align: left; text-decoration: none; font: 13px/1.4 Inter, sans-serif; cursor: pointer; }
+.workspace-page .papers-pane .paper-action-popover :is(a,button):is(:hover,:focus-visible) { background: #3b3029; color: var(--sigma-copper-foreground); }
+.workspace-page .papers-pane .paper-action-popover button.destructive-action { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .paper-action-popover button:disabled { opacity: .55; cursor: default; }
 .workspace-page .papers-pane .saved-paper-meta { margin-top: 2px; }
-.workspace-page .papers-pane .saved-paper-meta .text-view-link { color: #d9b17e; }
-.workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link { display: inline; width: auto; min-height: 0; padding: 0; margin-left: 7px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #d9b17e; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
-.workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link:hover:not(:disabled) { color: #ffe1ad; background: transparent; }
+.workspace-page .papers-pane .saved-paper-meta .text-view-link { color: var(--sigma-copper-foreground); }
+.workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link { display: inline; width: auto; min-height: 0; padding: 0; margin-left: 7px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; }
 .workspace-page .papers-pane .saved-paper-meta .paper-meta-score-action { margin-left: 0; flex: 0 0 auto; }
 .workspace-page .papers-pane .saved-paper-meta p { min-width: 0; }
 /* Match the anchored Session deletion confirmation and its copper text actions. */
 .workspace-page .papers-pane .paper-remove-anchor { position: relative; display: inline-flex; align-items: center; }
 .workspace-page .papers-pane .paper-remove-actions { position: absolute; z-index: 60; top: calc(100% + 5px); left: 0; width: min(280px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
 .workspace-page .papers-pane .paper-remove-actions .research-stop-confirm { width: 100%; margin: 0; padding: 12px 14px; box-sizing: border-box; box-shadow: 0 14px 35px #0009; }
-.workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button { color: #d9b17e; }
-.workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button:hover:not(:disabled) { color: #f3cd9e; }
+.workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button { color: var(--sigma-copper-foreground); }
+.workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button:hover:not(:disabled) { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .saved-paper-card .ai-paper-preview { max-height: min(55dvh, 560px); overflow: auto; }
 .workspace-page .papers-pane .ai-paper-preview-title-copy { display: inline-flex; margin-left: 8px; vertical-align: middle; }
-.workspace-page .papers-pane .ai-paper-preview-title-copy .text-copy-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #c7a16d; }
+.workspace-page .papers-pane .ai-paper-preview-title-copy .text-copy-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .ai-paper-preview-title-copy .text-copy-button svg { width: 18px; height: 18px; }
 .workspace-page .papers-pane .ai-paper-preview-title-copy .text-copy-button:hover { border-color: #ac7054; background: #3b3029; }
 @media (max-width: 700px) {
@@ -131,18 +131,18 @@
   justify-content: flex-start; gap: 12px; margin-bottom: 12px;
 }
 .workspace-page .paper-includes-dialog-heading h3 {
-  margin: 0; color: #e7be8d;
+  margin: 0; color: var(--sigma-copper-foreground);
   font: 500 14px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
 }
 .workspace-page .papers-pane .paper-includes-close {
   display: inline; width: auto; min-width: 0; min-height: 0;
   margin: 0; padding: 0; border: 0; border-radius: 0;
-  background: transparent; box-shadow: none; color: #d9b17e;
+  background: transparent; box-shadow: none; color: var(--sigma-copper-foreground);
   font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
 .workspace-page .papers-pane .paper-includes-close:hover {
-  color: #f3cd9e; background: transparent; box-shadow: none;
+  color: var(--sigma-copper-foreground); background: transparent; box-shadow: none;
 }
 .workspace-page .paper-includes-dialog .ai-paper-includes { min-width: 0; margin: 0; padding: 0; border: 0; }
 .workspace-page .paper-includes-dialog .ai-paper-options { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
@@ -161,12 +161,12 @@
 .workspace-page .papers-pane .paper-restart-inline .paper-restart-action {
   display: inline; width: auto; min-width: 0; min-height: 0;
   margin: 0; padding: 0; border: 0; border-radius: 0;
-  background: transparent; box-shadow: none; color: #d9b17e;
+  background: transparent; box-shadow: none; color: var(--sigma-copper-foreground);
   font: 13px/1.4 Inter, sans-serif; text-decoration: underline;
   text-underline-offset: 3px; cursor: pointer;
 }
 .workspace-page .papers-pane .paper-restart-inline .paper-restart-action:hover:not(:disabled) {
-  color: #f3cd9e; background: transparent;
+  color: var(--sigma-copper-foreground); background: transparent;
 }
 /* Saved and in-progress papers share a single two-line numbered card header. */
 .workspace-page .papers-pane .saved-paper-title-line {
@@ -244,7 +244,7 @@
   box-sizing: border-box; flex: 0 0 28px;
   width: 28px; min-width: 28px; height: 28px; min-height: 28px;
   margin: 0; padding: 3px; border: 1px solid transparent;
-  border-radius: 5px; background: transparent; box-shadow: none; color: #c7a16d;
+  border-radius: 5px; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground);
 }
 .workspace-page .papers-pane .paper-draft-process-control svg {
   display: block; flex: none; width: 20px; height: 20px; fill: currentColor;
@@ -274,7 +274,7 @@
   color: #a8b8c6; cursor: pointer;
 }
 .workspace-page .papers-pane .paper-stage-history > summary:hover {
-  color: #f1c58d;
+  color: var(--sigma-copper-foreground);
 }
 .workspace-page .papers-pane .paper-stage-history .paper-stage-list { margin-top: 5px; }
 
@@ -285,14 +285,14 @@
 .workspace-page .papers-pane .saved-paper-card .paper-diagnostics-content { padding: 4px 10px 8px; }
 
 /* Compact tape-recorder rewind control matches the adjacent Play/Stop icons. */
-.workspace-page .papers-pane .paper-draft-restart { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; padding: 3px; border: 0; background: transparent; color: #e5ba69; }
+.workspace-page .papers-pane .paper-draft-restart { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; padding: 3px; border: 0; background: transparent; color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .paper-draft-restart svg { width: 20px; height: 20px; }
-.workspace-page .papers-pane .paper-draft-restart:hover:not(:disabled) { color: #ffe1ad; background: #3b3029; }
+.workspace-page .papers-pane .paper-draft-restart:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: #3b3029; }
 .workspace-page .papers-pane .paper-draft-restart:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Numbered paper hover uses underline only, matching numbered sessions. */
 .workspace-page .papers-pane .saved-paper-title-toggle:is(:hover,:focus-visible) { text-decoration: underline; text-underline-offset: 3px; color: inherit; background: transparent; }
-.workspace-page .papers-pane .paper-title-star { display: inline; margin-left: 7px; color: #e5ba69; font-size: .95em; cursor: default; }
+.workspace-page .papers-pane .paper-title-star { display: inline; margin-left: 7px; color: var(--sigma-copper-foreground); font-size: .95em; cursor: default; }
 
 /* A wrapper owns the hint when browser-disabled Play cannot receive pointer events. */
 .workspace-page .papers-pane .paper-play-tooltip { display: inline-flex; align-items: center; }
