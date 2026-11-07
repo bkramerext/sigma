@@ -5760,19 +5760,15 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [emailOpen, setEmailOpen] = useState(false);
   const [qaOpen, setQaOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [projectTypesOpen, setProjectTypesOpen] = useState(false);
-  const [projectTypesFocusTypeId, setProjectTypesFocusTypeId] = useState<string | null>(null);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
   useEffect(() => {
-    const openTypes = () => setProjectTypesOpen(true);
     const refreshTypes = () => {
       void fetch('/api/project-types', { cache: 'no-store' }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => { projectTypeCache = data.project_types; setTypeCatalogRevision(value => value + 1); }).catch(() => undefined);
     };
-    window.addEventListener('sigma-open-project-types', openTypes);
     window.addEventListener('sigma-project-types-updated', refreshTypes);
     const controller = new AbortController();
     void fetch('/api/project-types', { signal: controller.signal }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => { projectTypeCache = data.project_types; setTypeCatalogRevision(value => value + 1); }).catch(() => undefined);
-    return () => { controller.abort(); window.removeEventListener('sigma-open-project-types', openTypes); window.removeEventListener('sigma-project-types-updated', refreshTypes); };
+    return () => { controller.abort(); window.removeEventListener('sigma-project-types-updated', refreshTypes); };
   }, []);
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
@@ -6210,7 +6206,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       onSent={count => { setEmailOpen(false); setAnnouncement('Project emailed to ' + count + (count === 1 ? ' recipient.' : ' recipients.')); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}/>}
 
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <ProjectTypesDialog initialOpenTypeId={projectTypesFocusTypeId} onClose={() => { setProjectTypesOpen(false); setProjectTypesFocusTypeId(null); /* ProjectTypesDialog restores focus to the Settings link. */ }} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
+/>}
     {qaOpen && <ResearchQADialog path={view.path} projectId={project.id} guest={guest} onCancel={() => { setQaOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-qa-button')?.focus()); }}/ >}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
       <summary>Project details &amp; history</summary>
