@@ -739,6 +739,99 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
     )
 
 
+async def test_native_stopped_session_moves_between_providers(path: Path) -> None:
+    """Unimported project research can change providers without replaying calls."""
+    view, strategy, account, config = await setup(path)
+    current = {"account": account}
+
+    async def connected_account():
+        return current["account"]
+
+    with (
+        patch.object(research_sessions, "auth_context", new=connected_account),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, account["identity"]
+        )
+        await asyncio.sleep(0)
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+        assert stopped["status"] == "stopped"
+        original = deepcopy(research_sessions._read(str(path), started["id"]))
+        current["account"] = {
+            **account,
+            "mode": "chatgpt",
+            "identity": "chatgpt:other-account",
+            "token": "different-provider-token",
+        }
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        saved = research_sessions._read(str(path), started["id"])
+        assert saved["mode"] == "chatgpt"
+        assert saved["identity_hash"] == research_sessions._digest("chatgpt:other-account")
+        assert saved["steps"] == original["steps"]
+        assert saved["artifacts"] == original["artifacts"]
+        assert saved["calls_used"] == original["calls_used"]
+        assert saved["transport_change_history"][-1]["reason"] == (
+            "stopped_session_provider_change"
+        )
+        assert saved["imported_via_bundle"] is False
+
+
+def test_model_switch_preserves_old_hard_budget_costs() -> None:
+    """Old settled calls retain their cost; future calls use the new model price."""
+    current_model = MODEL
+    target_model = next(
+        name for name in research_sessions.TOKEN_PRICES_PER_MILLION if name != current_model
+    )
+    old_price = research_sessions.TOKEN_PRICES_PER_MILLION[current_model]
+    new_price = research_sessions.TOKEN_PRICES_PER_MILLION[target_model]
+    ledger = new_ledger(
+        call_limit=8,
+        input_token_limit=500_000,
+        output_tokens_per_call=4000,
+        cost_limit_usd=100,
+        input_price_per_million=max(old_price["input"], old_price["cache_write"]),
+        output_price_per_million=old_price["output"],
+    )
+    reserve_before_dispatch(ledger, call_id="old-call", request_body=b"first request")
+    settle_after_response(ledger, call_id="old-call", input_tokens=10, output_tokens=20)
+    old_call = deepcopy(ledger["calls"][0])
+    record = {
+        "status": "stopped",
+        "mode": "api_key",
+        "model": current_model,
+        "reasoning_effort": "high",
+        "identity_hash": "former-account",
+        "steps": [],
+        "hard_budget_ledger": ledger,
+        "estimated_cost_reserved_usd": 0.0,
+    }
+    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False):
+        research_sessions._rebind_provider_transport(
+            record,
+            {"identity": "chatgpt:new", "mode": "chatgpt"},
+            {"model": target_model, "reasoning_effort": "medium"},
+        )
+    assert record["model"] == target_model
+    assert ledger["calls"][0] == old_call
+    assert ledger["input_price_per_million"] == max(new_price["input"], new_price["cache_write"])
+    assert ledger["output_price_per_million"] == new_price["output"]
+    reserve_before_dispatch(ledger, call_id="future-call", request_body=b"future")
+    assert ledger["calls"][0] == old_call
+    unknown = deepcopy(record)
+    unknown["steps"] = [
+        {"role": "investigator", "status": "interrupted", "attempt_status": "unknown"}
+    ]
+    try:
+        research_sessions._validate_provider_transport_change(unknown, next_model=current_model)
+    except ProjectError as exc:
+        assert "unknown" in str(exc)
+    else:
+        raise AssertionError("Transport migration replayed an unknown provider attempt")
+
+
 async def test_emailed_project_import_resumes_under_recipient_provider(path: Path):
     """Real start/stop/export/import/Resume, not just synthetic path-rewrite tests."""
     from sigma.project_bundle import import_bundle
