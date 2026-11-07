@@ -318,3 +318,14 @@
   top: 5px;
   right: 5px;
 }
+
+/* Nested add/edit subflows in administrator and Project Types dialogs.
+   Their X cancels only the nested draft, not the parent dialog. */
+:is(.admin-new-entry-heading, .project-types-section-heading):has(> .sigma-dialog-dismiss) {
+  position: relative;
+  padding-right: 42px;
+}
+:is(.admin-new-entry-heading, .project-types-section-heading) > .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 0;
+  right: 0;
+}
