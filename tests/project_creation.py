@@ -528,7 +528,9 @@ def main() -> None:
                 legacy_snapshot = {
                     "schema": "sigma-paper-evidence-v2",
                     "project_id": legacy_id,
-                    "sources": [],
+                    "sources": [
+                        {"id": f"project:{legacy_id}", "kind": "project", "data": {"id": legacy_id}}
+                    ],
                 }
                 legacy_snapshot_bytes = json.dumps(
                     legacy_snapshot, sort_keys=True, separators=(",", ":")
