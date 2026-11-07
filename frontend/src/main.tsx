@@ -5349,7 +5349,7 @@ function Home({ initialPath, onOpen }: {
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <GlobalSettingsDialog onClose={() => setProjectTypesOpen(false)}/>}
+      {projectTypesOpen && <GlobalSettingsDialog key={cloud?.user?.email ?? 'local'} onClose={() => setProjectTypesOpen(false)}/>}
     </div>
   </div>;
 }
