@@ -1053,7 +1053,19 @@ _SAFE_MATH_COMMANDS = {
     "supseteq",
     "tfrac",
 }
-_MATH_SPAN = re.compile(r"(\$\$[\s\S]*?\$\$|(?<!\\)\$[^$\n]+\$)")
+_MATH_SPAN = re.compile(
+    r"(\$\$[\s\S]*?\$\$|(?<!\\)\\\[[\s\S]*?(?<!\\)\\\]|"
+    r"(?<!\\)\\\([^\n]*?(?<!\\)\\\)|(?<!\\)\$[^$\n]+\$)"
+)
+
+
+def _math_body_and_display(token: str) -> tuple[str, bool]:
+    """Recognize math without permitting TeX commands in ordinary prose."""
+    if token.startswith(("$", r"\[")):
+        return token[2:-2], True
+    if token.startswith(r"\("):
+        return token[2:-2], False
+    return token[1:-1], False
 _UNICODE_MATH = {
     "−": "-",
     "≤": r"\leq",
@@ -1186,10 +1198,9 @@ def _latex_prose(source: str, *, display_long_math: bool = False) -> str:
         for match in _MATH_SPAN.finditer(text):
             escaped.append(escape_links(text[position : match.start()]))
             token = match.group(0)
-            delimiter = "$$" if token.startswith("$$") else "$"
-            body = token[len(delimiter) : -len(delimiter)]
+            body, is_display = _math_body_and_display(token)
             if _safe_math(body):
-                escaped.append(r"\[" + body + r"\]" if delimiter == "$$" else "$" + body + "$")
+                escaped.append(r"\[" + body + r"\]" if is_display else "$" + body + "$")
             else:
                 escaped.append(_latex(token))
             position = match.end()
@@ -1215,14 +1226,14 @@ def _latex_prose(source: str, *, display_long_math: bool = False) -> str:
     for match in _MATH_SPAN.finditer(source):
         output.append(plain(source[position : match.start()]))
         token = match.group(0)
-        delimiter = "$$" if token.startswith("$$") else "$"
-        body = math_body(token[len(delimiter) : -len(delimiter)])
+        source_body, explicit_display = _math_body_and_display(token)
+        body = math_body(source_body)
         consumed_punctuation = ""
         if _safe_math(body):
             should_display = display_long_math and (
                 len(body) > 65 or (len(body) > 45 and body.count(",") >= 5)
             )
-            if delimiter == "$$" or should_display:
+            if explicit_display or should_display:
                 if match.end() < len(source) and source[match.end()] in ".,;:":
                     consumed_punctuation = source[match.end()]
                 if len(body) > 140 and r"\qquad" in body:
