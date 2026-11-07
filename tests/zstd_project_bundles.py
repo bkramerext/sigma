@@ -59,14 +59,15 @@ def main() -> None:
     exported = portable_bundle(members)
     assert exported["version"] == 3
     assert exported["files"]["project.json"] == document
-    assert exported["files"]["artifacts/papers/paper-a.tex"] == members[
-        "artifacts/papers/paper-a.tex"
-    ].decode()
+    assert (
+        exported["files"]["artifacts/papers/paper-a.tex"]
+        == members["artifacts/papers/paper-a.tex"].decode()
+    )
     assert exported["files"]["artifacts/papers/paper-a.pdf"][ENCODING] == "zstd+base64"
     assert exported["files"]["evidence/raw.bin"][ENCODING] == "zstd+base64"
-    assert _decode(exported)["artifacts/papers/paper-a.pdf"] == members[
-        "artifacts/papers/paper-a.pdf"
-    ]
+    assert (
+        _decode(exported)["artifacts/papers/paper-a.pdf"] == members["artifacts/papers/paper-a.pdf"]
+    )
 
     with TemporaryDirectory() as directory:
         root = Path(directory)
@@ -80,20 +81,20 @@ def main() -> None:
                 assert read_file(live, name) == value
         reexport = json.loads(download_bytes(live))
         assert reexport["version"] == 3
-        assert _decode(reexport)["artifacts/papers/paper-a.tex"] == members[
-            "artifacts/papers/paper-a.tex"
-        ]
-        assert _decode(reexport)["artifacts/papers/paper-a.pdf"] == members[
-            "artifacts/papers/paper-a.pdf"
-        ]
+        assert (
+            _decode(reexport)["artifacts/papers/paper-a.tex"]
+            == members["artifacts/papers/paper-a.tex"]
+        )
+        assert (
+            _decode(reexport)["artifacts/papers/paper-a.pdf"]
+            == members["artifacts/papers/paper-a.pdf"]
+        )
 
         # Both pre-compression formats remain importable and writable.
         legacy_v1 = {
             "format": "sigma.project.bundle",
             "version": 1,
-            "files": {
-                name: base64.b64encode(value).decode() for name, value in members.items()
-            },
+            "files": {name: base64.b64encode(value).decode() for name, value in members.items()},
         }
         legacy_v2 = {
             "format": "sigma.project.bundle",
@@ -111,9 +112,10 @@ def main() -> None:
             target = root / f"legacy-{version}.json"
             import_bundle(legacy, target)
             assert read_bundle(target)["version"] == 3
-            assert read_file(target, "artifacts/papers/paper-a.pdf") == members[
-                "artifacts/papers/paper-a.pdf"
-            ]
+            assert (
+                read_file(target, "artifacts/papers/paper-a.pdf")
+                == members["artifacts/papers/paper-a.pdf"]
+            )
             write_file(target, "evidence/new.bin", b"new research")
             assert read_file(target, "evidence/new.bin") == b"new research"
             assert read_bundle(target)["files"]["evidence/new.bin"][ENCODING] == "zstd+base64"
@@ -123,9 +125,10 @@ def main() -> None:
         for version, legacy in ((1, legacy_v1), (2, legacy_v2)):
             target = root / f"old-on-disk-{version}.json"
             target.write_text(json.dumps(legacy))
-            assert read_file(target, "artifacts/papers/paper-a.pdf") == members[
-                "artifacts/papers/paper-a.pdf"
-            ]
+            assert (
+                read_file(target, "artifacts/papers/paper-a.pdf")
+                == members["artifacts/papers/paper-a.pdf"]
+            )
             write_file(target, "evidence/additional.bin", b"persisted")
             assert read_bundle(target)["version"] == 3
             assert read_file(target, "evidence/additional.bin") == b"persisted"
@@ -138,20 +141,29 @@ def main() -> None:
             ("boolean-size", {**pdf_value, "size": True}),
             ("oversized", {**pdf_value, "size": MAX_MEMBER_BYTES + 1}),
             ("invalid-base64", {**pdf_value, "data": "!"}),
-            ("truncated", {
-                **pdf_value,
-                "data": base64.b64encode(base64.b64decode(pdf_value["data"])[:-1]).decode(),
-            }),
-            ("trailing-frame", {
-                **pdf_value,
-                "data": base64.b64encode(
-                    base64.b64decode(pdf_value["data"]) + compress(b"extra")
-                ).decode(),
-            }),
-            ("uncompressed-v3", {
-                ENCODING: "base64",
-                "data": base64.b64encode(members["artifacts/papers/paper-a.pdf"]).decode(),
-            }),
+            (
+                "truncated",
+                {
+                    **pdf_value,
+                    "data": base64.b64encode(base64.b64decode(pdf_value["data"])[:-1]).decode(),
+                },
+            ),
+            (
+                "trailing-frame",
+                {
+                    **pdf_value,
+                    "data": base64.b64encode(
+                        base64.b64decode(pdf_value["data"]) + compress(b"extra")
+                    ).decode(),
+                },
+            ),
+            (
+                "uncompressed-v3",
+                {
+                    ENCODING: "base64",
+                    "data": base64.b64encode(members["artifacts/papers/paper-a.pdf"]).decode(),
+                },
+            ),
         ):
             corrupted = {
                 **stored,
