@@ -512,6 +512,80 @@ def main() -> None:
                 assert {item.name for item in managed.glob("*.json")} == existing_json
                 assert Path(source_path).read_bytes() == before_copy
 
+                # Legacy .sigma projects use papers/<id> and
+                # papers/.snapshots/<sha>. Import must preserve all their
+                # records and map them to the single-file artifact namespace.
+                legacy_path = managed / "legacy-with-paper-artifacts.sigma"
+                legacy_view = initialize_project(
+                    legacy_path, "Legacy with paper artifacts", "A historical proof"
+                )
+                legacy_id = legacy_view.project.id
+                legacy_paper_id = uuid4().hex
+                legacy_pdf = b"%PDF-1.7\\nlegacy-paper\\x00\\xff"
+                legacy_tex = b"\\\\documentclass{article}\\nLegacy proof.\\n"
+                legacy_snapshot = {
+                    "schema": "sigma-paper-evidence-v2",
+                    "project_id": legacy_id,
+                    "sources": [],
+                }
+                legacy_snapshot_bytes = json.dumps(
+                    legacy_snapshot, sort_keys=True, separators=(",", ":")
+                ).encode()
+                legacy_digest = hashlib.sha256(legacy_snapshot_bytes).hexdigest()
+                legacy_record = {
+                    "project_id": legacy_id,
+                    "paper_id": legacy_paper_id,
+                    "paper_version": 1,
+                    "created_at": "2026-11-04T16:01:00+00:00",
+                    "snapshot_sha256": legacy_digest,
+                    "snapshot_ref": legacy_digest,
+                    "draft": {"title": "Legacy preserved paper"},
+                    "validation_warnings": [],
+                    "generation": {},
+                    "pdf_size_bytes": len(legacy_pdf),
+                    "pdf_sha256": hashlib.sha256(legacy_pdf).hexdigest(),
+                    "tex_size_bytes": len(legacy_tex),
+                    "tex_sha256": hashlib.sha256(legacy_tex).hexdigest(),
+                }
+                legacy_papers_dir = legacy_path / "papers"
+                legacy_papers_dir.mkdir()
+                (legacy_papers_dir / f"{legacy_paper_id}.json").write_text(
+                    json.dumps(legacy_record)
+                )
+                (legacy_papers_dir / f"{legacy_paper_id}.pdf").write_bytes(legacy_pdf)
+                (legacy_papers_dir / f"{legacy_paper_id}.tex").write_bytes(legacy_tex)
+                frozen_dir = legacy_papers_dir / ".snapshots"
+                frozen_dir.mkdir()
+                (frozen_dir / f"{legacy_digest}.json.zlib").write_bytes(
+                    zlib.compress(legacy_snapshot_bytes)
+                )
+                assert client.post("/api/projects/open", json={"path": str(legacy_path)}).status_code == 200
+                legacy_bundle = client.get(
+                    "/api/projects/export", params={"path": str(legacy_path)}
+                )
+                assert legacy_bundle.status_code == 200, legacy_bundle.text
+                legacy_imported = client.post(
+                    "/api/projects/import", json={"bundle": legacy_bundle.json()}
+                )
+                assert legacy_imported.status_code == 201, legacy_imported.text
+                imported_legacy_path = legacy_imported.json()["path"]
+                assert imported_legacy_path != str(legacy_path)
+                assert legacy_imported.json()["project"]["id"] != legacy_id
+                assert {item["paper_id"] for item in papers.list_papers(imported_legacy_path)} == {
+                    legacy_paper_id
+                }
+                assert papers.get_pdf(imported_legacy_path, legacy_paper_id) == legacy_pdf
+                assert papers.paper_tex(imported_legacy_path, legacy_paper_id).encode() == legacy_tex
+                assert papers.get_paper(imported_legacy_path, legacy_paper_id)["snapshot"][
+                    "project_id"
+                ] == legacy_imported.json()["project"]["id"]
+                assert (legacy_papers_dir / f"{legacy_paper_id}.pdf").read_bytes() == legacy_pdf
+                assert (legacy_papers_dir / f"{legacy_paper_id}.tex").read_bytes() == legacy_tex
+                recent = client.get("/api/projects/recent")
+                assert recent.status_code == 200
+                recent_paths = {item["path"] for item in recent.json()["projects"]}
+                assert {str(legacy_path), imported_legacy_path} <= recent_paths
+
                 saved_as = client.post(
                     "/api/projects/save-as",
                     json={"path": source_path, "title": "API math v2"},
