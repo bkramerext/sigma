@@ -117,15 +117,15 @@
 .workspace-page .project-pane-actions .project-download-button svg,
 .workspace-page .project-pane-actions .project-email-button svg {
   display: block;
-  width: 30px;
-  height: 30px;
+  width: 27px;
+  height: 27px;
 }
 .workspace-page .project-pane-actions .project-download-button {
   padding: 1px;
 }
 .workspace-page .project-pane-actions .sigma-action-glyph {
-  width: 27px;
-  height: 27px;
+  width: 24.3px;
+  height: 24.3px;
 }
 .home-page .home-projects-heading {
   column-gap: 7px;
@@ -185,4 +185,14 @@
     --home-project-edge: var(--home-side-gap);
     top: var(--home-corner-gap);
   }
+}
+
+/* Ten-percent reduction for top-level Home and Project glyphs only.
+   Keep their 34px hit targets and approved inter-icon spacing unchanged. */
+.home-page .home-projects-heading .sigma-action-glyph {
+  width: 22.5px;
+  height: 22.5px;
+}
+.workspace-page .project-pane-actions .text-view-icon.project-qa-button {
+  font-size: 15.3px;
 }
