@@ -157,13 +157,14 @@ def verify(
         project = json.loads(project_file.read_text(encoding="utf-8"))
         if not isinstance(project, dict) or not isinstance(project.get("id"), str):
             raise TypeError("a saved project record is invalid")
+    compilation_cache_name = ".publication-reference-compilation.json"
     artifact_files = [
         path
         for path in workspace_root.rglob("*")
         if path.is_file()
         and not path.is_symlink()
         and path.suffix.lower() in {".json", ".pdf", ".tex", ".csv", ".png", ".svg"}
-        and path.name not in {"project.json", ".DS_Store"}
+        and path.name not in {"project.json", ".DS_Store", compilation_cache_name}
     ]
     if len(project_files) < min_projects:
         raise ValueError(f"found {len(project_files)} projects; expected at least {min_projects}")
@@ -176,7 +177,37 @@ def verify(
         f"PASS research artifacts: {len(artifact_files)} persisted JSON/PDF/TeX/data assets"
     )
 
-    paper_records = list(workspace_root.glob("*/**/papers/*.json"))
+    # Publication compilation metadata lives alongside paper records but is not
+    # itself a paper. Validate the one known cache format (including its seal),
+    # then validate actual paper records as before. Do not broadly ignore hidden
+    # JSON files: an unexpected file in papers/ remains a restore failure.
+    paper_dirs = list(workspace_root.glob("*/**/papers"))
+    for paper_dir in paper_dirs:
+        cache_path = paper_dir / compilation_cache_name
+        if cache_path.exists() or cache_path.is_symlink():
+            if (
+                cache_path.is_symlink()
+                or not cache_path.is_file()
+                or cache_path.stat().st_size > 24000
+            ):
+                raise ValueError("publication compilation cache is unsafe or oversized")
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            if not isinstance(cache, dict) or cache.get("schema") != 2:
+                raise ValueError("publication compilation cache schema is invalid")
+            cache_seal = cache.get("record_sha256")
+            cache_body = {key: value for key, value in cache.items() if key != "record_sha256"}
+            expected_seal = hashlib.sha256(
+                json.dumps(
+                    cache_body, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+                ).encode()
+            ).hexdigest()
+            if not isinstance(cache_seal, str) or cache_seal != expected_seal:
+                raise ValueError("publication compilation cache integrity seal is invalid")
+    paper_records = [
+        path
+        for path in workspace_root.glob("*/**/papers/*.json")
+        if path.name != compilation_cache_name
+    ]
     verified_papers = 0
     for record_path in paper_records:
         if record_path.is_symlink() or not record_path.is_file():
