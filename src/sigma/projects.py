@@ -774,10 +774,10 @@ def initialize_project(
             problem.strip(),
             (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
             investigation_type=mode,
-            ai_model=resolved_model,
-            reasoning_effort=reasoning_effort,
+            ai_model=legacy_model(),
+            reasoning_effort="high",
             difficulty=selected_difficulty,
-            show_advanced_outcome_details=show_advanced_outcome_details,
+            show_advanced_outcome_details=False,
             backend_build_commit=_current_build_commit(),
             project_type_snapshot=_type_snapshot(mode),
         )
@@ -823,10 +823,10 @@ def initialize_project(
             problem.strip(),
             (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
             investigation_type=mode,
-            ai_model=resolved_model,
-            reasoning_effort=reasoning_effort,
+            ai_model=legacy_model(),
+            reasoning_effort="high",
             difficulty=selected_difficulty,
-            show_advanced_outcome_details=show_advanced_outcome_details,
+            show_advanced_outcome_details=False,
             backend_build_commit=_current_build_commit(),
             project_type_snapshot=_type_snapshot(mode),
         )
@@ -1443,10 +1443,11 @@ def update_project(
             problem=wanted.problem,
             investigation_type=wanted_type_id,
             project_type_snapshot=snapshot,
-            ai_model=wanted.ai_model,
-            reasoning_effort=wanted.reasoning_effort,
+            # Version 12 never persists user-wide model/Thinking/Outcome choices.
+            ai_model=legacy_model(),
+            reasoning_effort="high",
             difficulty=wanted.difficulty,
-            show_advanced_outcome_details=wanted.show_advanced_outcome_details,
+            show_advanced_outcome_details=False,
             events=(
                 *project.events,
                 Event(
