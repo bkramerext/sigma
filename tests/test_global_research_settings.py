@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import stat
+from datetime import UTC, datetime
+from uuid import uuid4
 
 from sigma import (
     global_research_settings,
@@ -12,6 +14,7 @@ from sigma import (
     research_sessions,
     section_layout_preferences,
 )
+from sigma.projects import Difficulty, Event, Project, _decode, _document
 
 
 def test_global_research_settings_defaults_and_project_limits_ignored(tmp_path, monkeypatch):
@@ -107,3 +110,25 @@ def test_unattended_and_section_layout_are_per_user(tmp_path, monkeypatch):
     monkeypatch.setattr(project_types, "_store_path", lambda: second / "types.json")
     assert research_preferences.allow_unattended_background_execution() is False
     assert section_layout_preferences.expand_one_project_section_at_a_time() is False
+
+
+def test_project_v12_drops_user_wide_fields_from_serialized_project():
+    record = Project(
+        schema_version=12,
+        id=str(uuid4()),
+        title="Research question",
+        problem="What can be discovered?",
+        events=(Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
+        difficulty=Difficulty.MEDIUM,
+        ai_model="gpt-6-luna",
+        reasoning_effort="low",
+        show_advanced_outcome_details=True,
+    )
+    raw = json.loads(_document(record))
+    assert raw["schema_version"] == 12
+    assert "ai_model" not in raw
+    assert "reasoning_effort" not in raw
+    assert "show_advanced_outcome_details" not in raw
+    restored = _decode(raw)
+    assert restored.title == record.title
+    assert restored.difficulty == record.difficulty
