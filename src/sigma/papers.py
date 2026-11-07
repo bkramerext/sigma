@@ -6687,14 +6687,38 @@ async def _generate_long_draft(
             )
             started = monotonic()
             log = logging.getLogger("sigma.lifecycle")
+            # Diagnostic metadata only: never log frozen research text or credentials.
+            input_bytes = len(
+                _provider_input_text(input_value, schema_name, max_input_bytes).encode("utf-8")
+            )
+            output_delta_events = 0
+
+            async def observe_section_output() -> None:
+                nonlocal output_delta_events
+                output_delta_events += 1
+                if output_delta_events == 1 or output_delta_events % 1000 == 0:
+                    log.info(
+                        "paper.provider_output project_id=%s section=%s attempt=%d "
+                        "delta_events=%d elapsed_s=%.1f",
+                        project_id or "unknown",
+                        section_number,
+                        attempt_number,
+                        output_delta_events,
+                        monotonic() - started,
+                    )
+                await section_output_observed(section_number)
+
             log.info(
                 "paper.provider_attempt_started project_id=%s schema=%s section=%s "
-                "attempt=%d call_index=%d",
+                "attempt=%d call_index=%d input_bytes=%d instructions_chars=%d effort=%s",
                 project_id or "unknown",
                 schema_name,
                 section_number if type(section_number) is int else "none",
                 attempt_number,
                 calls,
+                input_bytes,
+                len(instructions),
+                config["reasoning_effort"],
             )
             try:
                 async with asyncio.timeout(remaining):
@@ -6707,15 +6731,10 @@ async def _generate_long_draft(
                         response_model=response_model,
                         max_input_bytes=max_input_bytes,
                         on_output_delta=(
-                            (
-                                lambda number=input_value["section_number"]: section_output_observed(
-                                    number
-                                )
-                            )
+                            observe_section_output
                             if on_output_delta is not None
                             and schema_name == "sigma_long_paper_section"
-                            and isinstance(input_value, dict)
-                            and type(input_value.get("section_number")) is int
+                            and type(section_number) is int
                             else None
                         ),
                         project_id=project_id,
@@ -6726,6 +6745,15 @@ async def _generate_long_draft(
                         ),
                     )
             except TimeoutError as exc:
+                log.warning(
+                    "paper.provider_stage_budget_exhausted project_id=%s section=%s "
+                    "attempt=%d elapsed_s=%.1f delta_events=%d",
+                    project_id or "unknown",
+                    section_number if type(section_number) is int else "none",
+                    attempt_number,
+                    monotonic() - started,
+                    output_delta_events,
+                )
                 # An already-dispatched paid attempt may have consumed allowance.
                 # Never start another paid request after the shared deadline.
                 raise PaperTransientFailure(
