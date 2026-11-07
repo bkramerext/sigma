@@ -2094,7 +2094,7 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
 
 
 def test_display_math_is_rendered_and_escaped_equations_are_safely_recovered() -> None:
-    """Regression: nonconsecutive-subset paper printed \[...\] equations as prose."""
+    r"""Regression: nonconsecutive-subset paper printed \[...\] equations as prose."""
     root_filter = (
         "\\[\n"
         r"a_n=\frac{P_n(1)+P_n(\omega)+P_n(\omega^2)}{3}."
