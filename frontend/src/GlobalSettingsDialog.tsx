@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import DialogDismissButton from './DialogDismissButton';
-import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
+import ProjectTypesDialog, { type ProjectTypeRecord, type ProjectTypesSaveState } from './ProjectTypesDialog';
 import './global-settings.css';
 
 type Tab = 'types' | 'research' | 'limits' | 'preferences';
@@ -27,7 +27,7 @@ type CatalogModel = { id: string; label: string; efforts: string[]; relative_cos
 type Preference = { allow_unattended_background_execution: boolean; expand_one_project_section_at_a_time: boolean; progress_email: boolean };
 const tabs: { id: Tab; title: string }[] = [
   { id: 'types', title: 'Project Types' },
-  { id: 'research', title: 'Research' },
+  { id: 'research', title: 'Model' },
   { id: 'limits', title: 'Limits' },
   { id: 'preferences', title: 'Preferences' },
 ];
@@ -63,6 +63,13 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [typesSaveState, setTypesSaveState] = useState<ProjectTypesSaveState>({ dirty: false, valid: false, busy: false });
+  const typesSaveRef = useRef<(() => Promise<boolean>) | null>(null);
+  const savedSnapshot = useRef<string | null>(null);
+  const onTypesSaveStateChange = useCallback((next: ProjectTypesSaveState) => {
+    setTypesSaveState(previous =>
+      previous.dirty === next.dirty && previous.valid === next.valid && previous.busy === next.busy ? previous : next);
+  }, []);
   useEffect(() => {
     dialog.current?.showModal();
     const controller = new AbortController();
@@ -85,6 +92,11 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       });
       setProgressAvailable(!!progress.available);
       setModels(catalog.models ?? []);
+      savedSnapshot.current = JSON.stringify({ config: research, prefs: {
+        allow_unattended_background_execution: !!unattended.allow_unattended_background_execution,
+        expand_one_project_section_at_a_time: !!layout.expand_one_project_section_at_a_time,
+        progress_email: !!progress.enabled,
+      } });
       setLoaded(true);
     }).catch(cause => { if (!controller.signal.aborted) setError(String(cause)); });
     return () => controller.abort();
@@ -98,8 +110,29 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     setConfig(current => current ? { ...current, ...patch } : current);
   };
   const setPref = (patch: Partial<Preference>) => { setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
+  const hasOtherChanges = loaded && !!config && savedSnapshot.current !== JSON.stringify({ config, prefs });
+  const hasChanges = typesSaveState.dirty || hasOtherChanges;
+  const validLimits = !!config && (['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const)
+    .every(field => Number.isInteger(Number(config.limits[field])) && Number(config.limits[field]) >= 1 && String(config.limits[field]).trim() !== '')
+    && (['session_duration_minutes', 'maximum_input_tokens_per_session'] as const)
+      .every(field => config.limits[field] == null || (Number.isFinite(Number(config.limits[field])) && Number(config.limits[field]) > 0 && String(config.limits[field]).trim() !== ''))
+    && (config.limits.maximum_estimated_cost_usd == null ||
+      (Number.isFinite(Number(config.limits.maximum_estimated_cost_usd)) && Number(config.limits.maximum_estimated_cost_usd) > 0 &&
+      String(config.limits.maximum_estimated_cost_usd).trim() !== ''));
+  const canSave = loaded && hasChanges && !busy && !typesSaveState.busy && validLimits &&
+    (!typesSaveState.dirty || typesSaveState.valid);
   async function save() {
-    if (!config || busy) return;
+    if (!config || !canSave) return;
+    setBusy(true); setError(''); setSaved(false);
+    try {
+      if (typesSaveState.dirty) {
+        const didSave = await typesSaveRef.current?.();
+        if (!didSave) return;
+      }
+      if (!hasOtherChanges) {
+        setSaved(true);
+        return;
+      }
     const limits = { ...config.limits };
     const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
     for (const field of whole) {
@@ -115,8 +148,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     }
     const cost = limits.maximum_estimated_cost_usd as number | string | null;
     limits.maximum_estimated_cost_usd = cost === '' || cost == null ? null : Number(cost);
-    setBusy(true); setError(''); setSaved(false);
-    try {
       const next = await putJson('/api/user-preferences/research-settings', {
         limits, ai_model: config.ai_model, reasoning_effort: config.reasoning_effort,
         show_advanced_outcome_details: config.show_advanced_outcome_details,
@@ -134,19 +165,20 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       window.dispatchEvent(new CustomEvent('sigma-section-layout-preference-changed', {
         detail: prefs.expand_one_project_section_at_a_time,
       }));
+      savedSnapshot.current = JSON.stringify({ config: next, prefs });
       setSaved(true);
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
   const model = models.find(item => item.id === config?.ai_model);
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
-  return <dialog ref={dialog} className="project-settings-dialog sigma-global-settings" aria-labelledby="sigma-global-settings-title"
+  return <dialog ref={dialog} className={`project-settings-dialog sigma-global-settings sigma-global-settings--${tab}`} aria-labelledby="sigma-global-settings-title"
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
     <div className="sigma-global-settings-content">
       <header className="settings-header">
         <h2 id="sigma-global-settings-title">Settings</h2>
         <div className="settings-actions">
-          {tab !== 'types' && <button type="button" disabled={!loaded || busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>}
+          <button type="button" disabled={!canSave} onClick={() => void save()}>{busy || typesSaveState.busy ? 'Saving…' : 'Save'}</button>
           <DialogDismissButton label="Close Settings" disabled={busy} onClick={onClose}/>
         </div>
       </header>
@@ -155,7 +187,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           onClick={() => changeTab(item.id)}>{item.title}</button>)}
       </nav>
       <section role="tabpanel" hidden={tab !== 'types'}>
-        <ProjectTypesDialog embedded onClose={() => {}} renderIcon={(item: ProjectTypeRecord) =>
+        <ProjectTypesDialog embedded onClose={() => {}} onSaveStateChange={onTypesSaveStateChange} saveHandleRef={typesSaveRef} renderIcon={(item: ProjectTypeRecord) =>
           item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> :
           <span className="sigma-settings-type-icon" aria-hidden="true">◈</span>}/>
       </section>
@@ -163,7 +195,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         {!loaded && !error && <p role="status">Loading your settings…</p>}
         {config && tab === 'research' && <fieldset disabled={busy}>
           <label htmlFor="sigma-global-model">Model</label>
-          <select id="sigma-global-model" value={config.ai_model} onChange={event => {
+          <select id="sigma-global-model" className="sigma-model-select" value={config.ai_model} onChange={event => {
             const selected = models.find(m => m.id === event.target.value);
             setResearch({ ai_model: event.target.value,
               reasoning_effort: selected?.efforts.includes(config.reasoning_effort)
@@ -173,7 +205,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
             {models.map(item => <option key={item.id} value={item.id}>{item.label} · {item.relative_cost}</option>)}
           </select>
           <label htmlFor="sigma-global-effort">Thinking level</label>
-          <select id="sigma-global-effort" value={config.reasoning_effort}
+          <select id="sigma-global-effort" className="sigma-effort-select" value={config.reasoning_effort}
             onChange={event => setResearch({ reasoning_effort: event.target.value })}>
             {(model?.efforts ?? [config.reasoning_effort]).map(effort =>
               <option key={effort} value={effort}>{effort.charAt(0).toUpperCase() + effort.slice(1)}</option>)}
@@ -235,7 +267,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           <label className="project-preference-checkbox"><input type="checkbox"
             checked={prefs.allow_unattended_background_execution}
             onChange={e => setPref({ allow_unattended_background_execution: e.target.checked })}/>Allow unattended background execution</label>
-          <p className="settings-hint">These preferences are yours, across every project. Unattended execution may incur provider usage.</p>
+          <p className="settings-hint">Unattended execution may incur provider usage.</p>
         </fieldset>}
         {error && <p role="alert" className="error">{error}</p>}
         {saved && <p role="status" className="settings-hint">Settings saved.</p>}
