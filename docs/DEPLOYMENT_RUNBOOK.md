@@ -197,6 +197,49 @@ record must include the fresh recovery point and restore evidence, exact image
 labels/IDs, deployment result, and smoke-test outcome. No v0.1.6 tag is
 authorized by this record.
 
+## v0.2.1 production deployment outcome — 2026-11-06
+
+Issue [#588](https://github.com/bkramerext/sigma/issues/588) was completed for
+the exact approved v0.2.1 commit
+`5435e14eeea159ab207ad50016577b9a9542ae59`. Its Nov 6 scope decision was
+observed: PR #639, PR #641, issue #643, and new Research Ethos work are not in
+the release. Exact-SHA Ruff, SIGMA verification, browser CI, and local
+`./sigma test` passed.
+
+The fresh application-consistent snapshot
+`sigma-state-v021-pre-20261107-0658` reached READY (436,288 stored bytes) and
+remains retained. An isolated no-public-IP, no-service-account VM mounted its
+clone read-only using `ro,noload,nosuid,nodev,noexec,norecovery`. Restore
+verification passed three SQLite integrity checks; three identities and
+workspace mappings; 17 projects; 42 artifacts; one validated TeX/PDF pair; ten
+terminal history rows; and 46 accounting rows, including 15 reserved or
+unknown outcomes ($5.938237 recorded/reserved). The verifier recognizes and
+checks the integrity seal of the known hidden publication compilation cache;
+actual paper records still receive strict identity, TeX, and PDF hash/size
+checks. The temporary VM and clone disk were removed and confirmed absent.
+
+The existing guarded helper was run against the approved SHA with
+`--backup-verified --schema-compatible` and built both images; no `--no-build`
+was used. Backend image ID:
+`sha256:1ab6ae4c60f8c320bb69c1cc0135a60b994084befa7dc0c440701a8fa2cd3a88`;
+frontend image ID:
+`sha256:4615bc091f737620956a5da1bedc3f96ced3a38c4d155e513a126b670f1f09e5`.
+The release record, host checkout, image tags, and source labels match the
+approved SHA. Systemd and all three containers are healthy; the state disk UUID
+and mount options match the runbook; maintenance is off. The cutover window
+was approximately 20 seconds (07:08:49–07:09:09 UTC).
+
+Public HTTPS returned 200, hosted cloud-auth status returned 200/ready, and
+anonymous `/api/health` returned the expected 401. Headless Chrome About showed
+`Version 0.2.1 · Build 5435e14` with no page errors or write requests. No paid
+provider inference was run. Authenticated login, project import/export, actual
+email delivery, saved-paper viewing, and research execution were not exercised.
+The one-off recovery snapshot is retained; the recurring backup timer remains
+absent. See the [operations runbook](OPERATION_RUNBOOK.md#sigma-v021-deployment-outcome-2026-11-06-pdt--2026-11-07-utc)
+for detailed evidence, access-path friction, and rollback limitations. Recovery
+resources remained within the documented $25 incremental ceiling; exact billed
+spend was not independently queried.
+
 ## v0.2.0 production deployment outcome — 2026-11-04
 
 The operator authorized Red in this conversation to remedy release blockers,
