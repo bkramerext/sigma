@@ -2400,7 +2400,7 @@ const PAPER_STAGES = [
   { label: 'Validate', stages: ['validation'] },
   { label: 'Proofread', stages: ['proofreading'] },
   { label: 'Generate PDF', stages: ['compile', 'pdf_check'] },
-  { label: 'Score paper', stages: ['scoring', 'score_failed'] },
+  { label: 'Score', stages: ['scoring', 'score_failed'] },
   { label: 'Finish', stages: ['finishing', 'complete'] },
 ] as const;
 
@@ -2432,7 +2432,7 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
   if (step === 7) return completed ? 'Generated PDF' : current ? 'Generating PDF' : 'Generate PDF';
   if (step === 8) {
     if (progress.detail?.includes('scoring did not finish')) return 'Score unavailable';
-    return completed ? 'Scored paper' : current ? 'Scoring paper' : 'Score paper';
+    return completed ? 'Scored' : current ? 'Scoring' : 'Score';
   }
   return completed ? 'Finished' : current ? 'Finishing' : 'Finish';
 }
