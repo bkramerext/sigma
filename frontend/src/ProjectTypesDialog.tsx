@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import './project-types.css';
+import DialogDismissButton from './DialogDismissButton';
 
 export type ProjectTypeRecord = {
   id: string;
@@ -669,7 +670,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     event.preventDefault();
     focusable[nextIndex].focus();
   }}>
-    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy} onClick={close}>Close</button></div></header>
+    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton ref={first} label="Close Project Types" disabled={busy} onClick={close}/></div></header>
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
