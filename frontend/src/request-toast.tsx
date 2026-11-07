@@ -5,10 +5,6 @@ import { providerInterruptionCopy } from './provider-usage-guidance';
 
 const toastStore = new RequestToastStore();
 
-// Temporary UI inspection aid; remove before merging the icon-refactor branch.
-if (import.meta.env.DEV) {
-  toastStore.add('UI TEST TOAST: This is a contrived error for inspecting the upper-right dismiss X. No request failed.');
-}
 
 const FETCH_UNREACHABLE_HINT = 'The request could not reach the server. In production, the SIGMA backend may not be running or may be unreachable. Check the backend service and its logs; a network interruption can also cause this error.';
 
