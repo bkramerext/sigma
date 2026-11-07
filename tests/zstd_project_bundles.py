@@ -77,9 +77,9 @@ def main() -> None:
     }
     text_export = portable_bundle(text_members)
     assert text_export["files"]["evidence/unfinished.json"][ENCODING] == "text"
-    assert _decode(text_export)["evidence/unfinished.json"] == text_members[
-        "evidence/unfinished.json"
-    ]
+    assert (
+        _decode(text_export)["evidence/unfinished.json"] == text_members["evidence/unfinished.json"]
+    )
     old_json = {
         "format": "sigma.project.bundle",
         "version": 2,
