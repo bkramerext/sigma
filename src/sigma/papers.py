@@ -3282,7 +3282,13 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 set(progress_state)
                 - (
                     required_progress_keys
-                    | {"failure_reason", "detail", "sections_total", "last_progress_at", "output_delta_count"}
+                    | {
+                        "failure_reason",
+                        "detail",
+                        "sections_total",
+                        "last_progress_at",
+                        "output_delta_count",
+                    }
                 )
             )
             or (
@@ -6693,20 +6699,27 @@ async def _generate_long_draft(
             )
             output_delta_events = 0
 
-            async def observe_section_output() -> None:
+            async def observe_section_output(
+                *,
+                section: int | None = section_number,
+                attempt: int = attempt_number,
+                started_at: float = started,
+                logger: logging.Logger = log,
+            ) -> None:
                 nonlocal output_delta_events
                 output_delta_events += 1
                 if output_delta_events == 1 or output_delta_events % 1000 == 0:
-                    log.info(
+                    logger.info(
                         "paper.provider_output project_id=%s section=%s attempt=%d "
                         "delta_events=%d elapsed_s=%.1f",
                         project_id or "unknown",
-                        section_number,
-                        attempt_number,
+                        section,
+                        attempt,
                         output_delta_events,
-                        monotonic() - started,
+                        monotonic() - started_at,
                     )
-                await section_output_observed(section_number)
+                if type(section) is int:
+                    await section_output_observed(section)
 
             log.info(
                 "paper.provider_attempt_started project_id=%s schema=%s section=%s "
@@ -6718,7 +6731,7 @@ async def _generate_long_draft(
                 calls,
                 input_bytes,
                 len(instructions),
-                config["reasoning_effort"],
+                str(config.get("reasoning_effort", "unspecified")),
             )
             try:
                 async with asyncio.timeout(remaining):
@@ -8581,8 +8594,11 @@ async def _generate_impl(
             last_output_write = monotonic()
             now = _now()
             updated = {
-                **active, "stage": stage, "updated_at": now,
-                "last_progress_at": now, "output_delta_count": output_delta_count,
+                **active,
+                "stage": stage,
+                "updated_at": now,
+                "last_progress_at": now,
+                "output_delta_count": output_delta_count,
             }
             if active.get("stage") == "retry":
                 updated["current"] = (

@@ -346,7 +346,6 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
     assert uncertain_state["plan"]
 
 
-
 def test_long_paper_section_retries_share_one_hour_budget() -> None:
     """A slow failed call cannot silently earn two more one-hour attempts."""
     package, plan = fast_package(section_count=2)
@@ -386,6 +385,7 @@ def test_long_paper_section_retries_share_one_hour_budget() -> None:
     assert "Editorial notice" in draft.sections[0].paragraphs[0]
     assert draft.sections[1].paragraphs == ["Saved section 2."]
     assert state["provider_calls_total"] == 3
+
 
 def test_transient_paper_failures_keep_other_sections_and_publish_labeled_fallback() -> None:
     """Exhausted retries preserve authored sections and publish a visible gap."""
