@@ -406,7 +406,9 @@ def main() -> None:
                         }
                     ],
                 }
-                tex_bytes = b"\\\\documentclass{article}\\n\\\\begin{document}Proof\\\\end{document}\\n"
+                tex_bytes = (
+                    b"\\\\documentclass{article}\\n\\\\begin{document}Proof\\\\end{document}\\n"
+                )
                 paper["paper_version"] = 1
                 paper["tex_sha256"] = hashlib.sha256(tex_bytes).hexdigest()
                 paper["tex_size_bytes"] = len(tex_bytes)
@@ -559,7 +561,10 @@ def main() -> None:
                 (frozen_dir / f"{legacy_digest}.json.zlib").write_bytes(
                     zlib.compress(legacy_snapshot_bytes)
                 )
-                assert client.post("/api/projects/open", json={"path": str(legacy_path)}).status_code == 200
+                assert (
+                    client.post("/api/projects/open", json={"path": str(legacy_path)}).status_code
+                    == 200
+                )
                 legacy_bundle = client.get(
                     "/api/projects/export", params={"path": str(legacy_path)}
                 )
@@ -575,10 +580,15 @@ def main() -> None:
                     legacy_paper_id
                 }
                 assert papers.get_pdf(imported_legacy_path, legacy_paper_id) == legacy_pdf
-                assert papers.paper_tex(imported_legacy_path, legacy_paper_id).encode() == legacy_tex
-                assert papers.get_paper(imported_legacy_path, legacy_paper_id)["snapshot"][
-                    "project_id"
-                ] == legacy_imported.json()["project"]["id"]
+                assert (
+                    papers.paper_tex(imported_legacy_path, legacy_paper_id).encode() == legacy_tex
+                )
+                assert (
+                    papers.get_paper(imported_legacy_path, legacy_paper_id)["snapshot"][
+                        "project_id"
+                    ]
+                    == legacy_imported.json()["project"]["id"]
+                )
                 assert (legacy_papers_dir / f"{legacy_paper_id}.pdf").read_bytes() == legacy_pdf
                 assert (legacy_papers_dir / f"{legacy_paper_id}.tex").read_bytes() == legacy_tex
                 recent = client.get("/api/projects/recent")
