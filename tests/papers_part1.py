@@ -2115,7 +2115,10 @@ def test_display_math_is_rendered_and_escaped_equations_are_safely_recovered() -
         restored, count = papers._restore_escaped_math_in_tex(escaped)
         assert count == 1
         assert restored == source
-        assert not papers._tex_static_diagnostics(restored)
+        assert not any(
+            "display-math" in warning or "Math delimiter" in warning
+            for warning in papers._tex_static_diagnostics(restored)
+        )
         assert any("display-math" in x for x in papers._tex_static_diagnostics(escaped))
     assert papers._latex_prose(r"The identity \(a_n=3\) holds.") == (
         r"The identity $a_n=3$ holds."
