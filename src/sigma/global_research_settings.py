@@ -4,6 +4,7 @@ Authenticated users are isolated by the same private catalog identity boundary a
 Project Types. Missing files get new-user defaults; legacy project limits are
 intentionally not imported.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,16 +19,23 @@ from sigma.projects import ProjectError
 
 _FILENAME = ".sigma-global-research-settings.json"
 
+
 def _path() -> Path:
     # The project types store already resolves trusted principal identity in
     # hosted, local signed-in, and single-user anonymous deployment modes.
     return project_types._store_path().parent / _FILENAME
 
+
 def _defaults() -> dict[str, Any]:
     from sigma.model_catalog import DEFAULT_MODEL
     from sigma.research_sessions import NEW_DEFAULT_LIMITS
-    return {"limits": dict(NEW_DEFAULT_LIMITS), "ai_model": DEFAULT_MODEL,
-            "reasoning_effort": "high", "show_advanced_outcome_details": False}
+
+    return {
+        "limits": dict(NEW_DEFAULT_LIMITS),
+        "ai_model": DEFAULT_MODEL,
+        "reasoning_effort": "high",
+        "show_advanced_outcome_details": False,
+    }
 
 
 def load_config() -> dict[str, Any]:
@@ -48,13 +56,18 @@ def load_config() -> dict[str, Any]:
         raise ProjectError("Global research settings are invalid") from exc
     finally:
         os.close(fd)
-    if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("limits"), dict):
+    if (
+        not isinstance(raw, dict)
+        or raw.get("version") != 1
+        or not isinstance(raw.get("limits"), dict)
+    ):
         raise ProjectError("Global research settings are invalid")
     if set(raw["limits"]) - set(NEW_DEFAULT_LIMITS):
         raise ProjectError("Global research settings contain unknown limits")
     settings = _defaults()
     settings["limits"] = _validate_limits({**NEW_DEFAULT_LIMITS, **raw["limits"]})
     from sigma.model_catalog import validate_pair
+
     model = raw.get("ai_model", settings["ai_model"])
     effort = raw.get("reasoning_effort", settings["reasoning_effort"])
     if type(model) is not str or type(effort) is not str:
@@ -71,14 +84,15 @@ def load_config() -> dict[str, Any]:
     settings["show_advanced_outcome_details"] = advanced
     return settings
 
+
 def load() -> dict[str, Any]:
     return load_config()["limits"]
 
 
 def save_config(raw: dict[str, Any]) -> dict[str, Any]:
+    from sigma.model_catalog import validate_pair
     from sigma.research_sessions import NEW_DEFAULT_LIMITS, _validate_limits
 
-    from sigma.model_catalog import validate_pair
     current = load_config()
     if "limits" in raw:
         current["limits"] = _validate_limits({**NEW_DEFAULT_LIMITS, **raw["limits"]})
