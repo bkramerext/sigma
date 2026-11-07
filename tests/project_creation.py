@@ -196,7 +196,7 @@ def main() -> None:
                 assert "attachment" in downloaded.headers["content-disposition"]
                 portable = downloaded.json()
                 assert portable["format"] == "sigma.project.bundle"
-                assert portable["version"] == 2
+                assert portable["version"] == 3
                 # Both the canonical export route and the legacy download
                 # alias must return one complete, importable file bundle.
                 legacy_download = client.get(
