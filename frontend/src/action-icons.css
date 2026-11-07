@@ -196,3 +196,121 @@
 .workspace-page .project-pane-actions .text-view-icon.project-qa-button {
   font-size: 15.3px;
 }
+
+
+/*
+ * Dismissal for dialogs and confirmation popovers.
+ * Same 24px-viewBox X shape, 28px clickable target and copper hover as Session remove.
+ * The button keeps the old callback; only its location and affordance change.
+ */
+.sigma-dialog-dismiss.sigma-dialog-dismiss {
+  position: absolute !important;
+  z-index: 5;
+  inset: 10px 10px auto auto;
+  display: inline-flex !important;
+  flex: 0 0 28px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  margin: 0 !important;
+  padding: 4px !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--sigma-copper-foreground) !important;
+  font-size: 0 !important;
+  line-height: 1 !important;
+  text-decoration: none !important;
+  cursor: pointer;
+}
+.sigma-dialog-dismiss.sigma-dialog-dismiss svg {
+  display: block !important;
+  flex: 0 0 20px;
+  width: 20px !important;
+  height: 20px !important;
+}
+.sigma-dialog-dismiss.sigma-dialog-dismiss:hover:not(:disabled) {
+  background: #3b3029 !important;
+  border-color: #ac7054 !important;
+  color: var(--sigma-copper-foreground) !important;
+  text-decoration: none !important;
+}
+.sigma-dialog-dismiss.sigma-dialog-dismiss:focus-visible {
+  outline: 2px solid #edbc77 !important;
+  outline-offset: 2px;
+}
+.sigma-dialog-dismiss.sigma-dialog-dismiss:disabled {
+  opacity: .5 !important;
+  cursor: default !important;
+}
+
+/* Anchor X at the upper-right of each modal's header, not the action row. */
+:is(.project-settings-dialog .settings-header,
+    .project-entry-dialog .entry-dialog-header,
+    .paper-includes-dialog-heading,
+    .project-types-dialog > header,
+    .admin-dialog-heading,
+    .privacy-notice-heading,
+    .sigma-dialog-heading) {
+  position: relative;
+  padding-right: 51px;
+}
+.project-settings-dialog .settings-header .settings-actions,
+.project-entry-dialog .entry-dialog-header .entry-import,
+.project-types-dialog > header .project-types-header-actions {
+  position: static;
+}
+.project-types-dialog > header .sigma-dialog-dismiss,
+.project-settings-dialog .settings-header .sigma-dialog-dismiss,
+.project-entry-dialog .entry-dialog-header .sigma-dialog-dismiss,
+.admin-dialog-heading .sigma-dialog-dismiss,
+.privacy-notice-heading .sigma-dialog-dismiss,
+.sigma-dialog-heading .sigma-dialog-dismiss,
+.paper-includes-dialog-heading .sigma-dialog-dismiss {
+  top: 9px;
+  right: 11px;
+}
+
+/* These confirmation prompts are not full modals. Anchor to the popup itself. */
+:is(.research-stop-confirm,
+    .saved-paper-confirm,
+    .recent-remove-confirm,
+    .project-model-confirm-popover,
+    .admin-remove-confirm,
+    .resume-authorization-popover):has(.sigma-dialog-dismiss) {
+  position: relative;
+  padding-right: 44px;
+}
+:is(.research-stop-confirm,
+    .saved-paper-confirm,
+    .recent-remove-confirm,
+    .project-model-confirm-popover,
+    .admin-remove-confirm,
+    .resume-authorization-popover) .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 6px;
+  right: 6px;
+}
+
+/* Position X inside title-row confirmation, preserving normal title controls. */
+.workspace-page .papers-heading-actions:has(> .sigma-dialog-dismiss) {
+  position: relative;
+  padding-right: 34px;
+}
+.workspace-page .papers-heading-actions > .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 3px;
+  right: 0;
+}
+.workspace-page .research-qa-dialog p.error:has(> .sigma-dialog-dismiss) {
+  position: relative;
+  padding-right: 46px;
+}
+.workspace-page .research-qa-dialog p.error > .sigma-dialog-dismiss {
+  top: 5px;
+  right: 5px;
+}
