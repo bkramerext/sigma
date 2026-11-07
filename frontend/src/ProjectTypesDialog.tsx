@@ -15,7 +15,7 @@ export type ProjectTypeRecord = {
   behavior?: Record<string, boolean>;
 };
 
-type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode; initialOpenTypeId?: string | null };
+type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode; initialOpenTypeId?: string | null; embedded?: boolean };
 type Reference = { name: string; url: string };
 type ReferenceField = 'research_standards_references' | 'publication_standards_references';
 type ReferenceFields = Pick<ProjectTypeRecord, ReferenceField>;
@@ -156,7 +156,7 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   </div>;
 }
 
-export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null }: Props) {
+export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null, embedded = false }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const explicitlyClosing = useRef(false);
   const first = useRef<HTMLButtonElement>(null);
@@ -195,7 +195,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   }
   useEffect(() => {
     const element = dialog.current;
-    if (!element) return;
+    if (!element || embedded) return;
     if (!element.open) element.showModal();
     first.current?.focus();
     // Capture Escape before the browser's native dialog close behavior,
@@ -478,7 +478,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       await load();
       window.dispatchEvent(new Event('sigma-project-types-updated'));
       setAddingId(null);
-      close();
+      if (!embedded) close();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
@@ -644,6 +644,28 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     [...item.research_standards_references, ...item.publication_standards_references].some(ref =>
       !!referenceUrlError(ref.url) || urlValidation[ref.url] === 'invalid')
   );
+  const content = <>
+    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>{!embedded && <DialogDismissButton ref={first} label="Close Project Types" disabled={busy} onClick={close}/>}</div></header>
+    {error && <p role="alert" className="pt-dialog-error">{error}</p>}
+    <div className="project-types-body">
+      <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
+      <section className="pt-common-references">
+        <h4>Research standards references for all project types</h4>
+        {listEditor('common', 'research_standards_references', [
+          ...(commonReferences?.research_standards_references ?? []),
+          ...commonCustomReferences.research_standards_references,
+        ], false, commonReferences?.research_standards_references.length ?? 0)}
+        <h4>Publication standards references for all project types</h4>
+        {listEditor('common', 'publication_standards_references', [
+          ...(commonReferences?.publication_standards_references ?? []),
+          ...commonCustomReferences.publication_standards_references,
+        ], false, commonReferences?.publication_standards_references.length ?? 0)}
+      </section>
+    </div>
+  </>;
+  if (embedded) return <div className="project-types-dialog project-types-embedded" aria-label="Project Types settings">{content}</div>;
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title"
     onCancel={event => { event.preventDefault(); }}
     onClose={() => {
@@ -670,24 +692,6 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     event.preventDefault();
     focusable[nextIndex].focus();
   }}>
-    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton ref={first} label="Close Project Types" disabled={busy} onClick={close}/></div></header>
-    {error && <p role="alert" className="pt-dialog-error">{error}</p>}
-    <div className="project-types-body">
-      <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
-      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
-      <section className="pt-common-references">
-        <h4>Research standards references for all project types</h4>
-        {listEditor('common', 'research_standards_references', [
-          ...(commonReferences?.research_standards_references ?? []),
-          ...commonCustomReferences.research_standards_references,
-        ], false, commonReferences?.research_standards_references.length ?? 0)}
-        <h4>Publication standards references for all project types</h4>
-        {listEditor('common', 'publication_standards_references', [
-          ...(commonReferences?.publication_standards_references ?? []),
-          ...commonCustomReferences.publication_standards_references,
-        ], false, commonReferences?.publication_standards_references.length ?? 0)}
-      </section>
-    </div>
+    {content}
   </dialog>;
 }
