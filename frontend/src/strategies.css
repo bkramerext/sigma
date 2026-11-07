@@ -1310,3 +1310,25 @@
 .workspace-page .sessions-pane-heading .section-count { margin-left: 0; flex: 0 0 auto; }
 /* Match compact spacing between session title and first control; avoid oversized icon gaps. */
 .workspace-page .session-summary .session-heading-actions { column-gap: 4px; row-gap: 6px; }
+
+/* Error-card dismiss control: reuse the session-remove X and 28px hit area. */
+.workspace-page .session-notice-header { align-items: flex-start; justify-content: space-between; flex-wrap: nowrap; }
+.workspace-page .session-notice-dismiss,
+.workspace-page .paper-score-error-dismiss {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px;
+  box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px;
+  margin: -5px -3px 0 6px; padding: 4px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; box-shadow: none; color: var(--sigma-copper-foreground);
+  text-decoration: none; cursor: pointer;
+}
+.workspace-page .session-notice-dismiss svg,
+.workspace-page .paper-score-error-dismiss svg { display: block; width: 20px; height: 20px; }
+.workspace-page .session-notice-dismiss:hover:not(:disabled),
+.workspace-page .paper-score-error-dismiss:hover:not(:disabled) {
+  background: #3b3029; border-color: #ac7054; color: var(--sigma-copper-foreground);
+  text-decoration: none;
+}
+.workspace-page .session-notice-dismiss:focus-visible,
+.workspace-page .paper-score-error-dismiss:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+.workspace-page .paper-score-error-card { position: relative; padding-right: 48px; }
+.workspace-page .paper-score-error-dismiss { position: absolute; top: 12px; right: 12px; margin: 0; }
