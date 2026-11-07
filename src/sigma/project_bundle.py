@@ -264,9 +264,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
                 raise BundleError("Invalid project member encoding")
         elif name.endswith(".json"):
             try:
-                data = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode(
-                    "utf-8"
-                )
+                data = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
             except (TypeError, ValueError) as exc:
                 raise BundleError("Invalid JSON project member") from exc
         elif isinstance(value, str):
