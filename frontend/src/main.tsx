@@ -2469,14 +2469,14 @@ function paperActivityLabel(progress: PaperProgress, now: number): string {
   if (!Number.isFinite(timestamp)) return 'Starting…';
   const elapsed = Math.max(0, Math.floor((now - timestamp) / 1000));
   if (elapsed < 60) {
-    const count = progress.output_delta_count;
-    return typeof count === 'number' && count > 0
-      ? `Making progress · ${count.toLocaleString()} text updates`
-      : 'Making progress · Just now';
+    const recent = elapsed < 5 ? 'Just now' : `${elapsed} sec ago`;
+    return (progress.output_delta_count ?? 0) > 0
+      ? `Receiving text · ${recent}`
+      : `Writing in progress · ${recent}`;
   }
   const minutes = Math.floor(elapsed / 60);
-  if (minutes >= 5) return `No new progress for ${minutes} min`;
-  return `Last progress · ${minutes} min ago`;
+  if (minutes >= 5) return `No recent writing activity for ${minutes} min`;
+  return `Last writing activity · ${minutes} min ago`;
 }
 
 function PaperActivityLine({ progress }: { progress: PaperProgress }) {
