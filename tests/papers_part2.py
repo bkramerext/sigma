@@ -402,7 +402,7 @@ def test_long_paper_section_retries_share_one_hour_budget() -> None:
 
 
 def test_transient_paper_failures_preserve_authored_sections_and_block_publication() -> None:
-    """Exhausted retries must not turn missing analysis into a successful paper."""
+    """A failed in-flight section must not be replayed or published as prose."""
     package, plan = fast_package(section_count=5)
     state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
     attempts: dict[int, int] = {}
@@ -447,7 +447,7 @@ def test_transient_paper_failures_preserve_authored_sections_and_block_publicati
                 raise AssertionError("Failed section must block publication")
 
     asyncio.run(generate())
-    assert attempts[1] == 3
+    assert attempts[1] == 1
     assert "1" not in state["section_drafts"]
     assert all(
         item["paragraphs"] == [f"Saved section {number}."]
@@ -458,7 +458,7 @@ def test_transient_paper_failures_preserve_authored_sections_and_block_publicati
         for value in state["section_drafts"].values()
         for paragraph in value["paragraphs"]
     )
-    assert any("Retrying section 1 (attempt 3 of 3)." in d for d in retry_details)
+    assert retry_details == []
     calls_before = state["provider_calls"]
 
     async def no_repeat(*_args, **_kwargs):

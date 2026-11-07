@@ -358,10 +358,10 @@ class PaperConnectionFailure(ProjectError):
 
 
 class PaperTransientFailure(ProjectError):
-    """A transient provider failure eligible for bounded, accounted replay.
+    """The provider request may have consumed work or allowance.
 
-    The prior attempt may have consumed model allowance. Retried responses
-    only commit once a complete validated paper stage has been received.
+    Never automatically replay a partially delivered or incomplete request.
+    Only PaperConnectionFailure is known to precede provider dispatch.
     """
 
 
@@ -6890,6 +6890,11 @@ async def _generate_long_draft(
                     monotonic() - started,
                     type(exc).__name__,
                 )
+                # Late provider failures may follow substantial model work and
+                # allowance consumption. A repeat is not a harmless retry.
+                # Only an undelivered connection attempt may be replayed.
+                if isinstance(exc, PaperTransientFailure):
+                    raise
                 if (
                     attempt_number == maximum
                     or monotonic() + 0.4 * attempt_number >= stage_deadline
