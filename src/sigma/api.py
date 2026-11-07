@@ -1905,15 +1905,21 @@ def create_project_view(body: CreateProjectRequest):
         and project_types.get_type(body.investigation_type) is None
     ):
         raise ProjectError("Choose a currently available project type")
+    # Only type and difficulty are project configuration. Legacy model/Outcome
+    # columns remain for schema compatibility but are never taken from imports
+    # or from the previous project's settings when creating new projects.
+    from sigma import global_research_settings
+
+    user = global_research_settings.load_config()
     return asdict(
         create_project(
             body.title,
             body.problem,
             body.investigation_type,
-            body.ai_model,
-            body.reasoning_effort,
+            user["ai_model"],
+            user["reasoning_effort"],
             body.difficulty,
-            body.show_advanced_outcome_details,
+            user["show_advanced_outcome_details"],
         )
     )
 
