@@ -4,7 +4,7 @@
 }
 .home-page .about-provenance p { margin: 0 0 12px; }
 .home-page .about-provenance p:last-child { margin-bottom: 0; }
-.home-page .about-provenance strong { color: #f1cd9f; }
+.home-page .about-provenance strong { color: var(--sigma-copper-foreground); }
 .home-page .about-provenance-comparison {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
