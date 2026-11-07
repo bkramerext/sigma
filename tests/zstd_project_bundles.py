@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from sigma.project_bundle import (
     BundleError,
@@ -19,6 +20,7 @@ from sigma.project_bundle import (
     stored_bundle,
     write_file,
 )
+from sigma import project_bundle, zstd_codec
 from sigma.zstd_codec import MAX_MEMBER_BYTES, ZstdCodecError, compress, decompress
 
 ENCODING = "$sigma_bundle_encoding"
@@ -92,6 +94,22 @@ def main() -> None:
         ENCODING: "custom-field",
         "data": "ordinary JSON",
     }
+
+    # Zstandard can expand incompressible inputs. A member at the raw
+    # limit still needs to survive its slightly larger compressed frame.
+    with (
+        patch.object(project_bundle, "MAX_MEMBER_BYTES", 128),
+        patch.object(project_bundle, "MAX_COMPRESSED_MEMBER_BYTES", 2048),
+        patch.object(zstd_codec, "MAX_MEMBER_BYTES", 128),
+        patch.object(zstd_codec, "MAX_COMPRESSED_MEMBER_BYTES", 2048),
+    ):
+        incompressible = os.urandom(128)
+        assert len(compress(incompressible)) > len(incompressible)
+        boundary = {
+            "project.json": b'{"schema_version": 11}',
+            "evidence/incompressible.bin": incompressible,
+        }
+        assert _decode(stored_bundle(boundary)) == boundary
 
     with TemporaryDirectory() as directory:
         root = Path(directory)
