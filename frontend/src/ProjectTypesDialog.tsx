@@ -166,6 +166,7 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
 
 export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null, embedded = false, onSaveStateChange, saveHandleRef }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const embeddedRoot = useRef<HTMLDivElement>(null);
   const explicitlyClosing = useRef(false);
   const first = useRef<HTMLButtonElement>(null);
   const initialCustomIds = useRef<string[]>([]);
@@ -256,6 +257,23 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       ?.scrollIntoView({ block: 'center', behavior: 'auto' }));
     return () => cancelAnimationFrame(frame);
   }, [initialOpenTypeId, revision]);
+  // Opening a late row must bring its newly expanded contents into the scroll viewport.
+  useEffect(() => {
+    if (!embedded || !open) return;
+    const frame = requestAnimationFrame(() => {
+      const container = embeddedRoot.current?.querySelector<HTMLElement>('.project-types-body');
+      const card = Array.from(container?.querySelectorAll<HTMLElement>('[data-project-type-id]') ?? [])
+        .find(node => node.dataset.projectTypeId === open);
+      if (container && card) {
+        const viewport = container.getBoundingClientRect();
+        const bounds = card.getBoundingClientRect();
+        if (bounds.bottom > viewport.bottom || bounds.top < viewport.top) {
+          container.scrollTop += bounds.top - viewport.top - 8;
+        }
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [embedded, open]);
   const sortedBuiltins = useMemo(() => [...builtins].sort((a, b) => a.name.localeCompare(b.name)), [builtins]);
   const sortedDrafts = useMemo(() => [...drafts].sort((a, b) => a.name.localeCompare(b.name)), [drafts]);
   function edit(id: string, patch: Partial<ProjectTypeRecord>) {
@@ -599,7 +617,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         </div></td></tr>;
       })}
       {!readonly && references.length - immutableCount < 100 &&
-        !references.some((reference, index) => index >= immutableCount && !reference.url.trim()) &&
+        !references.some((reference, index) => index >= immutableCount &&
+          (!reference.url.trim() || (editingReferences.has(`${owner}:${field}:${index}`) &&
+            referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null))) &&
         <tr className="pt-reference-new-row"><td>
         <button type="button" disabled={busy}
           onClick={() => {
@@ -633,6 +653,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     || JSON.stringify(referencePreferences) !== JSON.stringify(savedReferencePreferences)
     || JSON.stringify(commonCustomReferences) !== JSON.stringify(savedCommonCustomReferences)
     || JSON.stringify(builtinCustomReferences) !== JSON.stringify(savedBuiltinCustomReferences));
+  const pendingNewReference = Array.from(editingReferences)
+    .some(key => referenceEditOrigins.current.get(key) === null);
   const invalidBuiltinReferences = Object.entries(builtinCustomReferences).some(([owner, fields]) => {
     const base = builtins.find(item => item.id === owner);
     if (!base) return true;
@@ -643,7 +665,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
     });
   });
-  const invalidDraft = invalidBuiltinReferences || Object.entries(commonCustomReferences).some(([field, references]) => {
+  const invalidDraft = pendingNewReference || invalidBuiltinReferences || Object.entries(commonCustomReferences).some(([field, references]) => {
     const urls = [...(commonReferences?.[field as ReferenceField] ?? []), ...references].map(ref => preferenceUrl(ref.url));
     return references.length > 100 || new Set(urls.filter(Boolean)).size !== urls.filter(Boolean).length ||
       references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
@@ -684,7 +706,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       </section>
     </div>
   </>;
-  if (embedded) return <div className="project-types-dialog project-types-embedded" aria-label="Project Types settings">{content}</div>;
+  if (embedded) return <div ref={embeddedRoot} className="project-types-dialog project-types-embedded" aria-label="Project Types settings">{content}</div>;
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title"
     onCancel={event => { event.preventDefault(); }}
     onClose={() => {
