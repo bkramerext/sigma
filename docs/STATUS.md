@@ -1,6 +1,62 @@
 # SIGMA status
 
-## 2026-11-06 — Issue #590 release IAM setup; v0.2.1 deployment held
+## 2026-11-06 — SIGMA v0.2.1 production deployment complete
+
+Production now runs v0.2.1 from the exact approved commit
+`5435e14eeea159ab207ad50016577b9a9542ae59`. The guarded helper built the
+backend and frontend from that SHA and recorded the immutable images; no
+excluded PRs or later `main` changes were included. Exact-SHA Ruff, SIGMA
+verification, and browser CI were already green before cutover.
+
+The fresh application-consistent recovery snapshot
+`sigma-state-v021-pre-20261107-0658` is READY and retained. A no-public-IP,
+no-service-account recovery VM mounted a clone read-only with
+`ro,noload,nosuid,nodev,noexec,norecovery`; the read-only verifier passed three
+SQLite integrity checks, three identity/workspace mappings, 17 project
+records, 42 research artifacts, one TeX/PDF paper pair with matching hash and
+size, ten terminal job-history rows, and 46 accounting rows ($5.938237
+recorded/reserved, including 15 reserved or unknown outcomes). The verifier
+was narrowly corrected to recognize and integrity-check the known hidden
+publication-compilation cache rather than misclassify it as a paper record.
+The temporary recovery VM and clone disk were removed; the snapshot remains.
+
+The release helper completed at 2026-11-07 07:09 UTC. Backend image
+`sha256:1ab6ae4c60f8c320bb69c1cc0135a60b994084befa7dc0c440701a8fa2cd3a88` and
+frontend image
+`sha256:4615bc091f737620956a5da1bedc3f96ced3a38c4d155e513a126b670f1f09e5`
+both carry the approved source SHA. Production systemd and all three
+containers are healthy; the edge image remains
+`sha256:cf1bd22f2415bc99b785ece1df2c49d32985ac4ac42d84df335be17350593693`.
+The persistent state UUID and mount options are unchanged. Maintenance is off.
+The observed maintenance/cutover window was approximately 20 seconds
+(07:08:49–07:09:09 UTC); public HTTPS returned 200 after cutover, hosted
+cloud-auth status returned 200/ready, and unauthenticated `/api/health`
+returned the expected 401. Headless Chrome reported
+`Version 0.2.1 · Build 5435e14`, with no page errors or write requests. No
+paid inference was run. Full authenticated login, import/export, email, and
+research workflows were not exercised. Exact billed recovery-drill spend was
+not independently queried; the bounded resource plan stayed within the
+documented $25 incremental ceiling.
+
+The role-separated release identity could not fetch instance metadata needed
+by `gcloud compute ssh`, and direct SSH timed out; the already-authorized
+project admin used IAP to run the guarded helper. The release IAM identities
+were not broadened. See the operations and deployment runbooks for detailed
+evidence and rollback notes.
+
+PR [#589](https://github.com/bkramerext/sigma/pull/589) fixed the local scored
+sample migration test path and merged as
+`994f714f299cb380e92f27753c4da8516e319d10`. Exact-merge Actions passed
+[SIGMA verification](https://github.com/bkramerext/sigma/actions/runs/42242564357),
+[browser verification](https://github.com/bkramerext/sigma/actions/runs/42242564360),
+and [Ruff](https://github.com/bkramerext/sigma/actions/runs/42242564407).
+
+Issue #590 established keyless, separate `sigma-release-operator` and
+`sigma-release-ssh` identities. Effective permissions and least-privilege
+role boundaries are documented in the
+[operations runbook](OPERATION_RUNBOOK.md#sigma-keyless-release-identities-2026-11-06-issue-590).
+
+## SIGMA v0.2.0 production deployment (2026-11-04 PDT)
 
 PR [#589](https://github.com/bkramerext/sigma/pull/589) fixed the local scored
 sample migration test path and merged as
