@@ -7,6 +7,8 @@ import hashlib
 import json
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -15,11 +17,24 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import research_sessions as fixture
 
-from sigma import research_reference_compiler, research_sessions
+from sigma import research_reference_compiler, research_sessions, session_log
 from sigma.openai_connection import AuthContext
 from sigma.project_types import builtin_types, curated_common_references
 from sigma.projects import ProjectError
 from sigma.research_method_sources import retrieval_readiness_errors
+
+
+@contextmanager
+def temporary_project_directory() -> Iterator[str]:
+    """Drain async session-log file writes before deleting each test workspace."""
+    with TemporaryDirectory() as tmp:
+        try:
+            yield tmp
+        finally:
+            # Awaiting the research task alone is not enough: its log writer
+            # runs on a separate daemon thread and can recreate directories
+            # while TemporaryDirectory is removing them.
+            session_log.flush()
 
 
 def source(title: str, *, status: str = "retrieved", reason: str | None = None) -> dict:
@@ -68,7 +83,7 @@ def verify_compiler_receives_verified_excerpts() -> None:
 
 
 async def verify_provider_free_admission() -> None:
-    with TemporaryDirectory() as tmp:
+    with temporary_project_directory() as tmp:
         path = Path(tmp) / "method-readiness.sigma"
         view, strategy, fixture_credential, config = await fixture.setup(path)
         credential = AuthContext(
@@ -259,7 +274,7 @@ async def verify_empty_and_single_reference_sessions() -> None:
         ([source("Only-selected")], "true", "pending", True),
         ([source("Only-selected")], "false", "disabled", False),
     ):
-        with TemporaryDirectory() as tmp:
+        with temporary_project_directory() as tmp:
             path = Path(tmp) / "optional-methods.sigma"
             view, strategy, fixture_credential, config = await fixture.setup(path)
             credential = AuthContext(
@@ -341,7 +356,7 @@ async def verify_unavailable_reference_sessions() -> None:
         ),
     )
     for label, sources, expected_stage, expected_ids in cases:
-        with TemporaryDirectory() as tmp:
+        with temporary_project_directory() as tmp:
             path = Path(tmp) / f"{label}.sigma"
             view, strategy, fixture_credential, config = await fixture.setup(path)
             credential = AuthContext(
