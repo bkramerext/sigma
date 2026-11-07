@@ -56,8 +56,11 @@ def _files(directory: Path) -> dict[str, bytes]:
                 raise BundleError("Symbolic links are not allowed in project storage")
         for name in files:
             child = Path(root) / name
-            if not stat.S_ISREG(child.lstat().st_mode):
+            info = child.lstat()
+            if not stat.S_ISREG(info.st_mode):
                 raise BundleError("Only regular project files can be bundled")
+            if info.st_size > MAX_MEMBER_BYTES or total_size + info.st_size > MAX_BUNDLE_BYTES:
+                raise BundleError("Project bundle exceeds allowed member or total size")
             relative = child.relative_to(directory).as_posix()
             data = child.read_bytes()
             total_size += len(data)
