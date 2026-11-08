@@ -242,7 +242,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     // without swallowing inline editor key handlers.
     const preserveModal = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && element.open && !explicitlyClosing.current) {
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest('input, textarea, [role="combobox"], [role="listbox"]')) return;
         event.preventDefault();
+        if (!busy) close();
       }
     };
     document.addEventListener('keydown', preserveModal, true);
@@ -721,7 +724,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" title="New project type"><span className="pt-circled-plus" aria-hidden="true">+</span></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <h4>Research standards references for all project types</h4>
@@ -739,7 +742,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   </>;
   if (embedded) return <div ref={embeddedRoot} className="project-types-dialog project-types-embedded" aria-label="Project Types settings">{content}</div>;
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title"
-    onCancel={event => { event.preventDefault(); }}
+    onCancel={event => { event.preventDefault(); if (!busy) close(); }}
     onClose={() => {
       // Some browsers can still dispatch a native close despite a cancelled
       // Escape. Only Close/Save may dismiss this dialog. Restore modal status
@@ -749,7 +752,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       }
     }}
     onKeyDown={event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!busy) close(); }
     }}
     onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
