@@ -24,6 +24,53 @@ an alternate routine-release checklist.
 
 ## SIGMA v0.3.0 — Red-owned deployment and current IAM blocker
 
+### Operator funding constraint — no additional recovery infrastructure
+
+**2026-11-08: The operator explicitly declined a temporary recovery VM,
+recovery clone disk, and new snapshot/storage.** This supersedes the
+previous $25 allowance for the v0.3.0 recovery drill. **There is no
+authorization to provision or retain any new billable cloud resource**
+for this release, regardless of a modeled cost below $25.
+
+- **Do not execute the new snapshot/clone/recovery-VM steps 3–6 below**,
+  even if IAM, quotas, billing evidence, and a future source SHA all pass.
+  Those steps are the standard path for releases **when separately
+  authorized**, not permission to spend. Do not create a smaller or
+  cheaper substitute without explicit approval.
+- Do not delete or modify existing production snapshots, disks, or
+  resources to reduce spend without a separate inventory, recovery
+  analysis, and explicit approval. Existing VM and snapshot storage may
+  continue generating normal charges; the new constraint concerns
+  **additional infrastructure**, not a verified $0 cloud bill.
+- Red may inspect **existing** snapshots, backup arrangements, disk
+  capacity, and restore evidence read-only, and propose a genuinely
+  no-new-cloud-infrastructure recovery method using already-authorized
+  facilities. Never copy private user data to personal devices,
+  external storage, or new services without approval and a reviewed
+  confidentiality/integrity plan.
+- The old v0.2.2 snapshot is point-in-time historical protection; it
+  **does not** establish recoverability of post-snapshot user writes.
+  An untested in-place copy to the same production disk is not an
+  independent recovery path. Do not assert `--backup-verified` based
+  solely on an old snapshot, a model estimate, or a live verifier.
+- A usable alternative must provide an application-consistent and
+  **restorably verified** protection path for current user data,
+  with independent failure isolation, provenance, retention and
+  recovery instructions. Merely choosing `--backup-verified` to
+  bypass a failed gate is prohibited.
+
+**Until the operator explicitly approves a safe no-new-infrastructure
+recovery design and the current source SHA, deployment is HALTED.**
+Red can continue source-independent *read-only* access, billing, and
+inventory checks but cannot stop writers, alter maintenance, create
+backups/snapshots, build and cut over, or run restore tests against
+production state. If no acceptable alternative exists, preserve
+healthy v0.2.2 and report `DEPLOYMENT BLOCKED — RECOVERY COST POLICY`.
+Do not interpret earlier deployment authorization as overriding this
+newer cost constraint.
+
+
+
 **Status (2026-11-08): HELD for current billing evidence and a new release
 source SHA.** Production remains v0.2.2 at
 `469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. The original recovery
@@ -202,7 +249,7 @@ this is not a request to grant it now. Record the date and redacted
 evidence. If no authorized billing viewer can furnish it,
 report **READINESS BLOCKED — BILLING_EVIDENCE**, not READY FOR SHA.
 
-**Cost bound:** The incremental recovery scenario is modeled as
+**Historical estimate — NOT authorized to spend:** The earlier incremental recovery scenario was modeled as
 $16.11, or $21.11 with contingency, including an e2-standard-2 VM
 for at most 24h, up to 100-GiB boot and 30-GiB clone disks,
 and a 30-GiB standard snapshot retained up to 30 days. No
