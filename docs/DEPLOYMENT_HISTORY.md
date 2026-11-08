@@ -1,0 +1,448 @@
+# SIGMA Deployment History (archived)
+
+The material below is preserved from the former combined deployment runbook
+for traceability. It contains version-specific authorization records, previous
+release controls, schema-specific compatibility analysis, past outcomes,
+and backend operational notes. **It is not a current production deployment
+procedure and does not authorize a release.** Use
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md) for the current routine
+procedure and [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md) for live host and
+incident guidance.
+
+## Authorization record — SIGMA v0.1.5 / issue #337
+
+| Authorization | Record | Scope |
+| --- | --- | --- |
+| Stage A release preparation | The operator approved Stage A; PR [#338](https://github.com/bkramerext/sigma/pull/338) was merged at `bc275cb214d1fbec0fd40334593d50d82263c07e`. | Prepare the v0.1.5 release candidate and its handoff. The release tag was not authorized by that approval. |
+| Self-review and self-merge | The operator explicitly authorized the agent to self-review and merge its own PRs. PRs [#340](https://github.com/bkramerext/sigma/pull/340) and [#341](https://github.com/bkramerext/sigma/pull/341) were reviewed against their diffs and verification evidence, then merged at `f4ff07a1b1a5e82915990adee8dea9466702d5bd` and `aa23f4b393f4ef657471705f467f9beecbb0689a`. | Repository PR review and merge only. Each PR still requires a clean diff, exact-head CI success, and merge against the expected head SHA. |
+| Stage B production release | After initially withholding cutover authorization, the operator directed “you need to deploy” and then explicitly confirmed “yes, i authorize.” | Authorizes proceeding with the v0.1.5 production release process, subject to the preservation, recovery, exact-SHA, health, and no-paid-provider constraints below. It does not make an unverified rollback assertion true. |
+
+The release authorization does not approve unrelated infrastructure changes,
+recurring backup configuration, IAM broadening, deletion of production data or
+recovery points, or paid provider inference. It includes cleanup of temporary
+VMs and clone disks created solely for the authorized restore drill, while
+retaining the approved recovery snapshot. Keep the operator's constraints:
+preserve identities, projects, research, papers, and spending records; do not
+access the operator's local SIGMA server; do not coordinate directly with
+other Codex workers.
+
+The operator also directed that issues exposed by release work be fixed within
+scope, and that work may be aborted when a failure becomes catastrophic or
+disproportionate. Fix a bounded defect found during preflight or deployment,
+verify the fix, and record the new exact SHA. If the next action risks data
+loss, identity/accounting corruption, credential exposure, unbounded cost, or
+requires an unreviewed destructive migration, stop writers when needed, preserve
+the current disk and evidence, do not bypass a gate, and report the blocker and
+smallest safe recovery path. Resume only after the owner reviews any new scope.
+
+## Release controls
+
+1. Select one full lowercase 40-character release commit SHA. Run CI on that
+   exact SHA and record its successful result. Build from that SHA using
+   `deploy/release_image.py`; verify both `linux/amd64` image revision labels
+   and immutable image IDs. The release builder also passes the full commit as
+   the frontend Docker build argument `SIGMA_BUILD_COMMIT`; Vite displays its
+   seven-character prefix in About. Do not substitute a tag or a moving branch
+   name. Verify the built frontend bundle contains the expected seven-character
+   prefix before deployment.
+2. Before stopping production, verify the actual host checkout, protected
+   `SIGMA_RELEASE`, running image tags/labels, mounted state disk, service
+   health, and the last recovery point. Record observed values and resolve
+   disagreements from host state and timestamped release records.
+3. Use a fresh application-consistent state-disk snapshot and verify it by
+   restoring a clone on an isolated host with no public ingress and no
+   production service account or credentials. Establish the recovery
+   verifier's aggregate thresholds before the drill. Red records the selected
+   maintenance window, required IAM, project quota/billing review, $25 maximum
+   incremental cost, recovery owner, and temporary-resource cleanup plan before
+   creating resources. A production deployment assignment authorizes these
+   routine, bounded release steps without another human approval. Use no public
+   ingress or production service account for recovery resources; retain the
+   recovery snapshot. If billing, quota, IAM, or the $25 ceiling cannot be
+   verified, stop and report the specific gate.
+4. Run the documented host preflight with the explicit repository argument:
+   `sudo /usr/local/libexec/sigma/gce_preflight.py --json --repository /opt/sigma/current`.
+   Run the sandbox runtime check only as an approved exercise because it starts
+   a sandbox execution and writes evidence.
+5. Deploy only through the guarded GCE helper, with the exact selected SHA and
+   required recovery/schema assertions. The guarded command's Boolean
+   assertions are operator attestations, not compatibility tests. The current
+   helper has no `--no-build` option: it checks out the selected SHA, loads that
+   commit's deployment tooling, and builds both images from its Git archive
+   before changing the production release pin or stopping the service. Do not
+   pass an unsupported flag or replace the guarded helper. Verify
+   service/container health, image IDs and labels, public HTTPS,
+   authentication, and persistence without paid provider calls.
+6. Record the actual cutover SHA, image IDs, downtime, health evidence, recovery
+   point, and operator outcome in `OPERATION_RUNBOOK.md` and the committed PR
+   handoff under `messages/`.
+
+## Routine-release autonomy
+
+An explicit assignment to deploy the current `main` authorizes the ordinary
+steps in this runbook. Red owns the maintenance window, exact-SHA CI and image
+checks, isolated restore drill, guarded deployment, smoke tests, temporary
+recovery VM/disk cleanup, and release records. Do not pause for an additional
+human approval when all gates pass. For each recovery drill, use the existing
+READY snapshot where possible, retain it, and keep incremental GCP resource
+costs at or below $25. Verify live billing, required quota, and least-privilege
+access before creating temporary resources. If a gate fails, a resource would
+exceed the ceiling, or a destructive/data-changing action is needed, keep
+production untouched and report the blocker. This standing routine-release
+authorization does not include unrelated infrastructure or IAM changes,
+recurring backup setup, paid inference, or production data restoration.
+
+## Schema 10 recovery rule
+
+The exact v0.1.4 project parser accepts schemas 1–9 and rejects schema 10.
+SIGMA v0.1.5 can write schema 10 when saving strategy provenance. No
+older-binary compatibility bridge has been implemented or demonstrated.
+Therefore:
+
+- Before a schema 10 write, code rollback is allowed only after compatibility
+  is demonstrated for the exact older binary and state.
+- After a schema 10 write, do not restart v0.1.4 against the changed state.
+  Stop writers, preserve the post-release disk and logs, and forward-fix on
+  schema-10-capable code.
+- If pre-release data recovery is necessary, treat it as a separate,
+  explicitly authorized restore incident. Preserve the post-release disk,
+  use the verified pre-release recovery point, and record the data-loss
+  interval. A code rollback is not a data rollback.
+
+## Current evidence
+
+At the time of this record, production was observed on v0.1.4 at
+`6fa626bdfc1f07cb873103dfed2323864d4fb280`. The existing snapshot was stale
+and not restore-tested; the recurring backup timer was inactive. After the
+operator authorized deployment, a fresh application-consistent snapshot
+`sigma-state-v015-pre-20261030-0506` reached `READY` at
+2026-10-29 22:06:32 PDT from source disk `sigma-state`. The service was stopped,
+Compose writers were confirmed stopped, and the mounted disk was synced before
+snapshot creation. SIGMA was restarted; systemd then reported no pending unit
+reload, and the service was active with backend/frontend healthy and edge
+running. The isolated restore drill and target-host image build remain
+incomplete.
+
+The v0.1.5 version-bump source commit is
+`2026f1e5b167ec76289ba2335d369603e4f377ee`. For deployment, select the exact
+post-release operational commit
+`aa23f4b393f4ef657471705f467f9beecbb0689a`, which contains the v0.1.5 source
+and rollback-preflight correction; its post-merge `verify` check succeeded
+[in CI run 41006080748](https://github.com/bkramerext/sigma/actions/runs/41006080748/job/123901170598).
+Build and label the target images from that full SHA. No `v0.1.5` tag has been
+created.
+
+The isolated restore check then completed on a clone of the snapshot, attached
+READ_ONLY to a recovery VM with no public IP and no service account and mounted
+`ro,nosuid,nodev,noexec,norecovery`. The offline verifier passed three SQLite
+integrity checks, 3 identities/mappings, 12 projects, 30 research artifacts,
+zero paper pairs, and 17 accounting call rows, including five reserved or
+unknown outcomes. It also preserved ten terminal historical job rows across
+two removed workspaces; no active jobs or accounting calls referenced those
+workspaces. The verifier change for this history case is under review in
+[PR #343](https://github.com/bkramerext/sigma/pull/343); exact-head CI and merge
+must pass before the updated verifier becomes the maintained procedure. The
+temporary VM and clone disk remain until evidence is recorded and cleanup is
+verified. Preserve the snapshot.
+
+The clone contained 12 saved project records: eleven at schema 8 and one at
+schema 9, with no missing or invalid schema values. These versions are within
+v0.1.4's supported 1–9 range and v0.1.5's 1–10 range. This confirms the
+pre-cutover state is readable by either version; it does not establish that
+v0.1.4 can read a later schema 10 write.
+
+## 2026-10-30 About build SHA spot correction
+
+PR [#344](https://github.com/bkramerext/sigma/pull/344) fixed frontend build
+provenance by passing the full requested commit as `SIGMA_BUILD_COMMIT`; Vite
+embeds its seven-character prefix. PR
+[#345](https://github.com/bkramerext/sigma/pull/345) changed the guarded helper
+to check out and validate candidate tooling before image construction. Both
+PRs were self-reviewed under the operator's standing authorization and passed
+exact-head CI. The final deployed merge commit is
+`83c89f20e19ea87c4a3b4934942d0a78c2019973`.
+
+Production deployment used the candidate helper extracted from that exact
+commit because the previously installed helper did not yet include the
+candidate-tooling ordering fix. The guarded command fetched and verified the
+full SHA, checked out candidate tooling, passed host preflight, built both
+images from the candidate archive, then stopped/restarted the service and
+verified health. The active checkout and protected pin now match the deployed
+SHA. Both release image labels/IDs verified; all three containers are healthy;
+systemd is active with no pending unit reload; `/srv/sigma-state` is mounted.
+Public root and bundle returned HTTP 200, and the bundle contains `83c89f2`.
+The unauthenticated health API returned expected HTTP 401.
+
+This was a build-metadata correction with no backend application-code or state
+schema change. The existing READY snapshot
+`sigma-state-v015-pre-20261030-0506` was retained; no new snapshot or restore
+drill was done. No paid provider call or local SIGMA server request occurred.
+The `v0.1.5` tag was not created.
+
+## Authorization record — SIGMA v0.1.6 release
+
+On 2026-10-30, the operator assigned Red ownership of release preparation,
+local validation, release PR review and merge, GCP deployment, and production
+smoke testing from the latest `main`. The operator explicitly authorized Red to
+review and merge its own release PR. GitHub Actions is unavailable through
+October 31 because of account billing/budget restrictions; the release gate for
+this deployment is one clean `./sigma test` on the exact release candidate,
+release-specific validation, and production deployment/smoke testing. Do not
+modify Actions configuration or wait for Actions. Preserve production identity,
+configuration, persistent projects, research, and accounting; avoid paid AI
+calls, paper-quality work, Round 11, and unrelated product changes.
+
+The release version is v0.1.6, following the deployed v0.1.5. Release source
+must be the tested merged candidate SHA. The existing snapshot
+`sigma-state-v015-pre-20261030-0506` predates the v0.1.5 deployment, so it is
+not by itself a current recovery point for this release. The remaining release
+record must include the fresh recovery point and restore evidence, exact image
+labels/IDs, deployment result, and smoke-test outcome. No v0.1.6 tag is
+authorized by this record.
+
+## v0.2.1 production deployment outcome — 2026-11-06
+
+Issue [#588](https://github.com/bkramerext/sigma/issues/588) was completed for
+the exact approved v0.2.1 commit
+`5435e14eeea159ab207ad50016577b9a9542ae59`. Its Nov 6 scope decision was
+observed: PR #639, PR #641, issue #643, and new Research Ethos work are not in
+the release. Exact-SHA Ruff, SIGMA verification, browser CI, and local
+`./sigma test` passed.
+
+The fresh application-consistent snapshot
+`sigma-state-v021-pre-20261107-0658` reached READY (436,288 stored bytes) and
+remains retained. An isolated no-public-IP, no-service-account VM mounted its
+clone read-only using `ro,noload,nosuid,nodev,noexec,norecovery`. Restore
+verification passed three SQLite integrity checks; three identities and
+workspace mappings; 17 projects; 42 artifacts; one validated TeX/PDF pair; ten
+terminal history rows; and 46 accounting rows, including 15 reserved or
+unknown outcomes ($5.938237 recorded/reserved). The verifier recognizes and
+checks the integrity seal of the known hidden publication compilation cache;
+actual paper records still receive strict identity, TeX, and PDF hash/size
+checks. The temporary VM and clone disk were removed and confirmed absent.
+
+The existing guarded helper was run against the approved SHA with
+`--backup-verified --schema-compatible` and built both images; no `--no-build`
+was used. Backend image ID:
+`sha256:1ab6ae4c60f8c320bb69c1cc0135a60b994084befa7dc0c440701a8fa2cd3a88`;
+frontend image ID:
+`sha256:4615bc091f737620956a5da1bedc3f96ced3a38c4d155e513a126b670f1f09e5`.
+The release record, host checkout, image tags, and source labels match the
+approved SHA. Systemd and all three containers are healthy; the state disk UUID
+and mount options match the runbook; maintenance is off. The cutover window
+was approximately 20 seconds (07:08:49–07:09:09 UTC).
+
+Public HTTPS returned 200, hosted cloud-auth status returned 200/ready, and
+anonymous `/api/health` returned the expected 401. Headless Chrome About showed
+`Version 0.2.1 · Build 5435e14` with no page errors or write requests. No paid
+provider inference was run. Authenticated login, project import/export, actual
+email delivery, saved-paper viewing, and research execution were not exercised.
+The one-off recovery snapshot is retained; the recurring backup timer remains
+absent. See the [operations runbook](OPERATION_RUNBOOK.md#sigma-v021-deployment-outcome-2026-11-06-pdt--2026-11-07-utc)
+for detailed evidence, access-path friction, and rollback limitations. Recovery
+resources remained within the documented $25 incremental ceiling; exact billed
+spend was not independently queried.
+
+## v0.2.0 production deployment outcome — 2026-11-04
+
+The operator authorized Red in this conversation to remedy release blockers,
+deploy SIGMA v0.2.0 from approved `main`, and continue through production
+verification. The deployed target is
+`9d938907ffd02fb89c9d10545e8df61484310cbd`. Exact merged-SHA CI passed:
+[SIGMA tests](https://github.com/bkramerext/sigma/actions/runs/41977490940),
+[browser acceptance](https://github.com/bkramerext/sigma/actions/runs/41977490915),
+and [Ruff](https://github.com/bkramerext/sigma/actions/runs/41977490887).
+
+Before cutover, the application-consistent recovery point
+`sigma-state-v020-pre-20261104-1736` was created from `sigma-state` and reached
+READY. An isolated read-only clone restore passed three SQLite integrity
+checks, verified 3 identities/workspaces, 14 projects, 33 artifacts, terminal
+job history and 19 accounting rows, and preserved six reserved/unknown
+outcomes. The snapshot remains retained; the temporary VM and clone disk were
+removed and verified absent. No IAM grant was made.
+
+Red deployed using the documented guarded helper and the required verified
+backup/schema flags. The release record, protected release pin, checkout,
+running container labels and image IDs match the target. The systemd service
+and all three containers are healthy, the persistent state disk is mounted,
+maintenance is off, and the public HTTPS root returns HTTP 200. About reports
+`Version 0.2.0 · Build 9d93890` in production Chrome. See the detailed
+[operations outcome](OPERATION_RUNBOOK.md#sigma-v020-deployment-outcome-2026-11-04-pdt).
+
+**Deployment status: live and healthy; full production smoke acceptance is
+incomplete.** The available browser was unauthenticated. Login redirect to
+Google was observed without submitting credentials, and anonymous sample
+research/history display succeeded without initiating research. Positive
+authenticated login, project import/export, actual email delivery, bounded
+research execution, and saved-paper viewing remain unverified. No research or
+provider call was made. Do not report full smoke acceptance as passed.
+
+The release runbook correction in PR #549 removes the unsupported
+`--no-build` instruction: the guarded helper has no such flag and builds from
+the exact requested SHA before service stop/pin. This correction is included in
+the deployed target. PR #548 prepared the v0.2.0 version/build metadata.
+
+## Authorization record — SIGMA v0.1.7 regular production deployment
+
+On 2026-10-30, the operator authorized Red to deploy the latest merged `main`,
+including the domain-authorization fix in PR #389 and the maintenance-page
+implementation in PR #385. PR #385 merged at
+`31ba6c4aba1ed59d2d7e092f589b882d7f134b30`; its exact-head CI passed, and CI on
+the merge commit passed in [run 41176581580](https://github.com/bkramerext/sigma/actions/runs/41176581580)
+before preparing the v0.1.7 candidate. The product version must be bumped to
+v0.1.7 in the Python project, uv lock, frontend
+package, and npm lock. Red may review and merge the version-bump PR after its
+required CI succeeds. Deploy from the tested merged `main` SHA. No separate
+release tag is part of this deployment.
+
+The operator authorized the routine deployment, maintenance cutover, isolated
+restore drill, and temporary-resource cleanup without further human approval.
+Red owns the recovery and maintenance windows. Verify live billing, quota, and
+least-privilege access; cap incremental recovery-drill resources at $25; retain
+the READY snapshot and remove only the temporary recovery VM and clone disk.
+Preserve identities, projects, research history, papers and accounting. Do not
+make unrelated infrastructure/IAM changes, enable recurring backups, or make
+paid provider calls. Keep production untouched if a required recovery, exact-SHA
+CI, host-preflight, or smoke-test gate fails.
+
+## v0.1.7 pre-deployment restore drill — 2026-10-30
+
+Snapshot `sigma-state-v016-pre-20261030-1122` was READY from source disk
+`sigma-state` (created 2026-10-30 11:22:22 PDT). The production host was on
+`0e51d20341ea5656f971e075b466694393e25d97` when inspected. A temporary
+`e2-standard-2` recovery VM had no external IP and no service account. Its
+30 GB clone disk `sigma-state-restore-red-20261030`, filesystem UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`, was attached read-only and mounted with
+`ro,nosuid,nodev,noexec,norecovery`.
+
+The offline verifier from the candidate checkout passed with the prior verified
+aggregate thresholds:
+
+```sh
+sudo python3 /tmp/verify-state-restore.py /mnt/sigma-restore \
+  --min-workspaces 3 --min-projects 12 --min-artifacts 30 --min-papers 0
+```
+
+Observed: three SQLite integrity checks passed; 3 identities/workspaces map to
+3 distinct directories; 12 projects; 30 research artifacts; zero saved paper
+pairs; 10 terminal historical job rows across two unmapped workspaces; and 17
+accounting call rows with five reserved or unknown outcomes preserved. The
+verifier returned `PASS: all restore checks completed read-only`. The recovery
+snapshot remains retained. Temporary VM/disk cleanup and removal of temporary
+SSH metadata completed 2026-10-30 23:30 PDT. The recovery VM and clone disk are
+absent; only the production VM and its two disks remain. The pre-existing
+project SSH key entry was preserved and the temporary `ubuntu` mapping removed.
+The SSH troubleshooting command briefly enabled
+`networkmanagement.googleapis.com`; it was disabled immediately and verified
+disabled. This deviation made no persistent API or SSH-access change.
+
+The active host Caddy is version 2.6.2. Candidate validation passed after using
+the version-compatible unqualified `handle_errors` form. Before host setup, the
+empty import glob warned that it had no matching files; the maintenance
+configuration was subsequently installed and revalidated before reload. The
+final `off` state intentionally leaves the glob empty and Caddy logs that benign
+warning during validation.
+
+## v0.1.7 production deployment outcome — 2026-10-30
+
+The tested version-bump PR [#390](https://github.com/bkramerext/sigma/pull/390)
+was reviewed and merged after all exact-head workflows passed. The merge commit
+`802e9b6b7da5829868070f760e17280cd8a927f2` is the deployed full `main` SHA;
+its post-merge `SIGMA verification` passed in [run 41177482484](https://github.com/bkramerext/sigma/actions/runs/41177482484). It includes domain-authorization
+PR #389 (merge `e3047b83c0f95c8f1f06cd4a5c66ca55a194745e`) and maintenance PR
+#385 (merge `31ba6c4aba1ed59d2d7e092f589b882d7f134b30`). `./sigma test` passed
+on the exact candidate; the optional graph-present scenario skipped because its
+Python sandbox image was unavailable. No release tag was created.
+
+Immediately before cutover, host checkout and protected `SIGMA_RELEASE` both
+matched `0e51d20341ea5656f971e075b466694393e25d97`, the three containers were
+healthy, all 23 host preflight checks passed, and the persistent state disk was
+mounted at `/srv/sigma-state` from UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. The recovery snapshot
+`sigma-state-v016-pre-20261030-1122` remained `READY` and its isolated
+read-only restore drill had passed. The research database had 40 jobs: 2
+paused and 38 terminal, with zero queued/running/stopping jobs.
+
+The target helper was extracted from the exact merged SHA (helper SHA-256
+`cb8b05579ef1e494143f221130624964356e6d4565654daa6e4bd7f2b8cebf17`). It
+passed host preflight, built both Linux/amd64 images from the target commit's
+Git archive, enabled maintenance, stopped and restarted `sigma.service`,
+verified healthy containers and the state mount, then disabled maintenance.
+The helper reported success. The release record at
+`/var/lib/sigma/releases/802e9b6b7da5829868070f760e17280cd8a927f2.json` records
+backend image ID
+`sha256:d97c4ff5092fb6fedb74d5e6842ae95ddb755fa063958ab24468d1643da20223` and
+frontend image ID
+`sha256:852158bc89470ea2a486f224935ad51b799649b64e9b9082d8fd1329366c682d`;
+source labels and running image IDs match the deployed SHA. All backend,
+frontend, and edge containers were healthy after cutover.
+
+Host maintenance setup completed before deployment. Files from the merged SHA
+were installed at `/var/www/sigma-maintenance/`; the root-owned import directory
+is `/etc/caddy/sigma-maintenance`; and the root-owned mode-0755 switch is
+`/usr/local/libexec/sigma/maintenance-switch.py`. Caddy 2.6.2 validated the
+version-compatible unqualified `handle_errors` config and reloaded while normal
+traffic continued. The original one-site Caddyfile is backed up at
+`/etc/caddy/Caddyfile.pre-sigma-v017-20261031`.
+
+An external HTTPS monitor first observed maintenance HTTP 503 at
+2026-10-31 06:46:53 UTC and last observed it at 06:47:34 UTC; the first normal
+HTTP 200 followed at 06:47:36 UTC. During the 503 window the page included
+`Cache-Control: no-store, max-age=0`; the maintenance image endpoint returned
+HTTP 200 with `image/png` and matched committed asset SHA-256
+`6d7034dcb1d372c43b2a572a5b8c44e3ab68bd84ac3f2a965d3546864a0bf54e`. After
+cutover, the root returned 200 without maintenance content; the image route did
+not return the maintenance PNG. The public endpoint verifier passed DNS, closed
+private ports, HTTP-to-HTTPS redirect, TLS/root, SPA deep link, and hosted API.
+Hosted auth status returned HTTP 200/ready; an unauthenticated member endpoint
+returned HTTP 401. Headless Chrome rendered the SIGMA application. The served
+frontend bundle contains version `0.1.7` and build prefix `802e9b6`.
+
+Post-cutover checkout and protected release pin match the deployed SHA;
+`sigma.service` and Caddy are active with no pending systemd unit reload; all
+three containers are healthy; the state disk remains mounted; and maintenance is
+off. Production availability recovered immediately after the measured
+maintenance window. No paid provider calls or local SIGMA server requests
+occurred. The release snapshot is now pre-v0.1.7, not a post-deployment
+recovery point; take and restore-verify a fresh point before the next release.
+The recurring backup timer remains absent. Exact GCP-billed recovery-drill
+spend was not independently queried.
+
+Schema review found the v0.1.7 database additions use defaulted columns
+(`notification_error`, `job_kind`); old inserts specify their columns, and
+existing job rows receive `job_kind='research'`. The auth migration also removes
+inactive email authorization tombstones as part of the domain-authorization fix.
+The `--schema-compatible` guard was supplied based on this source review,
+pre-cutover zero-active-job check, and preserved backup; it was not an
+end-to-end rehearsal of the exact v0.1.6 binary against the migrated live
+database. Therefore do not treat future code rollback as certified: if a later
+incident needs rollback, preserve the state and logs and first demonstrate exact
+old-binary compatibility or use the separately authorized restore process. The
+normal deployment completed without triggering rollback.
+
+Issue [#383](https://github.com/bkramerext/sigma/issues/383) was auto-closed
+by the PR #385 merge before production verification. Red reopened it after
+discovering that ordering and closed it at 2026-10-31 06:50:23 UTC, after
+successful production verification. During recovery-host troubleshooting,
+`gcloud compute ssh --troubleshoot` briefly enabled
+`networkmanagement.googleapis.com`; it was immediately disabled and verified
+off. Temporary project SSH metadata was removed while preserving the existing
+admin key entry. No persistent API, IAM, SSH, or network change remains.
+
+
+## Production backend watchdog, retained logs, and recovery
+
+On the GCE host, after deploying the release checkout, run `sudo bash /opt/sigma/current/deploy/install-resilience.sh` once (or rerun `install-host-monitor.sh` to refresh all timer units). Inspect `systemctl status sigma-backend-watchdog.timer sigma-log-retention.timer` and `journalctl -u sigma-backend-watchdog.service`.
+
+The watchdog checks every minute; Docker's `restart: unless-stopped` covers exited backend processes and the watchdog handles running-but-unhealthy containers. It refuses repair during an inactive SIGMA service/deploy or unmounted state disk. It only restarts the backend container, not the project state, and requires exactly one Compose backend container.
+
+Backend INFO logs and RSS/cgroup memory usage are written under `/srv/sigma-state/auth/operational-logs/backend.log` on the dedicated persistent disk (container path `/var/lib/sigma-auth/operational-logs/backend.log`). Memory samples also appear in the backend container's standard logs (`docker logs` / Compose backend logs). Samples default to 30 seconds and start immediately at backend launch. The memory-pressure guard separately checks every five seconds. If the durable file cannot be opened, an error is emitted to the console while memory telemetry and the guard continue running. The cgroup used/limit and percentage are the primary OOM pressure indicator; RSS alone underreports child processes and filesystem cache. The host watchdog writes dated files in the same directory. These logs are sensitive operational data; do not make the directory public or include it in web exports. `sigma-log-retention.timer` runs every 12 hours and removes only retired backend and watchdog log files older than seven days; the active `backend.log` is never deleted. Confirm retention and free disk periodically.
+
+The backend memory-pressure circuit breaker samples container cgroup memory every 5 seconds (while periodic INFO samples remain at 30-second intervals). At >=85% of the cgroup limit or <=512 MiB remaining it stops current research, papers, scoring, ELI5, Q/A, proposals and other tracked AI work, and refuses new inference admission. Pressure clears only after usage drops to <=75% so work does not automatically resume while memory is unstable. It sends an URGENT mail via SIGMA's existing configured transport to the verified active administrator roster; a durable on-disk marker suppresses duplicate alerts for 15 minutes across restarts. Failed mail delivery is logged. Check `memory.critical`, `memory.stop_active`, `memory.admin_alert_sent` / `memory.admin_alert_failed` and inspect project progress before re-admission. Cancellation is best-effort for subprocesses already running outside the Python event loop; monitor cgroup pressure and the watchdog for eventual recovery.
+
+After an unexpected backend restart, in-progress research is recovered via its persisted session/ledger locks and interrupted-state logic. Paper generation is **not** auto-replayed (provider attempts can already be billed); progress reports an interruption and user can Continue from saved checkpoints when preflight permits. Some one-shot runs with no saved draft require explicit restart rather than an automatic repeat. Never reset workspaces or ledgers to fix an OOM.
+
+
+### Critical memory safety circuit breaker
+
+The backend samples cgroup memory every five seconds for protection (and logs periodic telemetry every 30 seconds) and refuses new research/paper jobs above **85%** of container memory, with **512 MiB or less** cgroup headroom, or when the host has **768 MiB or less** memory available. It asynchronously cancels active research sessions and paper generation, retaining checkpoints and uncertain provider reservations. Paper work reports a recoverable failure; research is paused with a memory-pressure reason. Admission resumes when cgroup usage falls below 75% and host memory availability has recovered above 1.25 GiB (hysteresis). One urgent email per pressure episode (at most once every 15 minutes) is sent to the configured `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` via the existing mail transport. Check mail configuration and inspect logs for `memory.admin_alert_sent` or `memory.admin_alert_failed`. The guard cannot prevent a sudden allocation spike between samples or a host-level OOM; restart and checkpoint recovery remain necessary.
