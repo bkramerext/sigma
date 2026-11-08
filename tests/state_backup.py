@@ -142,9 +142,7 @@ class StateBackupTests(unittest.TestCase):
             "finished_at": "2026-11-07T00:01:00+00:00",
         }
         cache["record_sha256"] = hashlib.sha256(
-            json.dumps(
-                cache, sort_keys=True, ensure_ascii=False, separators=(",", ":")
-            ).encode()
+            json.dumps(cache, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
         ).hexdigest()
         path = paper_dir / ".publication-reference-compilation.json"
         path.write_text(json.dumps(cache))
@@ -169,6 +167,25 @@ class StateBackupTests(unittest.TestCase):
             data["status"] = "completed"
             cache.write_text(json.dumps(data))
             with self.assertRaisesRegex(ValueError, "integrity seal"):
+                restore.verify(root, 2, 2, 2, 1)
+
+    def test_restore_verifier_rejects_resealed_malformed_publication_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_state(root)
+            cache = self.add_publication_cache(root)
+            data = json.loads(cache.read_text())
+            data["provider_calls_attempted"] = 3
+            data["record_sha256"] = hashlib.sha256(
+                json.dumps(
+                    {key: value for key, value in data.items() if key != "record_sha256"},
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            cache.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, "metadata format"):
                 restore.verify(root, 2, 2, 2, 1)
 
     def test_restore_verifier_rejects_symlinked_publication_cache(self) -> None:
