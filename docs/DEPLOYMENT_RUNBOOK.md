@@ -1,5 +1,16 @@
 # SIGMA Routine Production Release
 
+## Principles — keep releases simple
+
+- **Ship the application, not the infrastructure.** A routine release upgrades SIGMA's backend and frontend on the existing VM.
+- **One approval, one owner.** The operator supplies the release SHA; Red deploys and verifies end to end without intermediate handoffs.
+- **Reuse what works.** Prefer the established deployment helper, configuration, access, and green exact-SHA CI. Don't re-audit previously proven setup without evidence of a problem.
+- **Check real failures, not hypothetical ones.** A concrete failed command, incompatible migration, unhealthy service, or data-integrity mismatch deserves investigation. An unverified but unrelated possibility does not become a release blocker.
+- **No added cost or complexity by default.** Don't provision infrastructure, expand permissions, add services, or invent new approval gates for routine deployments.
+- **Keep exceptional work elsewhere.** Provisioning, IAM redesign, incident recovery, and disaster-recovery exercises belong in the operations references. Promote a new recurring release step only after a demonstrated failure and a clear reason it must recur.
+
+**Maintenance rule:** Keep this routine checklist short. Any proposed new gate must identify a real failure it prevents, show why the existing checks are insufficient, and replace or simplify an existing step where possible. Otherwise document it as troubleshooting, not as a mandatory release prerequisite.
+
 **Goal:** Upgrade SIGMA's backend and frontend on the existing production VM. This is a single-user hobby project. Initial cloud configuration, incident recovery, and historical release evidence belong in [Operations Runbook](OPERATION_RUNBOOK.md) and [Deployment History](DEPLOYMENT_HISTORY.md), not this checklist.
 
 **One instruction starts a release:** The operator says `main` is ready and supplies the approved full 40-character SHA. Red handles the routine release end to end, without asking to advance stages. Until then, leave production running on v0.2.2 and do not freeze a moving `main`.
