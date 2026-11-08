@@ -27,6 +27,31 @@ function suitableEffort(model: ModelChoice, current: string): string | null {
     || effortOrder.indexOf(a) - effortOrder.indexOf(b))[0];
 }
 
+/** Slide only the changed label, preserving the pill's measured width. */
+function ScrollingLabel({ value, direction, className }: {
+  value: string;
+  direction: 'forward' | 'reverse';
+  className: string;
+}) {
+  const previous = useRef(value);
+  const sequence = useRef(0);
+  const [slide, setSlide] = useState<{ from: string; to: string; sequence: number } | null>(null);
+  useEffect(() => {
+    if (previous.current === value) return;
+    const from = previous.current;
+    previous.current = value;
+    sequence.current += 1;
+    setSlide({ from, to: value, sequence: sequence.current });
+  }, [value]);
+  const active = slide?.to === value ? slide : null;
+  return <span className={`${className} global-model-pill-slide-viewport`}>
+    {active ? <span key={active.sequence} className={`global-model-pill-slide-pair global-model-pill-slide-${direction}`} aria-hidden="true">
+      <span className="global-model-pill-slide-out">{active.from}</span>
+      <span className="global-model-pill-slide-in">{active.to}</span>
+    </span> : <span className="global-model-pill-slide-static">{value}</span>}
+  </span>;
+}
+
 /** Restores the historic model cycle pill, now persisted as a per-user default. */
 export default function GlobalModelPill({ enabled = true }: { enabled?: boolean }) {
   const [settings, setSettings] = useState<ResearchSettings | null>(null);
@@ -155,8 +180,8 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
         if (event.key === 'ArrowDown') { event.preventDefault(); cycleThinking(); }
       }}>
       <span className="global-model-pill-current">
-        <span className="global-model-pill-primary">Model · {label}</span>
-        {thinkingLabel && <span className="global-model-pill-secondary">{thinkingLabel}</span>}
+        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="reverse"/>
+        {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward"/>}
       </span>
       {choices.map(choice => <span key={choice.id} className="global-model-pill-measure" aria-hidden="true">
         Model · {modelName(choice, choice.id)}{choice.relative_cost ? ' ' + choice.relative_cost : ''}
