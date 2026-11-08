@@ -3138,7 +3138,8 @@ def _load_work(path: str) -> dict[str, Any] | None:
     proofread_ready = value.get("proofread_ready")
     if proofread_ready is not None and (
         not isinstance(proofread_ready, dict)
-        or set(proofread_ready) != {"input_sha256", "tex", "result", "warnings", "invalid_control_codes"}
+        or set(proofread_ready)
+        != {"input_sha256", "tex", "result", "warnings", "invalid_control_codes"}
         or not isinstance(proofread_ready["tex"], str)
         or len(proofread_ready["tex"].encode()) > MAX_PROOFREAD_TEX_BYTES
         or not isinstance(proofread_ready["result"], dict)
@@ -3153,10 +3154,22 @@ def _load_work(path: str) -> dict[str, Any] | None:
     pdf_checkpoint = value.get("pdf_checkpoint")
     if pdf_checkpoint is not None and (
         not isinstance(pdf_checkpoint, dict)
-        or set(pdf_checkpoint) != {
-            "pass", "next_pass", "ready", "proofread_sha256", "pdf_sha256",
-            "pdf_size_bytes", "tex", "draft", "warnings", "compile_diagnostics",
-            "layout_warnings", "layout_repairs", "pdf_check_passes", "diagram_fallback",
+        or set(pdf_checkpoint)
+        != {
+            "pass",
+            "next_pass",
+            "ready",
+            "proofread_sha256",
+            "pdf_sha256",
+            "pdf_size_bytes",
+            "tex",
+            "draft",
+            "warnings",
+            "compile_diagnostics",
+            "layout_warnings",
+            "layout_repairs",
+            "pdf_check_passes",
+            "diagram_fallback",
             "appendix_included",
         }
         or type(pdf_checkpoint["pass"]) is not int
@@ -3165,7 +3178,11 @@ def _load_work(path: str) -> dict[str, Any] | None:
         or not 2 <= pdf_checkpoint["next_pass"] <= 4
         or type(pdf_checkpoint["ready"]) is not bool
         or type(pdf_checkpoint["appendix_included"]) is not bool
-        or not all(isinstance(pdf_checkpoint[key], str) and re.fullmatch(r"[0-9a-f]{64}", pdf_checkpoint[key]) for key in ("proofread_sha256", "pdf_sha256"))
+        or not all(
+            isinstance(pdf_checkpoint[key], str)
+            and re.fullmatch(r"[0-9a-f]{64}", pdf_checkpoint[key])
+            for key in ("proofread_sha256", "pdf_sha256")
+        )
         or type(pdf_checkpoint["pdf_size_bytes"]) is not int
         or not 0 < pdf_checkpoint["pdf_size_bytes"] <= MAX_PAPER_BYTES
         or not isinstance(pdf_checkpoint["tex"], str)
@@ -3178,9 +3195,13 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Saved PDF pass checkpoint is invalid")
     if pdf_checkpoint is not None:
         PaperDraft.model_validate(pdf_checkpoint["draft"])
-    if "published_paper_id" in value and not re.fullmatch(r"[0-9a-f]{32}", str(value["published_paper_id"])):
+    if "published_paper_id" in value and not re.fullmatch(
+        r"[0-9a-f]{32}", str(value["published_paper_id"])
+    ):
         raise ProjectError("Published paper checkpoint identity is invalid")
-    if "published_pdf_sha256" in value and not re.fullmatch(r"[0-9a-f]{64}", str(value["published_pdf_sha256"])):
+    if "published_pdf_sha256" in value and not re.fullmatch(
+        r"[0-9a-f]{64}", str(value["published_pdf_sha256"])
+    ):
         raise ProjectError("Published paper checkpoint checksum is invalid")
     if "planning_origin" in value and value["planning_origin"] not in {"ai", "fallback"}:
         raise ProjectError("Long-paper checkpoint planning origin is invalid")
@@ -9352,22 +9373,43 @@ async def _generate_impl(
         output_delta_count = 0
         incoming_checkpoint = _load_work(path)
         resume_floor = None
-        if incoming_checkpoint is not None and not incoming_checkpoint.get("explicit_restart_pending"):
+        if incoming_checkpoint is not None and not incoming_checkpoint.get(
+            "explicit_restart_pending"
+        ):
             if incoming_checkpoint.get("published_paper_id"):
                 resume_floor = "scoring"
-            elif incoming_checkpoint.get("pdf_checkpoint") or incoming_checkpoint.get("proofread_ready"):
+            elif incoming_checkpoint.get("pdf_checkpoint") or incoming_checkpoint.get(
+                "proofread_ready"
+            ):
                 resume_floor = "compile"
-            elif incoming_checkpoint.get("proofreading") or incoming_checkpoint.get("validated_draft"):
+            elif incoming_checkpoint.get("proofreading") or incoming_checkpoint.get(
+                "validated_draft"
+            ):
                 resume_floor = "proofreading"
             elif incoming_checkpoint.get("section_drafts") or incoming_checkpoint.get("plan"):
                 resume_floor = "sections"
-            elif incoming_checkpoint.get("evidence_notes") or incoming_checkpoint.get("evidence_indexed"):
+            elif incoming_checkpoint.get("evidence_notes") or incoming_checkpoint.get(
+                "evidence_indexed"
+            ):
                 resume_floor = "evidence"
         stage_order = (
-            "queued", "snapshot", "source_material", "publication_compilation",
-            "evidence", "consolidation", "planning", "writing", "sections",
-            "validation", "proofreading", "compile", "pdf_check",
-            "scoring", "score_failed", "finishing", "complete",
+            "queued",
+            "snapshot",
+            "source_material",
+            "publication_compilation",
+            "evidence",
+            "consolidation",
+            "planning",
+            "writing",
+            "sections",
+            "validation",
+            "proofreading",
+            "compile",
+            "pdf_check",
+            "scoring",
+            "score_failed",
+            "finishing",
+            "complete",
         )
 
         async def report_activity(
@@ -9694,9 +9736,12 @@ async def _generate_impl(
                     "A paper checkpoint exists for different frozen evidence or paper type. Resume using the saved evidence or explicitly restart while preserving prior attempt accounting."
                 )
         if checkpoint is not None and work.get("include_diagrams") != include_diagrams:
-            # The combined diagrams-and-tables preference changes only what is
-            # included in the final rendering and any unfinished authoring.
-            # Keep completed one-shot drafts, plans, and section tables intact.
+            # Render-affecting option changes explicitly invalidate downstream
+            # validation/TeX/PDF artifacts, but never paid authoring outputs.
+            if not work.get("published_paper_id"):
+                for key in ("validated_draft", "validated_warnings", "proofread_ready", "pdf_checkpoint"):
+                    work.pop(key, None)
+                resume_floor = None
             work["include_diagrams"] = include_diagrams
             _save_work(path, work)
         # Preserve the decision to recover an interrupted planning call before
@@ -9786,13 +9831,19 @@ async def _generate_impl(
                 try:
                     if not expected_binding or not expected_project_id:
                         raise ProjectError("Automatic scoring requires an AI connection")
-                    await paper_scores.score_paper(path, paper_id, expected_binding, expected_project_id)
+                    await paper_scores.score_paper(
+                        path, paper_id, expected_binding, expected_project_id
+                    )
                 except Exception as exc:  # noqa: BLE001 - never invalidate a published PDF
                     logging.getLogger("sigma.lifecycle").warning(
                         "paper.score_failed project_id=%s paper_id=%s error_type=%s",
-                        expected_project_id or "unknown", paper_id, type(exc).__name__,
+                        expected_project_id or "unknown",
+                        paper_id,
+                        type(exc).__name__,
                     )
-                    score_failure_detail = "PDF saved; scoring did not finish. Use Score paper to retry."
+                    score_failure_detail = (
+                        "PDF saved; scoring did not finish. Use Score paper to retry."
+                    )
                     await report("score_failed", None, None, "active", detail=score_failure_detail)
             await report("finishing", None, None, detail=score_failure_detail)
             _schedule_progress_email(path, "paper_finished", paper_id)
@@ -9808,9 +9859,14 @@ async def _generate_impl(
             return {
                 key: saved_record[key]
                 for key in (
-                    "paper_id", "project_id", "created_at", "snapshot_sha256",
-                    "validation_warnings", "obligation_reconciliation",
-                    "author_review_warnings", "generation",
+                    "paper_id",
+                    "project_id",
+                    "created_at",
+                    "snapshot_sha256",
+                    "validation_warnings",
+                    "obligation_reconciliation",
+                    "author_review_warnings",
+                    "generation",
                 )
             } | {"title": saved_record["draft"]["title"]}
 
@@ -9823,10 +9879,9 @@ async def _generate_impl(
                 None,
             )
             if published_summary is not None:
-                if (
-                    not published_summary["pdf_available"]
-                    or published_summary.get("pdf_sha256") != work.get("published_pdf_sha256")
-                ):
+                if not published_summary["pdf_available"] or published_summary.get(
+                    "pdf_sha256"
+                ) != work.get("published_pdf_sha256"):
                     raise ProjectError(
                         "Published PDF does not match the scoring checkpoint; do not regenerate it."
                     )
@@ -10024,6 +10079,7 @@ async def _generate_impl(
         ]
 
         one_shot_validation_started = False
+        model = config["model"]
         if work.get("validated_draft") is not None:
             # A completed validation is a real authoring boundary. Rehydrate
             # the exact accepted draft without replaying AI authoring or edits.
@@ -10194,6 +10250,9 @@ async def _generate_impl(
             )
             model = config["model"]
             long_form = True
+        material_omissions = (
+            _material_evidence_omissions(work.get("omitted_evidence", [])) if long_form else []
+        )
         if work.get("validated_draft") is not None:
             draft = PaperDraft.model_validate(work["validated_draft"])
             validation_warnings = list(work["validated_warnings"])
@@ -10459,7 +10518,9 @@ async def _generate_impl(
                         # provider_calls_attempted. New checkpoints keep that
                         # total separately and count only calls for this TeX.
                         prior_calls = int(work.get("proofreading_calls_prior", 0))
-                        checkpoint_calls = int(saved_proofreading.get("provider_calls_attempted", 0))
+                        checkpoint_calls = int(
+                            saved_proofreading.get("provider_calls_attempted", 0)
+                        )
                         if saved_proofreading.get("provider_calls_accounting_version", 1) == 2:
                             render_calls = checkpoint_calls
                         else:
@@ -10753,11 +10814,16 @@ async def _generate_impl(
                 # The PDF, TeX for the next pass, and the diagnostics cursor
                 # advance atomically from the resume reader's perspective.
                 _save_pdf_pass(
-                    path, work, pass_number, pdf,
+                    path,
+                    work,
+                    pass_number,
+                    pdf,
                     next_pass=4 if ready else pass_number + 1,
                     ready=ready,
                     proofread_sha256=proofread_source_sha256,
-                    tex=tex, draft=draft, warnings=warnings,
+                    tex=tex,
+                    draft=draft,
+                    warnings=warnings,
                     compile_diagnostics=compile_diagnostics,
                     layout_warnings=layout_warnings,
                     layout_repairs=layout_repairs,
@@ -10873,10 +10939,16 @@ async def _generate_impl(
                 record["generation"]["sigma_issues_included"] = True
                 # A verified optional appendix is another durable PDF boundary.
                 _save_pdf_pass(
-                    path, work, 4, pdf,
-                    next_pass=4, ready=True,
+                    path,
+                    work,
+                    4,
+                    pdf,
+                    next_pass=4,
+                    ready=True,
                     proofread_sha256=proofread_source_sha256,
-                    tex=tex, draft=draft, warnings=warnings,
+                    tex=tex,
+                    draft=draft,
+                    warnings=warnings,
                     compile_diagnostics=compile_diagnostics,
                     layout_warnings=list(record["generation"]["layout_warnings"]),
                     layout_repairs=layout_repairs,
