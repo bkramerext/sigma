@@ -5592,13 +5592,25 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
 }) {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   return <span className="strategy-inline-commands">
-    <button type="button" className="text-view-link" disabled={disabled}
-      title={`${strategy.enabled ? 'Disable' : 'Enable'} strategy`} onClick={() => onCommand('toggle', strategy)}>{strategy.enabled ? 'Disable' : 'Enable'}</button>
-    <button type="button" className="text-view-link" disabled={disabled}
-      title="Fork strategy" onClick={() => onCommand('fork', strategy)}>Fork</button>
+    <button type="button" className="text-view-link strategy-icon-action" disabled={disabled}
+      aria-label={`${strategy.enabled ? 'Disable' : 'Enable'} strategy`} aria-pressed={strategy.enabled}
+      data-tooltip={`${strategy.enabled ? 'Disable' : 'Enable'} strategy`} onClick={() => onCommand('toggle', strategy)}>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="2"/>{strategy.enabled && <path d="m8 12 3 3 5-6" strokeWidth="2.3"/>}
+      </svg>
+    </button>
+    <button type="button" className="text-view-link strategy-icon-action" disabled={disabled}
+      aria-label="Fork strategy" data-tooltip="Fork strategy" onClick={() => onCommand('fork', strategy)}>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="6" cy="3.5" r="2"/><circle cx="18" cy="6.5" r="2"/><circle cx="6" cy="20.5" r="2"/>
+        <path d="M6 5.5v13M18 8.5v2a6 6 0 0 1-6 6H6"/>
+      </svg>
+    </button>
     <span className="strategy-remove-anchor">
-      <button type="button" id={`commands-${strategy.id}`} className="text-view-link" disabled={disabled}
-        title="Remove strategy" onClick={() => setConfirmingRemove(true)}>Remove</button>
+      <button type="button" id={`commands-${strategy.id}`} className="text-view-link strategy-icon-action" disabled={disabled}
+        aria-label="Remove strategy" data-tooltip="Remove strategy" onClick={() => setConfirmingRemove(true)}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round"><path d="M5 5 19 19M19 5 5 19"/></svg>
+      </button>
       {confirmingRemove && <div className="strategy-remove-popover"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove strategy ${strategy.title}`}>
         <p>Remove “{strategy.title}” from Strategies? Its research and history will be kept in the project.</p>
         <div className="session-remove-confirm-actions">
