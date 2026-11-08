@@ -425,3 +425,44 @@
   .global-model-pill-slide-pair .global-model-pill-slide-out { display: none; animation: none; }
   .global-model-pill-slide-pair .global-model-pill-slide-in { animation: none; }
 }
+
+/* Header alignment: both second-row pills begin at the same top edge.
+   Left-align the two Model lines (including sliding frames) and the
+   Sponsored ChatGPT label/allowance without altering their pill widths. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  text-align: left;
+  place-items: center stretch;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  width: 100%;
+  align-items: stretch;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-viewport,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-primary,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-secondary,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-pair > span {
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .api-connection > summary,
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  justify-content: flex-start;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .api-connection > summary .connection-label-stack {
+  align-items: flex-start;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .sponsored-allowance-trigger {
+  align-self: flex-start;
+  text-align: left;
+}
+.home-page .home-account-grid > .api-connection,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  align-self: start;
+  margin-top: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  top: calc(var(--sigma-header-first-row-height) + var(--identity-pill-gap));
+}
