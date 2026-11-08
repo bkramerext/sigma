@@ -222,7 +222,8 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
                 opened_projects.append(response.json())
 
         page.on("response", capture)
-        page.goto(ui_url, wait_until="networkidle")
+        # Wait explicitly for app state below; networkidle is unstable with long-lived events.
+        page.goto(ui_url, wait_until="domcontentloaded")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
         expect(welcome).to_be_visible()
@@ -644,7 +645,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         )
         backdrop_context = browser.new_context(viewport={"width": 1280, "height": 850})
         backdrop_page = backdrop_context.new_page()
-        backdrop_page.goto(ui_url, wait_until="networkidle")
+        backdrop_page.goto(ui_url, wait_until="domcontentloaded")
         backdrop_welcome = backdrop_page.get_by_role("dialog", name="Welcome to SIGMA!")
         expect(backdrop_welcome).to_be_visible()
         backdrop_page.mouse.click(2, 2)
