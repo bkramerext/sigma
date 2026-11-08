@@ -130,3 +130,46 @@
   margin: 0;
   min-width: 0;
 }
+
+/* Inline reference actions: same vocabulary for custom, built-in and common refs. */
+.project-types-dialog .pt-reference-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.project-types-dialog .pt-reference-heading > :is(h3, h4) { margin-bottom: 6px; }
+.project-types-dialog .pt-circled-plus {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em;
+  height: 1.15em;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font: 600 1em/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: none;
+}
+.project-types-dialog .pt-new-action:has(.pt-circled-plus) {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  text-decoration: none !important;
+}
+.project-types-dialog .project-types-section-heading > .pt-new-action { font-size: 17px; }
+.project-types-dialog .pt-reference-heading > .pt-new-action { font-size: 13px; }
+.project-types-dialog .pt-reference-action-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+.project-types-dialog .pt-reference-entry button:has(.pt-reference-action-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 24px;
+  padding: 2px;
+  text-decoration: none !important;
+}
