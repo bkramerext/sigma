@@ -3815,9 +3815,11 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             nonlocal compile_calls
             compile_calls += 1
             if interrupt_at == "pdf":
-                if compile_calls == 1:
-                    diagnostics.append("Overfull \\hbox (10.0pt too wide)")
+                # The first compile verifies TeX for proofreading.
+                # Calls 2 and 3 are PDF passes 1 and 2, respectively.
                 if compile_calls == 2:
+                    diagnostics.append("Overfull \\hbox (10.0pt too wide)")
+                if compile_calls == 3:
                     raise asyncio.CancelledError()
             return b"%PDF-fixture"
 
@@ -3870,6 +3872,7 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
                 assert not pdf_pass["ready"]
                 assert len(papers.list_papers(str(path))) == 0
                 assert papers._load_pdf_pass(str(path), pdf_pass).startswith(b"%PDF-")
+            compiled_before_resume = compile_calls
             result = asyncio.run(
                 papers.generate(
                     str(path), credential["identity"], view.project.id,
@@ -3877,7 +3880,7 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
                 )
             )
         assert author_calls == 1, "Resume replayed a paid author request"
-        assert compile_calls == (1 if interrupt_at == "score" else 3)
+        assert compile_calls - compiled_before_resume == (0 if interrupt_at == "score" else 1)
         assert score_calls == (2 if interrupt_at == "score" else 1)
         assert len(papers.list_papers(str(path))) == 1, "Resume duplicated the paper version"
         assert papers._load_work(str(path)) is None
