@@ -344,16 +344,16 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             papers_pane = page.locator(".papers-pane")
             expect(papers_pane.get_by_role("heading", name="Papers")).to_be_visible()
             expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
-            expect(papers_pane.get_by_role("button", name="Include")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="Include in paper")).to_be_visible()
             papers_pane.get_by_role("button", name="New paper").click()
             expect(papers_pane.get_by_role("button", name="Start Paper 1")).to_be_visible()
-            papers_pane.get_by_role("button", name="Cancel", exact=True).click()
+            papers_pane.get_by_role("button", name="Cancel starting paper").click()
             expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
             papers_pane.get_by_role("button", name="New paper").click()
             papers_pane.get_by_role("button", name="Start Paper 1").click()
             expect(papers_pane.get_by_role("button", name="Stop Paper 1")).to_be_visible()
             expect(papers_pane.get_by_role("button", name="New paper")).to_have_count(0)
-            expect(papers_pane.get_by_role("button", name="Include")).to_have_count(0)
+            expect(papers_pane.get_by_role("button", name="Include in paper")).to_have_count(0)
             expect(papers_pane.locator(".section-count")).to_contain_text("1 paper")
             expect(
                 papers_pane.get_by_role("button", name="Remove unfinished Paper 1")
@@ -389,14 +389,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             preference_link.press("Enter")
             expect(hint).to_have_count(0)
             expect(simple_outcome.locator(".outcome-subsections")).to_be_visible()
-            # Confirm the preference was persisted in the project settings.
-            settings = page.get_by_role("button", name="Project settings", exact=True)
-            settings.click()
-            dialog = page.get_by_role("dialog", name="Settings")
-            dialog.get_by_role("tab", name="Preferences").click()
-            detail_setting = dialog.get_by_role("checkbox", name="Show advanced Outcome details")
-            expect(detail_setting).to_be_checked()
-            dialog.get_by_role("button", name="Cancel", exact=True).click()
+            # Advanced Outcome is a user preference shared by all projects.
+            enabled = page.evaluate(
+                """async () => {
+                    const response = await fetch('/api/user-preferences/research-settings');
+                    return (await response.json()).show_advanced_outcome_details;
+                }"""
+            )
+            assert enabled is True
             for session in sessions:
                 row = page.locator(f'li[data-session-id="{session["id"]}"]')
                 expect(row).to_be_visible(timeout=15000)
@@ -591,16 +591,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 assert mobile_conclusion.locator(".outcome-markdown .katex").count() >= 8
                 mobile_conclusion.screenshot(path=f"/tmp/sigma-conclusion-typeset-{width}.png")
             page.mouse.move(1400, 10)
-            # Switch to Simple Outcome and verify the same provenance is above the narrative.
-            settings = page.get_by_role("button", name="Project settings", exact=True)
-            settings.click()
-            dialog = page.get_by_role("dialog", name="Settings")
-            dialog.get_by_role("tab", name="Preferences").click()
-            detail_setting = dialog.get_by_role("checkbox", name="Show advanced Outcome details")
-            expect(detail_setting).to_be_checked()
-            detail_setting.uncheck()
-            dialog.get_by_role("button", name="Save", exact=True).click()
-            expect(dialog).to_be_hidden()
+            # The Outcome-display preference is user-scoped, not part of
+            # the small per-project Settings dialog. Persist it and reload.
+            result = page.evaluate(
+                """async () => {
+                    const response = await fetch('/api/user-preferences/research-settings', {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({show_advanced_outcome_details: false}),
+                    });
+                    return response.status;
+                }"""
+            )
+            assert result == 200
+            page.reload()
             row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             expect(row.locator(".outcome-simple")).to_be_visible()
             expect(row.locator(".research-pause-guidance")).to_contain_text(

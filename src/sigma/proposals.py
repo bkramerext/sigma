@@ -19,7 +19,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sigma import cloud_research, cloud_workspaces
-from sigma.model_catalog import DEFAULT_MODEL, validate_pair
+from sigma.model_catalog import validate_pair
 from sigma.openai_connection import auth_context, cloud_credential, models, provider_endpoint
 from sigma.plan_stream import completed, failure
 from sigma.projects import (
@@ -563,10 +563,18 @@ async def configuration(
     path: str | None = None,
     view: ProjectView | None = None,
     context: Mapping[str, Any] | None = None,
+    *,
+    frozen_model: str | None = None,
+    frozen_effort: str | None = None,
 ) -> dict[str, Any]:
     snapshot = view or (inspect_project(path) if path else None)
-    model = snapshot.project.ai_model if snapshot else DEFAULT_MODEL
-    effort = snapshot.project.reasoning_effort if snapshot else "high"
+    # Future research is configured by the current user, never the project.
+    # Historical records keep their model and effort snapshots.
+    from sigma import global_research_settings
+
+    user_settings = global_research_settings.load_config()
+    model = frozen_model if frozen_model is not None else user_settings["ai_model"]
+    effort = frozen_effort if frozen_effort is not None else user_settings["reasoning_effort"]
     if context is None:
         context = await auth_context()
     discovery = await models(context=context)
@@ -577,7 +585,10 @@ async def configuration(
         selected = next(c for c in discovery["models"] if c["id"] == model)
         available = selected["availability"] == "available"
         if not available and discovery["connection"]["status"] == "connected":
-            message = "Selected project model is unavailable to this API account. Change it explicitly in Edit Project; no fallback will be used."
+            message = (
+                "Selected research model is unavailable to this API account. "
+                "Change it in Home Settings → Research; no fallback will be used."
+            )
     except ValueError as exc:
         message = str(exc)
     return {
@@ -1132,11 +1143,7 @@ async def generate_proposal(
                 "AI account or billing mode changed during generation. The draft was discarded; retry explicitly."
             )
         current_view = inspect_project(path)
-        if (
-            current_view.project.id != project_id
-            or current_view.project.ai_model != config["model"]
-            or current_view.project.reasoning_effort != config["reasoning_effort"]
-        ):
+        if current_view.project.id != project_id:
             raise ProjectError(
                 "Project identity or selected model changed during generation. The draft was discarded; reopen and retry."
             )

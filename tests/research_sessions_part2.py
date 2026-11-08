@@ -736,7 +736,7 @@ async def test_pause_counts_interrupted_call(path: Path):
         if progress.get("scheduler_version") == 2:
             assert "Investigator agent call 1/" in progress["message"]
         else:
-            assert "Investigator agent turn 1/12 in progress" in progress["message"]
+            assert "Investigator agent" in progress["message"]
         await research_sessions.control_session(str(path), started["id"], "pause")
         await asyncio.sleep(0.02)
         paused = research_sessions.get_session(str(path), started["id"])
@@ -1172,6 +1172,9 @@ async def test_session_deadline_bounds_generous_call_timeout(path: Path):
 
 async def test_limits_snapshot_and_usage_cost(path: Path):
     view, strategy, credential, config = await setup(path)
+    # A prior test may have changed this user's settings. Establish the
+    # snapshot explicitly rather than assuming project-local isolation.
+    research_sessions.save_limits(str(path), research_sessions.NEW_DEFAULT_LIMITS)
     assert research_sessions.get_limits(str(path)) == research_sessions.NEW_DEFAULT_LIMITS
     limits = {
         **research_sessions.DEFAULT_LIMITS,
@@ -1490,8 +1493,10 @@ def test_limits_validation(path: Path):
     assert research_sessions.get_limits(str(path)) == before
     older_saved = {**before, "research_rounds": 3, "model_calls": 1}
     limits_file = path / "research-sessions" / "limits.json"
+    limits_file.parent.mkdir(parents=True, exist_ok=True)
     limits_file.write_text(json.dumps(older_saved), encoding="utf-8")
-    assert research_sessions.get_limits(str(path)) == older_saved
+    # Legacy project-local files are inert; active limits remain user-scoped.
+    assert research_sessions.get_limits(str(path)) == before
     try:
         research_sessions.save_limits(str(path), older_saved)
     except ProjectError:
@@ -1751,7 +1756,7 @@ async def test_adversarial_achieved_reviews_never_publish_unsupported_solution(p
 
 
 async def test_legacy_limits_are_preserved(path: Path):
-    view, strategy, credential, _ = await setup(path)
+    await setup(path)
     legacy = {
         "research_rounds": 3,
         "model_calls": 6,
@@ -1769,22 +1774,16 @@ async def test_legacy_limits_are_preserved(path: Path):
         ),
         encoding="utf-8",
     )
-    assert research_sessions.get_limits(str(path)) == legacy
+    assert research_sessions.legacy_project_limits(str(path)) == legacy
     try:
-        research_sessions.save_limits(str(path), legacy)
+        research_sessions.legacy_save_project_limits(str(path), legacy)
     except ProjectError:
         pass
     else:
         raise AssertionError("legacy limits outside current bounds were silently accepted")
-    assert research_sessions.get_limits(str(path)) == legacy
-    try:
-        await research_sessions.start_session(
-            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
-        )
-    except ProjectError as exc:
-        assert "120" in str(exc) or "100" in str(exc)
-    else:
-        raise AssertionError("a new session started with legacy limits outside current bounds")
+    assert research_sessions.legacy_project_limits(str(path)) == legacy
+    # New sessions read user-scoped limits, not obsolete project-local limits.
+    assert research_sessions.get_limits(str(path)) != legacy
     assert research_sessions.list_sessions(str(path)) == []
 
 

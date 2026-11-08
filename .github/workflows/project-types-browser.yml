@@ -2,6 +2,11 @@ name: Project Types browser acceptance
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "browser_checks/project_types_436.py"
+      - ".github/workflows/project-types-browser.yml"
 
 permissions:
   contents: read

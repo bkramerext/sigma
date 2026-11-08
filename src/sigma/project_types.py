@@ -368,13 +368,12 @@ def common_references() -> dict[str, list[dict[str, str]]]:
 
 
 def _default_reference_preferences() -> dict[str, dict[str, list[str]]]:
-    """Per-user default: omit shared guides, retain discipline-specific guides."""
-    return {
-        "common": {
-            field: [ref["url"] for ref in refs]
-            for field, refs in curated_common_references().items()
-        }
-    }
+    """New users start with every common and discipline-specific reference enabled.
+
+    Preferences list *disabled* reference URLs; existing users retain their
+    saved choices. No migration or propagation is performed.
+    """
+    return {}
 
 
 def _validate_reference_preferences(

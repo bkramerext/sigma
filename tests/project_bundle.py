@@ -577,14 +577,11 @@ def main() -> None:
             )
 
             assert get_limits(created.path) == dict(NEW_DEFAULT_LIMITS)
-            # Existing malformed limits must never be mistaken for missing defaults.
+            # Historic project-local limits are inert in the new user-scoped model.
+            # They remain byte-for-byte portable, even when malformed.
             write_file(created.path, "research-sessions/limits.json", b"{invalid")
-            try:
-                get_limits(created.path)
-            except ProjectError:
-                pass
-            else:
-                raise AssertionError("Corrupt limits were silently reset")
+            assert get_limits(created.path) == dict(NEW_DEFAULT_LIMITS)
+            assert read_file(created.path, "research-sessions/limits.json") == b"{invalid"
             delete_file(created.path, "research-sessions/limits.json")
             assert _allocate_session_number(created.path, []) == 2
             assert _allocate_session_number(created.path, []) == 3
@@ -708,6 +705,13 @@ def main() -> None:
                 "max_concurrent_sessions": 4,
             }
             save_limits(str(created.path), saved_limits)
+            # Verify import/export preserves historical project-local limits as
+            # inert data; live limits now come exclusively from user preferences.
+            write_file(
+                created.path,
+                "research-sessions/limits.json",
+                json.dumps(saved_limits).encode(),
+            )
             assert {
                 "project.json",
                 f"research-sessions/{session_id}.json",
@@ -796,7 +800,8 @@ def main() -> None:
                 customized.project.difficulty is not None
                 and customized.project.difficulty.value == "hard"
             )
-            assert customized.project.show_advanced_outcome_details is True
+            # Outcome display is user-scoped; project bundles no longer store it.
+            assert customized.project.show_advanced_outcome_details is False
             assert read_bundle(customized.path)["files"]["project.json"]
             assert {item.project.id for item in list_json_projects()} >= {
                 created.project.id,

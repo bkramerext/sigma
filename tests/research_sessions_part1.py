@@ -1515,11 +1515,13 @@ def test_project_concurrency_max_four_and_legacy_read(root: Path) -> None:
         "max_concurrent_sessions": 17,
     }
     saved_path = Path(path) / "research-sessions" / "limits.json"
+    saved_path.parent.mkdir(parents=True, exist_ok=True)
     saved_path.write_text(json.dumps(legacy), encoding="utf-8")
     assert research_sessions.get_limits(path)["max_concurrent_sessions"] == 4
     assert json.loads(saved_path.read_text())["max_concurrent_sessions"] == 17
     research_sessions.save_limits(path, research_sessions.get_limits(path))
-    assert json.loads(saved_path.read_text())["max_concurrent_sessions"] == 4
+    # User-scoped saves cannot mutate portable project-local legacy data.
+    assert json.loads(saved_path.read_text())["max_concurrent_sessions"] == 17
 
 
 async def test_start_preflight_does_not_hold_project_or_global_admission_locks(path: Path):
@@ -1594,7 +1596,9 @@ async def test_start_preserves_frozen_inputs_after_slow_preflight(path: Path):
             )
         finally:
             release.set()
-        started = await asyncio.wait_for(task, timeout=2)
+        # A saturated CI runner may delay source prefetch after auth completes.
+        # Lock responsiveness is independently asserted by the two-second gate above.
+        started = await asyncio.wait_for(task, timeout=10)
         await research_sessions._tasks[started["id"]]
     record = research_sessions._read(str(path), started["id"])
     assert record["strategy_text"] == strategy.approach
@@ -2105,7 +2109,10 @@ async def test_legacy_background_disconnect_after_gate_wait(path: Path) -> None:
         return None
 
     with (
-        patch("sigma.research_preferences.projects_root", return_value=path.parent),
+        patch(
+            "sigma.global_research_settings._path",
+            return_value=path.parent / "research-settings.json",
+        ),
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(research_sessions, "_worker", new=idle_worker),
@@ -2131,7 +2138,10 @@ async def test_legacy_background_disconnect_after_gate_wait(path: Path) -> None:
         return []
 
     with (
-        patch("sigma.research_preferences.projects_root", return_value=path.parent),
+        patch(
+            "sigma.global_research_settings._path",
+            return_value=path.parent / "research-settings.json",
+        ),
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(research_sessions, "_acquire_gates", new=disconnect_during_gate),

@@ -615,11 +615,11 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
 
     original_role_call = research_sessions._portfolio_role_call
 
-    async def pinned_configuration(*, view, context):
-        # No mid-run UI preference may change the model or thinking level
-        # selected when Play began.
-        assert view.project.ai_model == MODEL
-        assert view.project.reasoning_effort == "high"
+    async def pinned_configuration(*, view, context, frozen_model=None, frozen_effort=None):
+        # Future user settings may change, but a running session explicitly
+        # supplies its frozen model/effort on every subsequent provider call.
+        assert frozen_model in (None, MODEL)
+        assert frozen_effort in (None, "high")
         return config
 
     async def blocked_role_call(*args, **kwargs):
@@ -675,8 +675,8 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
             },
             show_advanced_outcome_details=True,
         )
-        assert inspect_project(path).project.show_advanced_outcome_details
-        assert inspect_project(path).project.reasoning_effort == "medium"
+        assert not inspect_project(path).project.show_advanced_outcome_details
+        assert inspect_project(path).project.reasoning_effort == current.reasoning_effort
         release.set()
         continued = await wait_for(path, started["id"])
     assert continued["status"] in {"completed", "ended"}, continued["message"]

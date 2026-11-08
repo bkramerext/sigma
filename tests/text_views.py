@@ -328,6 +328,9 @@ async def main_async(root: Path):
         if version < 6:
             raw.pop("ai_model", None)
             raw.pop("reasoning_effort", None)
+        else:
+            raw["ai_model"] = "gpt-6.1-sol"
+            raw["reasoning_effort"] = "high"
         if version < 5:
             raw.pop("active_order", None)
         if version < 4:

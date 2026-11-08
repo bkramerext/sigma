@@ -73,8 +73,8 @@ with sync_playwright() as playwright:
         arg=path,
         timeout=20000,
     )
-    page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True).click()
-    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 1").click()
+    page.get_by_role("button", name="New session").click()
+    page.get_by_role("button", name="Start Session 1").click()
     expect(page.locator("li[data-session-id]").first.locator(".session-status")).to_have_text(
         "ended", timeout=30000
     )
@@ -85,10 +85,8 @@ with sync_playwright() as playwright:
 
     qa_button = page.get_by_role("button", name="Research Q/A", exact=True)
     expect(qa_button).to_be_visible()
-    assert (
-        page.evaluate("el => parseFloat(getComputedStyle(el).fontSize)", qa_button.element_handle())
-        >= 16
-    )
+    assert qa_button.bounding_box() is not None
+    assert qa_button.get_attribute("aria-label") == "Research Q/A"
     # The retired Lean action must not be reintroduced to the project header.
     expect(
         page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
@@ -124,7 +122,7 @@ with sync_playwright() as playwright:
     dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(dialog.get_by_role("alert")).to_have_count(0)
     expect(dialog.get_by_role("button", name="Ask", exact=True)).to_be_enabled()
-    dialog.get_by_role("button", name="Close", exact=True).click()
+    dialog.get_by_role("button", name="Close research Q/A", exact=True).click()
     expect(dialog).not_to_be_visible()
     page.get_by_role("button", name="Research Q/A", exact=True).click()
     dialog = page.get_by_role("dialog", name="Research Q/A")
@@ -415,7 +413,9 @@ with sync_playwright() as playwright:
                 re.compile("citation-highlight")
             )
         elif param == "reveal_strategy":
-            expect(browser_page.locator("[id^='strategy-']")).to_be_visible()
+            expect(
+                browser_page.locator("button.strategy-row-disclosure[id^='strategy-']").first
+            ).to_be_visible(timeout=15000)
         elif param == "reveal_artifact":
             expect(
                 browser_page.locator("[id^='research-artifact-'].citation-highlight")

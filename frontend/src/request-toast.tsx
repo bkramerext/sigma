@@ -5,6 +5,7 @@ import { providerInterruptionCopy } from './provider-usage-guidance';
 
 const toastStore = new RequestToastStore();
 
+
 const FETCH_UNREACHABLE_HINT = 'The request could not reach the server. In production, the SIGMA backend may not be running or may be unreachable. Check the backend service and its logs; a network interruption can also cause this error.';
 
 function actionableRequestMessage(message: string): string {
@@ -96,7 +97,7 @@ export function RequestErrorToasts() {
       <div className="request-toast-item-inner">
         <div className="request-toast" data-phase={failure.phase} role="alert">
           <div className="request-toast-content"><strong>{providerInterruptionCopy(failure.message)?.title ?? 'Request Failed'}</strong><p>{providerInterruptionCopy(failure.message) ? `${providerInterruptionCopy(failure.message)?.description} ${providerInterruptionCopy(failure.message)?.next}` : failure.message}</p></div>
-          <button type="button" aria-label="Dismiss request error" onClick={() => toastStore.dismiss(failure.id)}>Dismiss</button>
+          <button type="button" className="request-toast-dismiss" aria-label="Dismiss request error" data-tooltip="Dismiss request error" onClick={() => toastStore.dismiss(failure.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
         </div>
       </div>
     </div>)}

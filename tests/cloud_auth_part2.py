@@ -1573,12 +1573,7 @@ class CloudAuthTests(CloudAuthFixture):
                 b_before = client_b.get("/api/project-types").json()
                 self.assertEqual(a_before, b_before)
                 common = a_before["common_references"]
-                defaults = {
-                    "common": {
-                        field: [ref["url"] for ref in common[field]]
-                        for field in project_types.REFERENCE_FIELDS
-                    }
-                }
+                defaults = {}
                 self.assertEqual(a_before["reference_preferences"], defaults)
                 a_extra_r = "https://a.example.invalid/research"
                 a_extra_p = "https://a.example.invalid/publication"
@@ -1712,13 +1707,14 @@ class CloudAuthTests(CloudAuthFixture):
                             "publication_standards_references"
                         ]
                     },
-                    {b_extra_p},
+                    {b_extra_p}
+                    | {ref["url"] for ref in common["publication_standards_references"]},
                 )
                 b_research = {
                     next(
                         item for item in project_types.builtin_types() if item.id == "mathematical"
                     ).research_standards_references[0]["url"]
-                }
+                } | {ref["url"] for ref in common["research_standards_references"]}
                 for principal, path, research_urls, publication_urls in (
                     (
                         cloud_auth.Principal("google-sub-1", "admin@example.org", "admin"),
@@ -1730,7 +1726,8 @@ class CloudAuthTests(CloudAuthFixture):
                         cloud_auth.Principal("e2-user-b", "e2-member@example.org", "member"),
                         b_created.json()["path"],
                         b_research,
-                        {b_extra_p},
+                        {b_extra_p}
+                        | {ref["url"] for ref in common["publication_standards_references"]},
                     ),
                 ):
                     context = cloud_auth._CURRENT_PRINCIPAL.set(principal)
@@ -2160,27 +2157,9 @@ class CloudAuthTests(CloudAuthFixture):
                     self.assertEqual(created.status_code, 201, created.text)
                     path = created.json()["path"]
                     project_id = created.json()["project"]["id"]
-                    project_document = member.get(
-                        "/api/projects/inspect", params={"path": path}
-                    ).json()["project"]
-                    settings_keys = (
-                        "title",
-                        "problem",
-                        "investigation_type",
-                        "ai_model",
-                        "reasoning_effort",
-                        "difficulty",
-                        "show_advanced_outcome_details",
-                    )
-                    expected_settings = {key: project_document[key] for key in settings_keys}
-                    model_update = member.post(
-                        "/api/projects/update",
-                        json={
-                            "path": path,
-                            **expected_settings,
-                            "ai_model": "gpt-6-luna",
-                            "expected": expected_settings,
-                        },
+                    model_update = member.put(
+                        "/api/user-preferences/research-settings",
+                        json={"ai_model": "gpt-6-luna", "reasoning_effort": "high"},
                     )
                     self.assertEqual(model_update.status_code, 200, model_update.text)
                     strategy = member.post(
@@ -2224,8 +2203,8 @@ class CloudAuthTests(CloudAuthFixture):
                         (2, 3, 3, 18),
                         reloaded_limits.text,
                     )
-                    self.assertEqual(research_sessions.get_limits(path)["model_calls"], 12)
-                    self.assertNotIn("scheduler_version", research_sessions.get_limits(path))
+                    self.assertEqual(research_sessions.get_limits(path)["model_calls"], 18)
+                    self.assertEqual(research_sessions.get_limits(path)["scheduler_version"], 2)
                     config = member.get("/api/projects/proposals/config", params={"path": path})
                     self.assertEqual(config.status_code, 200, config.text)
                     self.assertTrue(config.json()["available"], config.text)

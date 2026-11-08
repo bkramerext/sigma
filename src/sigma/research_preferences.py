@@ -14,14 +14,19 @@ import stat
 import tempfile
 from pathlib import Path
 
-from sigma.projects import ProjectError, projects_root
+from sigma.projects import ProjectError
 
 PREFERENCES = ".sigma-user-preferences.json"
 LOCK = ".sigma-user-preferences.lock"
 
 
 def _root() -> Path:
-    root = projects_root()
+    # Use the same verified-principal private boundary as Project Types.
+    # Anonymous single-user local mode continues using the legacy root.
+    # Signed-in users do not inherit preferences from a shared local root.
+    from sigma import project_types
+
+    root = project_types._store_path().parent
     if root.is_symlink() or not root.is_dir():
         raise ProjectError("User preferences directory is unsafe")
     return root

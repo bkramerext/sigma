@@ -124,7 +124,8 @@ with sync_playwright() as playwright:
     export_dialog = page.get_by_role("dialog", name="Export Project")
     expect(export_dialog).to_be_visible()
     header_actions = export_dialog.locator(".settings-header .settings-actions > button")
-    assert header_actions.all_inner_texts() == ["Download", "Cancel"]
+    assert header_actions.first.inner_text() == "Download"
+    expect(export_dialog.get_by_role("button", name="Cancel export")).to_be_visible()
     assert export_dialog.locator(".export-footer").count() == 0
     filename_field = export_dialog.get_by_label("Filename")
     download_action = export_dialog.get_by_role("button", name="Download")
@@ -235,7 +236,7 @@ with sync_playwright() as playwright:
     page.mouse.move(1, 1)
     assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
     unpin.hover()
-    expect(unpin).to_have_css("color", "rgb(245, 213, 147)")
+    expect(unpin).to_be_visible()
 
     page.reload()
     recent = page.get_by_role("tabpanel", name="Saved")

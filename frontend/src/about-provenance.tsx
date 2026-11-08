@@ -23,7 +23,7 @@ function DiagramCard({ x, y, width, height, title, lines, fill, stroke, titleCol
 }
 
 function FlowArrow({ d, tone = 'blue', dashed = false }: { d: string; tone?: 'blue' | 'green' | 'gold' | 'violet' | 'coral'; dashed?: boolean }) {
-  const color = { blue: '#78bbee', green: '#85cfa7', gold: '#e9bd76', violet: '#b59ff5', coral: '#f0a098' }[tone];
+  const color = { blue: '#78bbee', green: '#85cfa7', gold: 'var(--sigma-copper-foreground)', violet: '#b59ff5', coral: '#f0a098' }[tone];
   return <path d={d} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dashed ? '5 5' : undefined} markerEnd={`url(#about-provenance-arrow-${tone})`}/>;
 }
 
@@ -51,7 +51,7 @@ export default function AboutProvenanceVision() {
           <desc id="about-provenance-description">Scientific papers contribute evidence, AI agents contribute analyses and hypotheses, and human investigators contribute observations and guidance to an evolving investigation graph. Evidence informs observations and hypotheses, contradictions trigger reassessment, and decisions guide further inquiry. Current Understanding and the Published TeX Document are two projections of that graph.</desc>
           <defs>
             {(['blue', 'green', 'gold', 'violet', 'coral'] as const).map(tone => <marker key={tone} id={`about-provenance-arrow-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-              <path d="M 0 0 L 8 4 L 0 8 z" fill={{ blue: '#78bbee', green: '#85cfa7', gold: '#e9bd76', violet: '#b59ff5', coral: '#f0a098' }[tone]}/>
+              <path d="M 0 0 L 8 4 L 0 8 z" fill={{ blue: '#78bbee', green: '#85cfa7', gold: 'var(--sigma-copper-foreground)', violet: '#b59ff5', coral: '#f0a098' }[tone]}/>
             </marker>)}
           </defs>
 
@@ -86,14 +86,14 @@ export default function AboutProvenanceVision() {
           <DiagramCard x={18} y={181} width={222} height={88} title="AI Agents" lines={['Interpret, question, challenge,', 'and synthesize evidence']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
           <DiagramCard x={18} y={336} width={222} height={88} title="Human Investigators" lines={['Observe, correct, judge, and', 'direct the research']} fill="#183b32" stroke="#74b99a" titleColor="#b5efce"/>
 
-          <text x="381" y="188" textAnchor="middle" fill="#e9bd76" fontSize="11">supports / refutes</text>
+          <text x="381" y="188" textAnchor="middle" fill="var(--sigma-copper-foreground)" fontSize="11">supports / refutes</text>
           <text x="367" y="305" textAnchor="end" fill="#9bcfed" fontSize="11">informs</text>
           <text x="577" y="305" fill="#c5b5fd" fontSize="11">may conflict</text>
           <text x="471" y="354" textAnchor="middle" fill="#c5b5fd" fontSize="11">reveals</text>
           <text x="558" y="424" fill="#f0aaa3" fontSize="11">reassesses</text>
           <text x="353" y="515" fill="#a0dec0" fontSize="11">guides new inquiry</text>
 
-          <DiagramCard x={310} y={199} width={139} height={68} title="Evidence" lines={['Claims, data,', 'citations']} fill="#403019" stroke="#e9bd76" titleColor="#ffe1aa"/>
+          <DiagramCard x={310} y={199} width={139} height={68} title="Evidence" lines={['Claims, data,', 'citations']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
           <DiagramCard x={492} y={199} width={140} height={68} title="Hypotheses" lines={['Explanations,', 'models']} fill="#183b32" stroke="#85cfa7" titleColor="#b5efce"/>
           <DiagramCard x={310} y={330} width={139} height={68} title="Observations" lines={['Findings,', 'measurements']} fill="#17324a" stroke="#78bbee" titleColor="#bde5ff"/>
           <DiagramCard x={492} y={330} width={140} height={68} title="Contradictions" lines={['Conflicting claims,', 'open questions']} fill="#302345" stroke="#b59ff5" titleColor="#dfccff"/>
@@ -104,7 +104,7 @@ export default function AboutProvenanceVision() {
           <text x="805" y="285" textAnchor="middle" fill="#9cb5c8" fontSize="11">projection</text>
           <text x="805" y="473" textAnchor="middle" fill="#9cb5c8" fontSize="11">projection</text>
 
-          <text x="455" y="581" textAnchor="middle" fill="#f3d9ad" fontSize="16" fontWeight="600">The investigation is the enduring artifact.</text>
+          <text x="455" y="581" textAnchor="middle" fill="var(--sigma-copper-foreground)" fontSize="16" fontWeight="600">The investigation is the enduring artifact.</text>
           <text x="455" y="604" textAnchor="middle" fill="#b7cbd8" fontSize="14">The publication is one of its projections.</text>
         </svg>
       </div>

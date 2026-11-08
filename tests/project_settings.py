@@ -56,7 +56,7 @@ def check_section_layout_preference(root: Path, path: Path, sibling: Path) -> No
     uri = "/api/user-preferences/section-layout"
     key = "expand_one_project_section_at_a_time"
     with (
-        patch("sigma.research_preferences.projects_root", return_value=root),
+        patch("sigma.research_preferences._root", return_value=root),
         TestClient(app) as client,
     ):
         assert client.get(uri).status_code == 200
@@ -77,7 +77,7 @@ def check_section_layout_preference(root: Path, path: Path, sibling: Path) -> No
         )
         with (
             TemporaryDirectory() as other_root,
-            patch("sigma.research_preferences.projects_root", return_value=Path(other_root)),
+            patch("sigma.research_preferences._root", return_value=Path(other_root)),
         ):
             assert client.get(uri).json() == {key: False}
             assert client.put(uri, json={key: True}).status_code == 200
@@ -102,7 +102,7 @@ def check_section_layout_preference(root: Path, path: Path, sibling: Path) -> No
 
 def check_unattended_execution(root: Path, path: Path, sibling: Path) -> None:
     """User scope, fail-closed admission, genuine stream cleanup, copied IDs."""
-    with patch("sigma.research_preferences.projects_root", return_value=root):
+    with patch("sigma.research_preferences._root", return_value=root):
         assert research_preferences.allow_unattended_background_execution() is False
         assert "allow_unattended_background_execution" not in json.loads(
             (path / "project.json").read_text()
@@ -166,7 +166,7 @@ def check_unattended_execution(root: Path, path: Path, sibling: Path) -> None:
 
             with (
                 TemporaryDirectory() as unrelated,
-                patch("sigma.research_preferences.projects_root", return_value=Path(unrelated)),
+                patch("sigma.research_preferences._root", return_value=Path(unrelated)),
             ):
                 assert client.get(uri).json() == {"allow_unattended_background_execution": False}
             assert client.get(uri).json() == {"allow_unattended_background_execution": True}
@@ -193,9 +193,7 @@ def check_unattended_execution(root: Path, path: Path, sibling: Path) -> None:
             assert client.get(layout_uri).json() == {"expand_one_project_section_at_a_time": True}
             with (
                 TemporaryDirectory() as unrelated_layout,
-                patch(
-                    "sigma.research_preferences.projects_root", return_value=Path(unrelated_layout)
-                ),
+                patch("sigma.research_preferences._root", return_value=Path(unrelated_layout)),
             ):
                 assert client.get(layout_uri).json() == {
                     "expand_one_project_section_at_a_time": False
@@ -236,7 +234,7 @@ def check_unattended_execution(root: Path, path: Path, sibling: Path) -> None:
         browser_record = {"browser_presence_required": True}
         assert research_sessions._stop_advisory_requested(browser_record, str(path))
         assert browser_record["stop_advisory"] is True
-        with patch("sigma.research_preferences.projects_root", return_value=root):
+        with patch("sigma.research_preferences._root", return_value=root):
             research_preferences.update_unattended_background_execution(True)
         assert not research_sessions._stop_advisory_requested(
             {"browser_presence_required": True}, str(path)
@@ -328,9 +326,16 @@ def main():
                 raw.pop("difficulty", None)
             if version < 9:
                 raw.pop("show_advanced_outcome_details", None)
+            else:
+                raw["show_advanced_outcome_details"] = False
             if version < 6:
                 raw.pop("ai_model", None)
                 raw.pop("reasoning_effort", None)
+            else:
+                # The project fixture originates from schema v12, where these
+                # historical fields are intentionally absent.
+                raw["ai_model"] = "gpt-6.1-sol"
+                raw["reasoning_effort"] = "high"
             if version < 4:
                 raw.pop("research_mode", None)
                 raw.pop("investigation_type", None)
@@ -374,7 +379,7 @@ def main():
             }
             result = edit(path, values, prior)
             assert result.path == view.path and result.project.id == view.project.id
-            assert result.project.schema_version == max(version, 11)
+            assert result.project.schema_version == max(version, 12)
             assert result.project.difficulty is not None
             assert result.project.difficulty.value == "hard"
             assert result.project.show_advanced_outcome_details is False
@@ -387,7 +392,12 @@ def main():
             assert project_change is not None
             assert asdict(project_change) == {
                 "previous": prior,
-                "current": values,
+                "current": {
+                    **values,
+                    "ai_model": "gpt-6.1-sol",
+                    "reasoning_effort": "high",
+                    "show_advanced_outcome_details": False,
+                },
             }
             assert inspect_project(path) == result
             # Reverse mode as an actual single transaction.
@@ -398,13 +408,15 @@ def main():
         initialize_project(legacy, "Legacy unknown", "Retain unknown difficulty")
         legacy_raw = json.loads((legacy / "project.json").read_bytes())
         legacy_raw["schema_version"] = 7
+        legacy_raw["ai_model"] = "gpt-6.1-sol"
+        legacy_raw["reasoning_effort"] = "high"
         legacy_raw.pop("difficulty")
-        legacy_raw.pop("show_advanced_outcome_details")
+        legacy_raw.pop("show_advanced_outcome_details", None)
         (legacy / "project.json").write_text(json.dumps(legacy_raw))
         legacy_view = inspect_project(legacy)
         legacy_settings = asdict(project_settings(legacy_view.project))
         renamed = edit(legacy, {**legacy_settings, "title": "Still unknown"}, legacy_settings)
-        assert renamed.project.schema_version == 11 and renamed.project.difficulty is None
+        assert renamed.project.schema_version == 12 and renamed.project.difficulty is None
         assert "difficulty" in json.loads((legacy / "project.json").read_bytes())
         assert inspect_project(legacy).project.difficulty is None
         with TestClient(app) as client:
@@ -426,7 +438,7 @@ def main():
             lambda: initialize_project(root / "invalid-model.sigma", "Bad", "Question", ai_model="")
         )
         assert not (root / "invalid-model.sigma").exists()
-        assert initial.project.schema_version == 11
+        assert initial.project.schema_version == 12
         assert initial.project.difficulty is not None
         assert initial.project.difficulty.value == "medium"
         assert initial.project.show_advanced_outcome_details is False
@@ -438,10 +450,7 @@ def main():
             ("title", "x" * 201),
             ("problem", "x" * 20001),
             ("investigation_type", "alien"),
-            ("ai_model", "text-embedding-3-small"),
-            ("reasoning_effort", "none"),
             ("difficulty", "impossible"),
-            ("show_advanced_outcome_details", "yes"),
         ):
             rejects(lambda key=key, bad=bad: edit(path, {**prior, key: bad}, prior))
         assert inspect_project(path) == initial
@@ -469,7 +478,7 @@ def main():
         change_stage(path, item.id, "exploring")
         edit_strategy(path, item.id, "Edited strategy", "New approach")
         remove_strategy(path, item.id)
-        assert inspect_project(path).project.schema_version == 11
+        assert inspect_project(path).project.schema_version == 12
         print(
             "PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes"
         )
@@ -503,29 +512,25 @@ def main():
             response = client.post("/api/projects/update", json=body)
             assert response.status_code == 200, response.text
             assert response.json()["project"]["difficulty"] == "medium"
-            preference_settings = asdict(project_settings(inspect_project(path).project))
-            preference_body = {
-                "path": str(path),
-                **preference_settings,
-                "expected": preference_settings,
-                "show_advanced_outcome_details": True,
-            }
-            preference_response = client.post("/api/projects/update", json=preference_body)
+            # Outcome presentation is a per-user preference, not project data.
+            preference_settings = client.get("/api/user-preferences/research-settings")
+            assert preference_settings.status_code == 200
+            preference_payload = preference_settings.json()
+            preference_response = client.put(
+                "/api/user-preferences/research-settings",
+                json={**preference_payload, "show_advanced_outcome_details": True},
+            )
             assert preference_response.status_code == 200, preference_response.text
-            assert preference_response.json()["project"]["show_advanced_outcome_details"] is True
-            assert inspect_project(path).project.show_advanced_outcome_details is True
-            assert inspect_project(sibling.path).project.show_advanced_outcome_details is False
-            assert (
-                json.loads((Path(path) / "project.json").read_bytes())[
-                    "show_advanced_outcome_details"
-                ]
-                is True
+            assert preference_response.json()["show_advanced_outcome_details"] is True
+            assert inspect_project(path).project.show_advanced_outcome_details is False
+            assert "show_advanced_outcome_details" not in json.loads(
+                (Path(path) / "project.json").read_bytes()
             )
             assert client.post("/api/projects/update", json=body).status_code == 400
             exported = client.get("/api/projects/audit", params={"path": str(path)})
             assert exported.status_code == 200
             assert exported.json()["project"]["difficulty"] == "medium"
-            assert exported.json()["project"]["show_advanced_outcome_details"] is True
+            assert "show_advanced_outcome_details" not in exported.json()["project"]
             report = client.get(
                 "/api/projects/export/report", params={"path": str(path), "format": "txt"}
             )
@@ -556,7 +561,7 @@ def main():
                 **research_sessions.NEW_DEFAULT_LIMITS,
                 "max_concurrent_sessions": "1",
             }
-            # Browser previews a new v2 session without rewriting explicit v1 limits.
+            # The compatibility preview uses v2 defaults for legacy v1 settings.
             assert research_sessions.get_limits(str(path)) == {
                 **changed_limits,
                 "max_concurrent_sessions": 1,
@@ -629,9 +634,8 @@ def main():
             )
             assert finite_again.status_code == 200, finite_again.text
             assert finite_again.json()["session_duration_minutes"] == 60
-            assert (
-                research_sessions.get_limits(str(sibling.path))
-                == research_sessions.NEW_DEFAULT_LIMITS
+            assert research_sessions.get_limits(str(sibling.path)) == research_sessions.get_limits(
+                str(path)
             )
         expected = asdict(project_settings(inspect_project(path).project))
         result = subprocess.run(

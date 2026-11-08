@@ -51,24 +51,9 @@ with sync_playwright() as playwright:
     assert saved_before["reasoning_effort"] == "high"
     assert saved_before["difficulty"] is not None
 
-    cases = [
-        (
-            401,
-            "Model availability requires an authorized session. Saved settings are unchanged.",
-            False,
-        ),
-        (
-            403,
-            "Model availability requires an authorized session. Saved settings are unchanged.",
-            False,
-        ),
-        (
-            503,
-            "Model availability check failed (HTTP 503). Retry after connectivity is restored. Saved settings are unchanged. Preferences remain configurable; access is checked when connected.",
-            True,
-        ),
-    ]
-
+    # The project no longer owns Model/Thinking controls. Even when the
+    # provider catalog fails, the user's saved pair remains readable from
+    # home Settings without modifying the project.
     def catalog_failure(response_status):
         def handle(route):
             route.fulfill(
@@ -79,25 +64,19 @@ with sync_playwright() as playwright:
 
         return handle
 
-    for status, expected_message, preferences_available in cases:
+    for status in (401, 403, 503):
         page.route("**/api/ai/models", catalog_failure(status))
-        page.reload()
-        model = page.locator(".project-model-pill")
-        thinking = page.locator(".project-thinking-pill")
-        difficulty = page.locator(".project-difficulty-badge")
-        if preferences_available:
-            expect(model).to_be_enabled()
-            expect(thinking).to_be_enabled()
-            expect(page.locator(".project-controls-message")).to_contain_text(
-                "Preferences remain configurable; access is checked when connected."
-            )
-        else:
-            expect(model).to_be_disabled()
-            expect(thinking).to_be_disabled()
-        expect(difficulty).to_be_enabled()
-        expect(model).to_contain_text("Sol" if preferences_available else "gpt-6.1-sol")
-        expect(thinking).to_contain_text("High")
-        expect(page.locator(".project-controls-message")).to_have_text(expected_message)
+        page.goto(BASE_URL)
+        page.get_by_role("button", name="Settings", exact=True).click()
+        dialog = page.get_by_role("dialog", name="Settings")
+        expect(dialog).to_be_visible()
+        dialog.get_by_role("tab", name="Model").click()
+        model = dialog.locator("#sigma-global-model")
+        thinking = dialog.locator("#sigma-global-effort")
+        expect(model).to_have_value("gpt-6.1-sol")
+        expect(thinking).to_have_value("high")
+        expect(model.locator("option")).to_have_count(1)
+        expect(dialog.get_by_role("button", name="Save", exact=True)).to_be_disabled()
         for width in (1280, 390, 320):
             page.set_viewport_size({"width": width, "height": 850})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
@@ -113,6 +92,7 @@ with sync_playwright() as playwright:
         } == {
             key: saved_before[key] for key in ("id", "ai_model", "reasoning_effort", "difficulty")
         }
+        dialog.get_by_role("button", name="Close Settings").click()
         page.unroute("**/api/ai/models")
 
     assert not page_errors, page_errors

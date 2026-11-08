@@ -2,28 +2,28 @@
 .project-types-dialog:not([open]) { display: none; }
 .project-types-dialog::backdrop { background: #01050bba; backdrop-filter: blur(3px); }
 .project-types-dialog > header { display: flex; flex: 0 0 auto; align-items: baseline; justify-content: flex-start; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #35404a; }
-.project-types-dialog > header h2 { margin: 0; color: #edc38d; font: 400 25px/1.25 Georgia, serif; }
+.project-types-dialog > header h2 { margin: 0; color: var(--sigma-copper-foreground); font: 400 25px/1.25 Georgia, serif; }
 .project-types-dialog > header > .project-types-header-actions { display: flex; align-items: baseline; gap: 12px; }
 .project-types-dialog button, .project-types-dialog input, .project-types-dialog textarea, .project-types-dialog select { font: 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; }
-.project-types-dialog button:not([role="combobox"]):not([role="option"]) { appearance: none; min-height: 28px; padding: 2px 3px; border: 0; border-radius: 0; box-shadow: none; color: #edc38d; background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.project-types-dialog button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) { color: #ffe5a6; background: transparent; box-shadow: none; text-shadow: none; }
+.project-types-dialog button:not([role="combobox"]):not([role="option"]) { appearance: none; min-height: 28px; padding: 2px 3px; border: 0; border-radius: 0; box-shadow: none; color: var(--sigma-copper-foreground); background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.project-types-dialog button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; box-shadow: none; text-shadow: none; }
 .project-types-dialog button:disabled { opacity: .55; cursor: default; }
 .project-types-section-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
 .project-types-section-heading > div { display: flex; gap: 12px; }
-.project-types-section-heading > span { font-size: 12px; color: #edc38d; }
+.project-types-section-heading > span { font-size: 12px; color: var(--sigma-copper-foreground); }
 .project-types-body { flex: 1 1 auto; overflow: auto; padding: 16px 20px 22px; }
 .project-types-body > section { margin-top: 18px; }
-.project-types-body h3 { margin: 0 0 9px; color: #edc38d; font: 400 17px/1.35 Georgia, serif; }
+.project-types-body h3 { margin: 0 0 9px; color: var(--sigma-copper-foreground); font: 400 17px/1.35 Georgia, serif; }
 .project-types-checkbox { display: inline-flex; align-items: center; gap: 8px; width: fit-content; color: #c4ced8; cursor: pointer; }
 .project-types-dialog .project-types-checkbox input[type="checkbox"] { box-sizing: border-box; display: inline-block; flex: 0 0 16px; width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; padding: 0; accent-color: #bc7e58; }
 .project-type-card { margin: 7px 0; border: 1px solid #604832; border-radius: 6px; background: #0b141e; }
-.project-type-card > summary { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 6px 11px; color: #e5c49c; cursor: pointer; list-style: none; }
+.project-type-card > summary { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 6px 11px; color: var(--sigma-copper-foreground); cursor: pointer; list-style: none; }
 .project-type-card > summary::-webkit-details-marker { display: none; }
-.project-type-card > summary:before { content: '›'; color: #c9a16f; font-size: 21px; transform: rotate(0); }
+.project-type-card > summary:before { content: '›'; color: var(--sigma-copper-foreground); font-size: 21px; transform: rotate(0); }
 .project-type-card[open] > summary:before { transform: rotate(90deg); }
 .project-type-card > summary strong { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
-.project-type-card > summary small { flex: 0 0 auto; margin-left: auto; color: #edc38d; }
-.project-type-card-icon, .project-type-card-icon > * { display: inline-flex; width: 23px; height: 23px; align-items: center; justify-content: center; color: #d6a36f; }
+.project-type-card > summary small { flex: 0 0 auto; margin-left: auto; color: var(--sigma-copper-foreground); }
+.project-type-card-icon, .project-type-card-icon > * { display: inline-flex; width: 23px; height: 23px; align-items: center; justify-content: center; color: var(--sigma-copper-foreground); }
 .project-type-card-body { display: grid; gap: 12px; padding: 4px 14px 15px 33px; }
 .project-type-card-body > label { display: grid; gap: 5px; color: #c6d0d9; font-size: 12px; }
 .project-type-card-body :is(input, textarea, select) { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid #59636e; border-radius: 4px; color: #e5ebf0; background: #080f17; }
@@ -39,24 +39,24 @@
 /* Common, built-in, and custom reference actions share the link yellow.
    Removing horizontal button padding aligns New directly beneath the URL text. */
 .project-types-dialog .pt-reference-table td button:not([role="combobox"]):not([role="option"]) {
-  min-height: 24px; padding: 1px 0; border: 0; color: #edc38d;
+  min-height: 24px; padding: 1px 0; border: 0; color: var(--sigma-copper-foreground);
   background: transparent; text-decoration: underline;
 }
 .project-types-dialog .pt-reference-table td button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) {
-  color: #ffe5a6;
+  color: var(--sigma-copper-foreground);
 }
 .project-type-card > summary .project-type-remove { flex: 0 0 auto; margin-left: 0; white-space: nowrap; }
 .pt-reference-new-row td { padding-top: 2px; }
 .project-types-add { margin-top: 8px; }
 .project-types-body [role=alert] { color: #f1aaa0; }
-.project-type-missing-warning { margin: 12px 0; padding: 12px 14px; border: 1px solid #b87e4f; border-radius: 6px; color: #e6d4bd; background: #32251c; }
+.project-type-missing-warning { margin: 12px 0; padding: 12px 14px; border: 1px solid #b87e4f; border-radius: 6px; color: var(--sigma-copper-foreground); background: #32251c; }
 .project-type-missing-warning p { margin: 6px 0 10px; }
 .project-type-warning-dialog { box-sizing: border-box; width: min(520px, calc(100vw - 32px)); margin: auto; padding: 20px; border: 1px solid #b87e4f; border-radius: 8px; color: #d5dfe7; background: linear-gradient(145deg, #111a23, #07111e); box-shadow: 0 24px 65px #0009; }
 .project-type-warning-dialog::backdrop { background: #01050bd9; backdrop-filter: blur(3px); }
-.project-type-warning-dialog h2 { margin: 0 0 12px; color: #e5ad8f; font: 400 23px/1.25 Georgia, serif; }
+.project-type-warning-dialog h2 { margin: 0 0 12px; color: var(--sigma-copper-foreground); font: 400 23px/1.25 Georgia, serif; }
 .project-type-warning-dialog p { line-height: 1.55; }
 .project-type-warning-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.project-type-warning-actions button { min-height: 36px; padding: 7px 11px; border: 1px solid #765342; border-radius: 4px; color: #e0b39a; background: #101a24; cursor: pointer; }
+.project-type-warning-actions button { min-height: 36px; padding: 7px 11px; border: 1px solid #765342; border-radius: 4px; color: var(--sigma-copper-foreground); background: #101a24; cursor: pointer; }
 .project-type-warning-actions button:first-child { border-color: #ba7658; background: linear-gradient(140deg, #a75e43, #74402f); color: #fff2e9; }
 @media (max-width: 600px) {
   .project-types-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
@@ -72,19 +72,19 @@
 .project-types-dialog .pt-based-on-picker { position: relative; z-index: 3; width: fit-content; max-width: 100%; justify-self: start; }
 .project-types-dialog .pt-based-on-picker [role="combobox"] { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 43px; padding: 9px 12px; border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; text-decoration: none; }
 .project-types-dialog .pt-based-on-picker [role="combobox"] > span { flex: 1 1 auto; }
-.project-types-dialog .pt-based-on-picker .research-type-chevron { width: 12px; height: 12px; flex: 0 0 12px; fill: none; stroke: #bd9a75; stroke-width: 1.5; transition: transform 120ms ease; }
+.project-types-dialog .pt-based-on-picker .research-type-chevron { width: 12px; height: 12px; flex: 0 0 12px; fill: none; stroke: var(--sigma-copper-foreground); stroke-width: 1.5; transition: transform 120ms ease; }
 .project-types-dialog .pt-based-on-picker [aria-expanded="true"] .research-type-chevron { transform: rotate(180deg); }
 .project-types-dialog .pt-based-on-picker .research-type-options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: min(256px, 36dvh); overflow: auto; padding: 4px; border: 1px solid #806247; border-radius: 6px; background: #091522; box-shadow: 0 14px 35px #000b; }
 .project-types-dialog .pt-based-on-picker .research-type-options [role="option"] { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #dce7f0; font: 13px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; text-decoration: none; }
 .project-types-dialog .pt-based-on-picker .research-type-options [role="option"]:hover,
 .project-types-dialog .pt-based-on-picker .research-type-options [role="option"]:focus-visible,
-.project-types-dialog .pt-based-on-picker .research-type-options [role="option"][aria-selected="true"] { border-color: #a87950; background: #241a16; color: #f0c59a; }
-.project-types-dialog .pt-based-on-picker .research-type-icon { display: block; flex: 0 0 20px; width: 20px; height: 20px; color: #d6a36f; }
+.project-types-dialog .pt-based-on-picker .research-type-options [role="option"][aria-selected="true"] { border-color: #a87950; background: #241a16; color: var(--sigma-copper-foreground); }
+.project-types-dialog .pt-based-on-picker .research-type-icon { display: block; flex: 0 0 20px; width: 20px; height: 20px; color: var(--sigma-copper-foreground); }
 
 /* Prevent global pill/button themes from painting ordinary text actions red. */
 .project-types-dialog button:not([role="combobox"]):not([role="option"]),
-.project-types-dialog button:not([role="combobox"]):not([role="option"]):visited { color: #edc38d; background: transparent !important; background-image: none !important; border: 0 !important; box-shadow: none !important; text-decoration: underline; }
-.project-types-dialog button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) { color: #ffe5a6; text-shadow: none; }
+.project-types-dialog button:not([role="combobox"]):not([role="option"]):visited { color: var(--sigma-copper-foreground); background: transparent !important; background-image: none !important; border: 0 !important; box-shadow: none !important; text-decoration: underline; }
+.project-types-dialog button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) { color: var(--sigma-copper-foreground); text-shadow: none; }
 .project-types-dialog button:not([role="combobox"]):not([role="option"]):disabled { opacity: .5; }
 .pt-validation-error { display: block; color: #f1aaa0; font-size: 12px; line-height: 1.45; }
 .pt-dialog-error { flex: 0 0 auto; max-height: 120px; margin: 0; padding: 10px 20px; overflow-y: auto; border-bottom: 1px solid #8c514a; color: #f1aaa0; background: #211719; font-size: 13px; line-height: 1.45; }
@@ -99,10 +99,10 @@
 .pt-common-references > p { margin: 0 0 12px; color: #b6c3cf; font-size: 12px; line-height: 1.55; }
 .pt-common-references > h4 { margin: 13px 0 6px; color: #cdd7e0; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 .pt-reference-link { display: grid; gap: 0; min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
-.project-types-dialog .pt-reference-link a { width: fit-content; max-width: 100%; color: #edc38d; text-underline-offset: 3px; }
-.project-types-dialog .pt-reference-link a:hover { color: #ffe5a6; }
+.project-types-dialog .pt-reference-link a { width: fit-content; max-width: 100%; color: var(--sigma-copper-foreground); text-underline-offset: 3px; }
+.project-types-dialog .pt-reference-link a:hover { color: var(--sigma-copper-foreground); }
 .project-types-dialog .pt-reference-link .pt-reference-url { color: #aab7c4; font-size: 11px; }
-.project-types-dialog .pt-reference-link .pt-reference-url:hover { color: #e7d1b8; }
+.project-types-dialog .pt-reference-link .pt-reference-url:hover { color: var(--sigma-copper-foreground); }
 .project-types-dialog .pt-restore-references { justify-self: start; }
 
 /* Usage controls apply to shared, built-in and custom references alike. */
@@ -113,7 +113,7 @@
 
 /* New follows the same copper link palette as neighboring actions. */
 .project-types-dialog button.pt-new-action:not([role="combobox"]):not([role="option"]) {
-  color: #edc38d !important;
+  color: var(--sigma-copper-foreground) !important;
 }
 .project-types-dialog button.pt-new-action:not([role="combobox"]):not([role="option"]):hover:not(:disabled),
 .project-types-dialog button.pt-new-action:not([role="combobox"]):not([role="option"]):focus-visible {

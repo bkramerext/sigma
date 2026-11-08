@@ -19,7 +19,6 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
@@ -918,6 +917,18 @@ def _effective_limits(limits: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_limits(path: str) -> dict[str, Any]:
+    """Current user's global limits; intentionally ignore project-local limits.json.
+
+    path remains accepted for legacy callers. Saved session snapshots still own
+    their original execution configuration.
+    """
+    from sigma import global_research_settings
+
+    return global_research_settings.load()
+
+
+def legacy_project_limits(path: str) -> dict[str, Any]:
+    """Historical reader retained for inspection and bundle compatibility."""
     if project_path(path).suffix == ".json":
         from sigma.project_bundle import _decode, read_bundle
 
@@ -4133,6 +4144,14 @@ def _call_cost_reservation(
 
 
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
+    """Save current user's limits (never write them into a project)."""
+    from sigma import global_research_settings
+
+    return global_research_settings.save(raw)
+
+
+def legacy_save_project_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
+    """Legacy writer retained only for compatibility testing."""
     if project_path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
 
@@ -5165,7 +5184,7 @@ def control_mock_session(path: str, session_id: str, action: str) -> dict[str, A
         )
         if active_count >= limits["max_concurrent_sessions"]:
             raise ProjectError(
-                "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+                "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Home Settings → Limits."
             )
         record["status"] = "queued"
         record["current_action"] = "Queued"
@@ -5692,15 +5711,12 @@ async def _frozen_session_configuration(
     view: Any, credential: Mapping[str, Any], record: dict[str, Any]
 ) -> dict[str, Any]:
     """Check provider access for the model selected when the session began."""
-    pinned = replace(
-        view,
-        project=replace(
-            view.project,
-            ai_model=record["model"],
-            reasoning_effort=record["reasoning_effort"],
-        ),
+    return await configuration(
+        view=view,
+        context=credential,
+        frozen_model=record["model"],
+        frozen_effort=record["reasoning_effort"],
     )
-    return await configuration(view=pinned, context=credential)
 
 
 def _validate_provider_transport_change(record: dict[str, Any], *, next_model: str) -> None:
@@ -7332,7 +7348,7 @@ async def control_session(
             ]
             if len(others) >= current_limits["max_concurrent_sessions"]:
                 raise ProjectError(
-                    "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+                    "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Home Settings → Limits."
                 )
             if record.get("cloud_sponsored") is True and record.get("cost_status") != "available":
                 # Older recovered sessions discarded their accumulated estimate

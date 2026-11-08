@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import DialogDismissButton from './DialogDismissButton';
 import './resume-authorization.css';
 
 export type ResumeAuthorization = {
@@ -91,8 +92,8 @@ export default function ResumeAuthorizationDialog({ request, anchor, onAuthorize
         </>}
       </div>
       <div className="resume-authorization-actions">
-        <button type="button" onClick={onAuthorize}>Authorize</button>
-        <button ref={cancelButton} type="button" onClick={onCancel}>Cancel</button>
+        <button type="button" onClick={onAuthorize}>Confirm</button>
+        <DialogDismissButton ref={cancelButton} label="Cancel session resumption" onClick={onCancel}/>
       </div>
     </div>,
     document.body,

@@ -1,0 +1,128 @@
+/* User-scoped Settings, preserving the existing Project Settings visual language. */
+.sigma-global-settings {
+  width: min(820px, calc(100vw - 32px));
+  max-height: min(90dvh, 860px);
+  overflow: hidden;
+  padding: 0;
+}
+.sigma-global-settings .sigma-global-settings-content {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90dvh, 860px);
+  min-height: 0;
+}
+.sigma-global-settings .settings-header,
+.sigma-global-settings .settings-tabs { flex: 0 0 auto; }
+.sigma-global-settings .settings-body { min-height: 0; overflow-y: auto; }
+.sigma-global-settings--research,
+.sigma-global-settings--preferences { width: min(520px, calc(100vw - 32px)); }
+.sigma-global-settings--limits { width: min(580px, calc(100vw - 32px)); }
+.sigma-global-settings .settings-body .sigma-model-select {
+  display: block;
+  width: min(100%, 300px);
+}
+.sigma-global-settings .settings-body .sigma-effort-select {
+  display: block;
+  width: min(100%, 155px);
+}
+.sigma-global-settings .settings-tabs { display: flex; flex-wrap: wrap; padding: 12px 24px 0; gap: 18px; }
+.sigma-global-settings .settings-tabs button {
+  background: transparent; border: 0; padding: 5px 1px 8px; min-height: 28px;
+  color: var(--sigma-copper-foreground); cursor: pointer; font: 13px Inter, sans-serif;
+}
+.sigma-global-settings .settings-tabs button[aria-selected="true"] { border-bottom: 2px solid var(--sigma-copper-foreground); }
+.sigma-global-settings .settings-tabs button:focus-visible { outline: 2px solid #edbc77; }
+.sigma-global-settings .settings-body { padding: 20px 24px 26px; }
+.sigma-global-settings .settings-body fieldset { border: 0; padding: 0; margin: 0; }
+.sigma-global-settings .settings-body label { display: block; margin-top: 14px; }
+.sigma-global-settings .settings-body select,
+.sigma-global-settings .settings-body input:not([type="checkbox"]) { max-width: 100%; }
+.sigma-global-settings .project-preference-checkbox { display: flex !important; align-items: center; gap: 10px; }
+.sigma-global-settings .project-preference-checkbox input { flex: 0 0 auto; }
+.sigma-global-settings .project-types-embedded {
+  position: static; width: auto; max-height: none; margin: 0; border: 0; border-radius: 0;
+  box-shadow: none; background: transparent; overflow: visible;
+}
+.sigma-global-settings .project-types-embedded > header {
+  padding: 10px 24px 12px; border-bottom: 0;
+}
+.sigma-global-settings .project-types-embedded > header h2 { display: none; }
+.sigma-global-settings [role="tabpanel"] {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.sigma-global-settings [role="tabpanel"][hidden] { display: none; }
+.sigma-global-settings .project-types-embedded {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sigma-global-settings .project-types-embedded .project-types-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  padding: 8px 24px 32px;
+  scrollbar-gutter: stable;
+}
+.sigma-global-settings .project-types-embedded .project-type-card:last-child {
+  scroll-margin-bottom: 24px;
+}
+.sigma-global-settings .project-types-embedded > header .project-types-header-actions {
+  display: flex; gap: 12px;
+}
+.sigma-settings-type-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+@media (max-width: 600px) {
+  .sigma-global-settings .settings-tabs { gap: 10px; padding-inline: 14px; }
+  .sigma-global-settings .settings-body { padding-inline: 14px; }
+  .sigma-global-settings .project-types-embedded .project-types-body { padding-inline: 14px; }
+}
+
+.sigma-global-settings .project-types-embedded:not([open]) { display: flex; }
+.sigma-project-classification-dialog { width: min(475px, calc(100vw - 32px)); }
+.sigma-project-classification-dialog .settings-body { padding: 20px 24px 25px; }
+.sigma-project-classification-dialog .settings-body fieldset { border: 0; margin: 0; padding: 0; }
+.sigma-project-classification-dialog .settings-body label { display: block; margin: 10px 0 6px; }
+
+/* Shared Save stays beside the Settings heading; Close remains at the far edge. */
+.sigma-global-settings .settings-header .settings-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: space-between;
+}
+.sigma-global-settings .settings-header .settings-actions > button:first-child {
+  width: auto;
+  flex: 0 0 auto;
+  margin-right: auto;
+}
+/* Classification changes only, so the dialog is content-height, not viewport-height. */
+.project-settings-dialog.sigma-project-classification-dialog {
+  width: min(400px, calc(100vw - 32px));
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
+}
+.sigma-project-classification-dialog > form {
+  height: auto;
+}
+.sigma-project-classification-dialog .settings-body {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.sigma-project-classification-dialog .settings-body .research-type-picker {
+  width: min(100%, 265px);
+}
+.sigma-project-classification-dialog .settings-body #sigma-project-difficulty {
+  width: min(100%, 145px);
+}
+/* Place classification Save beside its title and keep Close at the far edge. */
+.sigma-project-classification-dialog .settings-header .settings-actions {
+  flex: 1 1 auto;
+  justify-content: space-between;
+  min-width: 0;
+}
+.sigma-project-classification-dialog .settings-header .settings-actions > button:first-child {
+  margin-right: auto;
+}
