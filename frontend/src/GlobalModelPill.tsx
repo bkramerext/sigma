@@ -93,12 +93,16 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   const nextEffort = next && settings ? suitableEffort(next, settings.reasoning_effort) : null;
   const selectedName = modelName(selected, settings?.ai_model ?? 'Unavailable');
   const label = !enabled ? 'Sign in' : settings ? selectedName + (selected?.relative_cost ? ' ' + selected.relative_cost : '') : 'Unavailable';
+  const thinkingLabel = settings?.reasoning_effort
+    ? 'Thinking · ' + (settings.reasoning_effort === 'xhigh' ? 'Extra High'
+      : settings.reasoning_effort.charAt(0).toUpperCase() + settings.reasoning_effort.slice(1))
+    : null;
   const notice = nextEffort && settings && nextEffort !== settings.reasoning_effort
     ? ' Switching to ' + modelName(next, '') + ' also changes Thinking to ' + nextEffort + '.' : '';
   const tooltip = !enabled ? 'Sign in to view your default research model.' : settings
     ? 'The selected default model is ' + selectedName + '. Relative published API token cost: ' +
       (selected?.relative_cost ?? 'unknown') + '. Applies to future research and proposals across projects. ' +
-      'Click to cycle through reviewed models.' + notice
+      (thinkingLabel ? ' ' + thinkingLabel + '.' : '') + ' Click to cycle through reviewed models.' + notice
     : error || 'Checking your model selection.';
   async function save(choice: ModelChoice) {
     if (!settings || busy) return;
@@ -132,7 +136,10 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
       aria-label={'Model ' + label} title={tooltip} data-tooltip={tooltip}
       disabled={!enabled || !ready || busy || !!pending || !settings || !next || !nextEffort}
       onClick={cycle}>
-      <span className="global-model-pill-current">Model · {label}</span>
+      <span className="global-model-pill-current">
+        <span className="global-model-pill-primary">Model · {label}</span>
+        {thinkingLabel && <span className="global-model-pill-secondary">{thinkingLabel}</span>}
+      </span>
       {choices.map(choice => <span key={choice.id} className="global-model-pill-measure" aria-hidden="true">
         Model · {modelName(choice, choice.id)}{choice.relative_cost ? ' ' + choice.relative_cost : ''}
       </span>)}
