@@ -81,41 +81,54 @@ def reconcile(requirements: str, paper: Mapping[str, Any]) -> list[dict[str, str
 
 
 def overlap_warnings(paper: Mapping[str, Any]) -> list[str]:
-    """Flag near-duplicated substantial paragraphs across distinct sections.
+    """Flag near-duplicated substantial prose across editorial components.
 
-    This catches editorial repetition without rewriting a proof or discarding
-    caveats. Short technical definitions, summaries and ordinary overlaps are
-    intentionally exempt.
+    Include abstract, framing, methods, body sections, limitations, and
+    conclusions; repetition can occur outside the body sections. The high
+    overlap threshold and length gate avoid flagging ordinary technical
+    terminology or concise summaries. Never rewrite scientific content.
     """
+    blocks: list[tuple[str, str]] = []
+
+    def add_prose(label: str, value: Any) -> None:
+        if isinstance(value, str):
+            blocks.append((label, value))
+        elif isinstance(value, list):
+            blocks.extend((label, item) for item in value if isinstance(item, str))
+
+    add_prose("Abstract", paper.get("abstract"))
+    add_prose("Problem framing", paper.get("problem_framing"))
+    add_prose("Methods", paper.get("methods"))
     sections = paper.get("sections", [])
-    if not isinstance(sections, list):
-        return []
-    prior: list[tuple[str, set[str], str]] = []
+    if isinstance(sections, list):
+        for section in sections:
+            if isinstance(section, dict):
+                add_prose(str(section.get("heading", "Unnamed section")), section.get("paragraphs"))
+    add_prose("Limitations", paper.get("limitations"))
+    add_prose("Conclusions", paper.get("conclusions"))
+
+    prior: list[tuple[str, set[str]]] = []
     findings: list[str] = []
-    for section in sections:
-        if not isinstance(section, dict):
+    for heading, paragraph in blocks:
+        if len(paragraph) < 180:
             continue
-        heading = str(section.get("heading", "Unnamed section"))
-        for paragraph in section.get("paragraphs", []):
-            if not isinstance(paragraph, str) or len(paragraph) < 180:
+        tokens = re.findall(r"[a-z0-9]+", paragraph.casefold())
+        if len(tokens) < 35:
+            continue
+        shingles = {" ".join(tokens[i : i + 4]) for i in range(len(tokens) - 3)}
+        if not shingles:
+            continue
+        for older_heading, older_shingles in prior:
+            if older_heading == heading:
                 continue
-            tokens = re.findall(r"[a-z0-9]+", paragraph.casefold())
-            if len(tokens) < 35:
-                continue
-            shingles = {" ".join(tokens[i : i + 4]) for i in range(len(tokens) - 3)}
-            if not shingles:
-                continue
-            for older_heading, older_shingles, _ in prior:
-                if older_heading == heading:
-                    continue
-                score = len(shingles & older_shingles) / max(1, len(shingles | older_shingles))
-                if score >= 0.82:
-                    findings.append(
-                        f"Potential repeated argument across '{older_heading}' and '{heading}' "
-                        f"(four-word overlap {score:.0%}); review without deleting distinct evidence."
-                    )
-                    break
-            prior.append((heading, shingles, paragraph))
+            score = len(shingles & older_shingles) / max(1, len(shingles | older_shingles))
+            if score >= 0.82:
+                findings.append(
+                    f"Potential repeated argument across '{older_heading}' and '{heading}' "
+                    f"(four-word overlap {score:.0%}); review without deleting distinct evidence."
+                )
+                break
+        prior.append((heading, shingles))
     if len(findings) > 12:
         return [
             *findings[:12],
