@@ -11016,7 +11016,6 @@ async def _generate_impl(
         return await finalize_published(record)
 
 
-
 def _schedule_progress_email(
     path: str,
     event: Literal["paper_finished", "paper_failed", "paper_paused"],
