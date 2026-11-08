@@ -6539,20 +6539,16 @@ function ConnectedModelPill({ enabled }: { enabled: boolean }) {
   const cloud = useCloudIdentity();
   const funding = cloudFundingFor(cloud);
   const googleRequired = !!funding?.authenticationEnabled && !funding.authorized;
-  // Mirror ConnectionStatus: hosted and simulated sponsorship report provider
-  // status, but real local sponsorship uses the same AI connection as personal.
-  const hosted = funding?.target === 'hosted';
+  // Match the *displayed* ChatGPT pill rather than the provider health check:
+  // the sponsored pill is shown for an authorized sponsored connection even
+  // when its provider status has not yet been fetched.
   const sponsoredSelected = funding?.selectedConnection === 'sponsored';
-  const status = ai.connecting ? 'connecting'
-    : ai.initialLoading ? 'checking'
-    : ai.healthError ? 'stale'
-    : ai.info?.status ?? 'unknown';
-  const connected = hosted
-    ? sponsoredSelected && funding?.provider?.status === 'connected'
-    : funding?.simulatedSponsored
-      ? sponsoredSelected && funding?.provider?.status === 'connected'
-      : status === 'connected';
-  return enabled && connected && !googleRequired
+  const sponsoredPillVisible = !!funding?.authorized && sponsoredSelected
+    && (funding.target === 'hosted' || funding.sponsorshipEligible);
+  const personalConnected = !ai.connecting && !ai.initialLoading && !ai.healthError
+    && ai.info?.status === 'connected';
+  const visible = sponsoredPillVisible || (!sponsoredSelected && personalConnected);
+  return enabled && visible && !googleRequired
     ? <GlobalModelPill enabled/>
     : null;
 }
