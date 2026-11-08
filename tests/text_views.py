@@ -434,9 +434,7 @@ async def main_async(root: Path):
             request_started.set()
             await allow_response.wait()
         output = (
-            "Count $e_n$ for $n \\ge 0$"
-            if "e_n" in source_text
-            else "Count $f_n$ for $n \\ge 0$"
+            "Count $e_n$ for $n \\ge 0$" if "e_n" in source_text else "Count $f_n$ for $n \\ge 0$"
         )
         return httpx.Response(200, json=provider_output(output, model=payload["model"]))
 
@@ -461,9 +459,7 @@ async def main_async(root: Path):
             "model": "gpt-6-luna",
             "reasoning_effort": "low",
         }
-        second = await convert_text(
-            str(live_path), "strategy", "markdown", live_strategy.id
-        )
+        second = await convert_text(str(live_path), "strategy", "markdown", live_strategy.id)
         assert second["markdown"]["current"]
         assert second["markdown"]["provenance"]["model"] == MODEL
         assert second["markdown"]["provenance"]["reasoning_effort"] == "high"
