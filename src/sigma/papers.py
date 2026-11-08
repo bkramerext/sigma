@@ -9293,8 +9293,12 @@ async def _generate_impl(
                     )
         if not config["available"]:
             raise ProjectError(config["message"])
-        if checkpoint is not None and compatible and _rebind_paper_checkpoint_provider(
-            checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
+        if (
+            checkpoint is not None
+            and compatible
+            and _rebind_paper_checkpoint_provider(
+                checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
+            )
         ):
             _save_work(path, checkpoint)
         if checkpoint is not None and not compatible:
@@ -9763,6 +9767,23 @@ async def _generate_impl(
         timestamp = _now()
         from sigma import publication_audit
 
+        valid_diagrams: list[PaperDiagram] = []
+        invalid_diagram_count = 0
+        for diagram in draft.diagrams:
+            diagram_ids = [node.id for node in diagram.nodes]
+            known_ids = set(diagram_ids)
+            if (
+                len(known_ids) != len(diagram_ids)
+                or any(
+                    edge.source not in known_ids or edge.target not in known_ids
+                    for edge in diagram.edges
+                )
+                or any(set(boundary.node_ids) - known_ids for boundary in diagram.boundaries)
+            ):
+                invalid_diagram_count += 1
+            else:
+                valid_diagrams.append(diagram)
+        draft = draft.model_copy(update={"diagrams": valid_diagrams})
         paper_project_source = next(
             (
                 source.get("data", {})
@@ -9798,6 +9819,10 @@ async def _generate_impl(
         warnings = list(
             dict.fromkeys([*validation_warnings, *draft.validation_warnings, *audit_warnings])
         )
+        if invalid_diagram_count:
+            warnings.append(
+                "An experimental diagram had invalid node references and was omitted; the paper continues as text."
+            )
         source_reference_records = _source_reference_records(package)
         source_reference_map = {
             item["source_ref"]: item["label"] for item in source_reference_records
@@ -9808,24 +9833,6 @@ async def _generate_impl(
                 item["source_ref"],
             ):
                 source_reference_map.setdefault(source_id, item["label"])
-        valid_diagrams: list[PaperDiagram] = []
-        for diagram in draft.diagrams:
-            diagram_ids = [node.id for node in diagram.nodes]
-            known_ids = set(diagram_ids)
-            if (
-                len(known_ids) != len(diagram_ids)
-                or any(
-                    edge.source not in known_ids or edge.target not in known_ids
-                    for edge in diagram.edges
-                )
-                or any(set(boundary.node_ids) - known_ids for boundary in diagram.boundaries)
-            ):
-                warnings.append(
-                    "An experimental diagram had invalid node references and was omitted; the paper continues as text."
-                )
-            else:
-                valid_diagrams.append(diagram)
-        draft = draft.model_copy(update={"diagrams": valid_diagrams})
         record = {
             "schema_version": 1,
             "paper_id": identifier,

@@ -22,11 +22,11 @@ from sigma import (
 )
 from sigma.api import app
 from sigma.projects import (
+    ProjectError,
     _decode,
     _document,
     initialize_project,
     inspect_project,
-    ProjectError,
     project_settings,
 )
 
@@ -211,6 +211,15 @@ def main() -> None:
             assert len(archived) == 1
             assert archived[0].read_text() == '{"version": 1, "markdown": ""}'
             target.write_bytes(old_bytes)
+            # A recreated file defaults to 0644 and must be rejected until
+            # its private permissions have been explicitly restored.
+            try:
+                research_ethos.quarantine_invalid_override()
+            except ProjectError as exc:
+                assert "unsafe" in str(exc).casefold()
+            else:
+                raise AssertionError("Unsafe Ethos file must be refused")
+            target.chmod(0o600)
             try:
                 research_ethos.quarantine_invalid_override()
             except ProjectError as exc:
