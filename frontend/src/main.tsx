@@ -4685,8 +4685,9 @@ function DifficultyPicker({ value, onChange }: {
       const below = window.innerHeight - rect.bottom - 12;
       const above = rect.top - 12;
       const height = Math.min(180, Math.max(80, Math.max(below, above)));
+      const menuHeight = Math.min(height, panel.scrollHeight);
       setMenuStyle({
-        top: below < 130 && above > below ? Math.max(8, rect.top - height - 4) : rect.bottom + 4,
+        top: below < 130 && above > below ? Math.max(8, rect.top - menuHeight - 4) : rect.bottom + 4,
         left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
         width: rect.width, maxHeight: height,
       });
@@ -7077,7 +7078,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   onRevoke: (grant: CloudGrant) => Promise<void>;
   onReload: (grant: CloudGrant) => Promise<void>;
   onUpdateInvitation: (request: CloudInvitationRequest, status: 'reviewed' | 'declined') => Promise<void>;
-  onUpdateFeedback: (request: CloudFeedbackRequest, status: 'reviewed' | 'closed') => Promise<void>;
+  onUpdateFeedback: (request: CloudFeedbackRequest, status: 'new' | 'reviewed') => Promise<void>;
   onRemoveFeedback: (request: CloudFeedbackRequest) => Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -7282,7 +7283,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       })}</tbody></table></div> : <p className="cloud-access-bootstrap">No invitation requests.</p>}
       </details>
       <details className="admin-collapsible-section admin-feedback-section" open><summary><h3>Product feedback</h3></summary>
-      {feedbackRequests.length ? <div className="admin-table-scroll admin-feedback-scroll"><table className="admin-grants-table admin-feedback-table"><colgroup><col style={{ width: '33%' }}/><col style={{ width: '22%' }}/><col style={{ width: '15%' }}/><col style={{ width: '9%' }}/><col style={{ width: '21%' }}/></colgroup><thead><tr><th scope="col">Feedback</th><th scope="col">Google account</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}</th><td className="admin-feedback-account">{item.account_email || 'Not signed in'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td><div className="admin-feedback-actions">{item.status !== 'closed' && <><button type="button" className="admin-text-action" disabled={busy || item.status === 'reviewed'} onClick={() => void onUpdateFeedback(item, 'reviewed')}>Mark reviewed</button><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateFeedback(item, 'closed')}>Close</button></>}<button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onRemoveFeedback(item)}>Remove</button></div></td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
+      {feedbackRequests.length ? <div className="admin-table-scroll admin-feedback-scroll"><table className="admin-grants-table admin-feedback-table"><colgroup><col style={{ width: '33%' }}/><col style={{ width: '22%' }}/><col style={{ width: '15%' }}/><col style={{ width: '9%' }}/><col style={{ width: '21%' }}/></colgroup><thead><tr><th scope="col">Feedback</th><th scope="col">Google account</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}</th><td className="admin-feedback-account">{item.account_email || 'Not signed in'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td><div className="admin-feedback-actions"><button type="button" className="admin-text-action admin-icon-action" disabled={busy || item.status === 'closed'} aria-pressed={item.status === 'reviewed'} aria-label={item.status === 'reviewed' ? 'Mark feedback unreviewed' : 'Mark feedback reviewed'} data-tooltip={item.status === 'reviewed' ? 'Mark unreviewed' : 'Mark reviewed'} onClick={() => void onUpdateFeedback(item, item.status === 'reviewed' ? 'new' : 'reviewed')}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/>{item.status === 'reviewed' && <path d="m8 12 3 3 5-6" strokeWidth="2.3"/>}</svg></button><button type="button" className="admin-text-action admin-remove admin-icon-action" disabled={busy} aria-label="Remove feedback" data-tooltip="Remove feedback" onClick={() => void onRemoveFeedback(item)}><AdminActionIcon kind="remove"/></button></div></td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
       </details>
       <details className="admin-collapsible-section admin-authorized-users-section" open><summary><h3>Authorized users</h3></summary>
       <div className="admin-table-scroll admin-authorized-table-scroll"><table className="admin-grants-table admin-authorized-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col" className="admin-allowance-heading">Sponsorship allowance</th><th scope="col">Actions</th></tr></thead><tbody>
@@ -7515,7 +7516,7 @@ function CloudAuthGate() {
       setInvitationRequests(current => current.filter(request => request.subject !== item.subject));
     } finally { setBusy(false); }
   }
-  async function updateFeedback(item: CloudFeedbackRequest, next: 'reviewed' | 'closed') {
+  async function updateFeedback(item: CloudFeedbackRequest, next: 'new' | 'reviewed') {
     setBusy(true);
     try {
       const response = await fetch(`/api/cloud-auth/admin/feedback/${encodeURIComponent(item.id)}`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: next }) });
