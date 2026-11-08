@@ -17,7 +17,13 @@ type ResearchSettings = {
 };
 const costTier = (s: string) => /^\${1,3}$/.test(s) ? s.length : Number.POSITIVE_INFINITY;
 const effortOrder = ['low', 'medium', 'high', 'xhigh'];
-const modelName = (m: ModelChoice | undefined, fallback: string) => m?.label.split(' · ')[0] ?? fallback;
+const modelNames: Record<string, string> = {
+  'gpt-6-luna': 'GPT-6-Luna',
+  'gpt-6.1-sol': 'GPT-6.1-Sol',
+  'gpt-6-astra': 'GPT-6-Astra',
+};
+const modelName = (m: ModelChoice | undefined, fallback: string) =>
+  (m && modelNames[m.id]) ?? m?.label.split(' · ')[0] ?? modelNames[fallback] ?? fallback;
 function suitableEffort(model: ModelChoice, current: string): string | null {
   if (!model.efforts?.length) return null;
   if (model.efforts.includes(current)) return current;
@@ -32,17 +38,22 @@ function ScrollingLabel({ value, direction, className }: {
   value: string;
   direction: 'forward' | 'reverse';
   className: string;
+  userCycleRevision: number;
 }) {
   const previous = useRef(value);
+  const previousRevision = useRef(userCycleRevision);
   const sequence = useRef(0);
   const [slide, setSlide] = useState<{ from: string; to: string; sequence: number } | null>(null);
   useEffect(() => {
-    if (previous.current === value) return;
     const from = previous.current;
+    const userInitiated = userCycleRevision !== previousRevision.current;
     previous.current = value;
+    previousRevision.current = userCycleRevision;
+    if (from === value) return;
+    if (!userInitiated) { setSlide(null); return; }
     sequence.current += 1;
     setSlide({ from, to: value, sequence: sequence.current });
-  }, [value]);
+  }, [value, userCycleRevision]);
   const active = slide?.to === value ? slide : null;
   return <span className={`${className} global-model-pill-slide-viewport`}>
     {active ? <span key={active.sequence} className={`global-model-pill-slide-pair global-model-pill-slide-${direction}`} aria-hidden="true">
@@ -61,6 +72,8 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   const [error, setError] = useState('');
   const [pending, setPending] = useState<ModelChoice | null>(null);
   const [popup, setPopup] = useState({ left: 8, top: 8 });
+  const [modelCycleRevision, setModelCycleRevision] = useState(0);
+  const [thinkingCycleRevision, setThinkingCycleRevision] = useState(0);
   const trigger = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -135,7 +148,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
       (thinkingLabel ? ' ' + thinkingLabel + '.' : '') +
       ' Click the upper half to cycle models; click the lower half to cycle thinking levels.' + notice
     : error || 'Checking your model selection.';
-  async function save(choice: ModelChoice, requestedEffort?: string) {
+  async function save(choice: ModelChoice, requestedEffort?: string, userCycle?: 'model' | 'thinking') {
     if (!settings || busy) return;
     const effort = requestedEffort ?? suitableEffort(choice, settings.reasoning_effort);
     if (!effort) return;
@@ -152,6 +165,8 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail ?? result.error ?? 'Model could not be changed.');
       setSettings(result as ResearchSettings);
+      if (userCycle === 'model') setModelCycleRevision(revision => revision + 1);
+      if (userCycle === 'thinking') setThinkingCycleRevision(revision => revision + 1);
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
@@ -159,11 +174,11 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   function cycle() {
     if (!next || !settings || !nextEffort) return;
     if (selected && costTier(next.relative_cost) > costTier(selected.relative_cost)) setPending(next);
-    else void save(next);
+    else void save(next, undefined, 'model');
   }
   function cycleThinking() {
     if (!selected || !nextThinking || !settings) return;
-    void save(selected, nextThinking);
+    void save(selected, nextThinking, 'thinking');
   }
   const dismiss = () => { setPending(null); trigger.current?.focus(); };
   return <span className="global-model-pill-position">
@@ -180,8 +195,8 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
         if (event.key === 'ArrowDown') { event.preventDefault(); cycleThinking(); }
       }}>
       <span className="global-model-pill-current">
-        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="forward"/>
-        {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward"/>}
+        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="forward" userCycleRevision={modelCycleRevision}/>
+        {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward" userCycleRevision={thinkingCycleRevision}/>}
       </span>
       <span className="global-model-pill-max-labels" aria-hidden="true">
         <span>Model · GPT-6-Astra $$$</span>
@@ -195,7 +210,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
         ({pending.relative_cost}) is higher than the current tier ({selected?.relative_cost ?? 'unknown'}).
         Continue with this user-wide default?</p>
       <div className="project-model-confirm-actions">
-        <button ref={confirm} type="button" onClick={() => { const choice = pending; dismiss(); void save(choice); }}>Confirm</button>
+        <button ref={confirm} type="button" onClick={() => { const choice = pending; dismiss(); void save(choice, undefined, 'model'); }}>Confirm</button>
         <button type="button" onClick={dismiss}>Cancel</button>
       </div>
     </div>, document.body)}
