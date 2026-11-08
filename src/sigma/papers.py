@@ -9372,7 +9372,18 @@ async def _generate_impl(
         last_output_write = 0.0
         output_delta_count = 0
         incoming_checkpoint = _load_work(path)
-        resume_floor = None
+        # Pre-fix versions deleted their authoring checkpoint before scoring,
+        # but left a progress sidecar containing the published paper ID.
+        legacy_scoring_id: str | None = None
+        if incoming_checkpoint is None:
+            legacy_progress = _read_progress_status(path)
+            if (
+                legacy_progress is not None
+                and legacy_progress.get("stage") in {"scoring", "score_failed", "finishing"}
+                and isinstance(legacy_progress.get("paper_id"), str)
+            ):
+                legacy_scoring_id = legacy_progress["paper_id"]
+        resume_floor = "scoring" if legacy_scoring_id else None
         if incoming_checkpoint is not None and not incoming_checkpoint.get(
             "explicit_restart_pending"
         ):
@@ -9780,7 +9791,16 @@ async def _generate_impl(
         # reference selection can populate it or the compiler can dispatch.
         # Otherwise a restart sees an incomplete work record and loses the
         # already selected sources and attempted-call accounting.
-        if checkpoint is None:
+        legacy_published_record: dict[str, Any] | None = None
+        if checkpoint is None and legacy_scoring_id is not None:
+            # Validate the old published artifact rather than creating a new
+            # version from live research. Missing or altered PDFs fail closed.
+            legacy_published_record = get_paper(path, legacy_scoring_id, include_tex=False)
+            if not legacy_published_record["pdf_available"]:
+                raise ProjectError(
+                    "Previously published PDF is unavailable; scoring cannot safely resume."
+                )
+        if checkpoint is None and legacy_published_record is None:
             reset_ledger = _read_reset_ledger(path)
             work = _new_work(
                 snapshot_hash,
@@ -9874,6 +9894,12 @@ async def _generate_impl(
                     "generation",
                 )
             } | {"title": saved_record["draft"]["title"]}
+
+        # Recover old, already-published scoring interruptions even when the
+        # previous build cleared its generation checkpoint too early.
+        if legacy_published_record is not None:
+            record = legacy_published_record
+            return await finalize_published(record)
 
         # The publication record is committed before Score begins. A restart
         # during the scoring call must never fall through to paper authoring.
