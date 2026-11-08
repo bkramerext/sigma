@@ -96,68 +96,59 @@
   color: inherit;
 }
 
-/* Natural label widths determine the identity column, with the same 12px
-   horizontal inset as Model. Both rows stretch to that column, so the
-   connected Google and ChatGPT pills remain equal without extra blank space. */
-.home-page .home-account-grid {
-  grid-template-columns: max-content max-content;
+/* Account column sizes to its ChatGPT content. Google keeps its own
+   intrinsic pill width and aligns to the ChatGPT pill's right edge. */
+.home-page .home-account-grid,
+.home-page .home-account-grid:has(> .administrator-settings-link) {
+  grid-template-columns: repeat(2, max-content);
 }
 .home-page .home-account-grid:has(> .administrator-settings-link) {
-  grid-template-columns: max-content max-content max-content;
+  grid-template-columns: repeat(3, max-content);
 }
 .home-page .home-account-grid > .project-google-signin,
 .home-page .home-account-grid > .api-connection {
   box-sizing: border-box;
-  width: 100%;
+  width: max-content;
   min-width: 0;
   max-width: none;
-  justify-self: stretch;
+  justify-self: end;
 }
 .workspace-page .project-art-header .project-identity-pill-stack {
+  display: grid;
+  grid-template-columns: max-content;
   width: max-content;
-  max-width: min(100%, calc(100vw - 32px));
-  justify-items: stretch;
+  max-width: none;
+  justify-items: end;
 }
 .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
   box-sizing: border-box;
-  width: 100%;
+  width: max-content;
   min-width: 0;
   max-width: none;
+  justify-self: end;
 }
 :is(.home-page, .workspace-page) .project-google-signin,
 :is(.home-page, .workspace-page) .project-chatgpt-signin > summary {
   box-sizing: border-box;
   padding-inline: 12px;
 }
-:is(.home-page, .workspace-page) .project-chatgpt-signin > summary:not(.has-sponsored-allowance) {
-  width: 100%;
+:is(.home-page, .workspace-page) .project-chatgpt-signin > summary {
+  width: max-content;
+  min-width: 0;
   max-width: none;
   justify-content: center;
 }
-/* Sponsored content must not contribute its long text to the intrinsic
-   width of the Home or Project identity column. The regular Google label
-   continues to establish the column width; the sponsor pill may overflow it. */
-.home-page .home-account-grid > .api-connection:has(> summary.has-sponsored-allowance),
-.workspace-page .project-art-header .project-identity-pill-stack > .api-connection:has(> summary.has-sponsored-allowance) {
-  contain: inline-size;
-  overflow: visible;
-}
-/* Sponsorship may extend outside the normal pill, but cannot widen the
-   identity grid track; its parent remains the ordinary column width. */
 :is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
   width: max-content;
+  min-width: 0;
   max-width: none;
-  min-width: 100%;
   justify-content: flex-start;
 }
 @media (max-width: 700px) {
-  .home-page .home-account-grid,
-  .home-page .home-account-grid:has(> .administrator-settings-link) {
-    grid-template-columns: repeat(2, max-content);
-  }
-  .home-page .home-account-grid:has(> .administrator-settings-link) {
-    grid-template-columns: repeat(3, max-content);
+  :is(.home-page, .workspace-page) .project-google-signin,
+  :is(.home-page, .workspace-page) .api-connection > summary {
+    padding-inline: 9px;
   }
 }
 /* Each cycle candidate occupies the same grid cell invisibly, so the button
@@ -190,8 +181,8 @@
 .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
   box-sizing: border-box;
-  justify-self: stretch;
-  width: 100%;
+  justify-self: end;
+  width: max-content;
   min-width: 0;
   max-width: none;
 }
@@ -205,7 +196,7 @@
   color: var(--sigma-copper-foreground);
 }
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary:not(.has-sponsored-allowance) {
-  width: 100%;
+  width: max-content;
   justify-content: center;
 }
 .workspace-page .project-art-header .sigma-header-secondary-row > .project-global-settings-pill {
