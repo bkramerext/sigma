@@ -1437,16 +1437,16 @@ def update_project(
 ) -> ProjectView:
     from sigma import cloud_workspaces, project_collaboration
 
-    shared_edit = expected_revision is not None and collaborators is not None
     if (expected_revision is None) != (collaborators is None):
         raise ProjectError("Shared settings require both the collaborator list and revision.")
-    if shared_edit:
+    shared_edit = expected_revision is not None and collaborators is not None
+    if collaborators is not None:
         from sigma.model_catalog import validate_pair
 
         try:
             emails = [project_collaboration.normalize_collaborator(item) for item in collaborators]
             validate_pair(ai_model, reasoning_effort)
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             raise ProjectError(str(exc)) from exc
         if len(set(emails)) != len(emails):
             raise ProjectError("Each collaborator may appear only once.")
@@ -1580,7 +1580,11 @@ def update_project(
         if shared_edit:
             assert expected_revision is not None and collaborators is not None
             project_collaboration.save_settings(
-                view.path, expected_revision, collaborators, ai_model, reasoning_effort,
+                view.path,
+                expected_revision,
+                collaborators,
+                ai_model,
+                reasoning_effort,
                 view.project.title,
             )
 

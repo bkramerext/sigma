@@ -39,8 +39,8 @@ from pydantic import (
 from sigma import (
     cloud_research,
     cloud_workspaces,
-    project_collaboration,
     paper_writing_sources,
+    project_collaboration,
     publication_reference_compiler,
     reference_efficiency,
 )

@@ -1042,7 +1042,8 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     try:
         # Reserve synchronously before yielding a StreamingResponse. This
         # closes the window where an immediate Stop could miss the job.
-        papers.register_submission(body.path, task)
+        with project_collaboration.bind_lease(body.path, lease):
+            papers.register_submission(body.path, task)
     except BaseException:
         # Disk failure, duplicate submission, or any other admission error
         # must never leave an unregistered provider task running.
@@ -1571,8 +1572,11 @@ async def research_start_view(body: ResearchStartRequest):
                         status_code=400,
                     )
                 return JSONResponse(
-                    {"error": diagnostic["message"], "diagnostic_recorded": True,
-                     "diagnostic": diagnostic},
+                    {
+                        "error": diagnostic["message"],
+                        "diagnostic_recorded": True,
+                        "diagnostic": diagnostic,
+                    },
                     status_code=400,
                 )
         worker = research_sessions._tasks.get(result.get("id", ""))
@@ -1583,6 +1587,7 @@ async def research_start_view(body: ResearchStartRequest):
     finally:
         if not transferred:
             project_collaboration.release_lease(body.path, lease)
+
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
 async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):

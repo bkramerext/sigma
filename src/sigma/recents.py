@@ -437,11 +437,14 @@ def recent_projects() -> dict:
         known_paths = {entry["path"] for entry in entries}
         for row in shared_rows:
             if row["path"] not in known_paths:
-                entries.append({
-                    "id": row["id"], "path": row["path"],
-                    "accessed_at": datetime.now(UTC).isoformat(),
-                    "included_example": False,
-                })
+                entries.append(
+                    {
+                        "id": row["id"],
+                        "path": row["path"],
+                        "accessed_at": datetime.now(UTC).isoformat(),
+                        "included_example": False,
+                    }
+                )
     from sigma.research_sessions import has_active_session
 
     recent = []

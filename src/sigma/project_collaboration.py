@@ -5,6 +5,7 @@ The central SQLite catalog is an ACL, not a second copy of project data.
 All identities come from verified Google authentication; client emails are only
 membership invitations, never authorization assertions.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -12,13 +13,13 @@ import logging
 import re
 import sqlite3
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from functools import wraps
 from email.message import EmailMessage
+from functools import wraps
 from pathlib import Path
-from collections.abc import Callable
-from typing import Any, Iterator, TypeVar
+from typing import Any, TypeVar
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -62,7 +63,7 @@ def _verify_fence(db: sqlite3.Connection, path: str, actor: str) -> None:
     if token is not None:
         if lease is None or lease["token"] != token or lease["expires_at"] <= time.time():
             raise ProjectError("Project execution lease was lost. Resume from saved progress.")
-    elif lease is not None and lease["expires_at"] > time.time() and lease["email"] != actor:
+    elif lease is not None and lease["expires_at"] > time.time():
         raise ProjectError(
             f"Project is being used by {lease['email']} ({lease['activity']}). "
             "Wait for that activity to finish."
@@ -71,7 +72,7 @@ def _verify_fence(db: sqlite3.Connection, path: str, actor: str) -> None:
 
 @contextmanager
 def write_guard(
-    path: str, expected_revision: int | None = None
+    path: str, expected_revision: int | None = None, *, advance_revision: bool = True
 ) -> Iterator[sqlite3.Connection | None]:
     """Fence a persisted mutation and revision under one SQLite writer transaction.
 
@@ -92,8 +93,7 @@ def write_guard(
             type(expected_revision) is not int or row["revision"] != expected_revision
         ):
             raise ProjectError(
-                f"Project was saved by {row['last_writer']}. "
-                "Reopen it and redo your changes."
+                f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
             )
         yield db
         return
@@ -116,18 +116,18 @@ def write_guard(
                 or row["revision"] != expected_revision
             ):
                 raise ProjectError(
-                    f"Project was saved by {row['last_writer']}. "
-                    "Reopen it and redo your changes."
+                    f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
                 )
             _verify_fence(db, path, actor)
             binding = _WRITE_CONTEXT.set((path, db))
             try:
                 yield db
-                db.execute(
-                    """UPDATE shared_projects SET revision=revision+1,
-                       last_writer=?,updated_at=? WHERE path=?""",
-                    (actor, time.time(), path),
-                )
+                if advance_revision:
+                    db.execute(
+                        """UPDATE shared_projects SET revision=revision+1,
+                           last_writer=?,updated_at=? WHERE path=?""",
+                        (actor, time.time(), path),
+                    )
                 db.commit()
             finally:
                 _WRITE_CONTEXT.reset(binding)
@@ -139,9 +139,16 @@ def write_guard(
 def fenced_checkpoint(func: Callable[..., _T]) -> Callable[..., _T]:
     """Fence checkpoint sidecars that bypass the main project write lock."""
 
+    transient_status = func.__name__ in {
+        "_write_progress_status",
+        "_clear_progress_status",
+        "_write_queue_status",
+        "_clear_queue_status",
+    }
+
     @wraps(func)
     def guarded(path: str, *args: Any, **kwargs: Any) -> _T:
-        with write_guard(path):
+        with write_guard(path, advance_revision=not transient_status):
             return func(path, *args, **kwargs)
 
     return guarded
@@ -156,14 +163,12 @@ def watch_lease(path: str, token: str | None, worker: asyncio.Task[Any]) -> None
         try:
             while not worker.done():
                 try:
-                    await asyncio.wait_for(
-                        asyncio.shield(worker), timeout=LEASE_SECONDS / 3
-                    )
+                    await asyncio.wait_for(asyncio.shield(worker), timeout=LEASE_SECONDS / 3)
                 except TimeoutError:
                     if not renew_lease(path, token):
                         worker.cancel()
                         break
-                except BaseException:
+                except (Exception, asyncio.CancelledError):
                     break
             if not worker.done():
                 await asyncio.gather(worker, return_exceptions=True)
@@ -173,20 +178,23 @@ def watch_lease(path: str, token: str | None, worker: asyncio.Task[Any]) -> None
     asyncio.create_task(monitor())
 
 
-
-
 def normalize_collaborator(value: str) -> str:
     if not isinstance(value, str):
-        raise ValueError("Enter a valid Google account email address.")
+        raise TypeError("Enter a valid Google account email address.")
     email = value.strip().casefold()
     if len(email) > 254 or not EMAIL.fullmatch(email):
         raise ValueError("Enter a valid Google account email address.")
     local, domain = email.rsplit("@", 1)
     if (
-        ".." in local or local.endswith(".") or ".." in domain
-        or any(not part or len(part) > 63 or part.startswith("-") or part.endswith("-")
-               for part in domain.split("."))
-        or "." not in domain or len(domain.rsplit(".", 1)[1]) < 2
+        ".." in local
+        or local.endswith(".")
+        or ".." in domain
+        or any(
+            not part or len(part) > 63 or part.startswith("-") or part.endswith("-")
+            for part in domain.split(".")
+        )
+        or "." not in domain
+        or len(domain.rsplit(".", 1)[1]) < 2
     ):
         raise ValueError("Enter a valid Google account email address.")
     if domain in {"gmail.com", "googlemail.com"} and (
@@ -200,8 +208,11 @@ def _identity() -> tuple[cloud_workspaces.Workspace, str]:
     workspace = cloud_workspaces.current()
     principal = cloud_auth.current_principal()
     if (
-        workspace is None or workspace.guest or principal is None
-        or principal.role == "guest" or not workspace.verified_subject
+        workspace is None
+        or workspace.guest
+        or principal is None
+        or principal.role == "guest"
+        or not workspace.verified_subject
         or principal.subject != workspace.verified_subject
     ):
         raise ValueError("Authenticated Google account required for project collaboration.")
@@ -257,8 +268,12 @@ def register_owner(view: Any) -> None:
     workspace = cloud_workspaces.current()
     principal = cloud_auth.current_principal()
     if (
-        workspace is None or workspace.guest or principal is None or principal.role == "guest"
-        or not workspace.verified_subject or workspace.verified_subject != principal.subject
+        workspace is None
+        or workspace.guest
+        or principal is None
+        or principal.role == "guest"
+        or not workspace.verified_subject
+        or workspace.verified_subject != principal.subject
     ):
         return
     path = Path(view.path)
@@ -277,8 +292,16 @@ def register_owner(view: Any) -> None:
                 """INSERT INTO shared_projects
                 (path, project_id, owner_hash, owner_email, model, thinking, last_writer, updated_at)
                 VALUES (?,?,?,?,?,?,?,?)""",
-                (view.path, view.project.id, workspace.subject_hash, principal.email.casefold(),
-                 config["ai_model"], config["reasoning_effort"], principal.email.casefold(), time.time()),
+                (
+                    view.path,
+                    view.project.id,
+                    workspace.subject_hash,
+                    principal.email.casefold(),
+                    config["ai_model"],
+                    config["reasoning_effort"],
+                    principal.email.casefold(),
+                    time.time(),
+                ),
             )
         elif row["project_id"] != view.project.id or row["owner_hash"] != workspace.subject_hash:
             db.rollback()
@@ -287,19 +310,24 @@ def register_owner(view: Any) -> None:
 
 
 def authorized_shared_path(path: Path) -> bool:
-    """The caller already checked for traversal and symlinks; accept exact ACL paths only."""
+    """Require verified owner identity or explicit collaborator membership."""
     try:
-        _workspace, email = _identity()
+        workspace, email = _identity()
     except ValueError:
         return False
     with _db() as db:
         row = db.execute(
-            """SELECT 1 FROM shared_collaborators c
-            JOIN shared_projects p ON p.path=c.path
-            WHERE c.path=? AND c.email=?""", (str(path), email)
+            """SELECT 1 FROM shared_projects p
+            WHERE p.path=? AND (
+                p.owner_hash=?
+                OR EXISTS (
+                    SELECT 1 FROM shared_collaborators c
+                    WHERE c.path=p.path AND c.email=?
+                )
+            )""",
+            (str(path), workspace.subject_hash, email),
         ).fetchone()
         return row is not None
-
 
 def _row(db: sqlite3.Connection, path: str) -> sqlite3.Row:
     row = db.execute("SELECT * FROM shared_projects WHERE path=?", (path,)).fetchone()
@@ -313,9 +341,12 @@ def _membership(db: sqlite3.Connection, path: str) -> tuple[sqlite3.Row, str]:
     row = _row(db, path)
     if row["owner_hash"] == workspace.subject_hash:
         return row, email
-    if db.execute(
-        "SELECT 1 FROM shared_collaborators WHERE path=? AND email=?", (path, email)
-    ).fetchone() is None:
+    if (
+        db.execute(
+            "SELECT 1 FROM shared_collaborators WHERE path=? AND email=?", (path, email)
+        ).fetchone()
+        is None
+    ):
         raise ValueError("Project not found or access denied.")
     return row, email
 
@@ -335,21 +366,31 @@ def summary(path: str) -> dict[str, Any]:
     view = inspect_project(path)
     if cloud_workspaces.current() is None:
         return {
-            "owner": None, "collaborators": [], "revision": 0,
-            "model": view.project.ai_model, "thinking": view.project.reasoning_effort,
-            "lease": None, "shared": False,
+            "owner": None,
+            "collaborators": [],
+            "revision": 0,
+            "model": view.project.ai_model,
+            "thinking": view.project.reasoning_effort,
+            "lease": None,
+            "shared": False,
         }
     with _db() as db:
         row, email = _membership(db, view.path)
         members = [
-            record["email"] for record in db.execute(
+            record["email"]
+            for record in db.execute(
                 "SELECT email FROM shared_collaborators WHERE path=? ORDER BY email", (view.path,)
             )
         ]
         return {
-            "owner": row["owner_email"], "collaborators": members, "revision": row["revision"],
-            "model": row["model"], "thinking": row["thinking"], "lease": _lease(db, view.path),
-            "shared": bool(members), "you": email,
+            "owner": row["owner_email"],
+            "collaborators": members,
+            "revision": row["revision"],
+            "model": row["model"],
+            "thinking": row["thinking"],
+            "lease": _lease(db, view.path),
+            "shared": bool(members),
+            "you": email,
         }
 
 
@@ -361,10 +402,7 @@ def model_settings(path: str) -> dict[str, str] | None:
         shared = db.execute(
             "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
         ).fetchone()
-        return (
-            {"ai_model": row["model"], "reasoning_effort": row["thinking"]}
-            if shared else None
-        )
+        return {"ai_model": row["model"], "reasoning_effort": row["thinking"]} if shared else None
 
 
 def require_edit_revision(path: str, expected: int | None) -> None:
@@ -375,17 +413,23 @@ def require_edit_revision(path: str, expected: int | None) -> None:
     if transaction is not None and transaction[0] == str(path):
         db = transaction[1]
         row = _row(db, str(path))
-        shared = db.execute(
-            "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (str(path),)
-        ).fetchone() is not None
+        shared = (
+            db.execute(
+                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (str(path),)
+            ).fetchone()
+            is not None
+        )
     elif cloud_workspaces.current() is not None:
         with _db() as db:
             row = db.execute("SELECT * FROM shared_projects WHERE path=?", (str(path),)).fetchone()
             if row is None:
                 return
-            shared = db.execute(
-                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (str(path),)
-            ).fetchone() is not None
+            shared = (
+                db.execute(
+                    "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (str(path),)
+                ).fetchone()
+                is not None
+            )
     else:
         return
     if shared and expected is None:
@@ -425,7 +469,7 @@ def save_settings(
     try:
         emails = [normalize_collaborator(item) for item in collaborators]
         validate_pair(model, thinking)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise ProjectError(str(exc)) from exc
     if len(set(emails)) != len(emails):
         raise ProjectError("Each collaborator may appear only once.")
@@ -436,14 +480,11 @@ def save_settings(
         if row["owner_email"] in emails:
             raise ProjectError("The project owner is already included automatically.")
         previous = {
-            member["email"] for member in db.execute(
-                "SELECT email FROM shared_collaborators WHERE path=?", (path,)
-            )
+            member["email"]
+            for member in db.execute("SELECT email FROM shared_collaborators WHERE path=?", (path,))
         }
         new_members = set(emails)
-        changed = (
-            new_members != previous or row["model"] != model or row["thinking"] != thinking
-        )
+        changed = new_members != previous or row["model"] != model or row["thinking"] != thinking
         if changed:
             db.execute("DELETE FROM shared_collaborators WHERE path=?", (path,))
             db.executemany(
@@ -455,19 +496,22 @@ def save_settings(
                 (model, thinking, actor, path),
             )
             for member in previous - new_members:
-                db.execute(
-                    "DELETE FROM shared_leases WHERE path=? AND email=?", (path, member)
-                )
+                db.execute("DELETE FROM shared_leases WHERE path=? AND email=?", (path, member))
             for recipient in sorted(previous ^ new_members):
                 db.execute(
                     """INSERT INTO shared_email_outbox
                     (id,recipient,project_path,project_title,event,created_at)
                     VALUES (?,?,?,?,?,?)""",
-                    (uuid4().hex, recipient, path, title,
-                     "added" if recipient in new_members else "removed", time.time()),
+                    (
+                        uuid4().hex,
+                        recipient,
+                        path,
+                        title,
+                        "added" if recipient in new_members else "removed",
+                        time.time(),
+                    ),
                 )
         return {"changed": changed, "revision": expected + 1}
-
 
 
 def note_change(path: str) -> None:
@@ -476,18 +520,22 @@ def note_change(path: str) -> None:
         pass
 
 
-
 def shared_with_me() -> list[dict[str, str]]:
     workspace = cloud_workspaces.current()
     if workspace is None or workspace.guest:
         return []
-    _ws, email = _identity()
+    try:
+        _ws, email = _identity()
+    except ValueError:
+        # Without verified identity, no external projects are visible.
+        return []
     with _db() as db:
         return [
             {"path": row["path"], "id": row["project_id"]}
             for row in db.execute(
                 """SELECT p.path,p.project_id FROM shared_projects p JOIN shared_collaborators c
-                ON c.path=p.path WHERE c.email=? ORDER BY p.updated_at DESC""", (email,)
+                ON c.path=p.path WHERE c.email=? ORDER BY p.updated_at DESC""",
+                (email,),
             )
         ]
 
@@ -505,7 +553,13 @@ def acquire_lease(path: str, activity: str) -> str | None:
 
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")
-        row, actor = _membership(db, path)
+        registered = db.execute(
+            "SELECT 1 FROM shared_projects WHERE path=?", (path,)
+        ).fetchone()
+        if registered is None:
+            db.commit()
+            return None
+        _row, actor = _membership(db, path)
         shared = db.execute(
             "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
         ).fetchone()
@@ -587,33 +641,39 @@ def forget_project(path: str) -> None:
 
 def drain_notifications() -> list[str]:
     """Best effort delivery; failed messages stay queued for the next attempt."""
-    if cloud_workspaces.current() is None:
+    if not cloud_workspaces.enabled():
         return []
     with _db() as db:
-        pending = list(db.execute(
-            "SELECT * FROM shared_email_outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 20"
-        ))
+        pending = list(
+            db.execute(
+                "SELECT * FROM shared_email_outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 20"
+            )
+        )
     warnings: list[str] = []
     for event in pending:
         message = EmailMessage()
         added = event["event"] == "added"
         message["Subject"] = (
-            f"SIGMA: Added to {event['project_title']}" if added
+            f"SIGMA: Added to {event['project_title']}"
+            if added
             else f"SIGMA: Removed from {event['project_title']}"
         )
         origin = (cloud_auth.config().origin or "").rstrip("/")
         project_link = (
             f"{origin}/project?path={quote(event['project_path'], safe='')}"
-            if origin.startswith("https://") or origin.startswith("http://localhost")
+            if origin.startswith(("https://", "http://localhost"))
             else ""
         )
         text = (
             f"You have been added as a collaborator on SIGMA project "
             f"“{event['project_title']}”.\n\n"
-            + (f"Open project: {project_link}\n\n" if project_link else
-               "Sign in to SIGMA with this Google account to find the shared project.\n\n")
-            if added else
-            f"You have been removed as a collaborator on SIGMA project "
+            + (
+                f"Open project: {project_link}\n\n"
+                if project_link
+                else "Sign in to SIGMA with this Google account to find the shared project.\n\n"
+            )
+            if added
+            else f"You have been removed as a collaborator on SIGMA project "
             f"“{event['project_title']}”.\n"
         )
         message.set_content(text)
