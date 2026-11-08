@@ -739,10 +739,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 "pageerror", lambda error: compilation_page_errors.append(str(error))
             )
             stage_ids: dict[str, str] = {}
+            # Fetch the real saved session list once, before installing the
+            # browser route. Fetching and decoding inside an asynchronous
+            # route callback can outlive its page during browser teardown,
+            # causing an unrelated "Response has been disposed" failure.
+            baseline_response = compilation_page.request.get(
+                f"{ui_url}/api/projects/research-sessions?path={quote(str(project_path), safe='')}"
+            )
+            assert baseline_response.ok, baseline_response.text()
+            baseline_sessions = baseline_response.json()
+            assert isinstance(baseline_sessions, dict)
+            assert isinstance(baseline_sessions.get("sessions"), list)
 
             def compilation_session_response(route):
-                response = route.fetch()
-                payload = response.json()
+                payload = json.loads(json.dumps(baseline_sessions))
                 for index, state in enumerate(
                     ("pending", "running", "completed", "skipped", "fallback", "not_needed"),
                     start=12,
@@ -810,7 +820,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     }
                     payload["sessions"].append(variant)
                 route.fulfill(
-                    status=response.status,
+                    status=200,
                     content_type="application/json",
                     body=json.dumps(payload),
                 )
