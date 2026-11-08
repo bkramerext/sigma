@@ -848,7 +848,16 @@ with sync_playwright() as playwright:
     project_settings = page.get_by_role("dialog", name="Project Settings")
     expect(project_settings.get_by_role("tab", name="Preferences")).to_have_count(0)
     expect(project_settings.get_by_label("Difficulty")).to_be_visible()
-    project_settings.get_by_role("button", name="Close Project Settings").click()
+    # The compact dialog's entire X target stays inside its outer border.
+    close_control = project_settings.get_by_role("button", name="Close Project Settings")
+    close_box = close_control.bounding_box()
+    dialog_box = project_settings.bounding_box()
+    assert close_box and dialog_box
+    assert close_box["x"] >= dialog_box["x"]
+    assert close_box["y"] >= dialog_box["y"]
+    assert close_box["x"] + close_box["width"] <= dialog_box["x"] + dialog_box["width"]
+    assert close_box["y"] + close_box["height"] <= dialog_box["y"] + dialog_box["height"]
+    close_control.click()
 
     # User-wide Settings owns references and Outcome preferences. Edits made
     # on separate tabs share a single dirty-state and Save operation.
