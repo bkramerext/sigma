@@ -2,10 +2,10 @@
 
 **Status:** Operator procedures for the GCE deployment at `sigma-research.duckdns.org`. Keep this document current as deployment is exercised. **Do not treat proposed commands as executed evidence.**
 
-Detailed configuration and provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This is the **long-form host inventory, incident-recovery reference, and deployment evidence archive**, not another routine deployment checklist. Use the [routine release runbook](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667) only after explicit release authorization. Record actual commands, outcomes, IDs and dates; never publish secrets, access tokens or user data.
+Detailed configuration and provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This is the **long-form host inventory, incident-recovery reference, and deployment evidence archive**, not another routine deployment checklist. Use the [routine release runbook](DEPLOYMENT_RUNBOOK.md#sigma-routine-production-release) only after explicit release authorization. Record actual commands, outcomes, IDs and dates; never publish secrets, access tokens or user data.
 
 For **routine production deployments**, follow the single ordered
-[canonical keyless release path](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667).
+[canonical keyless release path](DEPLOYMENT_RUNBOOK.md#sigma-routine-production-release).
 The generic host, restore, and rollback sections below document operational
 primitives and incident procedures, not additional routine checklists.
 
@@ -292,8 +292,8 @@ restore the 14-point retention invariant.
 
 ## 4. Application release / update
 
-**For routine deployments, use the canonical guarded-release sequence in
-[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667).**
+**For routine deployments, use the five-step checklist in
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#release-checklist).**
 The following manual steps are historical/incident reference, not a shortcut
 around the exact-SHA recovery and helper gates.
 
@@ -526,11 +526,10 @@ RPO guarantee. No RTO is claimed. A successful snapshot is not restore evidence.
 
 ## 6. Restore drill (non-production) / disaster recovery
 
-A routine release must follow the single [keyless sequence](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667):
-fresh application-consistent snapshot, deterministic no-address/no-service-account
-OS Login recovery VM, read-only disk attachment and mount, strict verifier,
-and temporary-resource cleanup. The examples below cover generic/incident
-recovery and are not a second routine-release checklist.
+The standard SIGMA release follows the short [release checklist](DEPLOYMENT_RUNBOOK.md#release-checklist).
+The snapshot/recovery-VM examples below are for nonroutine disaster
+recovery and are **not** requirements for the current hobby-project
+backend/frontend upgrade.
 
 1. Choose a named snapshot whose status is `READY`; record its creation time,
    source disk, project, snapshot name and release SHA. Confirm the test host is
@@ -790,51 +789,35 @@ and 46 accounting calls ($5.938237 recorded; 15 reserved/unknown).
 It did **not** verify a fresh snapshot clone or future code/schema
 compatibility.
 
-**Existing-infrastructure recovery alternative (proposed, not yet
-approved):** Red's read-only inventory shows approximately 43 MiB
-used on the 30-GiB `sigma-state` volume and about 73 GiB free on
-the **separate, already-provisioned 100-GiB boot disk**. A full,
-application-quiesced, metadata-preserving and **actually verified**
-copy of the state tree to a root-only directory on that existing
-boot disk can cover software regression and in-place migration
-rollback risk without purchasing new VM/disk/snapshot capacity.
-This is **not** independent VM or zone disaster recovery.
-Do not interpret it as protection against a host-level compromise
-or loss of both disks; the older cloud snapshot remains stale.
-The operator must explicitly accept that limited risk and approve
-the no-new-resource procedure before any downtime or live backup.
-Use the conditional steps and protections in
-[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#no-new-resource-deployment-protection-existing-boot-disk-backup-option).
-No recovery VM, clone disk, new snapshot or incremental backup
-storage is authorized. Until the source SHA and risk acceptance
-are provided, the only allowable work is read-only inspection or
-synthetic-fixture testing of backup/restore instructions.
+**SIGMA v0.3.0 single-user routine upgrade.** Production remains v0.2.2 at
+`469c955dfadb5a7bd17b72fc069a3365b4f20ba7` until the operator
+supplies the final merged SHA. The only current user is the operator;
+their saved projects, papers and accounting still deserve preservation.
+Red has already verified the keyless deployment identities, healthy
+services, state disk, and operation-status read permissions.
 
-**New operator funding restriction (2026-11-08):** no new temporary
-recovery VM, clone disk, snapshot, or other incremental cloud storage
-is approved for v0.3.0. The earlier $16.11/$21.11 modeled scenario is
-**not an authorized spend**, even though it was within the former
-$25 ceiling. The existing v0.2.2 point-in-time snapshot cannot
-replace fresh protection for later data. Red may investigate existing
-resources read-only and propose a secure, independent, zero-new-cloud-
-infrastructure recovery path, but **must not run the canonical
-snapshot/VM recovery path or production cutover** until the operator
-has separately accepted a viable recovery design and a future source
-SHA. Retain healthy v0.2.2 in the meantime. Never delete existing
-snapshots as a cost-saving shortcut without separate authorization.
-See the explicit funding override in
-[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#operator-funding-constraint--no-additional-recovery-infrastructure).
+The upgrade should use the existing VM and guarded deployment helper,
+without new cloud resources or separate administrative stage handoffs.
+During the authorized upgrade, make a quick consistent, root-protected,
+verified copy of the application state onto available space on the
+**existing boot disk** before replacing backend and frontend. The
+copy supports recovery from a software-upgrade failure, not a
+catastrophic VM/zone failure. Keep the existing earlier snapshot
+untouched; it does not include later user writes. Verify current state
+and selected-release schema compatibility; do not falsely claim
+`--backup-verified` from an old snapshot or an unverified copy.
+Red should then run the guarded exact-SHA helper, verify both backend
+and frontend, state and public HTTPS, and report success. Stop only
+on actual failed checks. The operator's **main-ready/final SHA**
+instruction is the only remaining routine handoff.
 
-**Remaining source-independent gate: billing.** The Cloud Billing API
-is disabled and the recovery identity cannot inspect billing-account
-budgets. Current project/account linkage, active billing status, budget/
-alerts and actual current spend remain unverified. The **modeled** recovery
-cost is $16.11, or $21.11 with $5 contingency, under the $25 ceiling.
-No Owner-account billing inspection has been authorized. The next v0.3.0
-source SHA is not frozen while new features are being developed.
-The [canonical deployment runbook](DEPLOYMENT_RUNBOOK.md#sigma-v030--red-owned-deployment-and-current-iam-blocker)
-documents the exact remaining billing evidence, the authorized read-only
-options and future source-dependent recovery/cutover gates.
+The operator prohibits new backup VMs, clone disks, cloud snapshots,
+additional storage, paid inference, or billing/IAM expansion for this
+hobby-project release. Current billing reports are not a prerequisite
+for using already-provisioned capacity. The historical $16.11/$21.11
+recovery estimate is superseded by the zero-additional-infrastructure
+instruction. See
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#sigma-v030--routine-red-owned-release-current).
 
 The November 6 setup itself did not create recovery resources. The first
 bounded keyless snapshot and isolated restore drill completed during the
