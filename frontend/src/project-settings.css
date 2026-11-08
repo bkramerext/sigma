@@ -734,4 +734,4 @@
 }
 
 /* The classification dialog retains the established upper-right close inset. */
-.sigma-project-classification-dialog .settings-header { padding-top: 14px; }
+.sigma-project-classification-dialog .settings-header { padding-top: 6px; }
