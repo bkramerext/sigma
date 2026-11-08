@@ -22,3 +22,38 @@
 @media (max-width: 700px) {
   .global-model-pill { min-height: 28px; padding: 4px 9px; font-size: 9px; line-height: 1.2; }
 }
+
+/* One stable Model-column width, sized for the widest expected Astra $$$ label.
+   Model text uses the neutral identity-pill text color. */
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  display: grid;
+  grid-template-rows: auto auto;
+  row-gap: var(--identity-pill-gap);
+  width: max-content;
+  min-width: 240px;
+  max-width: min(260px, calc(100vw - 32px));
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-position {
+  justify-self: stretch;
+  width: 100%;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  width: 100%;
+  max-width: 100%;
+  color: #e0d0c8;
+  font-weight: 500;
+}
+:is(.home-page, .workspace-page) .sigma-header-secondary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+:is(.home-page, .workspace-page) .sigma-header-secondary-row > :first-child { justify-self: start; }
+:is(.home-page, .workspace-page) .sigma-header-secondary-row > :last-child { justify-self: end; }
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column {
+    min-width: 0;
+    width: min(240px, calc(100vw - 32px));
+  }
+}
