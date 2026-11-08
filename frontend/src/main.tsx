@@ -7033,7 +7033,7 @@ function AdminActionIcon({ kind }: { kind: 'new' | 'add' | 'remove' }) {
     stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {kind === 'new' ? <><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></>
       : kind === 'add' ? <path d="M12 5v14M5 12h14"/>
-      : <path d="M5 5 19 19M19 5 5 19"/>}
+      : <path d="M8 8 16 16M16 8 8 16" strokeWidth="4"/>}
   </svg>;
 }
 
