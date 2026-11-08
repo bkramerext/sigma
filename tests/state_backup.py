@@ -186,7 +186,9 @@ class StateBackupTests(unittest.TestCase):
             root = Path(temporary)
             self.make_state(root)
             self.add_publication_cache(root)
-            record_path = next((root / "auth/workspaces").glob("*/project/papers/" + "c" * 32 + ".json"))
+            record_path = next(
+                (root / "auth/workspaces").glob("*/project/papers/" + "c" * 32 + ".json")
+            )
             record = json.loads(record_path.read_text())
             record["tex_source"] = ""
             record_path.write_text(json.dumps(record))
@@ -206,7 +208,9 @@ class StateBackupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.make_state(root)
-            record_path = next((root / "auth/workspaces").glob("*/project/papers/" + "c" * 32 + ".json"))
+            record_path = next(
+                (root / "auth/workspaces").glob("*/project/papers/" + "c" * 32 + ".json")
+            )
             record = json.loads(record_path.read_text())
             record["pdf_size_bytes"] += 1
             record_path.write_text(json.dumps(record))
