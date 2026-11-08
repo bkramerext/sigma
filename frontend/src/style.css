@@ -546,7 +546,7 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
   width: max-content;
   justify-self: start;
 }
-.home-page .sigma-header-secondary-row > .home-settings-pill {
+.home-page .sigma-header-first-row > .home-settings-pill {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -564,13 +564,13 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
   color: #e0d0c8;
   cursor: pointer;
 }
-.home-page .sigma-header-secondary-row > .home-settings-pill svg { width: 19px; height: 19px; }
-.home-page .sigma-header-secondary-row > .home-settings-pill:hover:not(:disabled) {
+.home-page .sigma-header-first-row > .home-settings-pill svg { width: 19px; height: 19px; }
+.home-page .sigma-header-first-row > .home-settings-pill:hover:not(:disabled) {
   border-color: #cd9270;
   background: #172536fa;
   color: #fff2e9;
 }
-.home-page .sigma-header-secondary-row > .home-settings-pill:focus-visible {
+.home-page .sigma-header-first-row > .home-settings-pill:focus-visible {
   outline: 2px solid #e5a785;
   outline-offset: 3px;
 }
