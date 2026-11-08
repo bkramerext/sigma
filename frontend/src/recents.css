@@ -554,6 +554,11 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   width: 18px;
   height: 18px;
 }
+/* Use the same 20px X glyph as the paper removal action. */
+.cloud-access-dialog .admin-icon-action:has(svg path[stroke-width="4"]) svg {
+  width: 20px;
+  height: 20px;
+}
 .cloud-access-dialog .admin-icon-action:hover:not(:disabled) {
   background: #3b3029;
   border-color: #ac7054;
