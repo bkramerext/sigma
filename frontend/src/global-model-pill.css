@@ -266,3 +266,55 @@
     --sigma-header-first-row-height: 28px;
   }
 }
+
+/* Google sets the natural account-column width. The ChatGPT row fills exactly
+   that width rather than letting Sponsored/Unlimited enlarge the track. */
+.home-page .home-account-grid > .api-connection,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  box-sizing: border-box;
+  contain: inline-size;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  justify-self: stretch;
+  overflow: visible;
+}
+.home-page .home-account-grid > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin {
+  justify-self: stretch;
+  width: max-content;
+  min-width: 0;
+}
+.home-page .home-account-grid > .api-connection > summary,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary,
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin-left: 0;
+  justify-content: center;
+}
+:is(.home-page, .workspace-page) .api-connection > summary .connection-label-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  gap: 0;
+  text-align: center;
+  line-height: 1.35;
+}
+:is(.home-page, .workspace-page) .api-connection > summary .connection-label-stack > [role="status"] {
+  white-space: nowrap;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .sponsored-allowance-trigger {
+  align-self: center;
+  margin: 0;
+  white-space: nowrap;
+}
+/* Sponsor content adds vertical height only; the normal connection pill
+   remains one line high. */
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  padding-block: 9px;
+}
