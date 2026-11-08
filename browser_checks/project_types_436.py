@@ -84,24 +84,32 @@ with sync_playwright() as playwright:
         "window.__projectTypeConfirmations = []; window.confirm = message => { window.__projectTypeConfirmations.push(String(message)); return true; }"
     )
 
-    # Account pills read right-to-left, then top-to-bottom at right.
+    # Approved Home layout: About and Settings share the first left row,
+    # Model is immediately below About, and Google/ChatGPT form the right column.
     grid = page.locator(".home-account-grid")
     expect(grid).to_be_visible()
     expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
-        '"google model" "chatgpt about" ". admin"'
+        '"model-column google" "model-column chatgpt"'
     )
     about_rect = grid.locator(".home-about-button").bounding_box()
+    settings_rect = grid.locator(".home-settings-pill").bounding_box()
     google_rect = grid.locator(".project-google-signin").first.bounding_box()
-    assert about_rect and google_rect
+    chatgpt_rect = grid.locator(".api-connection > summary").first.bounding_box()
+    assert about_rect and settings_rect and google_rect and chatgpt_rect
     model_pill = grid.get_by_role("button", name="Model", exact=False)
     expect(model_pill).to_be_visible()
     expect(model_pill).to_be_enabled(timeout=15000)
     assert "cycle" in (model_pill.get_attribute("data-tooltip") or "").lower()
     model_rect = model_pill.bounding_box()
-    assert model_rect and model_rect["y"] < about_rect["y"]
-    assert abs(model_rect["x"] + model_rect["width"] - about_rect["x"] - about_rect["width"]) < 3
-    assert about_rect["x"] > google_rect["x"]
+    assert model_rect
+    assert abs(model_rect["x"] - about_rect["x"]) < 3
+    assert model_rect["y"] >= about_rect["y"] + about_rect["height"]
+    assert settings_rect["x"] >= about_rect["x"] + about_rect["width"]
+    assert abs(settings_rect["y"] - about_rect["y"]) < 3
+    assert google_rect["x"] >= model_rect["x"] + model_rect["width"]
+    assert chatgpt_rect["x"] >= model_rect["x"] + model_rect["width"]
+    assert abs(model_rect["y"] - chatgpt_rect["y"]) < 3
 
     # The restored pill cycles user-wide defaults (not project settings),
     # prompting before a cost-tier increase and preserving unrelated limits.
