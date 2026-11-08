@@ -319,7 +319,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
             {ethos.is_override && <button type="button" className="text-view-link sigma-ethos-restore"
               disabled={busy} onClick={() => {
                 if (window.confirm('Restore the built-in Research Ethos when Settings is saved?')) {
-                  setRestoreDefault(true); setEthosEditing(false); setEthosError(''); setSaved(false);
+                  setRestoreDefault(true); setEthosEditing(false); setSaved(false);
                 }
               }}>Restore Default</button>}
             {restoreDefault && <p className="settings-hint">Built-in Research Ethos will be restored when you Save Settings.</p>}
