@@ -548,7 +548,7 @@ def acquire_lease(path: str, activity: str) -> str | None:
     from sigma.projects import inspect_project
 
     register_owner(inspect_project(path))
-    if activity not in {"Research session", "Paper generation"}:
+    if activity not in {"Research session", "Paper generation", "Project deletion"}:
         raise ValueError("Unsupported collaboration activity.")
     from sigma.projects import ProjectError
 
@@ -626,15 +626,39 @@ def require_not_leased(path: str) -> None:
             )
 
 
-def forget_project(path: str) -> None:
+def forget_project(path: str, title: str | None = None) -> None:
+    """Revoke a deleted project's ACL and notify its former collaborators."""
     if cloud_workspaces.current() is None:
         return
+    from sigma.projects import ProjectError
+
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")
+        row, _actor = _membership(db, path)
+        workspace, _ = _identity()
+        if row["owner_hash"] != workspace.subject_hash:
+            raise ProjectError("Only the project owner may delete a shared project.")
+        members = [
+            record["email"]
+            for record in db.execute(
+                "SELECT email FROM shared_collaborators WHERE path=?", (path,)
+            )
+        ]
+        # Once the project is gone, queued additions must not invite access.
+        db.execute("DELETE FROM shared_email_outbox WHERE project_path=?", (path,))
         db.execute("DELETE FROM shared_leases WHERE path=?", (path,))
         db.execute("DELETE FROM shared_collaborators WHERE path=?", (path,))
-        db.execute("DELETE FROM shared_email_outbox WHERE project_path=?", (path,))
         db.execute("DELETE FROM shared_projects WHERE path=?", (path,))
+        now = time.time()
+        db.executemany(
+            """INSERT INTO shared_email_outbox
+               (id,recipient,project_path,project_title,event,created_at)
+               VALUES (?,?,?,?,?,?)""",
+            [
+                (uuid4().hex, member, path, title or row["project_id"], "removed", now)
+                for member in members
+            ],
+        )
         db.commit()
 
 

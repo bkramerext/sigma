@@ -224,6 +224,36 @@ class CollaborationTests(TestCase):
                 2,
             )
 
+    def test_project_deletion_fences_execution_and_revokes_membership(self) -> None:
+        with shared._db() as db:
+            db.execute(
+                """INSERT INTO shared_email_outbox
+                (id,recipient,project_path,project_title,event,created_at)
+                VALUES (?,?,?,?,?,?)""",
+                ("pending-add", self.other.email, self.path, "Study", "added", self.clock[0]),
+            )
+        token = shared.acquire_lease(self.path, "Project deletion")
+        self.assertIsNotNone(token)
+        with self.assertRaisesRegex(ProjectError, "being used"):
+            shared.acquire_lease(self.path, "Research session")
+        with shared.bind_lease(self.path, token):
+            shared.forget_project(self.path, "Study")
+        shared.release_lease(self.path, token)
+        with shared._db() as db:
+            self.assertIsNone(
+                db.execute("SELECT * FROM shared_projects WHERE path=?", (self.path,)).fetchone()
+            )
+            self.assertIsNone(
+                db.execute("SELECT * FROM shared_leases WHERE path=?", (self.path,)).fetchone()
+            )
+            records = list(
+                db.execute("SELECT recipient,project_title,event FROM shared_email_outbox")
+            )
+            self.assertEqual(
+                [(row["recipient"], row["project_title"], row["event"]) for row in records],
+                [(self.other.email, "Study", "removed")],
+            )
+
     def test_global_research_limits_save_does_not_take_project_lease(self) -> None:
         from sigma import research_sessions
 
