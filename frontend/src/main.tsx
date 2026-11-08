@@ -4685,7 +4685,7 @@ function DifficultyPicker({ value, onChange }: {
       const below = window.innerHeight - rect.bottom - 12;
       const above = rect.top - 12;
       const height = Math.min(180, Math.max(80, Math.max(below, above)));
-      const menuHeight = Math.min(height, panel.scrollHeight);
+      const menuHeight = Math.min(height, choices.length * 34 + 10);
       setMenuStyle({
         top: below < 130 && above > below ? Math.max(8, rect.top - menuHeight - 4) : rect.bottom + 4,
         left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
