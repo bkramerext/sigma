@@ -732,3 +732,6 @@
   .sigma-project-classification-dialog .settings-header h2 { width: auto; flex: 1 1 auto; }
   .sigma-project-classification-dialog .settings-header .settings-actions { width: auto; flex: 0 0 auto; justify-content: flex-end; }
 }
+
+/* The classification dialog retains the established upper-right close inset. */
+.sigma-project-classification-dialog .settings-header { padding-top: 14px; }
