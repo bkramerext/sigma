@@ -3229,7 +3229,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       {!guest && !showDraftPaper && <div className="papers-heading-actions strategy-heading-actions">
         {confirmNewPaper ? <>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); void generatePaper(); }}>Start Paper {draftVersion}</button>
-          <DialogDismissButton label="Cancel starting paper" onClick={() => setConfirmNewPaper(false)}/>
+          <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => setConfirmNewPaper(false)}>Cancel</button>
         </> : <>
         <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
         <span className="paper-includes-anchor">
