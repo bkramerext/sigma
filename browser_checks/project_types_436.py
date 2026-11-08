@@ -359,7 +359,9 @@ with sync_playwright() as playwright:
     dialog.get_by_role("tab", name="Model", exact=True).click()
     expect(dialog.locator("#sigma-global-model")).to_be_visible()
     dialog.get_by_role("tab", name="Research Ethos", exact=True).click()
-    expect(dialog.get_by_role("status").filter(has_text="Research Ethos could not be loaded")).to_be_visible()
+    expect(
+        dialog.get_by_role("status").filter(has_text="Research Ethos could not be loaded")
+    ).to_be_visible()
     expect(dialog.get_by_role("button", name="Recover invalid override")).to_be_visible()
     dialog.locator("header").get_by_role("button", name="Close Settings").click()
     page.unroute("**/api/user-preferences/research-ethos", broken_ethos)
@@ -385,7 +387,10 @@ with sync_playwright() as playwright:
     unattended.set_checked(not initial_unattended)
     dialog.locator("header").get_by_role("button", name="Save").click()
     expect(dialog.get_by_role("alert").filter(has_text="Partially saved")).to_be_visible()
-    expect(unattended).to_be_checked() if not initial_unattended else expect(unattended).not_to_be_checked()
+    if initial_unattended:
+        expect(unattended).not_to_be_checked()
+    else:
+        expect(unattended).to_be_checked()
     page.unroute("**/api/user-preferences/unattended-execution", fail_unattended_save)
     dialog.locator("header").get_by_role("button", name="Save").click()
     expect(dialog.get_by_role("status").filter(has_text="Settings saved")).to_be_visible()
