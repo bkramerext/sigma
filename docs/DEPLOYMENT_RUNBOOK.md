@@ -1,10 +1,9 @@
 # SIGMA Deployment Runbook
 
-This runbook records who authorized the SIGMA v0.1.5 release work and the
-checks required before the guarded GCE cutover. It supplements
-[OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md), which contains the detailed host,
-backup, restore, deployment, and rollback commands. A recorded authorization is
-not evidence that a release gate passed or that an operation was executed.
+Use the routine release procedure below for current deployments. Historical
+authorization and deployment records further down are evidence, **not** steps
+to repeat. See [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md) for host inventory
+and incident recovery. Authorization is not proof that a safety gate passed.
 
 ## Routine keyless GCE release — canonical ordered path (issue #667)
 
@@ -45,6 +44,26 @@ has already shipped; **do not redeploy it** as part of #667.
    using the **same identity and command**. Never fall back silently to the
    project Owner, broaden to Owner/Editor, or create a service-account key.
    **A denied connection is a release blocker, not a passed preflight.**
+
+   **Preflight operation polling before stopping production writers.** The
+   2026-11-08 v0.2.2 snapshot request was accepted, but `gcloud` reported
+   HTTP 403 while waiting because the recovery identity lacked
+   `compute.globalOperations.get`. Snapshot creation involves a **global**
+   operation; zonal disk/VM create, attach and delete involve **zonal**
+   operations. Verify the impersonated recovery identity can actually read a
+   known recent operation of each required scope using
+   `gcloud compute operations describe OPERATION --global` or
+   `--zone=us-west1-b`, respectively, with `--project` and
+   `--impersonate-service-account`. Required read permissions are
+   `compute.globalOperations.get` and `compute.zoneOperations.get`
+   (and `compute.regionOperations.get` only if the chosen procedure uses
+   regional operations). A successful resource `describe` does **not** prove
+   permission to poll its operation. Grant only the missing, narrowly scoped
+   operation-read permissions under #590/#667 and retest with the **same
+   impersonated identity**; never grant Owner/Editor or use human Owner
+   access. If there is no valid existing operation to test, mark the gate
+   **unverified**, not passed, and resolve it before downtime. Do not
+   repeatedly stop production to discover missing permissions.
 3. **Create a fresh application-consistent snapshot.** Declare the approved
    maintenance window and verify baseline identity, project, paper, job and
    accounting counts. Stop SIGMA writers cleanly on `sigma-gce-01`, sync the
@@ -67,7 +86,13 @@ has already shipped; **do not redeploy it** as part of #667.
    and confirm source disk, snapshot ID, and creation timestamp. Restart
    SIGMA and recheck health as soon as consistency is captured. If a
    snapshot cannot be verified, stop the release; do not claim
-   `--backup-verified`.
+   `--backup-verified`. **If `gcloud` reports a polling/permission failure
+   after submission, the create request may already have succeeded.**
+   Restart the service promptly, inspect the uniquely named snapshot using
+   the recovery identity, record its ID/source/status, and reconcile before
+   retrying. Never create a duplicate or assume a polling 403 means no
+   snapshot exists. A `READY` snapshot is **captured**, not yet a
+   **verified restore** (step 5).
 4. **Isolate the recovery clone in one creation pass.** Under the recovery
    identity, create a clone disk `sigma-state-restore-*` from that exact
    READY snapshot and a `sigma-v021-recovery-*` VM in `us-west1-b`.
@@ -103,6 +128,12 @@ has already shipped; **do not redeploy it** as part of #667.
    ```
    Confirm actual disk attachment is read-only before mounting. Abort
    safely on any create/attach failure; do not recreate with weaker flags.
+   Use normal completion polling with the correct scoped operation-read
+   permissions. `gcloud compute snapshots create` supports `--async`,
+   but the documented `gcloud compute disks create` does not: **do not
+   use `--async` as a general substitute for IAM**. If a create/attach
+   reports an ambiguous failure, inspect the exact named resource and its
+   state before any retry. Do not advance with unverified operations.
 5. **Verify the isolated restore, read-only.** Transfer the verifier from
    the **selected exact SHA** to the isolated recovery VM and run
    `deploy/verify-state-restore.py` against the mounted filesystem with
@@ -118,6 +149,10 @@ has already shipped; **do not redeploy it** as part of #667.
    documented authorization and preserve a pre-cleanup recovery snapshot.
    Never delete user, project, session, paper, identity, or accounting data
    just to satisfy verifier counts. Any unresolved mismatch blocks cutover.
+   Use the verifier from the **selected release SHA** for the pre-snapshot
+   production baseline too; the older v0.2.1 installed copy wrongly rejects
+   the known sealed compilation cache. Only a passing **isolated read-only
+   restore**, not a `READY` snapshot alone, permits `--backup-verified`.
 6. **Clean up bounded recovery resources and retain evidence.** Record
    verifier results, clone UUID/mount flags, timings, and source snapshot.
    Unmount, detach, delete the temporary `sigma-v021-recovery-*` VM and
@@ -145,14 +180,16 @@ has already shipped; **do not redeploy it** as part of #667.
    production data and accounting counts, HTTPS, auth readiness, expected
    anonymous API behavior, and **maintenance off**. Do not run paid
    inference. Record observed start/end/downtime, source CI run URLs,
-   snapshot/restore proof, identity used, security gate results, cleanup
-   confirmation, and remaining authenticated-test limitations. Keep the
+   snapshot/restore proof, identity used, **operation-polling permission
+   evidence**, any writer-stop downtime (including failed attempts),
+   security gate results, cleanup confirmation, and remaining
+   authenticated-test limitations. Keep the
    previous release/image and recovery point for forward-fix or separately
    authorized rollback decisions; a code rollback is never a data restore.
 
 **Compact evidence checklist** (record observed values, not assumptions):
 `release ticket + SHA + exact-SHA CI URLs`;
-`effective release-SSH and recovery-operator connections + IAM denials/limits`;
+`effective SSH/recovery connections + global/zonal operation-read permissions + IAM denials`;
 `preflight + quota/billing + <=$25 estimate`;
 `snapshot name/ID/source/READY/UTC`;
 `clone/VM flags + read-only mount + verifier results/counts`;
