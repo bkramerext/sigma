@@ -581,6 +581,6 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 }
 .home-page .sigma-header-secondary-row > .administrator-settings-link {
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
   white-space: nowrap;
 }
