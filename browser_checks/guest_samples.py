@@ -383,7 +383,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible(timeout=15000)
         expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
-        # The Markdown icon must match the title pencil at rest and on hover.
+        # Project field editing now uses the Project toolbar; Markdown toggles remain on strategies.
         # The three-field Project Description renders Markdown directly;
         # only strategies retain a plain/Markdown conversion button.
         project_markdown = page.locator(
@@ -395,7 +395,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(subject.locator(".sigma-description-rendered")).to_be_visible()
         expect(page.get_by_role("heading", name="Desired Outcomes")).to_be_visible()
         expect(page.get_by_role("heading", name="Paper Requirements")).to_be_visible()
-        pencil_button = page.locator(".project-pane-title-line .project-title-pencil")
+        pencil_button = page.locator(".project-pane-actions .project-description-toolbar-edit")
         expect(pencil_button).to_be_visible()
         icon_style = (
             "element => { const s = getComputedStyle(element); "
@@ -403,7 +403,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             "s.borderTopLeftRadius, s.boxShadow, s.textShadow]; }"
         )
         pencil_button.hover()
-        expect(page.locator("#sigma-ui-tooltip")).to_have_text("Edit text and description")
+        expect(page.locator("#sigma-ui-tooltip")).to_have_text("Edit project fields")
         assert pencil_button.get_attribute("title") is None
         strategy_pencils = page.locator(".strategy-title-pencil")
         assert strategy_pencils.count() > 0
