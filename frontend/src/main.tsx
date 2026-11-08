@@ -6279,7 +6279,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <div className="project-overview-card">
       <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
       <ProjectDescriptionEditor view={view} disabled={closing || ordering || !!dragId || (activeMode !== null && activeMode !== 'project-title')}
-        onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')}
+        onEnterMode={() => {
+          if (!enterMode('project-title')) return false;
+          sectionOpen('project');
+          setProjectExpanded(true);
+          window.localStorage.setItem(`sigma.projectPane:${path}`, 'true');
+          return true;
+        }} onExitMode={() => exitMode('project-title')}
         onSave={async (draft: ProjectDescriptionDraft) => {
           const current = settingsOf(view);
           const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current });
