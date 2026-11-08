@@ -13,9 +13,10 @@ substitute issue updates or PR preparation for completing an authorized
 deployment. No Owner fallback, broad IAM grants, destructive state changes,
 unbounded resources, or paid inference.
 
-**Path:** freeze SHA and reuse CI → verify effective access, billing/quota and
-schema → take and restore-verify an application-consistent snapshot → run the
-existing guarded cutover helper → verify production, cleanup and record results.
+**Default paid-infrastructure path:** freeze SHA and reuse CI → verify access,
+schema and quota → take and restore-verify an application-consistent snapshot
+using isolated recovery resources → guarded cutover → verify and record.
+**The v0.3.0 no-new-resource override below supersedes the paid snapshot path.**
 
 See [Operations Runbook](OPERATION_RUNBOOK.md) for host/incident procedures and
 [Deployment History](DEPLOYMENT_HISTORY.md) for previous release authorizations,
@@ -175,8 +176,9 @@ newer cost constraint.
 
 
 
-**Status (2026-11-08): HELD for current billing evidence and a new release
-source SHA.** Production remains v0.2.2 at
+**Status (2026-11-08): HELD pending operator acceptance of the limited
+existing-boot-disk recovery path and final release source SHA.**
+Production remains v0.2.2 at
 `469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. The original recovery
 identity operation-status IAM denial has been repaired and retested
 successfully (details below). No writers have been stopped, no snapshot or
@@ -186,8 +188,9 @@ completed; this authorization does **not** extend to billing inspection
 or release execution.
 
 **Owner and authority.** Red owns the complete routine deployment after
-preflight is repaired and a new release SHA is approved: evidence, recovery
-drill, guarded cutover, production acceptance, cleanup, and records. Red
+source-independent readiness is complete, the same-host limitation is
+accepted and a new release SHA is approved: backup verification,
+guarded cutover, production acceptance, retention, and records. Red
 should work through ordinary recoverable problems without Coordinator
 stage handoffs, and end with an explicit `DEPLOYMENT SUCCEEDED` or
 `DEPLOYMENT FAILED` report. A real safety gate stops work; Red must not
@@ -443,8 +446,9 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
    **Confirmed v0.3.0 IAM repair:** all three operation-read permissions
    have now been proven through the impersonated recovery identity on
    existing global/zonal operations (details above). Keep the
-   effective-access test as a future regression gate. The remaining
-   source-independent blocker is current billing evidence.
+   effective-access test as a future regression gate. A fresh
+   application-consistent backup remains required at cutover, using
+   the operator-accepted **no-new-resource** procedure if approved.
 3. **Create a fresh application-consistent snapshot.** Declare the approved
    maintenance window and verify baseline identity, project, paper, job and
    accounting counts. Stop SIGMA writers cleanly on `sigma-gce-01`, sync the
@@ -571,7 +575,9 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
    previous release/image and recovery point for forward-fix or separately
    authorized rollback decisions; a code rollback is never a data restore.
 
-**Compact evidence checklist** (record observed values, not assumptions):
+**Default paid-infrastructure evidence checklist** (not approved for
+v0.3.0 under the zero-new-resources restriction; record observed values,
+not assumptions):
 `release ticket + SHA + exact-SHA CI URLs`;
 `effective SSH/recovery connections + global/zonal operation-read permissions + IAM denials`;
 `preflight + quota/billing + <=$25 estimate`;
@@ -582,11 +588,23 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
 `HTTPS/auth/About + maintenance off + data/accounting preservation`;
 `no paid inference + limitations`.
 
-A documented dry-run is **not** live-credential acceptance. The v0.2.2
-release demonstrated keyless host access, but the v0.3.0 preflight confirmed
-operation-read denials. The next release remains on hold until a separately
-authorized IAM remediation is **effectively retested**, the selected v0.3.0
-SHA is refreshed after ongoing feature work, and all safety gates pass.
+**v0.3.0 zero-new-resource evidence checklist (conditional):**
+`operator's explicit same-host risk acceptance + frozen SHA + exact-SHA CI`;
+`verified state/boot disk identities, free space and root-only backup path`;
+`all writers stopped + complete copy + manifest hashes/metadata`;
+`selected release verifier run on copied tree + baseline/ledger integrity`;
+`schema and write-gate compatibility + guarded cutover command`;
+`running image SHA/IDs + production counts/HTTPS/About + maintenance off`;
+`retained boot-disk backup path and limited recovery/retention caveats`;
+`no new cloud resources, no paid inference, no destructive auto-restore`.
+
+The initial v0.3.0 IAM operation-read denials were fixed and successfully
+retested under the keyless release identity (evidence above). Do not
+reopen that resolved blocker without a new effective denial. The release
+remains on hold **only until** the operator has accepted a safe
+zero-new-resource deployment risk boundary, finalized the application
+SHA, and the remaining source-dependent checks pass. If a substantive
+new safety failure occurs, Red must stop and report it accurately.
 
 Historical authorizations, release controls, schema-specific rollback notes
 and past cutover records are retained in
