@@ -358,3 +358,69 @@
     padding-bottom: calc(42px + var(--identity-pill-gap));
   }
 }
+
+/* Circular-label cue: one line exits as the next slides into the same
+   fixed-width viewport. Model moves right (reverse cycle); Thinking left. */
+:is(.home-page, .workspace-page) .global-model-pill-current {
+  width: 100%;
+  min-width: 0;
+}
+:is(.home-page, .workspace-page) .global-model-pill .global-model-pill-slide-viewport {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 1.35em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: center;
+}
+.global-model-pill-slide-static,
+.global-model-pill-slide-pair > span {
+  display: block;
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
+}
+.global-model-pill-slide-pair {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.global-model-pill-slide-pair > span {
+  position: absolute;
+  inset: 0;
+}
+.global-model-pill-slide-forward .global-model-pill-slide-out {
+  animation: sigma-label-out-left 210ms ease-in-out both;
+}
+.global-model-pill-slide-forward .global-model-pill-slide-in {
+  animation: sigma-label-in-right 210ms ease-in-out both;
+}
+.global-model-pill-slide-reverse .global-model-pill-slide-out {
+  animation: sigma-label-out-right 210ms ease-in-out both;
+}
+.global-model-pill-slide-reverse .global-model-pill-slide-in {
+  animation: sigma-label-in-left 210ms ease-in-out both;
+}
+@keyframes sigma-label-out-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-100%); opacity: 0; }
+}
+@keyframes sigma-label-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes sigma-label-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+@keyframes sigma-label-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .global-model-pill-slide-pair .global-model-pill-slide-out { display: none; animation: none; }
+  .global-model-pill-slide-pair .global-model-pill-slide-in { animation: none; }
+}
