@@ -514,3 +514,31 @@
     padding-inline: 9px;
   }
 }
+
+/* Force the animated Model line and Thinking line to share the exact same
+   content origin: the pill's left padding. Invisible measurement spans still
+   reserve the maximum model width, but never affect text alignment. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  align-content: center;
+  width: 100%;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current > :is(.global-model-pill-primary, .global-model-pill-secondary) {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+  margin: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-viewport > .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-pair > span {
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: left;
+}
