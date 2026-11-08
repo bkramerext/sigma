@@ -403,11 +403,13 @@ class RecentProject:
 
 
 def recent_projects() -> dict:
-    from sigma import cloud_workspaces
+    from sigma import cloud_workspaces, project_collaboration
 
     workspace = cloud_workspaces.current()
     if workspace is not None and workspace.guest:
         return {"projects": []}
+    shared_rows = project_collaboration.shared_with_me() if workspace is not None else []
+    shared_by_path = {row["path"]: row for row in shared_rows}
     with _index() as index:
         pins = _effective_pins(index)
         entries = []
@@ -425,7 +427,24 @@ def recent_projects() -> dict:
                             entry["path"] = str(rebased)
                 except ValueError:
                     pass
+            if (
+                workspace is not None
+                and not Path(copied["path"]).is_relative_to(workspace.path)
+                and copied["path"] not in shared_by_path
+            ):
+                continue
             entries.append(copied)
+        known_paths = {entry["path"] for entry in entries}
+        for row in shared_rows:
+            if row["path"] not in known_paths:
+                entries.append(
+                    {
+                        "id": row["id"],
+                        "path": row["path"],
+                        "accessed_at": datetime.now(UTC).isoformat(),
+                        "included_example": False,
+                    }
+                )
     from sigma.research_sessions import has_active_session
 
     recent = []

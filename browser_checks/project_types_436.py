@@ -799,6 +799,23 @@ with sync_playwright() as playwright:
     assert derived_after_delete["based_on"] == parent_type["id"]
     assert derived_after_delete["scope"] == "Independent copied scope"
 
+    # This acceptance proves deleted-type recovery, not a long research run.
+    # Bound the deterministic provider fixture to one Investigator/Skeptic pair
+    # so slow CI runners cannot time out while executing unrelated turns.
+    limits_url = f"{FIXTURE_URL}/api/projects/research-limits"
+    current_limits = page.request.get(limits_url, params={"path": affected["path"]})
+    assert current_limits.ok, current_limits.text()
+    bounded_limits = {
+        **current_limits.json(),
+        "path": affected["path"],
+        "scheduler_version": 2,
+        "research_rounds": 1,
+        "turns_per_round": 1,
+        "model_calls": 2,
+    }
+    saved_limits = page.request.put(limits_url, data=bounded_limits)
+    assert saved_limits.ok, saved_limits.text()
+
     open_project(page, affected["path"])
     expect(page.get_by_role("heading", name="Deleted custom parent")).to_be_visible()
     expect(page.get_by_text("PROJECT DESCRIPTION", exact=True)).to_be_visible()

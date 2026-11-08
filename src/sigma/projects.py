@@ -280,11 +280,14 @@ def project_write_lock(value: str | Path):
         with os.fdopen(fd, "rb") as lock:
             if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
                 raise ProjectError("Project write lock must be a regular file")
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            try:
-                yield path
-            finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+            from sigma import project_collaboration
+
+            with project_collaboration.write_guard(str(path)):
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                try:
+                    yield path
+                finally:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
     except OSError as exc:
         raise ProjectError(f"Cannot lock project state: {exc}") from exc
 
@@ -1120,7 +1123,10 @@ def _update_project(
     text_edit: tuple[str, str] | None = None,
     *,
     _after_commit: Callable[[ProjectView], None] | None = None,
+    _expected_revision: int | None = None,
 ) -> ProjectView:
+    from sigma import project_collaboration
+
     view = inspect_project(value)
     path = Path(view.path)
     if path.suffix == ".json":
@@ -1129,7 +1135,10 @@ def _update_project(
         from sigma.project_bundle import transform_file
 
         try:
-            with project_write_lock(path):
+            with (
+                project_write_lock(path),
+                project_collaboration.write_guard(str(path), expected_revision=_expected_revision),
+            ):
 
                 def transform(previous: bytes) -> bytes:
                     project = _decode(json.loads(previous))
@@ -1148,7 +1157,10 @@ def _update_project(
     temporary: Path | None = None
     backup_temporary: Path | None = None
     try:
-        with project_write_lock(path):
+        with (
+            project_write_lock(path),
+            project_collaboration.write_guard(str(path), expected_revision=_expected_revision),
+        ):
             before = (path / STATE).read_bytes()
             project = inspect_project(path).project
             updated = update(project)
@@ -1429,7 +1441,28 @@ def update_project(
     show_advanced_outcome_details: bool | None = None,
     desired_outcomes: str | None = None,
     paper_requirements: str | None = None,
+    expected_revision: int | None = None,
+    collaborators: list[str] | None = None,
 ) -> ProjectView:
+    from sigma import cloud_workspaces, project_collaboration
+
+    if (expected_revision is None) != (collaborators is None):
+        raise ProjectError("Shared settings require both the collaborator list and revision.")
+    shared_edit = expected_revision is not None and collaborators is not None
+    if collaborators is not None:
+        from sigma.model_catalog import validate_pair
+
+        try:
+            emails = [project_collaboration.normalize_collaborator(item) for item in collaborators]
+            validate_pair(ai_model, reasoning_effort)
+        except (TypeError, ValueError) as exc:
+            raise ProjectError(str(exc)) from exc
+        if len(set(emails)) != len(emails):
+            raise ProjectError("Each collaborator may appear only once.")
+        if cloud_workspaces.current() is not None:
+            metadata = project_collaboration.summary(str(value))
+            if metadata["owner"] in emails:
+                raise ProjectError("The owner is already included automatically.")
     wanted = _settings(
         {
             "title": title,
@@ -1458,6 +1491,7 @@ def update_project(
     prior = _settings(expected)
 
     def update(project: Project) -> Project:
+        project_collaboration.require_edit_revision(str(value), expected_revision)
         current = project_settings(project)
         # These values were moved to user settings in schema 12. Ignore them
         # in project optimistic-lock checks and edits, including older callers.
@@ -1551,14 +1585,38 @@ def update_project(
             ),
         )
 
+    def after_commit(view: ProjectView) -> None:
+        if shared_edit:
+            assert expected_revision is not None and collaborators is not None
+            project_collaboration.save_settings(
+                view.path,
+                expected_revision,
+                collaborators,
+                ai_model,
+                reasoning_effort,
+                view.project.title,
+            )
+
     edit = ("project", text_format) if text_format else None
     if wanted.title != prior.title:
         from sigma.recents import assert_project_unpinned
 
         assert_project_unpinned(inspect_project(value).project.id)
         with _title_registry_lock(projects_root()):
-            return _update_project(value, update, edit)
-    return _update_project(value, update, edit)
+            return _update_project(
+                value,
+                update,
+                edit,
+                _after_commit=after_commit,
+                _expected_revision=expected_revision if shared_edit else None,
+            )
+    return _update_project(
+        value,
+        update,
+        edit,
+        _after_commit=after_commit,
+        _expected_revision=expected_revision if shared_edit else None,
+    )
 
 
 def export_complete_project(value: str | Path) -> bytes:

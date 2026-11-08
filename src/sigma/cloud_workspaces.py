@@ -309,7 +309,10 @@ def assert_project_path(value: str | Path, resolved: Path) -> None:
             if stat.S_ISLNK(metadata.st_mode):
                 raise ValueError("symlink")
         if not resolved.is_relative_to(workspace.path):
-            raise ValueError("owner")
+            from sigma import project_collaboration
+
+            if not project_collaboration.authorized_shared_path(resolved):
+                raise ValueError("owner")
     except (OSError, RuntimeError, ValueError) as exc:
         raise ValueError("Project not found or access denied.") from exc
 

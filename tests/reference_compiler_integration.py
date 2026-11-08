@@ -73,7 +73,8 @@ async def verify_compilation(
     limits.update(
         research_rounds=rounds,
         turns_per_round=1,
-        model_calls=2 * rounds * (2 if multiple_strategies else 1),
+        # Scheduler v2 counts calls per strategy, not across selected strategies.
+        model_calls=2 * rounds,
     )
     research_sessions.save_limits(str(path), limits)
     strategy_ids = [strategy.id]

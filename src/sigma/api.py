@@ -1006,25 +1006,29 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     presence_kwargs: dict[str, Any] = (
         {"browser_presence_required": True} if body.browser_presence_required else {}
     )
-    task = asyncio.create_task(
-        papers.generate(
-            body.path,
-            body.expected_binding,
-            body.expected_project_id,
-            progress=progress,
-            force_long_form=body.long_form,
-            expected_snapshot_sha256=body.expected_snapshot_sha256,
-            include_research_details=body.include_research_details,
-            include_claim_details=body.include_claim_details,
-            include_validation_notes=body.include_validation_notes,
-            include_research_excerpts=body.include_research_excerpts,
-            include_sigma_issues=body.include_sigma_issues,
-            include_diagrams=body.include_diagrams,
-            authorized_recovery_section=body.authorized_recovery_section,
-            **({"authorized_provider_change": True} if body.authorized_provider_change else {}),
-            **presence_kwargs,
+    from sigma import project_collaboration
+
+    lease = project_collaboration.acquire_lease(body.path, "Paper generation")
+    with project_collaboration.bind_lease(body.path, lease):
+        task = asyncio.create_task(
+            papers.generate(
+                body.path,
+                body.expected_binding,
+                body.expected_project_id,
+                progress=progress,
+                force_long_form=body.long_form,
+                expected_snapshot_sha256=body.expected_snapshot_sha256,
+                include_research_details=body.include_research_details,
+                include_claim_details=body.include_claim_details,
+                include_validation_notes=body.include_validation_notes,
+                include_research_excerpts=body.include_research_excerpts,
+                include_sigma_issues=body.include_sigma_issues,
+                include_diagrams=body.include_diagrams,
+                authorized_recovery_section=body.authorized_recovery_section,
+                **({"authorized_provider_change": True} if body.authorized_provider_change else {}),
+                **presence_kwargs,
+            )
         )
-    )
 
     def observe_detached_result(completed: asyncio.Task[dict[str, Any]]) -> None:
         if completed.cancelled():
@@ -1038,13 +1042,16 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     try:
         # Reserve synchronously before yielding a StreamingResponse. This
         # closes the window where an immediate Stop could miss the job.
-        papers.register_submission(body.path, task)
+        with project_collaboration.bind_lease(body.path, lease):
+            papers.register_submission(body.path, task)
     except BaseException:
         # Disk failure, duplicate submission, or any other admission error
         # must never leave an unregistered provider task running.
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+        project_collaboration.release_lease(body.path, lease)
         raise
+    project_collaboration.watch_lease(body.path, lease, task)
     task.add_done_callback(observe_detached_result)
 
     async def stream():
@@ -1530,40 +1537,56 @@ def mock_research_start_view(
 
 @app.post("/api/projects/research-sessions/start")
 async def research_start_view(body: ResearchStartRequest):
+    from sigma import project_collaboration
+
+    lease = project_collaboration.acquire_lease(body.path, "Research session")
+    transferred = False
     try:
-        return await research_sessions.start_session(
-            body.path,
-            body.strategy_id,
-            body.idempotency_key,
-            body.expected_project_id,
-            body.expected_binding,
-            body.expected_limits,
-            body.strategy_ids,
-            body.continue_using_saved_type_settings,
-            body.browser_presence_required,
-        )
-    except ProjectError as exc:
-        # Admission can fail before Session #1. Never manufacture a session.
-        # An unrecorded write must not obscure the original admission failure.
-        safe_message = project_diagnostics.sanitize(str(exc))
-        try:
-            diagnostic = project_diagnostics.append(
-                body.path,
-                stage="admission",
-                code="research_admission_failed",
-                message=safe_message,
-                correlation_id=str(body.idempotency_key),
-                http_status=400,
-            )
-        except (ProjectError, OSError, ValueError):
-            return JSONResponse(
-                {"error": safe_message, "diagnostic_recorded": False},
-                status_code=400,
-            )
-        return JSONResponse(
-            {"error": diagnostic["message"], "diagnostic_recorded": True, "diagnostic": diagnostic},
-            status_code=400,
-        )
+        with project_collaboration.bind_lease(body.path, lease):
+            try:
+                result = await research_sessions.start_session(
+                    body.path,
+                    body.strategy_id,
+                    body.idempotency_key,
+                    body.expected_project_id,
+                    body.expected_binding,
+                    body.expected_limits,
+                    body.strategy_ids,
+                    body.continue_using_saved_type_settings,
+                    body.browser_presence_required,
+                )
+            except ProjectError as exc:
+                safe_message = project_diagnostics.sanitize(str(exc))
+                try:
+                    diagnostic = project_diagnostics.append(
+                        body.path,
+                        stage="admission",
+                        code="research_admission_failed",
+                        message=safe_message,
+                        correlation_id=str(body.idempotency_key),
+                        http_status=400,
+                    )
+                except (ProjectError, OSError, ValueError):
+                    return JSONResponse(
+                        {"error": safe_message, "diagnostic_recorded": False},
+                        status_code=400,
+                    )
+                return JSONResponse(
+                    {
+                        "error": diagnostic["message"],
+                        "diagnostic_recorded": True,
+                        "diagnostic": diagnostic,
+                    },
+                    status_code=400,
+                )
+        worker = research_sessions._tasks.get(result.get("id", ""))
+        if worker is not None and not worker.done():
+            project_collaboration.watch_lease(body.path, lease, worker)
+            transferred = True
+        return result
+    finally:
+        if not transferred:
+            project_collaboration.release_lease(body.path, lease)
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
@@ -1583,13 +1606,35 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         if simulated is None:
             raise HTTPException(404, "Not found")
         return simulated
-    return await research_sessions.control_session(
-        body.path,
-        session_id,
-        body.action,
-        additional_calls=body.additional_calls,
-        browser_presence_required=body.browser_presence_required,
-    )
+    from sigma import project_collaboration
+
+    if body.action not in {"resume", "repair"}:
+        return await research_sessions.control_session(
+            body.path,
+            session_id,
+            body.action,
+            additional_calls=body.additional_calls,
+            browser_presence_required=body.browser_presence_required,
+        )
+    lease = project_collaboration.acquire_lease(body.path, "Research session")
+    transferred = False
+    try:
+        with project_collaboration.bind_lease(body.path, lease):
+            result = await research_sessions.control_session(
+                body.path,
+                session_id,
+                body.action,
+                additional_calls=body.additional_calls,
+                browser_presence_required=body.browser_presence_required,
+            )
+        worker = research_sessions._tasks.get(session_id)
+        if worker is not None and not worker.done():
+            project_collaboration.watch_lease(body.path, lease, worker)
+            transferred = True
+        return result
+    finally:
+        if not transferred:
+            project_collaboration.release_lease(body.path, lease)
 
 
 @app.post("/api/projects/research-sessions/{session_id}/interventions")
@@ -1667,7 +1712,11 @@ class InitRequest(OpenRequest):
 
 @app.post("/api/projects/open")
 def open_view(body: OpenRequest):
-    return asdict(open_project(body.path))
+    from sigma import project_collaboration
+
+    view = open_project(body.path)
+    project_collaboration.register_owner(view)
+    return asdict(view)
 
 
 @app.post("/api/projects/init", status_code=201)
@@ -1694,7 +1743,20 @@ def init_view(body: InitRequest):
 
 @app.get("/api/projects/inspect")
 def inspect_view(path: str):
-    return asdict(inspect_project(path))
+    from sigma import project_collaboration
+
+    view = inspect_project(path)
+    project_collaboration.register_owner(view)
+    return asdict(view)
+
+
+@app.get("/api/projects/collaboration")
+def project_collaboration_view(path: str):
+    from sigma import project_collaboration
+
+    view = inspect_project(path)
+    project_collaboration.register_owner(view)
+    return project_collaboration.summary(view.path)
 
 
 @app.get("/api/projects/audit")
@@ -2335,6 +2397,8 @@ class ProjectSettingsRequest(BaseModel):
 class UpdateProjectRequest(ProjectSettingsRequest):
     path: str
     expected: ProjectSettingsRequest
+    expected_revision: int | None = Field(default=None, ge=0)
+    collaborators: list[str] | None = None
 
 
 class DeleteProjectRequest(BaseModel):
@@ -2401,28 +2465,37 @@ async def delete_project_view(body: DeleteProjectRequest):
 
 @app.post("/api/projects/update")
 def update_project_view(body: UpdateProjectRequest):
-    current = inspect_project(body.path).project
+    from sigma import project_collaboration
+
+    current_view = inspect_project(body.path)
+    project_collaboration.register_owner(current_view)
+    current = current_view.project
     if (
         body.investigation_type != current.investigation_type
         and body.investigation_type != "default"
         and project_types.get_type(body.investigation_type) is None
     ):
         raise ProjectError("Choose a currently available project type")
-    return asdict(
-        update_project(
-            body.path,
-            body.title,
-            body.problem,
-            body.investigation_type,
-            body.ai_model,
-            body.reasoning_effort,
-            body.expected.model_dump(exclude_none=True),
-            difficulty=body.difficulty,
-            show_advanced_outcome_details=body.show_advanced_outcome_details,
-            desired_outcomes=body.desired_outcomes,
-            paper_requirements=body.paper_requirements,
-        )
+    view = update_project(
+        body.path,
+        body.title,
+        body.problem,
+        body.investigation_type,
+        body.ai_model,
+        body.reasoning_effort,
+        body.expected.model_dump(exclude_none=True),
+        difficulty=body.difficulty,
+        show_advanced_outcome_details=body.show_advanced_outcome_details,
+        desired_outcomes=body.desired_outcomes,
+        paper_requirements=body.paper_requirements,
+        expected_revision=body.expected_revision,
+        collaborators=body.collaborators,
     )
+    if body.collaborators is not None:
+        # Durable outbox delivery is best effort; a mail outage cannot roll
+        # back a successful project save or its optimistic revision.
+        project_collaboration.drain_notifications()
+    return asdict(view)
 
 
 def connection_view_state(state: dict[str, Any], request: Request) -> dict[str, Any]:

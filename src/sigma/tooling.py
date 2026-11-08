@@ -110,6 +110,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/rh_adversarial.py"],
             [*python, "python", "tests/t39_evaluation.py"],
             [*python, "python", "tests/project_settings.py"],
+            [*python, "python", "tests/project_collaboration.py"],
             [*python, "python", "tests/research_ethos.py"],
             [*python, "python", "tests/progress_notifications.py"],
             [*python, "python", "tests/model_connection.py"],

@@ -489,6 +489,9 @@ async def _run_outbox() -> None:
     while True:
         try:
             await asyncio.to_thread(_deliver_pending)
+            from sigma import project_collaboration
+
+            await asyncio.to_thread(project_collaboration.drain_notifications)
         except Exception:  # noqa: BLE001 - background email must never crash SIGMA
             _LOG.exception("progress_email.outbox_worker_failed")
         await asyncio.sleep(30)

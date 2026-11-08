@@ -4748,6 +4748,25 @@ function DifficultyPicker({ value, onChange }: {
   </div>;
 }
 
+type SharedProjectInfo = {
+  owner: string | null;
+  collaborators: string[];
+  revision: number;
+  model: string;
+  thinking: string;
+  shared: boolean;
+  lease: { email: string; activity: string; expires_at: number } | null;
+};
+
+function plausibleCollaboratorEmail(input: string): string | null {
+  const email = input.trim().toLowerCase();
+  const match = /^([a-z0-9][a-z0-9._+%-]{0,63})@([a-z0-9][a-z0-9.-]*\.[a-z]{2,})$/.exec(email);
+  if (!match || email.length > 254 || match[1].includes('..') || match[1].endsWith('.') || match[2].includes('..')) return null;
+  if (match[2].split('.').some(part => !part || part.length > 63 || part.startsWith('-') || part.endsWith('-'))) return null;
+  if (['gmail.com', 'googlemail.com'].includes(match[2]) && (!/^[a-z0-9]+(\.[a-z0-9]+)*$/.test(match[1]) || match[1].length < 6 || match[1].length > 30)) return null;
+  return email;
+}
+
 function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   initial: ProjectView; onSaved: (next: ProjectView) => void; onCancel: () => void;
 }) {
@@ -4755,19 +4774,68 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
+  const [shared, setShared] = useState<SharedProjectInfo | null>(null);
+  const [model, setModel] = useState(initial.project.ai_model);
+  const [thinking, setThinking] = useState(initial.project.reasoning_effort);
+  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { dialog.current?.showModal(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const json = async (url: string) => {
+      const response = await fetch(url, { signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Project settings are unavailable.');
+      return data;
+    };
+    void Promise.all([
+      json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path })}`),
+      json('/api/ai/models'),
+    ]).then(([saved, available]: [SharedProjectInfo, { models: CatalogChoice[] }]) => {
+      if (controller.signal.aborted) return;
+      setShared(saved);
+      setModel(saved.model);
+      setThinking(saved.thinking);
+      setCollaborators(saved.collaborators);
+      setCatalog(available.models);
+      setLoading(false);
+    }).catch(cause => {
+      if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
+    });
+    return () => controller.abort();
+  }, [initial.path]);
+  const selected = catalog.find(choice => choice.id === model);
+  const validPair = !shared?.owner || !!selected?.efforts.includes(thinking);
+  const changed = projectType !== initial.project.investigation_type
+    || difficulty !== initial.project.difficulty
+    || (!!shared?.owner && (model !== shared.model || thinking !== shared.thinking
+      || JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators)));
+  function addCollaborator() {
+    const email = plausibleCollaboratorEmail(newEmail);
+    if (!email) { setError('Enter a plausible Google account email address.'); return; }
+    if (email === shared?.owner || collaborators.includes(email)) {
+      setError('This account is already a collaborator.'); return;
+    }
+    setCollaborators(previous => [...previous, email].sort());
+    setNewEmail(''); setAdding(false); setError('');
+  }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (busy || (projectType === initial.project.investigation_type && difficulty === initial.project.difficulty)) return;
+    if (busy || loading || !changed || !validPair || !shared) return;
     setBusy(true); setError('');
     try {
       const previous = settingsOf(initial);
       const next = await post<ProjectView>('update', {
         path: initial.path, ...previous,
         investigation_type: projectType, difficulty,
+        ai_model: model, reasoning_effort: thinking,
         expected: previous,
+        ...(shared.owner ? { expected_revision: shared.revision, collaborators } : {}),
       });
       onSaved(next);
     } catch (cause) { setError(errorMessage(cause)); }
@@ -4780,17 +4848,61 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       <header className="settings-header">
         <h2 id="sigma-project-classification-title">Project Settings</h2>
         <div className="settings-actions">
-          <button type="submit" disabled={busy || (projectType === initial.project.investigation_type && difficulty === initial.project.difficulty)}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="submit" disabled={busy || loading || !changed || !validPair}>{busy ? 'Saving…' : 'Save'}</button>
           <DialogDismissButton label="Close Project Settings" disabled={busy} onClick={onCancel}/>
         </div>
       </header>
       <div className="settings-body">
-        <fieldset disabled={busy}>
+        <fieldset disabled={busy || loading}>
           <label id="sigma-project-type-label">Project Type</label>
           <ResearchTypePicker fieldLabel="Project Type" value={projectType} onChange={setProjectType}/>
           <label id="sigma-project-difficulty-label">Difficulty</label>
           <DifficultyPicker value={difficulty} onChange={setDifficulty}/>
+          {!!shared?.owner && <>
+            <div className="settings-model-row">
+              <div>
+                <label htmlFor="shared-project-model">Model</label>
+                <select id="shared-project-model" value={model} onChange={event => {
+                  const next = event.target.value;
+                  setModel(next);
+                  const option = catalog.find(item => item.id === next);
+                  if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
+                }}>
+                  {model && !selected && <option value={model}>{model} · unavailable</option>}
+                  {catalog.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="shared-project-thinking">Thinking</label>
+                <select id="shared-project-thinking" value={thinking} onChange={event => setThinking(event.target.value)}>
+                  {!selected?.efforts.includes(thinking) && <option value={thinking}>{thinkingLabels[thinking] ?? thinking} · unavailable</option>}
+                  {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
+                </select>
+              </div>
+            </div>
+            <section className="project-collaborators" aria-label="Collaborators">
+              <div className="project-collaborators-heading">
+                <h3>Collaborators</h3>
+                <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add collaborator" data-tooltip="Add collaborator" onClick={() => { setAdding(true); setError(''); }}><CirclePlusIcon/></button>
+              </div>
+              <div className="project-collaborator-row">
+                <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
+              </div>
+              {collaborators.map(email => <div className="project-collaborator-row" key={email}>
+                <span>{email}</span>
+                <button type="button" aria-label={`Remove ${email}`} className="project-collaborator-remove" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>×</button>
+              </div>)}
+              {adding && <div className="project-collaborator-add">
+                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => setNewEmail(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCollaborator(); } if (event.key === 'Escape') { event.stopPropagation(); setAdding(false); setNewEmail(''); } }}/>
+                <button type="button" onClick={addCollaborator}>Add</button>
+                <button type="button" onClick={() => { setAdding(false); setNewEmail(''); }}>Cancel</button>
+              </div>}
+            </section>
+          </>}
         </fieldset>
+        {loading && <p className="settings-hint">Loading shared settings…</p>}
+        {!validPair && <p role="alert" className="error">Choose a compatible model and Thinking level.</p>}
         {error && <p role="alert" className="error">{error}</p>}
       </div>
     </form>
@@ -5968,6 +6080,22 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [researchRunning, setResearchRunning] = useState(false);
   const [paperRunning, setPaperRunning] = useState(false);
   const [paperQueued, setPaperQueued] = useState(false);
+  const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
+  useEffect(() => {
+    if (guest) return;
+    let active = true;
+    const poll = () => {
+      void fetch(`/api/projects/collaboration?${new URLSearchParams({ path })}`, {
+        headers: { 'X-Sigma-Error-Handled': 'true' },
+        cache: 'no-store',
+      }).then(response => response.ok ? response.json() : Promise.reject())
+        .then((value: SharedProjectInfo) => { if (active) setSharedActivity(value); })
+        .catch(() => { if (active) setSharedActivity(null); });
+    };
+    poll();
+    const interval = window.setInterval(poll, 5000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [path, guest]);
   const [initialResearchActivity, setInitialResearchActivity] = useState<'running' | 'queued' | null>();
   const [initialPaperActivity, setInitialPaperActivity] = useState<'active' | 'queued' | null>();
   const autoRevealed = useRef(false);
@@ -6478,6 +6606,11 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setAnnouncement('Advanced Outcome enabled for your account.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
     <PapersPane path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
+    {sharedActivity?.shared && <p className="project-collaboration-activity" role="status" aria-live="polite">
+      {sharedActivity.lease
+        ? `${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`
+        : 'No collaborator is currently running this project.'}
+    </p>}
     {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}

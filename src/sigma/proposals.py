@@ -570,11 +570,13 @@ async def configuration(
     snapshot = view or (inspect_project(path) if path else None)
     # Future research is configured by the current user, never the project.
     # Historical records keep their model and effort snapshots.
-    from sigma import global_research_settings
+    from sigma import global_research_settings, project_collaboration
 
     user_settings = global_research_settings.load_config()
-    model = frozen_model if frozen_model is not None else user_settings["ai_model"]
-    effort = frozen_effort if frozen_effort is not None else user_settings["reasoning_effort"]
+    shared_settings = project_collaboration.model_settings(snapshot.path) if snapshot else None
+    selected_settings = shared_settings or user_settings
+    model = frozen_model if frozen_model is not None else selected_settings["ai_model"]
+    effort = frozen_effort if frozen_effort is not None else selected_settings["reasoning_effort"]
     if context is None:
         context = await auth_context()
     discovery = await models(context=context)
