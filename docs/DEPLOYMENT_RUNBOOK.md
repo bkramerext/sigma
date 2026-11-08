@@ -221,27 +221,23 @@ deploy helper, enable maintenance, or claim v0.3.0 was deployed.
    `sudo -n true`, systemd/Compose and all three containers, release
    pin, disk UUID/mount flags, quotas, and available recovery instance
    and disk types. Do not alter anything to produce a green check.
-3. **Billing — BLOCKED:** An authorized **billing-account viewer** must
-   confirm via Cloud Console (or a pre-existing legitimate read-only
-   API path) that project `sigma-research-prod` is still linked to an
-   active billing account, its relevant budget and alert thresholds are
-   present, and current costs/spend are visible or honestly unavailable.
-   The Cloud Billing API is disabled; **do not enable it**, widen billing
-   IAM or use the personal Owner account for billing under the separate
-   IAM-only authorization. This is a visibility follow-up for the current
-   **zero-new-resource** path, not a hard release blocker unless the
-   existing billing link or actual service status is known to be broken.
-   The previous October budget/credit evidence is historical. Budget alerts are **not** hard spend caps. The latest
-   modeled recovery cost is **$16.11**, or **$21.11 including $5
-   contingency**, versus a mandatory $25 incremental ceiling. This is
-   modeled, not billed. Do not create recovery resources before current
-   billing association and budget evidence is supplied.
+3. **Billing visibility — FOLLOW-UP, not a release blocker for no-new-
+   resource rollout:** An already-authorized viewer may confirm the
+   existing project billing link, active account and budget alerts
+   through Cloud Console. The Cloud Billing API is disabled; do not
+   enable it, add billing roles, or reuse the one-time Owner IAM
+   authorization for billing inspection. October evidence is
+   historical and budget alerts are not hard spending caps. The
+   previously modeled $16.11/$21.11 paid recovery plan is now
+   **prohibited**; it is not part of this rollout. No new resources
+   or billing commitments are authorized. If production actually
+   becomes unhealthy because of billing suspension, stop.
 4. **Maintenance and baseline:** Inspect the existing maintenance
    switch state and confirm the public site is serving normally.
    Prepare the read-only identity, project, paper, job and accounting
    queries, baseline thresholds, and the restore-verifier invocation.
-   Capture a *fresh* baseline close to the actual snapshot, not from
-   old v0.2.2 numbers. Do not run paid inference.
+   Capture a *fresh* baseline close to the authorized consistent
+   boot-disk copy, not from old v0.2.2 numbers. Do not run paid inference.
 5. **Readiness proof:** Record the checked environment, impersonated
    identities, commands, statuses, quotas/costs, and remaining
    limitations in one concise readiness report. If all source-independent
@@ -253,8 +249,9 @@ Only when the operator says development is finished does Red select the
 new approved merged SHA. Then verify backend/frontend 0.3.0, update
 release notes, reuse exact-SHA green CI, perform final schema-compatibility
 review against the *actual selected commit*, and recapture the live
-data/accounting baseline. Proceed with the existing snapshot/restore,
-guarded cutover, acceptance, cleanup, and merged deployment record
+data/accounting baseline. Proceed **only if the operator has accepted
+same-host backup risk** with the conditional verified existing-boot-disk
+copy, guarded cutover, acceptance, cleanup, and merged deployment record
 without routine intermediary approval requests. Stop only on a genuine
 safety gate or a task requiring new privileges/scope.
 
@@ -340,7 +337,7 @@ cutover.
   early check. If actual recovery IAP fails, stop and remediate
   before accepting the restore.
 
-**Remaining billing gate (no authorization to change billing):**
+**Billing visibility follow-up (not a hard gate for zero-new-resource rollout):**
 The Cloud Billing API is disabled, and the recovery identity cannot
 view the account's budgets. Historical documentation of a $300 budget
 and 50/75/90/100% alerts does not prove those controls are current.
@@ -351,18 +348,17 @@ current budget/thresholds and alert notification settings, and
 available current spend/cost report. Google Cloud Billing Account
 Viewer on the **billing account** is a documented read-only option
 when an authorized billing administrator chooses to delegate;
-this is not a request to grant it now. Record the date and redacted
-evidence. If no authorized billing viewer can furnish it,
-report **READINESS BLOCKED — BILLING_EVIDENCE**, not READY FOR SHA.
+this is not a request to grant it now. Record any evidence received,
+but lack of that evidence alone is **not** grounds for blocking an
+already-paid, zero-new-resource release. Do not create billing access
+as a new release dependency.
 
-**Historical estimate — NOT authorized to spend:** The earlier incremental recovery scenario was modeled as
-$16.11, or $21.11 with contingency, including an e2-standard-2 VM
-for at most 24h, up to 100-GiB boot and 30-GiB clone disks,
-and a 30-GiB standard snapshot retained up to 30 days. No
-external IP or cross-region traffic; no paid inference.
-Costs are estimates, not actual spend. Observe and clean up
-temporary resources promptly, retain only the verified snapshot,
-and stop when the $25 incremental ceiling cannot be supported.
+**Historical paid estimate — prohibited by current funding policy:**
+The previously proposed $16.11 ($21.11 including contingency)
+recovery VM, clone and snapshot scenario is **not authorized**.
+No new cloud recovery infrastructure or paid inference. The
+conditional already-provisioned boot-disk copy above is the only
+newly proposed option; it does not require extra provisioned capacity.
 
 **Stage A execution environment:** use the current maintained runbook
 from `origin/main` and the approved keyless GCP operator runtime.
@@ -377,6 +373,7 @@ Proceed through the eight routine gates **below** only after these
 preflight issues are resolved, the operator approves the new frozen SHA,
 and appropriate exact-SHA CI is green. Preserve all existing recovery,
 least-privilege, cost, state, and rollback safeguards.
+
 ## Routine keyless GCE release — canonical ordered path (issue #667)
 
 **Version 0.3.0 cost-policy override:** The resource-creating snapshot,
