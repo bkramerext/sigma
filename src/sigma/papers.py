@@ -9343,6 +9343,25 @@ async def _generate_impl(
         last_logged_stage: tuple[str, str] | None = None
         last_output_write = 0.0
         output_delta_count = 0
+        incoming_checkpoint = _load_work(path)
+        resume_floor = None
+        if incoming_checkpoint is not None and not incoming_checkpoint.get("explicit_restart_pending"):
+            if incoming_checkpoint.get("published_paper_id"):
+                resume_floor = "scoring"
+            elif incoming_checkpoint.get("pdf_checkpoint") or incoming_checkpoint.get("proofread_ready"):
+                resume_floor = "compile"
+            elif incoming_checkpoint.get("proofreading") or incoming_checkpoint.get("validated_draft"):
+                resume_floor = "proofreading"
+            elif incoming_checkpoint.get("section_drafts") or incoming_checkpoint.get("plan"):
+                resume_floor = "sections"
+            elif incoming_checkpoint.get("evidence_notes") or incoming_checkpoint.get("evidence_indexed"):
+                resume_floor = "evidence"
+        stage_order = (
+            "queued", "snapshot", "source_material", "publication_compilation",
+            "evidence", "consolidation", "planning", "writing", "sections",
+            "validation", "proofreading", "compile", "pdf_check",
+            "scoring", "score_failed", "finishing", "complete",
+        )
 
         async def report_activity(
             stage: Literal["planning", "writing", "sections"],
@@ -9398,6 +9417,14 @@ async def _generate_impl(
             detail: str | None = None,
         ) -> None:
             nonlocal last_logged_stage, output_delta_count
+            # The persisted artifact determines the earliest unfinished stage;
+            # do not replay prior progress markers when reconstructing locally.
+            if (
+                resume_floor is not None
+                and stage in stage_order
+                and stage_order.index(stage) < stage_order.index(resume_floor)
+            ):
+                return
             if stage == "retry":
                 # Retrying is a substep, not a pipeline stage. Keep the actual
                 # stage and completed-section count visible throughout retry.
@@ -9574,7 +9601,7 @@ async def _generate_impl(
         # _generate_impl runs in its own task; child section tasks inherit this
         # selector, while unrelated paper scoring and tests never do.
         _paper_model_for_call.set(model_for_next_paper_call)
-        checkpoint = _load_work(path)
+        checkpoint = incoming_checkpoint
         frozen = checkpoint.get("frozen_package") if checkpoint is not None else None
         if frozen_snapshot is not None:
             package, snapshot_hash = _validate_frozen_snapshot(frozen_snapshot, view.project.id)
@@ -9735,6 +9762,73 @@ async def _generate_impl(
                     "Paper section recovery authorization does not match the saved "
                     "checkpoint; no additional AI request was made."
                 )
+
+        async def finalize_published(saved_record: dict[str, Any]) -> dict[str, Any]:
+            """Resume scoring/finalization from the immutable published PDF.
+
+            The generation checkpoint is cleared only after the complete
+            milestone has been durably reported. Cancellation during scoring
+            always leaves the published paper identity available for Continue.
+            """
+            paper_id = saved_record["paper_id"]
+            score_failure_detail: str | None = None
+            from sigma import paper_scores
+
+            if paper_scores.cached_score(saved_record) is None:
+                await report("scoring", None, None)
+                try:
+                    if not expected_binding or not expected_project_id:
+                        raise ProjectError("Automatic scoring requires an AI connection")
+                    await paper_scores.score_paper(path, paper_id, expected_binding, expected_project_id)
+                except Exception as exc:  # noqa: BLE001 - never invalidate a published PDF
+                    logging.getLogger("sigma.lifecycle").warning(
+                        "paper.score_failed project_id=%s paper_id=%s error_type=%s",
+                        expected_project_id or "unknown", paper_id, type(exc).__name__,
+                    )
+                    score_failure_detail = "PDF saved; scoring did not finish. Use Score paper to retry."
+                    await report("score_failed", None, None, "active", detail=score_failure_detail)
+            await report("finishing", None, None, detail=score_failure_detail)
+            _schedule_progress_email(path, "paper_finished", paper_id)
+            await report("complete", None, None, "complete", detail=score_failure_detail)
+            completed = _read_progress_status(path)
+            # No await between deleting in-flight artifacts and restoring the
+            # bounded finished status, so Stop cannot expose a stale cursor.
+            _clear_work(path)
+            _clear_reset_ledger(path)
+            if completed is not None:
+                _write_progress_status(path, {**completed, "paper_id": paper_id})
+            work.clear()
+            return {
+                key: saved_record[key]
+                for key in (
+                    "paper_id", "project_id", "created_at", "snapshot_sha256",
+                    "validation_warnings", "obligation_reconciliation",
+                    "author_review_warnings", "generation",
+                )
+            } | {"title": saved_record["draft"]["title"]}
+
+        # The publication record is committed before Score begins. A restart
+        # during the scoring call must never fall through to paper authoring.
+        published_id = work.get("published_paper_id")
+        if published_id and compatible:
+            published_summary = next(
+                (item for item in list_papers(path) if item["paper_id"] == published_id),
+                None,
+            )
+            if published_summary is not None:
+                if (
+                    not published_summary["pdf_available"]
+                    or published_summary.get("pdf_sha256") != work.get("published_pdf_sha256")
+                ):
+                    raise ProjectError(
+                        "Published PDF does not match the scoring checkpoint; do not regenerate it."
+                    )
+                return await finalize_published(get_paper(path, published_id, include_tex=False))
+            # The process exited after preparing the publication receipt but
+            # before _save; its authored draft and PDF pass remain resumable.
+            work.pop("published_paper_id", None)
+            work.pop("published_pdf_sha256", None)
+            _save_work(path, work)
 
         # Choose sources before authoring; never modify the frozen research.
         await report(
@@ -10722,54 +10816,17 @@ async def _generate_impl(
             elapsed_before
             + max(0, (datetime.now(UTC) - datetime.fromisoformat(started_at)).total_seconds())
         )
+        # The identity and checksum are saved before publication. If the
+        # process exits after _save but before Score, Continue finds this PDF.
+        work["published_paper_id"] = record["paper_id"]
+        work["published_pdf_sha256"] = hashlib.sha256(pdf).hexdigest()
+        _save_work(path, work)
         _save(path, record, pdf)
-        # The published PDF is durable. Drop the entire generation checkpoint
-        # BEFORE notifying clients; never rewrite it with a completed status.
-        _clear_work(path)
-        _clear_reset_ledger(path)
-        work.clear()
-        # The published artifacts now own the TeX/PDF/snapshot. Drop the
-        # in-flight copies before the final progress event can await a viewer.
         record.pop("tex_source", None)
         record.pop("snapshot", None)
         del tex, pdf
-        await report("scoring", None, None)
-        score_failure_detail: str | None = None
-        try:
-            if not expected_binding or not expected_project_id:
-                raise ProjectError("Automatic scoring requires an AI connection")
-            from sigma import paper_scores
+        return await finalize_published(record)
 
-            await paper_scores.score_paper(
-                path, record["paper_id"], expected_binding, expected_project_id
-            )
-        except Exception as exc:  # noqa: BLE001 - never invalidate an already published PDF
-            logging.getLogger("sigma.lifecycle").warning(
-                "paper.score_failed project_id=%s paper_id=%s error_type=%s",
-                expected_project_id or "unknown",
-                record["paper_id"],
-                type(exc).__name__,
-            )
-            score_failure_detail = "PDF saved; scoring did not finish. Use Score paper to retry."
-            await report("score_failed", None, None, "active", detail=score_failure_detail)
-        # The PDF is durable. Email is handed to a separate outbox, so
-        # reaching Finished never implies that SMTP delivery has completed.
-        await report("finishing", None, None, detail=score_failure_detail)
-        _schedule_progress_email(path, "paper_finished", record["paper_id"])
-        await report("complete", None, None, "complete", detail=score_failure_detail)
-        return {
-            key: record[key]
-            for key in (
-                "paper_id",
-                "project_id",
-                "created_at",
-                "snapshot_sha256",
-                "validation_warnings",
-                "obligation_reconciliation",
-                "author_review_warnings",
-                "generation",
-            )
-        } | {"title": draft.title}
 
 
 def _schedule_progress_email(
