@@ -883,6 +883,20 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
+
+    # Include popup's dismiss X aligns to the actual outer popup corner,
+    # not to the padded title row (which used to move it down and inward).
+    page.get_by_role("button", name="Include in paper").click()
+    paper_options = page.get_by_role("dialog", name="Include in paper")
+    expect(paper_options).to_be_visible()
+    paper_close = paper_options.get_by_role("button", name="Close paper inclusion options")
+    popup_box = paper_options.bounding_box()
+    close_box = paper_close.bounding_box()
+    assert popup_box and close_box
+    assert abs((popup_box["x"] + popup_box["width"]) - (close_box["x"] + close_box["width"]) - 11) <= 2, (popup_box, close_box)
+    assert abs(close_box["y"] - popup_box["y"] - 9) <= 2, (popup_box, close_box)
+    paper_close.click()
+    expect(paper_options).to_have_count(0)
     # Regression: editing the Project description swaps the toolbar pencil for
     # Save / Cancel and keeps those actions mounted after React re-renders.
     project_edit = page.locator(".project-pane-actions").get_by_role(
