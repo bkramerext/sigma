@@ -81,17 +81,13 @@ data or review existing infrastructure read-only. No live writer stop,
 live backup, cutover, deployment SHA or new resources until the operator
 declares the release ready.
 
-## Routine keyless GCE release — canonical ordered path (issue #667)
+## Reference only — historical cloud snapshot/recovery-VM procedure
 
-**For v0.3.0, use the short release sequence above.** Steps 3–6
-below document the historical cloud snapshot/recovery-VM procedure
-and are **not authorized** for this release. Keep technical checks
-honest and do not allocate additional infrastructure.
-
-Follow these eight gates in order only after a separate release authorization
-selects the target. Check the selected commit and effective live permissions;
-never infer results from past release records. Current production inventory is
-maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
+**Not applicable to v0.3.0.** The simple existing-VM procedure above is
+all Red needs for this release. The older eight-gate workflow below is
+retained only as historical reference; its VM, snapshot, billing and
+approval steps are **not v0.3.0 deployment instructions**. The current
+production inventory remains in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
 
 1. **Freeze and establish source provenance.** Choose an approved, merged,
    full 40-character SHA. Record exact-SHA successful Ruff, SIGMA verification,
