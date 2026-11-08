@@ -282,7 +282,10 @@ def project_write_lock(value: str | Path):
                 raise ProjectError("Project write lock must be a regular file")
             fcntl.flock(lock, fcntl.LOCK_EX)
             try:
-                yield path
+                from sigma import project_collaboration
+
+                with project_collaboration.write_guard(str(path)):
+                    yield path
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
     except OSError as exc:

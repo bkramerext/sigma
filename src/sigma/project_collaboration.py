@@ -7,14 +7,18 @@ membership invitations, never authorization assertions.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import sqlite3
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Any, Iterator
+from collections.abc import Callable
+from typing import Any, Iterator, TypeVar
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -24,6 +28,151 @@ from sigma.model_catalog import validate_pair
 LEASE_SECONDS = 120
 EMAIL = re.compile(r"^[a-z0-9][a-z0-9._+%-]{0,63}@[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$")
 LOGGER = logging.getLogger("sigma.collaboration")
+_LEASE_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
+    "sigma_project_execution_lease", default=None
+)
+_WRITE_CONTEXT: ContextVar[tuple[str, sqlite3.Connection] | None] = ContextVar(
+    "sigma_project_write_transaction", default=None
+)
+_T = TypeVar("_T")
+
+
+@contextmanager
+def bind_lease(path: str, token: str | None) -> Iterator[None]:
+    """Bind a worker's fencing token into asyncio child tasks."""
+    if token is None:
+        yield
+        return
+    binding = _LEASE_CONTEXT.set((str(path), token))
+    try:
+        yield
+    finally:
+        _LEASE_CONTEXT.reset(binding)
+
+
+def _verify_fence(db: sqlite3.Connection, path: str, actor: str) -> None:
+    from sigma.projects import ProjectError
+
+    lease = db.execute(
+        "SELECT token,email,activity,expires_at FROM shared_leases WHERE path=?",
+        (path,),
+    ).fetchone()
+    binding = _LEASE_CONTEXT.get()
+    token = binding[1] if binding is not None and binding[0] == path else None
+    if token is not None:
+        if lease is None or lease["token"] != token or lease["expires_at"] <= time.time():
+            raise ProjectError("Project execution lease was lost. Resume from saved progress.")
+    elif lease is not None and lease["expires_at"] > time.time() and lease["email"] != actor:
+        raise ProjectError(
+            f"Project is being used by {lease['email']} ({lease['activity']}). "
+            "Wait for that activity to finish."
+        )
+
+
+@contextmanager
+def write_guard(
+    path: str, expected_revision: int | None = None
+) -> Iterator[sqlite3.Connection | None]:
+    """Fence a persisted mutation and revision under one SQLite writer transaction.
+
+    Lease acquisition also requires BEGIN IMMEDIATE. A new owner cannot claim
+    the project between fencing verification and the actual checkpoint write.
+    Nested mutations on the same project reuse the transaction.
+    """
+    from sigma.projects import ProjectError
+
+    path = str(path)
+    existing = _WRITE_CONTEXT.get()
+    if existing is not None:
+        if existing[0] != path:
+            raise ProjectError("Nested writes across shared projects are unsupported.")
+        db = existing[1]
+        row = _row(db, path)
+        if expected_revision is not None and (
+            type(expected_revision) is not int or row["revision"] != expected_revision
+        ):
+            raise ProjectError(
+                f"Project was saved by {row['last_writer']}. "
+                "Reopen it and redo your changes."
+            )
+        yield db
+        return
+    workspace = cloud_workspaces.current()
+    if workspace is None or workspace.guest:
+        yield None
+        return
+    with _db() as db:
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
+            # Registration happens on open/create and at execution admission.
+            # Unregistered, private or newly initialized projects are unchanged.
+            yield None
+            return
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            row, actor = _membership(db, path)
+            if expected_revision is not None and (
+                type(expected_revision) is not int
+                or expected_revision < 0
+                or row["revision"] != expected_revision
+            ):
+                raise ProjectError(
+                    f"Project was saved by {row['last_writer']}. "
+                    "Reopen it and redo your changes."
+                )
+            _verify_fence(db, path, actor)
+            binding = _WRITE_CONTEXT.set((path, db))
+            try:
+                yield db
+                db.execute(
+                    """UPDATE shared_projects SET revision=revision+1,
+                       last_writer=?,updated_at=? WHERE path=?""",
+                    (actor, time.time(), path),
+                )
+                db.commit()
+            finally:
+                _WRITE_CONTEXT.reset(binding)
+        except BaseException:
+            db.rollback()
+            raise
+
+
+def fenced_checkpoint(func: Callable[..., _T]) -> Callable[..., _T]:
+    """Fence checkpoint sidecars that bypass the main project write lock."""
+
+    @wraps(func)
+    def guarded(path: str, *args: Any, **kwargs: Any) -> _T:
+        with write_guard(path):
+            return func(path, *args, **kwargs)
+
+    return guarded
+
+
+def watch_lease(path: str, token: str | None, worker: asyncio.Task[Any]) -> None:
+    """Renew a backend-owned lease regardless of browser connection state."""
+    if token is None:
+        return
+
+    async def monitor() -> None:
+        try:
+            while not worker.done():
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(worker), timeout=LEASE_SECONDS / 3
+                    )
+                except TimeoutError:
+                    if not renew_lease(path, token):
+                        worker.cancel()
+                        break
+                except BaseException:
+                    break
+            if not worker.done():
+                await asyncio.gather(worker, return_exceptions=True)
+        finally:
+            release_lease(path, token)
+
+    asyncio.create_task(monitor())
+
+
 
 
 def normalize_collaborator(value: str) -> str:
@@ -63,6 +212,7 @@ def _identity() -> tuple[cloud_workspaces.Workspace, str]:
 def _db() -> Iterator[sqlite3.Connection]:
     db = cloud_workspaces._connect(cloud_workspaces.storage_root())
     try:
+        db.execute("PRAGMA foreign_keys=ON")
         db.execute("""CREATE TABLE IF NOT EXISTS shared_projects (
             path TEXT PRIMARY KEY,
             project_id TEXT NOT NULL,
@@ -106,7 +256,10 @@ def register_owner(view: Any) -> None:
     """Lazily register existing as well as newly created private projects."""
     workspace = cloud_workspaces.current()
     principal = cloud_auth.current_principal()
-    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
+    if (
+        workspace is None or workspace.guest or principal is None or principal.role == "guest"
+        or not workspace.verified_subject or workspace.verified_subject != principal.subject
+    ):
         return
     path = Path(view.path)
     if not path.is_relative_to(workspace.path):
@@ -135,15 +288,15 @@ def register_owner(view: Any) -> None:
 
 def authorized_shared_path(path: Path) -> bool:
     """The caller already checked for traversal and symlinks; accept exact ACL paths only."""
-    workspace = cloud_workspaces.current()
-    principal = cloud_auth.current_principal()
-    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
+    try:
+        _workspace, email = _identity()
+    except ValueError:
         return False
     with _db() as db:
         row = db.execute(
             """SELECT 1 FROM shared_collaborators c
             JOIN shared_projects p ON p.path=c.path
-            WHERE c.path=? AND c.email=?""", (str(path), principal.email.casefold())
+            WHERE c.path=? AND c.email=?""", (str(path), email)
         ).fetchone()
         return row is not None
 
@@ -220,10 +373,14 @@ def require_revision(path: str, expected: int) -> None:
 
 
 def save_settings(
-    path: str, expected: int, collaborators: list[str], model: str, thinking: str,
+    path: str,
+    expected: int,
+    collaborators: list[str],
+    model: str,
+    thinking: str,
     title: str,
 ) -> dict[str, Any]:
-    """Called while the existing project write lock is held."""
+    """Validate and stage shared metadata in the surrounding fenced write."""
     from sigma.projects import ProjectError
 
     if not isinstance(collaborators, list) or len(collaborators) > 50:
@@ -235,13 +392,10 @@ def save_settings(
         raise ProjectError(str(exc)) from exc
     if len(set(emails)) != len(emails):
         raise ProjectError("Each collaborator may appear only once.")
-    with _db() as db:
-        db.execute("BEGIN IMMEDIATE")
+    with write_guard(path, expected) as db:
+        if db is None:
+            raise ProjectError("Collaboration is not available for this project.")
         row, actor = _membership(db, path)
-        if row["revision"] != expected:
-            raise ProjectError(
-                f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
-            )
         if row["owner_email"] in emails:
             raise ProjectError("The project owner is already included automatically.")
         previous = {
@@ -260,10 +414,13 @@ def save_settings(
                 [(path, member) for member in sorted(new_members)],
             )
             db.execute(
-                """UPDATE shared_projects SET revision=revision+1, model=?, thinking=?,
-                   last_writer=?, updated_at=? WHERE path=?""",
-                (model, thinking, actor, time.time(), path),
+                """UPDATE shared_projects SET model=?,thinking=?,last_writer=? WHERE path=?""",
+                (model, thinking, actor, path),
             )
+            for member in previous - new_members:
+                db.execute(
+                    "DELETE FROM shared_leases WHERE path=? AND email=?", (path, member)
+                )
             for recipient in sorted(previous ^ new_members):
                 db.execute(
                     """INSERT INTO shared_email_outbox
@@ -272,28 +429,15 @@ def save_settings(
                     (uuid4().hex, recipient, path, title,
                      "added" if recipient in new_members else "removed", time.time()),
                 )
-        db.commit()
-        return {"changed": changed, "revision": expected + int(changed)}
+        return {"changed": changed, "revision": expected + 1}
+
 
 
 def note_change(path: str) -> None:
-    """Advance revision after an ordinary validated project write."""
-    workspace = cloud_workspaces.current()
-    if workspace is None or workspace.guest:
-        return
-    try:
-        with _db() as db:
-            db.execute("BEGIN IMMEDIATE")
-            row, actor = _membership(db, path)
-            db.execute(
-                "UPDATE shared_projects SET revision=?,last_writer=?,updated_at=? WHERE path=?",
-                (row["revision"] + 1, actor, time.time(), path),
-            )
-            db.commit()
-    except ValueError as exc:
-        from sigma.projects import ProjectError
+    """Record a validated mutation (or join an enclosing write transaction)."""
+    with write_guard(path):
+        pass
 
-        raise ProjectError(str(exc)) from exc
 
 
 def shared_with_me() -> list[dict[str, str]]:
@@ -315,6 +459,9 @@ def acquire_lease(path: str, activity: str) -> str | None:
     """Atomic, renewable per-project single-operator admission. Unshared projects retain normal behavior."""
     if cloud_workspaces.current() is None:
         return None
+    from sigma.projects import inspect_project
+
+    register_owner(inspect_project(path))
     if activity not in {"Research session", "Paper generation"}:
         raise ValueError("Unsupported collaboration activity.")
     from sigma.projects import ProjectError
