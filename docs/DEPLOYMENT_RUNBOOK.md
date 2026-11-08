@@ -22,6 +22,46 @@ See [Operations Runbook](OPERATION_RUNBOOK.md) for host/incident procedures and
 old compatibility notes, and historical outcomes. Archived procedures are not
 an alternate routine-release checklist.
 
+## Coordinator-led release handoffs (SIGMA v0.3.0)
+
+For this release the **Coordinator is the release driver** and Red (Codex)
+performs only the operational stage explicitly delegated to it. This
+stage-by-stage handoff **supersedes the general unattended completion
+instruction for this release**: Red must stop at the end of each assigned
+stage and return its evidence. The operator forwards Red's response to the
+Coordinator, who determines the next step. No extra approval is necessary
+for read-only checks, but a successful handoff is **not** permission to
+proceed to the next stage.
+
+| Stage | Owner | Scope / advancement gate |
+| --- | --- | --- |
+| **A — Access readiness** | Red, then Coordinator review | Read-only, impersonated GCP access and host health checks, including global/zonal operation-status polling, IAP/OS Login, noninteractive sudo, quota and billing evidence. Do not stop writers, create recovery resources, change IAM, build images, or deploy. A missing permission is **FAILED** with the exact permission and narrow proposed remedy; past v0.2.2 success is not proof. |
+| **B — Source and release freeze** | Coordinator, with Red on separately delegated repository tasks | Draft release notes and version 0.3.0 preparation can proceed while main changes. **Do not freeze a commit until the operator says the source is ready.** Confirm all versioned files and release notes agree, select the final merged 40-character SHA, and reuse that SHA's passing CI. A moving branch or green tests alone never authorize cutover. |
+| **C — Fresh recovery verification** | Red, after Coordinator go-ahead | With Stage A access proven and a frozen Stage B SHA, perform only the documented application-consistent snapshot, isolated read-only restore verification, and bounded cleanup (steps 3–6 below). Retain the verified snapshot. Report the snapshot/restore evidence and any downtime; **do not cut over** in this stage. |
+| **D — Guarded cutover and production acceptance** | Red, after Coordinator go-ahead | Confirm Stage C evidence and schema compatibility, run the existing guarded helper for the exact frozen SHA (step 7), then complete step 8 and the release record. Never repeat an uncertain cutover without reconciling production's actual release pin and image provenance. |
+
+**Mandatory response after *each* Red stage:** the first line must be
+\`SIGMA v0.3.0 | STAGE <A/B/C/D> | SUCCEEDED\` or
+\`SIGMA v0.3.0 | STAGE <A/B/C/D> | FAILED\`.
+Then report (1) exact commands/checks and observed evidence (redacted),
+(2) source SHA and production SHA if checked, (3) permissions or recovery
+resources created/deleted, (4) health and data/maintenance state, (5) any
+unresolved gate and the smallest safe next action. The response is meant
+to be copied verbatim to the Coordinator. **SUCCEEDED** means every assigned
+gate is established; **FAILED** includes a partial result, unsupported
+attestation, timed-out operation, or genuine safety block. Never turn a
+failed check into implicit success. Both statuses end the current stage:
+wait for the Coordinator's next explicit handoff.
+
+**Operational safeguards:** no Owner/Editor fallback, long-lived keys,
+unapproved IAM broadening, paid inference, state deletion, or data restore.
+Keep the pre-release downtime and incremental recovery spend within the
+existing $25 ceiling and record truthfully what was actually verified.
+The Coordinator owns sequencing and repository documentation; Red owns
+on-host/GCP execution and observation. Work on v0.3.0 **does not itself
+authorize a production deployment** until the frozen release and stages
+are explicitly advanced.
+
 ## Routine keyless GCE release — canonical ordered path (issue #667)
 
 Follow these eight gates in order only after a separate release authorization
@@ -52,11 +92,11 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
    identity, including noninteractive `sudo -n true` on the intended VM.
    For `gcloud compute ssh`, `compute.instances.get` must be effective on
    the production host for the host identity and on the temporary recovery
-   VM for the recovery identity; the November 2026 attempt showed this
-   permission was denied despite prior OS Login/IAP tests. Adjust only
-   narrowly conditioned instance-read permissions under #590, then retest
-   using the **same identity and command**. Never fall back silently to the
-   project Owner, broaden to Owner/Editor, or create a service-account key.
+   VM for the recovery identity. Both identity paths were demonstrated
+   during v0.2.2, but must be retested for the target release. If denied,
+   investigate the smallest missing instance-read permission under #590,
+   then retest using the **same identity and command**. Never fall back
+   to the project Owner, broaden to Owner/Editor, or create a key.
    **A denied connection is a release blocker, not a passed preflight.**
 
    **Preflight operation polling before stopping production writers.** The
