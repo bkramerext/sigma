@@ -287,35 +287,40 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       : hostedPillLabel
     : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   const connectionTooltip = hostedPersonalUnavailable
-    ? 'Personal ChatGPT is unavailable in hosted SIGMA. Click to use sponsored ChatGPT.'
-    : connected && !sponsoredPill
-    ? 'ChatGPT is connected. Click to return to sponsorship.'
-    : undefined;
+    ? 'Personal ChatGPT is unavailable in hosted SIGMA. Click to use SIGMA-sponsored ChatGPT instead.'
+    : googleRequired
+      ? 'Sign in with Google to use your configured ChatGPT connection. Your saved ChatGPT credentials are preserved.'
+      : ai.connecting
+        ? 'ChatGPT sign-in is in progress. Complete authorization in the browser to connect your personal account.'
+        : cloudFunding?.selectingConnection
+          ? 'Switching your ChatGPT connection. Your selected funding mode will apply to future AI requests.'
+          : connected
+            ? `${ai.info?.account_label ? `ChatGPT connected as ${ai.info.account_label}.` : 'Your personal ChatGPT account is connected.'} SIGMA uses this personal connection for AI requests. ${cloudFunding?.sponsorshipEligible && !hosted ? 'Click to disconnect and return to SIGMA sponsorship.' : hosted ? 'Hosted SIGMA does not support personal ChatGPT here.' : 'Click to disconnect this ChatGPT account.'}`
+            : `Personal ChatGPT is not connected${ai.info?.status && !['unknown', 'unconfigured'].includes(ai.info.status) ? ` (${ai.info.status})` : ''}. Click to sign in with your own ChatGPT account to use your available model access. ${ai.info?.guidance ?? ''}`.trim();
   const globalRemaining = cloudFunding?.budget?.global_remaining_usd;
   const globalFundingExhausted = sponsoredSelected
     && !cloudFunding?.budget?.global_cap_exempt
     && typeof globalRemaining === 'number'
     && globalRemaining <= 0;
-  const globalFundingDetail = globalFundingExhausted ? ' · Global limit reached' : '';
-  const providerWarning = cloudFunding?.providerError
-    ? ' · Provider unavailable'
-    : cloudFunding?.provider?.status
-      && !['connected', 'checking'].includes(cloudFunding.provider.status)
-      ? ` · Provider ${cloudFunding.provider.status}`
-      : '';
-  const memberAllowance = cloudFunding?.error
-    ? 'Allowance unavailable'
-    : cloudFunding?.budget
-      ? cloudFunding.budget.remaining_usd === null ? 'Unlimited' : `${cloudFunding.budget.remaining_usd.toFixed(2)} remaining`
-      : cloudFunding?.loading ? 'Allowance loading' : 'Allowance unavailable';
-  const sponsorStatus = connected ? 'Connected' : ['disconnected', 'reauth_required', 'unauthorized', 'forbidden', 'unavailable', 'unconfigured', 'plan_not_permitted'].includes(ai.info?.status ?? '') ? 'Unavailable' : 'Checking';
-  const personalAction = 'Click to connect your own ChatGPT account.';
-  const sponsorDetails = adminSponsored
-    ? `Sponsor ${sponsorStatus}${ai.info?.account_label ? ` · ${ai.info.account_label}` : ''} · Unlimited${globalFundingDetail}${providerWarning}.`
-    : `${memberAllowance} · ${sponsorStatus}${providerWarning}.`;
-  const sponsorTooltip = hosted
-    ? `SIGMA-sponsored ChatGPT · ${sponsorStatus}${adminSponsored ? ` · Unlimited${ai.info?.account_label ? ` · ${ai.info.account_label}` : ''}` : ''}.`
-    : `${sponsorDetails} ${personalAction}`;
+  const sponsorStatus = connected ? 'Connected' : cloudFunding?.providerLoading ? 'Checking connection' : cloudFunding?.provider?.status ?? 'Not connected';
+  const providerDetail = cloudFunding?.providerError
+    ? 'Sponsored model connection could not be checked.'
+    : `Sponsored model connection: ${sponsorStatus}.`;
+  const allowanceDescription = !cloudFunding?.authorized
+    ? 'Sign in with Google to view your sponsored allowance.'
+    : cloudFunding.loading
+      ? 'Loading your remaining sponsored allowance…'
+      : cloudFunding.error
+        ? 'Your sponsored allowance is unavailable. Try again after reconnecting.'
+        : adminSponsored
+          ? 'This administrator has unlimited sponsored allocation; provider and global spending limits may still apply.'
+          : cloudFunding.budget
+            ? cloudFunding.budget.remaining_usd === null
+              ? 'Your sponsored allocation is unlimited; provider and global spending limits may still apply.'
+              : `${cloudFunding.budget.remaining_usd <= 0 ? 'No sponsored allocation remains.' : `$${cloudFunding.budget.remaining_usd.toFixed(2)} remaining of $${cloudFunding.budget.allowance_usd.toFixed(2)} per-user sponsored allocation.`} $${cloudFunding.budget.estimated_usage_usd.toFixed(2)} estimated usage and $${cloudFunding.budget.held_usd.toFixed(2)} held for in-progress requests.`
+            : sponsoredSelected ? 'Your sponsored allocation is not yet available.' : 'Sponsored access is not selected.';
+  const sponsorDetails = `${simulatedSponsored ? 'This mock sponsorship is simulated; research cannot call a live provider. ' : 'SIGMA covers eligible model calls using its sponsored allocation; membership, spending and provider limits still apply. '}${providerDetail} ${allowanceDescription}${globalFundingExhausted ? ' Global sponsored spending limit has been reached.' : ''}`;
+  const sponsorTooltip = `${forcedSponsored ? 'Sponsored ChatGPT is required for this account. ' : ''}${sponsorDetails} ${!hosted && !forcedSponsored && !simulatedSponsored ? 'Click to switch to your own ChatGPT account.' : hosted ? 'Hosted SIGMA manages this connection; switching to a personal ChatGPT account is unavailable here.' : ''}`.trim();
   const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode required' : ''}${connected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
   const allowanceText = !sponsoredSelected
     ? 'Personal'
