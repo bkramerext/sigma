@@ -30,12 +30,12 @@
   grid-template-rows: auto auto;
   row-gap: var(--identity-pill-gap);
   width: max-content;
-  min-width: 240px;
-  max-width: min(260px, calc(100vw - 32px));
+  min-width: 0;
+  max-width: min(280px, calc(100vw - 32px));
 }
 :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-position {
   justify-self: stretch;
-  width: 100%;
+  width: auto;
 }
 :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
   width: 100%;
@@ -70,7 +70,8 @@
 @media (max-width: 700px) {
   :is(.home-page, .workspace-page) .sigma-header-model-column {
     min-width: 0;
-    width: min(240px, calc(100vw - 32px));
+    width: max-content;
+    max-width: min(280px, calc(100vw - 32px));
   }
 }
 
