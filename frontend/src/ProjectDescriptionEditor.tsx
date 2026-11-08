@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import RenderedMarkdown from './RenderedMarkdown';
 import './project-description.css';
 
@@ -38,6 +39,10 @@ export default function ProjectDescriptionEditor({
   const [error, setError] = useState('');
   const trigger = useRef<HTMLButtonElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
+  const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setToolbarTarget(document.getElementById('project-description-toolbar-slot'));
+  }, []);
   useEffect(() => {
     if (!editing) setDraft(original());
   }, [editing, view.project.title, view.project.problem,
@@ -90,37 +95,44 @@ export default function ProjectDescriptionEditor({
     </section>)}
   </div>;
 
-  return <div className="sigma-description-editor">
-    {editing ? <form onSubmit={save}>
+  const toolbarActions = editing ? <>
+    <button type="submit" form="sigma-project-description-form"
+      className="text-view-link sigma-description-toolbar-action" disabled={busy}>
+      {busy ? 'Saving…' : 'Save'}
+    </button>
+    <button type="button" className="text-view-link sigma-description-toolbar-action"
+      disabled={busy} onClick={cancel}>Cancel</button>
+  </> : <button ref={trigger} type="button" disabled={disabled}
+    aria-label={'Edit project title and description: ' + view.project.title}
+    data-tooltip="Edit text and description"
+    className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-description-toolbar-edit"
+    onClick={() => { if (onEnterMode()) { setDraft(original()); setEditing(true); } }}>
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
+    </svg>
+  </button>;
+
+  return <>
+    <div className="sigma-description-editor">
+    {editing ? <form id="sigma-project-description-form" onSubmit={save}>
       <div className="project-pane-title-line is-renaming sigma-description-title-row">
         <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
         <input id="project-pane-title-input" ref={titleInput} required
           aria-label="Project title" value={draft.title} maxLength={200} disabled={busy}
           onChange={event => setDraft(old => ({ ...old, title: event.target.value }))}/>
-        <div className="sigma-description-actions">
-          <button type="submit" className="text-view-link" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-          <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
-        </div>
       </div>
       {fields}
       {error && <p className="error" role="alert">{error}</p>}
     </form> : <>
       <div className="project-pane-title-line">
         <h3 className="current-project">{view.project.title}</h3>
-        <button ref={trigger} type="button" disabled={disabled}
-          aria-label={'Edit project title and description: ' + view.project.title}
-          data-tooltip="Edit text and description"
-          className="text-view-link text-view-icon workspace-icon-button project-title-pencil"
-          onClick={() => { if (onEnterMode()) { setDraft(original()); setEditing(true); } }}>
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
-          </svg>
-        </button>
         <span id="project-markdown-slot" className="project-markdown-slot"/>
         <span id="project-markdown-slot-copy" className="project-copy-slot"/>
       </div>
       {fields}
     </>}
-  </div>;
+    </div>
+    {toolbarTarget && createPortal(toolbarActions, toolbarTarget)}
+  </>;
 }

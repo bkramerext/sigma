@@ -4,52 +4,60 @@
 }
 .sigma-description-editor form { width: 100%; }
 
-/* The pencil becomes inline Save/Cancel actions during editing. */
-.sigma-description-title-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: .75rem;
-}
+/* The description pencil shares the Project toolbar's 34px hit target and 7px gap.
+   In editing mode it swaps for standard compact, underlined Save / Cancel actions. */
+.workspace-page .project-pane-actions #project-description-toolbar-slot { display: contents; }
 .sigma-description-title-row #project-pane-title-input {
-  flex: 1 1 20rem;
   min-width: 0;
-  width: auto;
+  width: 100%;
   max-width: 100%;
 }
-.sigma-description-actions {
+.workspace-page .project-pane-heading .project-pane-actions .project-description-toolbar-edit {
+  box-sizing: border-box;
   display: inline-flex;
-  flex: 0 0 auto;
   align-items: center;
-  gap: .9rem;
-  white-space: nowrap;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+  color: var(--sigma-copper-foreground);
 }
-.sigma-description-actions button.text-view-link {
-  display: inline-block;
-  min-height: 0;
+.workspace-page .project-pane-heading .project-pane-actions .project-description-toolbar-edit svg {
+  width: 22px;
+  height: 22px;
+}
+.workspace-page .project-pane-heading .project-pane-actions button.sigma-description-toolbar-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: auto;
+  min-width: 0;
+  height: 34px;
+  min-height: 34px;
   margin: 0;
-  padding: .25rem 0;
+  padding: 0 3px;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  color: var(--sigma-copper-foreground, #edc38d);
-  font: 500 .9rem/1.35 Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--sigma-copper-foreground);
+  font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
 }
-.sigma-description-actions button.text-view-link:hover:not(:disabled) {
+.workspace-page .project-pane-heading .project-pane-actions button.sigma-description-toolbar-action:hover:not(:disabled) {
   color: #ffe0b5;
   background: transparent;
-  box-shadow: none;
 }
-.sigma-description-actions button.text-view-link:focus-visible {
+.workspace-page .project-pane-heading .project-pane-actions button.sigma-description-toolbar-action:focus-visible {
   outline: 2px solid #edbc77;
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
-.sigma-description-actions button.text-view-link:disabled {
+.workspace-page .project-pane-heading .project-pane-actions button.sigma-description-toolbar-action:disabled {
   opacity: .55;
   cursor: default;
 }
@@ -100,7 +108,6 @@
 .sigma-description-rendered p:first-child { margin-top: 0; }
 .sigma-description-rendered p:last-child { margin-bottom: 0; }
 @media (max-width: 600px) {
-  .sigma-description-title-row #project-pane-title-input { flex-basis: 100%; }
   .sigma-description-fields { margin-top: 1rem; }
   .sigma-description-field + .sigma-description-field { padding-top: .85rem; }
 }
