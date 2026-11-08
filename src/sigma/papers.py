@@ -3071,6 +3071,12 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "evidence_indexed",
         "evidence_strategy",
         "one_shot_draft",
+        "validated_draft",
+        "validated_warnings",
+        "proofread_ready",
+        "pdf_checkpoint",
+        "published_paper_id",
+        "published_pdf_sha256",
         "progress",
         "explicit_restart_pending",
         "planning_fallback_pending",
@@ -3122,6 +3128,60 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Saved paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
+    if "validated_draft" in value:
+        PaperDraft.model_validate(value["validated_draft"])
+    if "validated_warnings" in value and (
+        not isinstance(value["validated_warnings"], list)
+        or any(not isinstance(item, str) for item in value["validated_warnings"])
+    ):
+        raise ProjectError("Saved paper validation warnings are invalid")
+    proofread_ready = value.get("proofread_ready")
+    if proofread_ready is not None and (
+        not isinstance(proofread_ready, dict)
+        or set(proofread_ready) != {"input_sha256", "tex", "result", "warnings", "invalid_control_codes"}
+        or not isinstance(proofread_ready["tex"], str)
+        or len(proofread_ready["tex"].encode()) > MAX_PROOFREAD_TEX_BYTES
+        or not isinstance(proofread_ready["result"], dict)
+        or not isinstance(proofread_ready["warnings"], list)
+        or not all(isinstance(item, str) for item in proofread_ready["warnings"])
+        or not isinstance(proofread_ready["invalid_control_codes"], list)
+        or not all(isinstance(item, str) for item in proofread_ready["invalid_control_codes"])
+        or not isinstance(proofread_ready["input_sha256"], str)
+        or not re.fullmatch(r"[0-9a-f]{64}", proofread_ready["input_sha256"])
+    ):
+        raise ProjectError("Completed proofreading checkpoint is invalid")
+    pdf_checkpoint = value.get("pdf_checkpoint")
+    if pdf_checkpoint is not None and (
+        not isinstance(pdf_checkpoint, dict)
+        or set(pdf_checkpoint) != {
+            "pass", "next_pass", "ready", "proofread_sha256", "pdf_sha256",
+            "pdf_size_bytes", "tex", "draft", "warnings", "compile_diagnostics",
+            "layout_warnings", "layout_repairs", "pdf_check_passes", "diagram_fallback",
+            "appendix_included",
+        }
+        or type(pdf_checkpoint["pass"]) is not int
+        or not 1 <= pdf_checkpoint["pass"] <= 4
+        or type(pdf_checkpoint["next_pass"]) is not int
+        or not 2 <= pdf_checkpoint["next_pass"] <= 4
+        or type(pdf_checkpoint["ready"]) is not bool
+        or type(pdf_checkpoint["appendix_included"]) is not bool
+        or not all(isinstance(pdf_checkpoint[key], str) and re.fullmatch(r"[0-9a-f]{64}", pdf_checkpoint[key]) for key in ("proofread_sha256", "pdf_sha256"))
+        or type(pdf_checkpoint["pdf_size_bytes"]) is not int
+        or not 0 < pdf_checkpoint["pdf_size_bytes"] <= MAX_PAPER_BYTES
+        or not isinstance(pdf_checkpoint["tex"], str)
+        or not isinstance(pdf_checkpoint["warnings"], list)
+        or not isinstance(pdf_checkpoint["compile_diagnostics"], list)
+        or not isinstance(pdf_checkpoint["layout_warnings"], list)
+        or not isinstance(pdf_checkpoint["layout_repairs"], list)
+        or not isinstance(pdf_checkpoint["pdf_check_passes"], list)
+    ):
+        raise ProjectError("Saved PDF pass checkpoint is invalid")
+    if pdf_checkpoint is not None:
+        PaperDraft.model_validate(pdf_checkpoint["draft"])
+    if "published_paper_id" in value and not re.fullmatch(r"[0-9a-f]{32}", str(value["published_paper_id"])):
+        raise ProjectError("Published paper checkpoint identity is invalid")
+    if "published_pdf_sha256" in value and not re.fullmatch(r"[0-9a-f]{64}", str(value["published_pdf_sha256"])):
+        raise ProjectError("Published paper checkpoint checksum is invalid")
     if "planning_origin" in value and value["planning_origin"] not in {"ai", "fallback"}:
         raise ProjectError("Long-paper checkpoint planning origin is invalid")
     history = value.get("provider_change_history", [])
@@ -3514,6 +3574,9 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 "proofreading",
                 "compile",
                 "pdf_check",
+                "scoring",
+                "score_failed",
+                "finishing",
                 "retry",
                 "complete",
             }
@@ -3574,6 +3637,83 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
         staged.unlink(missing_ok=True)
     if isinstance(state.get("progress"), dict):
         _write_progress_status(path, state["progress"])
+
+
+def _save_pdf_pass(
+    path: str,
+    work: dict[str, Any],
+    pass_number: int,
+    pdf: bytes,
+    *,
+    next_pass: int,
+    ready: bool,
+    proofread_sha256: str,
+    tex: str,
+    draft: PaperDraft,
+    warnings: list[str],
+    compile_diagnostics: list[str],
+    layout_warnings: list[str],
+    layout_repairs: list[str],
+    pdf_check_passes: list[dict[str, Any]],
+    diagram_fallback: dict[str, Any] | None,
+    appendix_included: bool = False,
+) -> None:
+    """Write a pass-specific PDF before committing its checkpoint pointer.
+
+    Distinct pass files preserve the previous durable result if the process dies
+    between writing the PDF and advancing checkpoint.json.
+    """
+    if pass_number not in (1, 2, 3, 4) or not pdf.startswith(b"%PDF-"):
+        raise ProjectError("PDF pass checkpoint has invalid output")
+    if len(pdf) > MAX_PAPER_BYTES:
+        raise ProjectError("PDF pass checkpoint exceeds the storage limit")
+    file = _work_file(path, create=True).with_name(f"pdf-pass-{pass_number}.pdf")
+    if file.is_symlink():
+        raise ProjectError("PDF pass checkpoint is unsafe")
+    staged = _stage(file.parent, pdf)
+    try:
+        os.replace(staged, file)
+        fd = os.open(file.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        staged.unlink(missing_ok=True)
+    work["pdf_checkpoint"] = {
+        "pass": pass_number,
+        "next_pass": next_pass,
+        "ready": ready,
+        "proofread_sha256": proofread_sha256,
+        "pdf_sha256": hashlib.sha256(pdf).hexdigest(),
+        "pdf_size_bytes": len(pdf),
+        "tex": tex,
+        "draft": draft.model_dump(),
+        "warnings": warnings,
+        "compile_diagnostics": compile_diagnostics,
+        "layout_warnings": layout_warnings,
+        "layout_repairs": layout_repairs,
+        "pdf_check_passes": pdf_check_passes,
+        "diagram_fallback": diagram_fallback,
+        "appendix_included": appendix_included,
+    }
+    _save_work(path, work)
+
+
+def _load_pdf_pass(path: str, checkpoint: Mapping[str, Any]) -> bytes:
+    """Never resume from a missing, symlinked, or modified PDF artifact."""
+    number = checkpoint["pass"]
+    file = _work_file(path, create=False).with_name(f"pdf-pass-{number}.pdf")
+    if (
+        file.is_symlink()
+        or not file.is_file()
+        or file.stat().st_size != checkpoint["pdf_size_bytes"]
+    ):
+        raise ProjectError("Saved PDF pass is missing or unsafe; authored work was preserved")
+    pdf = file.read_bytes()
+    if not pdf.startswith(b"%PDF-") or hashlib.sha256(pdf).hexdigest() != checkpoint["pdf_sha256"]:
+        raise ProjectError("Saved PDF pass checksum mismatch; authored work was preserved")
+    return pdf
 
 
 def _progress_status_file(path: str, *, create: bool = False) -> Path:
