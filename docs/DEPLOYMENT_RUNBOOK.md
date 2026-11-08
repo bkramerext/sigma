@@ -13,9 +13,10 @@ substitute issue updates or PR preparation for completing an authorized
 deployment. No Owner fallback, broad IAM grants, destructive state changes,
 unbounded resources, or paid inference.
 
-**Path:** freeze SHA and reuse CI → verify effective access, billing/quota and
-schema → take and restore-verify an application-consistent snapshot → run the
-existing guarded cutover helper → verify production, cleanup and record results.
+**Default paid-infrastructure path:** freeze SHA and reuse CI → verify access,
+schema and quota → take and restore-verify an application-consistent snapshot
+using isolated recovery resources → guarded cutover → verify and record.
+**The v0.3.0 no-new-resource override below supersedes the paid snapshot path.**
 
 See [Operations Runbook](OPERATION_RUNBOOK.md) for host/incident procedures and
 [Deployment History](DEPLOYMENT_HISTORY.md) for previous release authorizations,
@@ -23,6 +24,106 @@ old compatibility notes, and historical outcomes. Archived procedures are not
 an alternate routine-release checklist.
 
 ## SIGMA v0.3.0 — Red-owned deployment and current IAM blocker
+
+### No-new-resource deployment protection: existing boot-disk backup option
+
+**Proposed, not yet approved for execution.** The operator has declined
+additional paid infrastructure. That does **not** mean the release can
+pretend a pre-v0.2.2 snapshot protects subsequent user writes. Red's
+read-only inventory established the current state disk is 30 GiB with
+about **43 MiB used**, while the **existing** 100-GiB boot disk has
+about **73 GiB free**. These are separate existing disks attached to
+the same production VM; using already allocated free boot-disk space
+requires **no new VM, disk, snapshot, or cloud backup service**. Free
+space and actual data size must be verified again immediately before use.
+
+A **quiesced, verified copy of the complete SIGMA state tree onto the
+existing boot disk** is a reasonable *limited* rollback protection
+against application-code or schema-upgrade mistakes. It is **not
+independent disaster recovery**: losing the VM/zone, losing the boot
+disk, or a privileged compromise may destroy both the live data and
+the copy. The older READY snapshot remains only historical protection
+and must not be mistaken for an up-to-date backup. **The operator must
+explicitly accept this residual risk once before Red uses this path
+for a real cutover.** No additional spending is authorized.
+
+Red may **prepare the procedure and test it with synthetic data
+without touching production** while application development continues.
+The conditional release-day procedure, *only after the final SHA is
+approved and the same-host-risk acceptance is given*, is:
+
+1. **Before downtime:** Verify separate boot/state disk identities with
+   `findmnt -T` and `lsblk`; the backup destination must be a real
+   root-only (0700), nonsymlink directory on the existing **boot
+   filesystem**, not a path on `/srv/sigma-state`. Check capacity
+   for at least two complete copies of the actual live data plus
+   growth headroom, permissions, numeric owners, ACLs and xattrs.
+   Confirm `rsync` (or an equivalent metadata-preserving tool) is
+   already installed; no new paid tooling or network destination.
+2. **Capture a consistent state:** Record a live baseline of identities,
+   projects, sessions, papers, jobs and accounting. Prevent all SIGMA
+   writers (including background execution), stop `sigma.service`
+   cleanly and verify the writers have stopped. Flush state to disk.
+   Copy the **entire** `/srv/sigma-state/` tree to a new unique
+   protected directory on the boot disk, preserving numeric owners,
+   modes, timestamps, hardlinks, ACLs and extended attributes.
+   Do **not** filter unknown files or follow unsafe symlinks.
+   Never copy private data to a user's laptop, a public bucket, or
+   an external service.
+3. **Verify without overwriting live state:** Flush the destination
+   and compare a complete file/metadata manifest (including hashes)
+   against the quiesced source. Run the selected release's
+   `deploy/verify-state-restore.py` **read-only on the copied tree**,
+   with baseline thresholds and all three SQLite integrity checks.
+   Test recovery instructions on a synthetic fixture beforehand.
+   Retain a record of the verified copy's root, capture time,
+   manifest digest, owner, exact verifier SHA, source SHA and
+   limitations. A mere copy command exiting zero is **not**
+   `--backup-verified`.
+4. **Keep writes blocked through acceptance:** Review the *selected*
+   release's schema and migration behavior. If the existing guarded
+   deploy helper cannot maintain the no-writes window during
+   candidate validation, use an additional reviewed temporary
+   write gate without modifying persisted records. Deploy only when
+   the limited backup evidence, compatibility proof and operator's
+   specific risk acceptance support the existing helper's
+   `--backup-verified` and `--schema-compatible` assertions.
+   Verify immutable image IDs, persisted data, paper/accounting
+   baselines, maintenance and user-facing service **before reopening
+   writes**; avoid paid inference.
+5. **If validation fails:** Stop the candidate and preserve the
+   failed state for diagnosis. Code-only rollback may be safe only
+   if schema compatibility was proven. **Never automatically copy
+   the backup over the live state**: that is a destructive restore
+   and requires a separately reviewed, explicitly authorized
+   recovery action, especially if any new user writes occurred.
+   Keep the app unavailable to writers rather than silently losing
+   post-backup records. Document recovery commands and the limit
+   of same-VM fault tolerance.
+6. **After success:** Keep the root-protected backup for an
+   operator-agreed short retention period, monitor the existing
+   boot-disk free space and verify backup access remains restricted.
+   Deleting the copy is a later, explicit retention decision; do
+   not leave unbounded copies to fill the boot disk.
+
+The normal fresh cloud snapshot + recovery VM steps below are **not
+authorized** under the current funding restriction. A verified
+same-host copy tests the *data recovery procedure* and protects
+against many upgrade errors, but it cannot honestly claim isolation
+from host/zone failures. If this residual risk is not accepted, Red
+must **preserve v0.2.2**, not generate another speculative
+`BLOCKED — RECOVERY STRATEGY` report: the concrete choice is now
+documented.
+
+**Billing-read gate:** With no new cloud resources or increased
+storage allocation, the prior requirement to discover the existing
+billing budget/alerts is an *operational visibility follow-up*,
+not a reason to demand new billing privileges before simply planning
+a deployment on already-paid infrastructure. Do not represent
+estimated incremental cost as actual billed spend. Recheck the
+existing VM's active health, sufficient free space and actual resource
+usage; do not enable billing APIs, change budget, or purchase
+resources. If billing is actually suspended or serving fails, stop.
 
 ### Operator funding constraint — no additional recovery infrastructure
 
@@ -50,17 +151,21 @@ for this release, regardless of a modeled cost below $25.
   confidentiality/integrity plan.
 - The old v0.2.2 snapshot is point-in-time historical protection; it
   **does not** establish recoverability of post-snapshot user writes.
-  An untested in-place copy to the same production disk is not an
-  independent recovery path. Do not assert `--backup-verified` based
-  solely on an old snapshot, a model estimate, or a live verifier.
+  An untested copy on the **same state disk** is not a recovery path.
+  A **quiesced and verified copy onto the separate existing boot disk**
+  is a *limited* software-upgrade rollback option, **only** with explicit
+  operator acceptance of its same-VM/zone failure risk. Do not assert
+  `--backup-verified` from a stale snapshot, modeled cost or live verifier.
 - A usable alternative must provide an application-consistent and
   **restorably verified** protection path for current user data,
-  with independent failure isolation, provenance, retention and
+  with understood failure isolation (or an explicit written
+  acceptance of same-host limitations), provenance, retention and
   recovery instructions. Merely choosing `--backup-verified` to
   bypass a failed gate is prohibited.
 
-**Until the operator explicitly approves a safe no-new-infrastructure
-recovery design and the current source SHA, deployment is HALTED.**
+**Until the operator accepts the documented same-host recovery risk,
+approves the complete no-new-resource plan and supplies the final
+source SHA, deployment is HALTED.**
 Red can continue source-independent *read-only* access, billing, and
 inventory checks but cannot stop writers, alter maintenance, create
 backups/snapshots, build and cut over, or run restore tests against
@@ -71,8 +176,9 @@ newer cost constraint.
 
 
 
-**Status (2026-11-08): HELD for current billing evidence and a new release
-source SHA.** Production remains v0.2.2 at
+**Status (2026-11-08): HELD pending operator acceptance of the limited
+existing-boot-disk recovery path and final release source SHA.**
+Production remains v0.2.2 at
 `469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. The original recovery
 identity operation-status IAM denial has been repaired and retested
 successfully (details below). No writers have been stopped, no snapshot or
@@ -82,8 +188,9 @@ completed; this authorization does **not** extend to billing inspection
 or release execution.
 
 **Owner and authority.** Red owns the complete routine deployment after
-preflight is repaired and a new release SHA is approved: evidence, recovery
-drill, guarded cutover, production acceptance, cleanup, and records. Red
+source-independent readiness is complete, the same-host limitation is
+accepted and a new release SHA is approved: backup verification,
+guarded cutover, production acceptance, retention, and records. Red
 should work through ordinary recoverable problems without Coordinator
 stage handoffs, and end with an explicit `DEPLOYMENT SUCCEEDED` or
 `DEPLOYMENT FAILED` report. A real safety gate stops work; Red must not
@@ -117,25 +224,23 @@ deploy helper, enable maintenance, or claim v0.3.0 was deployed.
    `sudo -n true`, systemd/Compose and all three containers, release
    pin, disk UUID/mount flags, quotas, and available recovery instance
    and disk types. Do not alter anything to produce a green check.
-3. **Billing — BLOCKED:** An authorized **billing-account viewer** must
-   confirm via Cloud Console (or a pre-existing legitimate read-only
-   API path) that project `sigma-research-prod` is still linked to an
-   active billing account, its relevant budget and alert thresholds are
-   present, and current costs/spend are visible or honestly unavailable.
-   The Cloud Billing API is disabled; **do not enable it**, widen billing
-   IAM or use the personal Owner account for billing under the separate
-   IAM-only authorization. The previous October budget/credit evidence
-   is historical. Budget alerts are **not** hard spend caps. The latest
-   modeled recovery cost is **$16.11**, or **$21.11 including $5
-   contingency**, versus a mandatory $25 incremental ceiling. This is
-   modeled, not billed. Do not create recovery resources before current
-   billing association and budget evidence is supplied.
+3. **Billing visibility — FOLLOW-UP, not a release blocker for no-new-
+   resource rollout:** An already-authorized viewer may confirm the
+   existing project billing link, active account and budget alerts
+   through Cloud Console. The Cloud Billing API is disabled; do not
+   enable it, add billing roles, or reuse the one-time Owner IAM
+   authorization for billing inspection. October evidence is
+   historical and budget alerts are not hard spending caps. The
+   previously modeled $16.11/$21.11 paid recovery plan is now
+   **prohibited**; it is not part of this rollout. No new resources
+   or billing commitments are authorized. If production actually
+   becomes unhealthy because of billing suspension, stop.
 4. **Maintenance and baseline:** Inspect the existing maintenance
    switch state and confirm the public site is serving normally.
    Prepare the read-only identity, project, paper, job and accounting
    queries, baseline thresholds, and the restore-verifier invocation.
-   Capture a *fresh* baseline close to the actual snapshot, not from
-   old v0.2.2 numbers. Do not run paid inference.
+   Capture a *fresh* baseline close to the authorized consistent
+   boot-disk copy, not from old v0.2.2 numbers. Do not run paid inference.
 5. **Readiness proof:** Record the checked environment, impersonated
    identities, commands, statuses, quotas/costs, and remaining
    limitations in one concise readiness report. If all source-independent
@@ -147,8 +252,9 @@ Only when the operator says development is finished does Red select the
 new approved merged SHA. Then verify backend/frontend 0.3.0, update
 release notes, reuse exact-SHA green CI, perform final schema-compatibility
 review against the *actual selected commit*, and recapture the live
-data/accounting baseline. Proceed with the existing snapshot/restore,
-guarded cutover, acceptance, cleanup, and merged deployment record
+data/accounting baseline. Proceed **only if the operator has accepted
+same-host backup risk** with the conditional verified existing-boot-disk
+copy, guarded cutover, acceptance, cleanup, and merged deployment record
 without routine intermediary approval requests. Stop only on a genuine
 safety gate or a task requiring new privileges/scope.
 
@@ -234,7 +340,7 @@ cutover.
   early check. If actual recovery IAP fails, stop and remediate
   before accepting the restore.
 
-**Remaining billing gate (no authorization to change billing):**
+**Billing visibility follow-up (not a hard gate for zero-new-resource rollout):**
 The Cloud Billing API is disabled, and the recovery identity cannot
 view the account's budgets. Historical documentation of a $300 budget
 and 50/75/90/100% alerts does not prove those controls are current.
@@ -245,18 +351,17 @@ current budget/thresholds and alert notification settings, and
 available current spend/cost report. Google Cloud Billing Account
 Viewer on the **billing account** is a documented read-only option
 when an authorized billing administrator chooses to delegate;
-this is not a request to grant it now. Record the date and redacted
-evidence. If no authorized billing viewer can furnish it,
-report **READINESS BLOCKED — BILLING_EVIDENCE**, not READY FOR SHA.
+this is not a request to grant it now. Record any evidence received,
+but lack of that evidence alone is **not** grounds for blocking an
+already-paid, zero-new-resource release. Do not create billing access
+as a new release dependency.
 
-**Historical estimate — NOT authorized to spend:** The earlier incremental recovery scenario was modeled as
-$16.11, or $21.11 with contingency, including an e2-standard-2 VM
-for at most 24h, up to 100-GiB boot and 30-GiB clone disks,
-and a 30-GiB standard snapshot retained up to 30 days. No
-external IP or cross-region traffic; no paid inference.
-Costs are estimates, not actual spend. Observe and clean up
-temporary resources promptly, retain only the verified snapshot,
-and stop when the $25 incremental ceiling cannot be supported.
+**Historical paid estimate — prohibited by current funding policy:**
+The previously proposed $16.11 ($21.11 including contingency)
+recovery VM, clone and snapshot scenario is **not authorized**.
+No new cloud recovery infrastructure or paid inference. The
+conditional already-provisioned boot-disk copy above is the only
+newly proposed option; it does not require extra provisioned capacity.
 
 **Stage A execution environment:** use the current maintained runbook
 from `origin/main` and the approved keyless GCP operator runtime.
@@ -271,7 +376,16 @@ Proceed through the eight routine gates **below** only after these
 preflight issues are resolved, the operator approves the new frozen SHA,
 and appropriate exact-SHA CI is green. Preserve all existing recovery,
 least-privilege, cost, state, and rollback safeguards.
+
 ## Routine keyless GCE release — canonical ordered path (issue #667)
+
+**Version 0.3.0 cost-policy override:** The resource-creating snapshot,
+clone and recovery-VM path below is *not authorized* for this release.
+It remains the canonical paid-infrastructure path for future releases
+only when separately approved. For v0.3.0 use the conditional existing
+boot-disk procedure above **only after specific operator acceptance**;
+never silently execute the default cloud recovery steps or count an
+unverified same-host copy as sufficient proof.
 
 Follow these eight gates in order only after a separate release authorization
 selects the target. Check the selected commit and effective live permissions;
@@ -332,8 +446,9 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
    **Confirmed v0.3.0 IAM repair:** all three operation-read permissions
    have now been proven through the impersonated recovery identity on
    existing global/zonal operations (details above). Keep the
-   effective-access test as a future regression gate. The remaining
-   source-independent blocker is current billing evidence.
+   effective-access test as a future regression gate. A fresh
+   application-consistent backup remains required at cutover, using
+   the operator-accepted **no-new-resource** procedure if approved.
 3. **Create a fresh application-consistent snapshot.** Declare the approved
    maintenance window and verify baseline identity, project, paper, job and
    accounting counts. Stop SIGMA writers cleanly on `sigma-gce-01`, sync the
@@ -460,7 +575,9 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
    previous release/image and recovery point for forward-fix or separately
    authorized rollback decisions; a code rollback is never a data restore.
 
-**Compact evidence checklist** (record observed values, not assumptions):
+**Default paid-infrastructure evidence checklist** (not approved for
+v0.3.0 under the zero-new-resources restriction; record observed values,
+not assumptions):
 `release ticket + SHA + exact-SHA CI URLs`;
 `effective SSH/recovery connections + global/zonal operation-read permissions + IAM denials`;
 `preflight + quota/billing + <=$25 estimate`;
@@ -471,11 +588,23 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
 `HTTPS/auth/About + maintenance off + data/accounting preservation`;
 `no paid inference + limitations`.
 
-A documented dry-run is **not** live-credential acceptance. The v0.2.2
-release demonstrated keyless host access, but the v0.3.0 preflight confirmed
-operation-read denials. The next release remains on hold until a separately
-authorized IAM remediation is **effectively retested**, the selected v0.3.0
-SHA is refreshed after ongoing feature work, and all safety gates pass.
+**v0.3.0 zero-new-resource evidence checklist (conditional):**
+`operator's explicit same-host risk acceptance + frozen SHA + exact-SHA CI`;
+`verified state/boot disk identities, free space and root-only backup path`;
+`all writers stopped + complete copy + manifest hashes/metadata`;
+`selected release verifier run on copied tree + baseline/ledger integrity`;
+`schema and write-gate compatibility + guarded cutover command`;
+`running image SHA/IDs + production counts/HTTPS/About + maintenance off`;
+`retained boot-disk backup path and limited recovery/retention caveats`;
+`no new cloud resources, no paid inference, no destructive auto-restore`.
+
+The initial v0.3.0 IAM operation-read denials were fixed and successfully
+retested under the keyless release identity (evidence above). Do not
+reopen that resolved blocker without a new effective denial. The release
+remains on hold **only until** the operator has accepted a safe
+zero-new-resource deployment risk boundary, finalized the application
+SHA, and the remaining source-dependent checks pass. If a substantive
+new safety failure occurs, Red must stop and report it accurately.
 
 Historical authorizations, release controls, schema-specific rollback notes
 and past cutover records are retained in

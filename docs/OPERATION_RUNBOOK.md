@@ -790,6 +790,26 @@ and 46 accounting calls ($5.938237 recorded; 15 reserved/unknown).
 It did **not** verify a fresh snapshot clone or future code/schema
 compatibility.
 
+**Existing-infrastructure recovery alternative (proposed, not yet
+approved):** Red's read-only inventory shows approximately 43 MiB
+used on the 30-GiB `sigma-state` volume and about 73 GiB free on
+the **separate, already-provisioned 100-GiB boot disk**. A full,
+application-quiesced, metadata-preserving and **actually verified**
+copy of the state tree to a root-only directory on that existing
+boot disk can cover software regression and in-place migration
+rollback risk without purchasing new VM/disk/snapshot capacity.
+This is **not** independent VM or zone disaster recovery.
+Do not interpret it as protection against a host-level compromise
+or loss of both disks; the older cloud snapshot remains stale.
+The operator must explicitly accept that limited risk and approve
+the no-new-resource procedure before any downtime or live backup.
+Use the conditional steps and protections in
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#no-new-resource-deployment-protection-existing-boot-disk-backup-option).
+No recovery VM, clone disk, new snapshot or incremental backup
+storage is authorized. Until the source SHA and risk acceptance
+are provided, the only allowable work is read-only inspection or
+synthetic-fixture testing of backup/restore instructions.
+
 **New operator funding restriction (2026-11-08):** no new temporary
 recovery VM, clone disk, snapshot, or other incremental cloud storage
 is approved for v0.3.0. The earlier $16.11/$21.11 modeled scenario is
