@@ -253,7 +253,6 @@
 /* Anchor X at the upper-right of each modal's header, not the action row. */
 :is(.project-settings-dialog .settings-header,
     .project-entry-dialog .entry-dialog-header,
-    .paper-includes-dialog-heading,
     .project-types-dialog > header,
     .admin-dialog-heading,
     .privacy-notice-heading,
@@ -261,6 +260,8 @@
   position: relative;
   padding-right: 51px;
 }
+/* Paper Include's X must be positioned against the popup edge, not its inset heading. */
+.paper-includes-dialog-heading { padding-right: 51px; }
 .project-settings-dialog .settings-header .settings-actions,
 .project-entry-dialog .entry-dialog-header .entry-import,
 .project-types-dialog > header .project-types-header-actions {

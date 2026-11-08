@@ -101,8 +101,25 @@ with sync_playwright() as playwright:
     expect(model_pill).to_be_visible()
     expect(model_pill).to_be_enabled(timeout=15000)
     assert "cycle" in (model_pill.get_attribute("data-tooltip") or "").lower()
+    # Wait for fonts and layout to settle before checking subpixel alignment.
+    # This still enforces the same 3px requirement; it does not relax it.
+    page.evaluate("() => document.fonts.ready")
+    page.wait_for_function(
+        """() => {
+        const about = document.querySelector(".home-account-grid .home-about-button");
+        const model = document.querySelector(".home-account-grid .global-model-pill");
+        return !!about && !!model &&
+            Math.abs(about.getBoundingClientRect().left - model.getBoundingClientRect().left) < 3;
+    }""",
+        timeout=7000,
+    )
+    # Compare positions from the same layout frame, not before/after font loading.
+    about_rect = grid.locator(".home-about-button").bounding_box()
+    settings_rect = grid.locator(".home-settings-pill").bounding_box()
+    google_rect = grid.locator(".project-google-signin").first.bounding_box()
+    chatgpt_rect = grid.locator(".api-connection > summary").first.bounding_box()
     model_rect = model_pill.bounding_box()
-    assert model_rect
+    assert about_rect and settings_rect and google_rect and chatgpt_rect and model_rect
     assert abs(model_rect["x"] - about_rect["x"]) < 3
     assert model_rect["y"] >= about_rect["y"] + about_rect["height"]
     assert settings_rect["x"] >= about_rect["x"] + about_rect["width"]
@@ -866,6 +883,49 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
+
+    # Include popup's dismiss X aligns to the actual outer popup corner,
+    # not to the padded title row (which used to move it down and inward).
+    page.get_by_role("button", name="Include in paper").click()
+    paper_options = page.get_by_role("dialog", name="Include in paper")
+    expect(paper_options).to_be_visible()
+    paper_close = paper_options.get_by_role("button", name="Close paper inclusion options")
+    popup_box = paper_options.bounding_box()
+    close_box = paper_close.bounding_box()
+    assert popup_box and close_box
+    assert (
+        abs((popup_box["x"] + popup_box["width"]) - (close_box["x"] + close_box["width"]) - 11) <= 2
+    ), (popup_box, close_box)
+    assert abs(close_box["y"] - popup_box["y"] - 9) <= 2, (popup_box, close_box)
+    paper_close.click()
+    expect(paper_options).to_have_count(0)
+    # Regression: editing the Project description swaps the toolbar pencil for
+    # Save / Cancel and keeps those actions mounted after React re-renders.
+    project_edit = page.locator(".project-pane-actions").get_by_role(
+        "button", name="Edit project fields"
+    )
+    expect(project_edit).to_be_visible()
+    project_edit.click()
+    toolbar = page.locator(".project-pane-actions")
+    save_project_fields = toolbar.get_by_role("button", name="Save", exact=True)
+    expect(save_project_fields).to_be_visible()
+    expect(save_project_fields).to_be_disabled()
+    expect(toolbar.get_by_role("button", name="Cancel", exact=True)).to_be_visible()
+    expect(toolbar.get_by_role("button", name="Edit project fields")).to_have_count(0)
+    expect(page.get_by_role("textbox", name="Project title")).to_be_visible()
+    # All four fields participate in dirty state, including reverting an edit.
+    outcomes = page.get_by_role("textbox", name="Desired Outcomes")
+    original_outcomes = outcomes.input_value()
+    outcomes.fill(original_outcomes + " Temporary test edit.")
+    expect(save_project_fields).to_be_enabled()
+    outcomes.fill(original_outcomes)
+    expect(save_project_fields).to_be_disabled()
+    page.wait_for_timeout(300)
+    expect(save_project_fields).to_be_disabled()
+    expect(toolbar.get_by_role("button", name="Cancel", exact=True)).to_be_visible()
+    toolbar.get_by_role("button", name="Cancel", exact=True).click()
+    expect(project_edit).to_be_visible()
+
     expect(page.get_by_role("button", name="Project settings")).to_be_visible()
     assert header.get_by_role("button", name="Project Types").count() == 0
 
@@ -905,6 +965,32 @@ with sync_playwright() as playwright:
     ).json()
     assert replaced["project"]["investigation_type"] == "mathematical"
     assert replaced["project"]["project_type_snapshot"]["id"] == "mathematical"
+
+    # Saving a changed project field persists it and switches back to the pencil.
+    project_edit = page.locator(".project-pane-actions").get_by_role(
+        "button", name="Edit project fields"
+    )
+    project_edit.click()
+    save_project_fields = page.locator(".project-pane-actions").get_by_role(
+        "button", name="Save", exact=True
+    )
+    expect(save_project_fields).to_be_disabled()
+    outcomes = page.get_by_role("textbox", name="Desired Outcomes")
+    original_outcomes = outcomes.input_value()
+    updated_outcomes = (original_outcomes + "\nBrowser save check.").strip()
+    outcomes.fill(updated_outcomes)
+    expect(save_project_fields).to_be_enabled()
+    save_project_fields.click()
+    expect(project_edit).to_be_visible()
+    expect(
+        page.locator(".project-pane-actions").get_by_role("button", name="Save", exact=True)
+    ).to_have_count(0)
+    assert (
+        page.request.get(
+            f"{FIXTURE_URL}/api/projects/inspect?path={quote(legacy['path'], safe='')}"
+        ).json()["project"]["desired_outcomes"]
+        == updated_outcomes
+    )
 
     # Project Settings contains only project type and difficulty.
     page.get_by_role("button", name="Project settings", exact=True).click()

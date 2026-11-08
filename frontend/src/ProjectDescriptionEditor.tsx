@@ -18,11 +18,13 @@ const definitions = [
 ] as const;
 
 export default function ProjectDescriptionEditor({
-  view, disabled, onEnterMode, onExitMode, onSave,
+  view, editing, busy, onBusyChange, onDirtyChange, onExitMode, onSave,
 }: {
   view: ProjectDescriptionView;
-  disabled: boolean;
-  onEnterMode: () => boolean;
+  editing: boolean;
+  busy: boolean;
+  onBusyChange: (busy: boolean) => void;
+  onDirtyChange: (dirty: boolean) => void;
   onExitMode: () => void;
   onSave: (draft: ProjectDescriptionDraft) => Promise<void>;
 }) {
@@ -32,45 +34,38 @@ export default function ProjectDescriptionEditor({
     desired_outcomes: view.project.desired_outcomes ?? '',
     paper_requirements: view.project.paper_requirements ?? '',
   });
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(original);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const trigger = useRef<HTMLButtonElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
+  const dirty = draft.title !== view.project.title
+    || draft.problem !== view.project.problem
+    || draft.desired_outcomes !== (view.project.desired_outcomes ?? '')
+    || draft.paper_requirements !== (view.project.paper_requirements ?? '');
   useEffect(() => {
-    if (!editing) setDraft(original());
+    onDirtyChange(editing && dirty);
+  }, [editing, dirty, onDirtyChange]);
+  useEffect(() => {
+    if (!editing) { setDraft(original()); setError(''); }
   }, [editing, view.project.title, view.project.problem,
       view.project.desired_outcomes, view.project.paper_requirements]);
   useEffect(() => {
     if (editing) { titleInput.current?.focus(); titleInput.current?.select(); }
   }, [editing]);
 
-  function cancel() {
-    if (busy) return;
-    setDraft(original());
-    setEditing(false);
-    setError('');
-    onExitMode();
-    requestAnimationFrame(() => trigger.current?.focus());
-  }
-
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || !dirty) return;
     if (!draft.title.trim() || !draft.problem.trim()) {
       setError('Project title and Research Subject are required.');
       return;
     }
-    setBusy(true); setError('');
+    onBusyChange(true); setError('');
     try {
       await onSave(draft);
-      setEditing(false);
       onExitMode();
-      requestAnimationFrame(() => trigger.current?.focus());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally { setBusy(false); }
+    } finally { onBusyChange(false); }
   }
 
   const fields = <div className="sigma-description-fields">
@@ -90,33 +85,19 @@ export default function ProjectDescriptionEditor({
     </section>)}
   </div>;
 
-  return <div className="sigma-description-editor">
-    {editing ? <form onSubmit={save}>
-      <div className="project-pane-title-line is-renaming">
+  return     <div className="sigma-description-editor">
+    {editing ? <form id="sigma-project-description-form" onSubmit={save}>
+      <div className="project-pane-title-line is-renaming sigma-description-title-row">
         <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
         <input id="project-pane-title-input" ref={titleInput} required
           aria-label="Project title" value={draft.title} maxLength={200} disabled={busy}
           onChange={event => setDraft(old => ({ ...old, title: event.target.value }))}/>
       </div>
       {fields}
-      <div className="sigma-description-actions">
-        <button type="submit" className="text-view-link" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-        <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
-      </div>
       {error && <p className="error" role="alert">{error}</p>}
     </form> : <>
       <div className="project-pane-title-line">
         <h3 className="current-project">{view.project.title}</h3>
-        <button ref={trigger} type="button" disabled={disabled}
-          aria-label={'Edit project title and description: ' + view.project.title}
-          data-tooltip="Edit text and description"
-          className="text-view-link text-view-icon workspace-icon-button project-title-pencil"
-          onClick={() => { if (onEnterMode()) { setDraft(original()); setEditing(true); } }}>
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
-          </svg>
-        </button>
         <span id="project-markdown-slot" className="project-markdown-slot"/>
         <span id="project-markdown-slot-copy" className="project-copy-slot"/>
       </div>
