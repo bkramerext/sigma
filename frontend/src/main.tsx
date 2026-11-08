@@ -4185,7 +4185,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
         <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
         {onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/></button>}
       </div>
-      <GlobalModelPill enabled={showConnectionStatus}/>
+      <ConnectedModelPill enabled={showConnectionStatus}/>
     </div>}
     </div>
     {globalSettingsOpen && <GlobalSettingsDialog onClose={() => setGlobalSettingsOpen(false)}/>}
@@ -5459,7 +5459,7 @@ function Home({ initialPath, onOpen }: {
                 <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
                 <button type="button" ref={settingsButton} className="home-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
               </div>
-              <GlobalModelPill enabled={showConnectionStatus}/>
+              <ConnectedModelPill enabled={showConnectionStatus}/>
             </div>
             <GoogleIdentityPill inviteInHeader/>
             {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
@@ -6530,6 +6530,25 @@ const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
 function cloudFundingFor(cloud: CloudIdentityState | null): CloudFunding | undefined {
   return cloud?.funding;
+}
+
+/** Match ConnectionStatus's connected state, including sponsored sessions.
+ * Google authentication alone is not sufficient to show the model selector. */
+function ConnectedModelPill({ enabled }: { enabled: boolean }) {
+  const ai = useAI();
+  const cloud = useCloudIdentity();
+  const funding = cloudFundingFor(cloud);
+  const hosted = funding?.target === 'hosted';
+  const sponsoredSelected = funding?.selectedConnection === 'sponsored';
+  const googleRequired = !!funding?.authenticationEnabled && !funding.authorized;
+  const connected = hosted
+    ? sponsoredSelected && funding?.provider?.status === 'connected'
+    : funding?.simulatedSponsored
+      ? sponsoredSelected && funding?.provider?.status === 'connected'
+      : !ai.connecting && !ai.initialLoading && !ai.healthError && ai.info?.status === 'connected';
+  return enabled && connected && !googleRequired
+    ? <GlobalModelPill enabled/>
+    : null;
 }
 
 type CloudDemoAudit = { export_version: 2; project: ProjectView['project']; agentic_runs: Record<string, any>[]; research_sessions: Record<string, any>[] };
