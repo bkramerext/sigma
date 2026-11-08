@@ -104,7 +104,7 @@ export default function ProjectDescriptionEditor({
       disabled={busy} onClick={cancel}>Cancel</button>
   </> : <button ref={trigger} type="button" disabled={disabled}
     aria-label={'Edit project title and description: ' + view.project.title}
-    data-tooltip="Edit text and description"
+    data-tooltip="Edit project fields"
     className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-description-toolbar-edit"
     onClick={() => { if (onEnterMode()) { setDraft(original()); setEditing(true); } }}>
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
