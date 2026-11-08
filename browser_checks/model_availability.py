@@ -80,7 +80,9 @@ with sync_playwright() as playwright:
         expect(thinking).to_contain_text("High")
         model.click()
         expect(dialog.get_by_role("listbox", name="Model").get_by_role("option")).to_have_count(1)
-        expect(dialog.get_by_role("listbox", name="Model").get_by_role("option").first).to_have_attribute("aria-selected", "true")
+        expect(
+            dialog.get_by_role("listbox", name="Model").get_by_role("option").first
+        ).to_have_attribute("aria-selected", "true")
         model.click()
         expect(dialog.get_by_role("button", name="Save", exact=True)).to_be_disabled()
         for width in (1280, 390, 320):

@@ -423,6 +423,11 @@ with sync_playwright() as playwright:
 
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
+    # Settings remembers the most recently selected tab when reopened.
+    expect(dialog.get_by_role("tab", name="Preferences")).to_have_attribute(
+        "aria-selected", "true"
+    )
+    dialog.get_by_role("tab", name="Project Types").click()
     add_button = dialog.locator(".project-types-section-heading").first.get_by_role(
         "button", name="New"
     )
