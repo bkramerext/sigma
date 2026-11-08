@@ -9905,10 +9905,11 @@ async def _generate_impl(
             # Resolve at dispatch, never mutate a config held by an in-flight call.
             from sigma import global_research_settings
 
+            shared_settings = project_collaboration.model_settings(path)
             return _select_paper_call_config(
                 base,
                 work,
-                global_research_settings.load_config(),
+                shared_settings or global_research_settings.load_config(),
                 lambda: _save_work(path, work),
             )
 

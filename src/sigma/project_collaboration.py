@@ -358,7 +358,44 @@ def model_settings(path: str) -> dict[str, str] | None:
         return None
     with _db() as db:
         row, _email = _membership(db, path)
-        return {"ai_model": row["model"], "reasoning_effort": row["thinking"]}
+        shared = db.execute(
+            "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
+        ).fetchone()
+        return (
+            {"ai_model": row["model"], "reasoning_effort": row["thinking"]}
+            if shared else None
+        )
+
+
+def require_edit_revision(path: str, expected: int | None) -> None:
+    """Prevent unversioned legacy settings clients from bypassing shared-project CAS."""
+    from sigma.projects import ProjectError
+
+    transaction = _WRITE_CONTEXT.get()
+    if transaction is not None and transaction[0] == str(path):
+        db = transaction[1]
+        row = _row(db, str(path))
+        shared = db.execute(
+            "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (str(path),)
+        ).fetchone() is not None
+    elif cloud_workspaces.current() is not None:
+        with _db() as db:
+            row = db.execute("SELECT * FROM shared_projects WHERE path=?", (str(path),)).fetchone()
+            if row is None:
+                return
+            shared = db.execute(
+                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (str(path),)
+            ).fetchone() is not None
+    else:
+        return
+    if shared and expected is None:
+        raise ProjectError("Shared project settings require a current revision. Reopen settings.")
+    if expected is not None and (
+        type(expected) is not int or expected < 0 or row["revision"] != expected
+    ):
+        raise ProjectError(
+            f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
+        )
 
 
 def require_revision(path: str, expected: int) -> None:

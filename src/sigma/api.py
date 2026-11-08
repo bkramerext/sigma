@@ -2392,6 +2392,8 @@ class ProjectSettingsRequest(BaseModel):
 class UpdateProjectRequest(ProjectSettingsRequest):
     path: str
     expected: ProjectSettingsRequest
+    expected_revision: int | None = Field(default=None, ge=0)
+    collaborators: list[str] | None = None
 
 
 class DeleteProjectRequest(BaseModel):
@@ -2458,28 +2460,37 @@ async def delete_project_view(body: DeleteProjectRequest):
 
 @app.post("/api/projects/update")
 def update_project_view(body: UpdateProjectRequest):
-    current = inspect_project(body.path).project
+    from sigma import project_collaboration
+
+    current_view = inspect_project(body.path)
+    project_collaboration.register_owner(current_view)
+    current = current_view.project
     if (
         body.investigation_type != current.investigation_type
         and body.investigation_type != "default"
         and project_types.get_type(body.investigation_type) is None
     ):
         raise ProjectError("Choose a currently available project type")
-    return asdict(
-        update_project(
-            body.path,
-            body.title,
-            body.problem,
-            body.investigation_type,
-            body.ai_model,
-            body.reasoning_effort,
-            body.expected.model_dump(exclude_none=True),
-            difficulty=body.difficulty,
-            show_advanced_outcome_details=body.show_advanced_outcome_details,
-            desired_outcomes=body.desired_outcomes,
-            paper_requirements=body.paper_requirements,
-        )
+    view = update_project(
+        body.path,
+        body.title,
+        body.problem,
+        body.investigation_type,
+        body.ai_model,
+        body.reasoning_effort,
+        body.expected.model_dump(exclude_none=True),
+        difficulty=body.difficulty,
+        show_advanced_outcome_details=body.show_advanced_outcome_details,
+        desired_outcomes=body.desired_outcomes,
+        paper_requirements=body.paper_requirements,
+        expected_revision=body.expected_revision,
+        collaborators=body.collaborators,
     )
+    if body.collaborators is not None:
+        # Durable outbox delivery is best effort; a mail outage cannot roll
+        # back a successful project save or its optimistic revision.
+        project_collaboration.drain_notifications()
+    return asdict(view)
 
 
 def connection_view_state(state: dict[str, Any], request: Request) -> dict[str, Any]:
