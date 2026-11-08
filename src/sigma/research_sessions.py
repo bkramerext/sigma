@@ -32,7 +32,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sigma import (
     cloud_research,
     cloud_workspaces,
-    project_collaboration,
     reference_efficiency,
     research_ethos,
     research_preferences,

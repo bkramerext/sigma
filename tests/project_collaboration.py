@@ -194,7 +194,9 @@ class CollaborationTests(TestCase):
                 "sigma.project_collaboration.cloud_auth.config",
                 return_value=SimpleNamespace(origin="https://sigma.example.org"),
             ),
-            patch("sigma.mail_transport.send_message", side_effect=RuntimeError("temporary")) as mail,
+            patch(
+                "sigma.mail_transport.send_message", side_effect=RuntimeError("temporary")
+            ) as mail,
         ):
             self.assertTrue(shared.drain_notifications())
             self.assertEqual(mail.call_count, 1)
@@ -208,13 +210,17 @@ class CollaborationTests(TestCase):
         ):
             self.assertEqual(shared.drain_notifications(), [])
             self.assertEqual(shared.drain_notifications(), [])
-        self.assertEqual({recipient for recipient, _ in messages}, {
-            "new@example.net", "other@example.org"
-        })
-        self.assertIn("/project?path=", next(body for email, body in messages if email == "new@example.net"))
+        self.assertEqual(
+            {recipient for recipient, _ in messages}, {"new@example.net", "other@example.org"}
+        )
+        self.assertIn(
+            "/project?path=", next(body for email, body in messages if email == "new@example.net")
+        )
         with shared._db() as db:
             self.assertEqual(
-                db.execute("SELECT count(*) FROM shared_email_outbox WHERE sent_at>0").fetchone()[0],
+                db.execute("SELECT count(*) FROM shared_email_outbox WHERE sent_at>0").fetchone()[
+                    0
+                ],
                 2,
             )
 
