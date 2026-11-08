@@ -147,14 +147,24 @@ with sync_playwright() as playwright:
     assert original_box
     model_tab = dialog.get_by_role("tab", name="Model", exact=True)
     model_tab.hover()
-    assert model_tab.evaluate("node => getComputedStyle(node).backgroundColor") == "rgba(0, 0, 0, 0)"
+    assert (
+        model_tab.evaluate("node => getComputedStyle(node).backgroundColor") == "rgba(0, 0, 0, 0)"
+    )
     assert "underline" in model_tab.evaluate("node => getComputedStyle(node).textDecorationLine")
     for tab_name in ("Model", "Limits", "Preferences", "Project Types"):
         dialog.get_by_role("tab", name=tab_name, exact=True).click()
         next_box = dialog.bounding_box()
         assert next_box
-        assert abs(next_box["width"] - original_box["width"]) <= 1, (tab_name, original_box, next_box)
-        assert abs(next_box["height"] - original_box["height"]) <= 1, (tab_name, original_box, next_box)
+        assert abs(next_box["width"] - original_box["width"]) <= 1, (
+            tab_name,
+            original_box,
+            next_box,
+        )
+        assert abs(next_box["height"] - original_box["height"]) <= 1, (
+            tab_name,
+            original_box,
+            next_box,
+        )
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     # All curated shared references are enabled by default for a new user.
     # The user can disable and re-enable each without changing catalog data.
