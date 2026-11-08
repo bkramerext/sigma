@@ -2539,7 +2539,7 @@ class FeedbackSubmission(BaseModel):
 
 
 class FeedbackStatusUpdate(BaseModel):
-    status: str = Field(pattern="^(reviewed|closed)$")
+    status: str = Field(pattern="^(new|reviewed|closed)$")
 
 
 @router.post("/feedback")
