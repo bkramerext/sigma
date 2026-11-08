@@ -88,7 +88,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   const choices = models.filter(m => m.availability !== 'unavailable' && m.efforts?.length)
     .sort((a, b) => costTier(a.relative_cost) - costTier(b.relative_cost) || a.label.localeCompare(b.label));
   const selectedIndex = choices.findIndex(m => m.id === settings?.ai_model);
-  const next = choices.length > 1 ? choices[(selectedIndex + 1 + choices.length) % choices.length]
+  const next = choices.length > 1 ? choices[(selectedIndex - 1 + choices.length) % choices.length]
     : choices.length === 1 && selectedIndex < 0 ? choices[0] : undefined;
   const nextEffort = next && settings ? suitableEffort(next, settings.reasoning_effort) : null;
   const selectedName = modelName(selected, settings?.ai_model ?? 'Unavailable');
