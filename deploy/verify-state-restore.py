@@ -53,7 +53,6 @@ def check_database(
         connection.close()
 
 
-
 def valid_publication_compilation(cache: dict) -> bool:
     """Check the standalone schema-2 shape; the caller separately checks its seal.
 
