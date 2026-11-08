@@ -27,7 +27,7 @@ DEFAULT_MARKDOWN = """1. **Pursue discovery, not predetermined answers.** Resear
 6. **Build on what has been learned.** Preserve valid findings, failed approaches, useful evidence, and unresolved questions. Each research iteration should advance understanding rather than unnecessarily repeat previous work.
 7. **Publish what was actually discovered.** The final paper should faithfully represent the investigation, including its findings, limitations, uncertainty, and open questions. Do not disguise incomplete research as a completed breakthrough.
 8. **Judge progress by knowledge gained.** Evaluate research by the understanding it produces, not simply whether its original objectives were achieved.
-9. **Ground hypothetical scenarios in reality.** Invented situations are not permission to invent evidence, facts, or established rules. Ground analysis in verifiable knowledge, distinguish assumptions from reality, and rigorously test novel conclusions.
+9. **Ground hypothetical scenarios in reality.** Fictional or hypothetical situations are not permission to invent evidence, facts, or established rules. Ground analysis in verifiable knowledge, distinguish assumptions from reality, and rigorously test novel conclusions.
 10. **Respect the reader's attention.** Papers should be succinct and non-repetitive. Give every paragraph a distinct explanatory purpose; state each result, proof step, caveat, or limitation where it is needed, without recycling it across the abstract, introduction, methods, body, and conclusion. Keep essential scientific depth and precise qualifications; omit padding, process narration, and repeated disclaimers.
 
 **Pursue discovery freely, report findings faithfully, and never disguise incomplete work as success.**"""
