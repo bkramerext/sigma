@@ -4179,7 +4179,6 @@ def _call_cost_reservation(
     return None
 
 
-@project_collaboration.fenced_checkpoint
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     """Save current user's limits (never write them into a project)."""
     from sigma import global_research_settings

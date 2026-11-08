@@ -639,17 +639,39 @@ def forget_project(path: str) -> None:
 
 
 def drain_notifications() -> list[str]:
-    """Best effort delivery; failed messages stay queued for the next attempt."""
+    """Deliver collaborator notices using the standard transport and a durable claim.
+
+    Only one process owns a pending row at a time. A crashed claim may be
+    reclaimed after ten minutes; rare duplicates after ambiguous delivery are
+    preferable to silently dropping an invitation.
+    """
     if not cloud_workspaces.enabled():
         return []
-    with _db() as db:
-        pending = list(
-            db.execute(
-                "SELECT * FROM shared_email_outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 20"
-            )
-        )
+    from sigma.mail_transport import send_message
+
     warnings: list[str] = []
-    for event in pending:
+    for _ in range(20):
+        with _db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            now = time.time()
+            # Negative sent_at values are in-flight claims. A reclaimed claim
+            # is intentionally at-least-once following a worker crash.
+            event = db.execute(
+                """SELECT * FROM shared_email_outbox
+                   WHERE sent_at IS NULL OR (sent_at < 0 AND sent_at >= ?)
+                   ORDER BY created_at, id LIMIT 1""",
+                (-(now - 600),),
+            ).fetchone()
+            if event is None:
+                db.commit()
+                return warnings
+            claim = -now
+            db.execute(
+                "UPDATE shared_email_outbox SET sent_at=? WHERE id=?",
+                (claim, event["id"]),
+            )
+            db.commit()
+
         message = EmailMessage()
         added = event["event"] == "added"
         message["Subject"] = (
@@ -663,7 +685,7 @@ def drain_notifications() -> list[str]:
             if origin.startswith(("https://", "http://localhost"))
             else ""
         )
-        text = (
+        body = (
             f"You have been added as a collaborator on SIGMA project "
             f"“{event['project_title']}”.\n\n"
             + (
@@ -675,16 +697,21 @@ def drain_notifications() -> list[str]:
             else f"You have been removed as a collaborator on SIGMA project "
             f"“{event['project_title']}”.\n"
         )
-        message.set_content(text)
+        message.set_content(body)
         try:
-            cloud_auth.send_smtp_message(message, [event["recipient"]])
-        except (cloud_auth.SMTPDeliveryError, RuntimeError, OSError) as exc:
+            send_message(message, recipients=[event["recipient"]])
+        except (cloud_auth.SMTPDeliveryError, RuntimeError, OSError, ValueError) as exc:
             LOGGER.warning("Collaboration notification queued: %s", type(exc).__name__)
+            with _db() as db:
+                db.execute(
+                    "UPDATE shared_email_outbox SET sent_at=NULL WHERE id=? AND sent_at=?",
+                    (event["id"], claim),
+                )
             warnings.append("Some collaboration notification emails are queued for retry.")
             break
         with _db() as db:
             db.execute(
-                "UPDATE shared_email_outbox SET sent_at=? WHERE id=? AND sent_at IS NULL",
-                (time.time(), event["id"]),
+                "UPDATE shared_email_outbox SET sent_at=? WHERE id=? AND sent_at=?",
+                (time.time(), event["id"], claim),
             )
     return warnings
