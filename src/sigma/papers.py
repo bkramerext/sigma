@@ -10496,6 +10496,13 @@ async def _generate_impl(
             ready_proofreading = work.get("proofread_ready")
             if (
                 isinstance(ready_proofreading, dict)
+                and ready_proofreading["input_sha256"] != raw_tex_sha256
+            ):
+                # A changed TeX render invalidates the completed proofread
+                # cursor. Make any necessary new proofreading visible.
+                resume_floor = "proofreading"
+            if (
+                isinstance(ready_proofreading, dict)
                 and ready_proofreading["input_sha256"] == raw_tex_sha256
             ):
                 # A completed TeX artifact is authoritative. In particular,
