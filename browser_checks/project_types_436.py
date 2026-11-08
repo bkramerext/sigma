@@ -89,12 +89,18 @@ with sync_playwright() as playwright:
     expect(grid).to_be_visible()
     expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
-        '"google about" "admin chatgpt"'
+        '"google model" "chatgpt about" "admin ."'
     )
     about_rect = grid.locator(".home-about-button").bounding_box()
     google_rect = grid.locator(".project-google-signin").first.bounding_box()
     assert about_rect and google_rect
-    assert about_rect["x"] > google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
+    model_pill = grid.get_by_role("button", name="Model", exact=False)
+    expect(model_pill).to_be_visible()
+    assert "cycle" in (model_pill.get_attribute("data-tooltip") or "").lower()
+    model_rect = model_pill.bounding_box()
+    assert model_rect and model_rect["y"] < about_rect["y"]
+    assert abs(model_rect["x"] + model_rect["width"] - about_rect["x"] - about_rect["width"]) < 3
+    assert about_rect["x"] > google_rect["x"]
 
     # A visible test host avoids the default Samples tab hiding Saved's
     # animations. Compare the CSSAnimation timeline anchors directly.

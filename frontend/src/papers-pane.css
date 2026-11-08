@@ -200,6 +200,8 @@
   min-width: 0;
   margin-left: 0;
 }
+/* Close X stays beside the preceding paper action while retaining its click target. */
+.workspace-page .papers-pane .saved-paper-title-tools .paper-remove-anchor { margin-left: -4px; }
 .workspace-page .papers-pane .saved-paper-second-line {
   display: block;
   min-width: 0;
