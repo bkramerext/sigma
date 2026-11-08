@@ -98,12 +98,8 @@
 
 /* Account column sizes to its ChatGPT content. Google keeps its own
    intrinsic pill width and aligns to the ChatGPT pill's right edge. */
-.home-page .home-account-grid,
-.home-page .home-account-grid:has(> .administrator-settings-link) {
+.home-page .home-account-grid {
   grid-template-columns: repeat(2, max-content);
-}
-.home-page .home-account-grid:has(> .administrator-settings-link) {
-  grid-template-columns: repeat(3, max-content);
 }
 .home-page .home-account-grid > .project-google-signin,
 .home-page .home-account-grid > .api-connection {
