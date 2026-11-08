@@ -5956,6 +5956,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const editDescriptionButton = useRef<HTMLButtonElement>(null);
   const [descriptionEditing, setDescriptionEditing] = useState(false);
   const [descriptionBusy, setDescriptionBusy] = useState(false);
+  const [descriptionDirty, setDescriptionDirty] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -6266,12 +6267,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </button>
       {descriptionEditing ? <>
         <button type="submit" form="sigma-project-description-form"
-          className="text-view-link sigma-description-toolbar-action" disabled={descriptionBusy}>
+          className="text-view-link sigma-description-toolbar-action" disabled={descriptionBusy || !descriptionDirty}>
           {descriptionBusy ? 'Saving…' : 'Save'}
         </button>
         <button type="button" className="text-view-link sigma-description-toolbar-action"
           disabled={descriptionBusy} onClick={() => {
             setDescriptionEditing(false);
+            setDescriptionDirty(false);
             exitMode('project-title');
             requestAnimationFrame(() => editDescriptionButton.current?.focus());
           }}>Cancel</button>
@@ -6284,6 +6286,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           sectionOpen('project');
           setProjectExpanded(true);
           window.localStorage.setItem(`sigma.projectPane:${path}`, 'true');
+          setDescriptionDirty(false);
           setDescriptionEditing(true);
         }}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -6309,8 +6312,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
       <ProjectDescriptionEditor view={view}
         editing={descriptionEditing} busy={descriptionBusy} onBusyChange={setDescriptionBusy}
+        onDirtyChange={setDescriptionDirty}
         onExitMode={() => {
           setDescriptionEditing(false);
+          setDescriptionDirty(false);
           exitMode('project-title');
           requestAnimationFrame(() => editDescriptionButton.current?.focus());
         }}

@@ -18,12 +18,13 @@ const definitions = [
 ] as const;
 
 export default function ProjectDescriptionEditor({
-  view, editing, busy, onBusyChange, onExitMode, onSave,
+  view, editing, busy, onBusyChange, onDirtyChange, onExitMode, onSave,
 }: {
   view: ProjectDescriptionView;
   editing: boolean;
   busy: boolean;
   onBusyChange: (busy: boolean) => void;
+  onDirtyChange: (dirty: boolean) => void;
   onExitMode: () => void;
   onSave: (draft: ProjectDescriptionDraft) => Promise<void>;
 }) {
@@ -36,6 +37,13 @@ export default function ProjectDescriptionEditor({
   const [draft, setDraft] = useState(original);
   const [error, setError] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
+  const dirty = draft.title !== view.project.title
+    || draft.problem !== view.project.problem
+    || draft.desired_outcomes !== (view.project.desired_outcomes ?? '')
+    || draft.paper_requirements !== (view.project.paper_requirements ?? '');
+  useEffect(() => {
+    onDirtyChange(editing && dirty);
+  }, [editing, dirty, onDirtyChange]);
   useEffect(() => {
     if (!editing) { setDraft(original()); setError(''); }
   }, [editing, view.project.title, view.project.problem,
@@ -46,7 +54,7 @@ export default function ProjectDescriptionEditor({
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || !dirty) return;
     if (!draft.title.trim() || !draft.problem.trim()) {
       setError('Project title and Research Subject are required.');
       return;

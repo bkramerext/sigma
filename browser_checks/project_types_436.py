@@ -891,12 +891,21 @@ with sync_playwright() as playwright:
     expect(project_edit).to_be_visible()
     project_edit.click()
     toolbar = page.locator(".project-pane-actions")
-    expect(toolbar.get_by_role("button", name="Save", exact=True)).to_be_visible()
+    save_project_fields = toolbar.get_by_role("button", name="Save", exact=True)
+    expect(save_project_fields).to_be_visible()
+    expect(save_project_fields).to_be_disabled()
     expect(toolbar.get_by_role("button", name="Cancel", exact=True)).to_be_visible()
     expect(toolbar.get_by_role("button", name="Edit project fields")).to_have_count(0)
     expect(page.get_by_role("textbox", name="Project title")).to_be_visible()
+    # All four fields participate in dirty state, including reverting an edit.
+    outcomes = page.get_by_role("textbox", name="Desired Outcomes")
+    original_outcomes = outcomes.input_value()
+    outcomes.fill(original_outcomes + " Temporary test edit.")
+    expect(save_project_fields).to_be_enabled()
+    outcomes.fill(original_outcomes)
+    expect(save_project_fields).to_be_disabled()
     page.wait_for_timeout(300)
-    expect(toolbar.get_by_role("button", name="Save", exact=True)).to_be_visible()
+    expect(save_project_fields).to_be_disabled()
     expect(toolbar.get_by_role("button", name="Cancel", exact=True)).to_be_visible()
     toolbar.get_by_role("button", name="Cancel", exact=True).click()
     expect(project_edit).to_be_visible()
@@ -940,6 +949,29 @@ with sync_playwright() as playwright:
     ).json()
     assert replaced["project"]["investigation_type"] == "mathematical"
     assert replaced["project"]["project_type_snapshot"]["id"] == "mathematical"
+
+    # Saving a changed project field persists it and switches back to the pencil.
+    project_edit = page.locator(".project-pane-actions").get_by_role(
+        "button", name="Edit project fields"
+    )
+    project_edit.click()
+    save_project_fields = page.locator(".project-pane-actions").get_by_role(
+        "button", name="Save", exact=True
+    )
+    expect(save_project_fields).to_be_disabled()
+    outcomes = page.get_by_role("textbox", name="Desired Outcomes")
+    original_outcomes = outcomes.input_value()
+    updated_outcomes = original_outcomes + " Browser save check."
+    outcomes.fill(updated_outcomes)
+    expect(save_project_fields).to_be_enabled()
+    save_project_fields.click()
+    expect(project_edit).to_be_visible()
+    expect(page.locator(".project-pane-actions").get_by_role(
+        "button", name="Save", exact=True
+    )).to_have_count(0)
+    assert page.request.get(
+        f"{FIXTURE_URL}/api/projects/inspect?path={quote(legacy['path'], safe='')}"
+    ).json()["project"]["desired_outcomes"] == updated_outcomes
 
     # Project Settings contains only project type and difficulty.
     page.get_by_role("button", name="Project settings", exact=True).click()
