@@ -540,3 +540,27 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 
 .workspace-page .project-global-settings-pill { display: inline-flex; align-items: center; gap: 6px; justify-self: stretch; width: 100%; }
 .workspace-page .project-global-settings-pill svg { width: 13px; height: 13px; }
+
+/* Project Settings uses the same sliders glyph, size, and copper as paper Include settings. */
+.workspace-page .project-pane-heading .project-pane-actions .project-classification-settings-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+  color: var(--sigma-copper-foreground);
+}
+.workspace-page .project-pane-heading .project-pane-actions .project-classification-settings-button svg {
+  width: 22px;
+  height: 22px;
+}
+/* Preserve the original Q/A wordmark weight and copper despite the generic action reset. */
+.workspace-page .project-pane-heading .project-primary-actions .project-pane-actions .project-qa-button {
+  font: 500 17px/1 Inter, sans-serif;
+  letter-spacing: .02em;
+  color: var(--sigma-copper-foreground);
+}
