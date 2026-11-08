@@ -68,7 +68,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const [ethosDraft, setEthosDraft] = useState('');
   const [ethosEditing, setEthosEditing] = useState(false);
   const [restoreDefault, setRestoreDefault] = useState(false);
-  const [ethosError, setEthosError] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -193,6 +192,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         setEthos(next);
         setEthosDraft(next.markdown);
         setRestoreDefault(false);
+        setEthosEditing(false);
       }
       setSaved(true);
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
@@ -217,7 +217,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           onClick={() => changeTab(item.id)}>{item.title}</button>)}
         <button type="button" className="sigma-ethos-pencil text-view-link text-view-icon workspace-icon-button"
           aria-label="Edit Research Ethos" data-tooltip="Edit Research Ethos"
-          disabled={!ethos || busy} onClick={() => { setTab('ethos'); setEthosEditing(true); setEthosError(''); }}>
+          disabled={!ethos || busy} onClick={() => { setTab('ethos'); setEthosEditing(true); }}>
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
@@ -324,7 +324,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
               }}>Restore Default</button>}
             {restoreDefault && <p className="settings-hint">Built-in Research Ethos will be restored when you Save Settings.</p>}
           </>}
-          {ethosError && <p role="alert" className="error">{ethosError}</p>}
         </section>}
         {error && <p role="alert" className="error">{error}</p>}
         {saved && <p role="status" className="settings-hint">Settings saved.</p>}
