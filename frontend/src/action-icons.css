@@ -334,13 +334,11 @@
 .admin-new-entry-heading .admin-new-entry-actions { position: static; }
 
 
-/* Admin heading sits inside the dialog's 32px content inset. Offset the
-   absolute close target back toward the modal border, as in Settings. */
+/* Position the Admin X against the modal itself, not its padded title row.
+   This gives the same 10px edge inset as other dialog dismissal controls. */
+.cloud-access-dialog { position: relative; }
+.cloud-access-dialog .admin-dialog-heading { position: static; }
 .cloud-access-dialog .admin-dialog-heading > .sigma-dialog-dismiss.sigma-dialog-dismiss {
-  right: -18px;
-}
-@media (max-width: 700px) {
-  .cloud-access-dialog .admin-dialog-heading > .sigma-dialog-dismiss.sigma-dialog-dismiss {
-    right: -1px;
-  }
+  top: 10px;
+  right: 10px;
 }
