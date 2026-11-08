@@ -636,3 +636,6 @@
 .project-settings-dialog.research-qa-dialog .research-qa-form textarea {
   margin-top: 0;
 }
+
+/* Keep Project Settings type selector outside dialog clipping. */
+.project-settings-dialog .research-type-options[popover] { position: fixed; inset: auto; right: auto; margin: 0; z-index: 2147483647; box-sizing: border-box; overflow-y: auto; }

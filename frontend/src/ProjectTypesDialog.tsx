@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import './project-types.css';
 import DialogDismissButton from './DialogDismissButton';
 
@@ -133,6 +133,7 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   const [expanded, setExpanded] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const optionsRef = useRef<HTMLDivElement>(null);
   const selected = options.find(option => option.id === value);
   const widestName = options.reduce((longest, option) => option.name.length > longest.length ? option.name : longest, "None");
   useEffect(() => {
@@ -142,6 +143,35 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
     };
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
+  }, [expanded]);
+  // The options must escape both the scrollable Project Types body and the
+  // modal dialog's clipped border. A native popover renders in the top layer.
+  useLayoutEffect(() => {
+    if (!expanded || !trigger.current || !optionsRef.current) return;
+    const anchor = trigger.current;
+    const popup = optionsRef.current;
+    popup.showPopover();
+    const position = () => {
+      const rect = anchor.getBoundingClientRect();
+      const availableBelow = Math.max(0, window.innerHeight - rect.bottom - 12);
+      const availableAbove = Math.max(0, rect.top - 12);
+      const desiredHeight = Math.min(256, popup.scrollHeight + 2);
+      const above = availableBelow < desiredHeight && availableAbove > availableBelow;
+      const height = Math.max(32, Math.min(256, above ? availableAbove : availableBelow));
+      const width = Math.min(rect.width, window.innerWidth - 16);
+      popup.style.width = `${width}px`;
+      popup.style.maxHeight = `${height}px`;
+      popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
+      popup.style.top = `${above ? Math.max(8, rect.top - Math.min(desiredHeight, height) - 4) : rect.bottom + 4}px`;
+    };
+    position();
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+    return () => {
+      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', position, true);
+      if (popup.matches(':popover-open')) popup.hidePopover();
+    };
   }, [expanded]);
   return <div className="research-type-picker pt-based-on-picker" ref={root}>
     <span className="pt-picker-width-measure" aria-hidden="true"><span className="pt-picker-icon-space"/><span>{widestName}</span><span className="pt-picker-chevron-space"/></span>
@@ -154,7 +184,8 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
       {selected && renderIcon(selected)}<span>{selected?.name ?? 'None'}</span>
       <svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
     </button>
-    {expanded && <div className="research-type-options" role="listbox" aria-label="Based on">
+    {expanded && <div ref={optionsRef} className="research-type-options" popover="manual" role="listbox" aria-label="Based on"
+      onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setExpanded(false); trigger.current?.focus(); } }}>
       <button type="button" role="option" aria-selected={!value} onClick={() => { onChoose(''); setExpanded(false); trigger.current?.focus(); }}>None</button>
       {options.map(option => <button key={option.id} type="button" role="option" aria-selected={value === option.id}
         onClick={() => { onChoose(option.id); setExpanded(false); trigger.current?.focus(); }}>

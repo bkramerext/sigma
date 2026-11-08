@@ -313,27 +313,27 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   justify-content: flex-end;
   gap: 12px;
 }
-/* The two home account columns align as About/Google above Admin/ChatGPT. */
+/* Model is the first top-right pill; About follows directly beneath it, right aligned. */
 .home-page .home-account-grid {
   display: grid;
   grid-template-columns: max-content max-content;
-  grid-template-areas: "about google" "admin chatgpt";
+  grid-template-areas: "google model" "chatgpt about" ". admin";
   align-items: start;
   justify-content: end;
   column-gap: calc(var(--identity-pill-gap) * 1.2);
   row-gap: var(--identity-pill-gap);
 }
 .home-page .home-account-grid > .home-about-button { grid-area: about; justify-self: end; }
-.home-page .home-account-grid > .project-google-signin { grid-area: google; justify-self: start; }
+.home-page .home-account-grid > .project-google-signin { grid-area: google; justify-self: end; }
 .home-page .home-account-grid > .administrator-settings-link { grid-area: admin; justify-self: end; }
 /* When Admin Settings is present, both left-column pills share its width. */
-.home-page .home-account-grid:has(> .administrator-settings-link) > :is(.home-about-button, .administrator-settings-link) {
+.home-page .home-account-grid:has(> .administrator-settings-link) > .administrator-settings-link {
   box-sizing: border-box;
   width: 100%;
   justify-self: stretch;
   text-align: center;
 }
-.home-page .home-account-grid > .api-connection { grid-area: chatgpt; justify-self: start; margin-left: 0; }
+.home-page .home-account-grid > .api-connection { grid-area: chatgpt; justify-self: end; margin-left: 0; }
 .home-page .home-account-grid > .google-invitation-dialog { display: none; }
 .home-page .home-account-grid > .google-invitation-dialog[open] { display: block; }
 @media (max-width: 700px) {
@@ -516,4 +516,18 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 @media (max-width: 700px) {
   .terms-of-service-card .terms-of-service-copy > p { font-size: clamp(16px, 3.5vw, 20px); }
   .terms-of-service-copy { gap: 18px; margin-top: 18px; }
+}
+
+/* Log title has room for normal leading; toolbar controls share a vertical center. */
+.session-log-page header h1 { font-weight: 500; line-height: 1.35; letter-spacing: .012em; margin: .25rem 0 .5rem; }
+.session-log-page header > p { line-height: 1.65; margin: .4rem 0 .85rem; }
+.session-log-page header > div { min-height: 36px; align-items: center; column-gap: 12px; row-gap: 8px; }
+.session-log-page header .session-log-toolbar-icon { align-self: center; vertical-align: middle; line-height: 0; }
+.session-log-page header .session-log-toolbar-icon svg { align-self: center; margin: auto; }
+
+/* With a third account-pill row, leave adequate space above Projects on phones. */
+@media (max-width: 700px) {
+  .home-page:has(.home-account-grid > .administrator-settings-link) {
+    --home-projects-top: max(152px, calc(var(--home-corner-gap) + 3 * var(--home-corner-pill-height) + 2 * var(--identity-pill-gap) + 24px));
+  }
 }

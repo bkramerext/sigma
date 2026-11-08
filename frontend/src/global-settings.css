@@ -1,22 +1,21 @@
 /* User-scoped Settings, preserving the existing Project Settings visual language. */
 .sigma-global-settings {
+  box-sizing: border-box;
   width: min(820px, calc(100vw - 32px));
-  max-height: min(90dvh, 860px);
+  height: min(690px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
   overflow: hidden;
   padding: 0;
 }
 .sigma-global-settings .sigma-global-settings-content {
   display: flex;
   flex-direction: column;
-  max-height: min(90dvh, 860px);
+  height: 100%;
   min-height: 0;
 }
 .sigma-global-settings .settings-header,
 .sigma-global-settings .settings-tabs { flex: 0 0 auto; }
-.sigma-global-settings .settings-body { min-height: 0; overflow-y: auto; }
-.sigma-global-settings--research,
-.sigma-global-settings--preferences { width: min(520px, calc(100vw - 32px)); }
-.sigma-global-settings--limits { width: min(580px, calc(100vw - 32px)); }
+.sigma-global-settings .settings-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .sigma-global-settings .settings-body .sigma-model-select {
   display: block;
   width: min(100%, 300px);
@@ -31,6 +30,11 @@
   color: var(--sigma-copper-foreground); cursor: pointer; font: 13px Inter, sans-serif;
 }
 .sigma-global-settings .settings-tabs button[aria-selected="true"] { border-bottom: 2px solid var(--sigma-copper-foreground); }
+/* Hover signals with an underline, never a filled background. */
+.project-settings-dialog.sigma-global-settings .settings-tabs button[role="tab"]:hover {
+  background: transparent !important; background-image: none !important; box-shadow: none !important;
+  color: var(--sigma-copper-foreground); text-decoration: underline; text-underline-offset: 4px;
+}
 .sigma-global-settings .settings-tabs button:focus-visible { outline: 2px solid #edbc77; }
 .sigma-global-settings .settings-body { padding: 20px 24px 26px; }
 .sigma-global-settings .settings-body fieldset { border: 0; padding: 0; margin: 0; }
@@ -48,6 +52,7 @@
 }
 .sigma-global-settings .project-types-embedded > header h2 { display: none; }
 .sigma-global-settings [role="tabpanel"] {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
   display: flex;
@@ -93,6 +98,7 @@
   min-width: 0;
   justify-content: space-between;
 }
+.sigma-global-settings .settings-header .sigma-dialog-dismiss { margin-right: 12px; }
 .sigma-global-settings .settings-header .settings-actions > button:first-child {
   width: auto;
   flex: 0 0 auto;

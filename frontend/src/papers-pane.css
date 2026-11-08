@@ -200,6 +200,8 @@
   min-width: 0;
   margin-left: 0;
 }
+/* Close X stays beside the preceding paper action while retaining its click target. */
+.workspace-page .papers-pane .saved-paper-title-tools .paper-remove-anchor { margin-left: -4px; }
 .workspace-page .papers-pane .saved-paper-second-line {
   display: block;
   min-width: 0;
@@ -293,7 +295,8 @@
 
 /* Numbered paper hover uses underline only, matching numbered sessions. */
 .workspace-page .papers-pane .saved-paper-title-toggle:is(:hover,:focus-visible) { text-decoration: underline; text-underline-offset: 3px; color: inherit; background: transparent; }
-.workspace-page .papers-pane .paper-title-star { display: inline; margin-left: 7px; color: var(--sigma-copper-foreground); font-size: .95em; cursor: default; }
+/* Align the star with the second-line paper title; retain the 6px star-to-number gap. */
+.workspace-page .papers-pane .paper-title-star { display: inline-flex; margin-left: 0; color: var(--sigma-copper-foreground); font-size: .95em; cursor: default; }
 
 /* A wrapper owns the hint when browser-disabled Play cannot receive pointer events. */
 .workspace-page .papers-pane .paper-play-tooltip { display: inline-flex; align-items: center; }

@@ -84,17 +84,60 @@ with sync_playwright() as playwright:
         "window.__projectTypeConfirmations = []; window.confirm = message => { window.__projectTypeConfirmations.push(String(message)); return true; }"
     )
 
-    # Home account pills occupy About / Google over Admin / ChatGPT at right.
+    # Account pills read right-to-left, then top-to-bottom at right.
     grid = page.locator(".home-account-grid")
     expect(grid).to_be_visible()
     expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
-        '"about google" "admin chatgpt"'
+        '"google model" "chatgpt about" ". admin"'
     )
     about_rect = grid.locator(".home-about-button").bounding_box()
     google_rect = grid.locator(".project-google-signin").first.bounding_box()
     assert about_rect and google_rect
-    assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
+    model_pill = grid.get_by_role("button", name="Model", exact=False)
+    expect(model_pill).to_be_visible()
+    expect(model_pill).to_be_enabled(timeout=15000)
+    assert "cycle" in (model_pill.get_attribute("data-tooltip") or "").lower()
+    model_rect = model_pill.bounding_box()
+    assert model_rect and model_rect["y"] < about_rect["y"]
+    assert abs(model_rect["x"] + model_rect["width"] - about_rect["x"] - about_rect["width"]) < 3
+    assert about_rect["x"] > google_rect["x"]
+
+    # The restored pill cycles user-wide defaults (not project settings),
+    # prompting before a cost-tier increase and preserving unrelated limits.
+    original_model_settings = page.request.get(
+        f"{FIXTURE_URL}/api/user-preferences/research-settings"
+    ).json()
+    expect(model_pill).to_be_enabled(timeout=15000)
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/user-preferences/research-settings")
+            and response.request.method == "PUT"
+        )
+    ):
+        model_pill.click()
+        cost_confirmation = page.locator(".global-model-confirm-popover")
+        if cost_confirmation.is_visible():
+            cost_confirmation.get_by_role("button", name="Confirm").click()
+    changed_model_settings = page.request.get(
+        f"{FIXTURE_URL}/api/user-preferences/research-settings"
+    ).json()
+    assert changed_model_settings["ai_model"] != original_model_settings["ai_model"]
+    assert changed_model_settings["limits"] == original_model_settings["limits"]
+    restore_response = page.request.put(
+        f"{FIXTURE_URL}/api/user-preferences/research-settings",
+        data={
+            key: original_model_settings[key]
+            for key in (
+                "limits",
+                "ai_model",
+                "reasoning_effort",
+                "show_advanced_outcome_details",
+            )
+        },
+    )
+    assert restore_response.ok
+    page.evaluate("window.dispatchEvent(new Event('sigma-global-settings-saved'))")
 
     # A visible test host avoids the default Samples tab hiding Saved's
     # animations. Compare the CSSAnimation timeline anchors directly.
@@ -142,6 +185,29 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Settings")
     expect(dialog).to_be_visible()
     expect(dialog.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
+    # Settings has one geometry regardless of selected tab, and hover is unfilled.
+    original_box = dialog.bounding_box()
+    assert original_box
+    model_tab = dialog.get_by_role("tab", name="Model", exact=True)
+    model_tab.hover()
+    assert (
+        model_tab.evaluate("node => getComputedStyle(node).backgroundColor") == "rgba(0, 0, 0, 0)"
+    )
+    assert "underline" in model_tab.evaluate("node => getComputedStyle(node).textDecorationLine")
+    for tab_name in ("Model", "Limits", "Preferences", "Project Types"):
+        dialog.get_by_role("tab", name=tab_name, exact=True).click()
+        next_box = dialog.bounding_box()
+        assert next_box
+        assert abs(next_box["width"] - original_box["width"]) <= 1, (
+            tab_name,
+            original_box,
+            next_box,
+        )
+        assert abs(next_box["height"] - original_box["height"]) <= 1, (
+            tab_name,
+            original_box,
+            next_box,
+        )
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     # All curated shared references are enabled by default for a new user.
     # The user can disable and re-enable each without changing catalog data.
@@ -488,6 +554,10 @@ with sync_playwright() as playwright:
     child = custom_section.locator(".project-type-card[open]")
     child.get_by_label("Name").fill("Browser Derived")
     child.get_by_role("combobox", name="Based on project type").click()
+    options_popup = child.locator(".pt-based-on-picker .research-type-options")
+    expect(options_popup).to_be_visible()
+    assert options_popup.evaluate("node => node.matches(':popover-open')")
+    assert options_popup.evaluate("node => getComputedStyle(node).position") == "fixed"
     child.get_by_role("option", name="Browser Parent").click()
     child.get_by_label("Scope").fill("Independent copied scope")
     expect(child.get_by_role("button", name="Generate icon")).to_have_count(0)
@@ -760,6 +830,10 @@ with sync_playwright() as playwright:
     settings = page.get_by_role("dialog", name="Project Settings")
     expect(settings).to_be_visible()
     settings.locator("#project-mode").click()
+    project_type_menu = settings.locator("#project-mode-options")
+    expect(project_type_menu).to_be_visible()
+    assert project_type_menu.evaluate('node => node.matches(":popover-open")')
+    assert project_type_menu.evaluate("node => getComputedStyle(node).position") == "fixed"
     settings.get_by_role("option", name="Mathematics").click()
     settings.get_by_role("button", name="Save", exact=True).click()
     expect(settings).not_to_be_visible()
@@ -1254,6 +1328,11 @@ with sync_playwright() as playwright:
     page.reload()
     scored = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-meta')
     expect(scored.get_by_role("button", name="See score")).to_be_enabled()
+    paper_row = page.locator('[data-paper-id="fixture-paper-1"]')
+    star_box = paper_row.locator(".paper-title-star").bounding_box()
+    paper_title_box = paper_row.locator(".saved-paper-second-line").bounding_box()
+    assert star_box and paper_title_box
+    assert abs(star_box["x"] - paper_title_box["x"]) <= 2, (star_box, paper_title_box)
     scored_position = scored.evaluate(
         """node => node.querySelector('button').getBoundingClientRect().left -
           node.querySelector('p').getBoundingClientRect().right"""

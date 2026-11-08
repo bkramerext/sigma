@@ -25,6 +25,7 @@ type ResearchConfig = {
 };
 type CatalogModel = { id: string; label: string; efforts: string[]; relative_cost: string };
 type Preference = { allow_unattended_background_execution: boolean; expand_one_project_section_at_a_time: boolean; progress_email: boolean };
+const modelCost = (value: string) => /^\${1,3}$/.test(value) ? value.length : Number.POSITIVE_INFINITY;
 const tabs: { id: Tab; title: string }[] = [
   { id: 'types', title: 'Project Types' },
   { id: 'research', title: 'Model' },
@@ -171,6 +172,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       }));
       savedSnapshot.current = JSON.stringify({ config: next, prefs });
       setSaved(true);
+      window.dispatchEvent(new Event('sigma-global-settings-saved'));
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
@@ -207,7 +209,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
                 ? config.reasoning_effort : selected?.efforts[0] ?? config.reasoning_effort });
           }}>
             {!model && <option value={config.ai_model}>{config.ai_model}</option>}
-            {models.map(item => <option key={item.id} value={item.id}>{item.label} · {item.relative_cost}</option>)}
+            {[...models].sort((a, b) => modelCost(a.relative_cost) - modelCost(b.relative_cost) || a.label.localeCompare(b.label)).map(item =>
+              <option key={item.id} value={item.id}>{item.label} · {item.relative_cost}</option>)}
           </select>
           <label htmlFor="sigma-global-effort">Thinking level</label>
           <select id="sigma-global-effort" className="sigma-effort-select" value={config.reasoning_effort}
