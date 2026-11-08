@@ -333,5 +333,8 @@
 .admin-new-entry-heading .admin-new-entry-actions { position: static; }
 
 /* Compact Project Settings close-X inset. */
-/* Keep the 28px hit target inside the compact dialog's border, near its top-right corner. */
-.sigma-project-classification-dialog .settings-header .sigma-dialog-dismiss.sigma-dialog-dismiss { top: 2px !important; right: 2px !important; }
+.sigma-project-classification-dialog .settings-header .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  /* Center the 28px target approximately 48px from the outer top/right borders. */
+  top: 34px !important;
+  right: 34px !important;
+}

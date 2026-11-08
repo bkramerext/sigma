@@ -848,16 +848,19 @@ with sync_playwright() as playwright:
     project_settings = page.get_by_role("dialog", name="Project Settings")
     expect(project_settings.get_by_role("tab", name="Preferences")).to_have_count(0)
     expect(project_settings.get_by_label("Difficulty")).to_be_visible()
-    # The compact dialog's entire X target stays inside its outer border.
-    close_control = project_settings.get_by_role("button", name="Close Project Settings")
-    close_box = close_control.bounding_box()
+    # The close X must be wholly inside the panel, centered about 48px
+    # from the top/right edges (the approved visual reference).
+    close_button = project_settings.get_by_role("button", name="Close Project Settings")
     dialog_box = project_settings.bounding_box()
-    assert close_box and dialog_box
+    close_box = close_button.bounding_box()
+    assert dialog_box and close_box
+    right_inset = dialog_box["x"] + dialog_box["width"] - (close_box["x"] + close_box["width"] / 2)
+    top_inset = close_box["y"] + close_box["height"] / 2 - dialog_box["y"]
+    assert 43 <= right_inset <= 53, (dialog_box, close_box)
+    assert 43 <= top_inset <= 53, (dialog_box, close_box)
     assert close_box["x"] >= dialog_box["x"]
-    assert close_box["y"] >= dialog_box["y"]
     assert close_box["x"] + close_box["width"] <= dialog_box["x"] + dialog_box["width"]
-    assert close_box["y"] + close_box["height"] <= dialog_box["y"] + dialog_box["height"]
-    close_control.click()
+    close_button.click()
 
     # User-wide Settings owns references and Outcome preferences. Edits made
     # on separate tabs share a single dirty-state and Save operation.
