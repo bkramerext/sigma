@@ -10599,7 +10599,27 @@ async def _generate_impl(
             pdf_check_passes: list[dict[str, Any]] = []
             diagram_fallback: dict[str, Any] | None = None
             pdf = b""
-            for pass_number in range(1, 4):
+            proofread_source_sha256 = hashlib.sha256(tex.encode()).hexdigest()
+            next_pdf_pass = 1
+            saved_pdf_pass = work.get("pdf_checkpoint")
+            if isinstance(saved_pdf_pass, dict):
+                if saved_pdf_pass["proofread_sha256"] != proofread_source_sha256:
+                    # Changed rendering options invalidate only the PDF passes.
+                    # Authored sections and accepted proofreading remain intact.
+                    work.pop("pdf_checkpoint", None)
+                    _save_work(path, work)
+                else:
+                    pdf = _load_pdf_pass(path, saved_pdf_pass)
+                    tex = saved_pdf_pass["tex"]
+                    draft = PaperDraft.model_validate(saved_pdf_pass["draft"])
+                    warnings = list(saved_pdf_pass["warnings"])
+                    compile_diagnostics = list(saved_pdf_pass["compile_diagnostics"])
+                    layout_warnings = list(saved_pdf_pass["layout_warnings"])
+                    layout_repairs = list(saved_pdf_pass["layout_repairs"])
+                    pdf_check_passes = list(saved_pdf_pass["pdf_check_passes"])
+                    diagram_fallback = saved_pdf_pass["diagram_fallback"]
+                    next_pdf_pass = 4 if saved_pdf_pass["ready"] else saved_pdf_pass["next_pass"]
+            for pass_number in range(next_pdf_pass, 4):
                 pass_diagnostics: list[str] = []
                 await report("compile", pass_number, 3)
                 try:
@@ -10707,21 +10727,38 @@ async def _generate_impl(
                     "diagnostics": layout_warnings,
                 }
                 pdf_check_passes.append(pass_record)
-                if not layout_warnings or pass_number == 3:
-                    break
-                repaired = _repair_tex_layout(tex, layout_warnings)
-                if repaired is None:
-                    break
-                tex, repair = repaired
-                pass_record["tex_repair"] = repair
-                layout_repairs.append(repair)
-                await report(
-                    "pdf_check",
-                    pass_number,
-                    3,
-                    "milestone",
-                    detail=f"Correcting TeX layout for PDF pass {pass_number + 1} of 3.",
+                ready = not layout_warnings or pass_number == 3
+                if not ready:
+                    repaired = _repair_tex_layout(tex, layout_warnings)
+                    if repaired is None:
+                        ready = True
+                    else:
+                        tex, repair = repaired
+                        pass_record["tex_repair"] = repair
+                        layout_repairs.append(repair)
+                        await report(
+                            "pdf_check",
+                            pass_number,
+                            3,
+                            "milestone",
+                            detail=f"Correcting TeX layout for PDF pass {pass_number + 1} of 3.",
+                        )
+                # The PDF, TeX for the next pass, and the diagnostics cursor
+                # advance atomically from the resume reader's perspective.
+                _save_pdf_pass(
+                    path, work, pass_number, pdf,
+                    next_pass=4 if ready else pass_number + 1,
+                    ready=ready,
+                    proofread_sha256=proofread_source_sha256,
+                    tex=tex, draft=draft, warnings=warnings,
+                    compile_diagnostics=compile_diagnostics,
+                    layout_warnings=layout_warnings,
+                    layout_repairs=layout_repairs,
+                    pdf_check_passes=pdf_check_passes,
+                    diagram_fallback=diagram_fallback,
                 )
+                if ready:
+                    break
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
         if layout_warnings:
