@@ -146,7 +146,7 @@ Research Q&A browser pages scroll correctly; literature-specific research and pa
 ---
 
 ## Version 0.2.2 — Research Controls and Reliable Papers
-*Release candidate*
+*November 8, 2026*
 
 **A follow-up release focused on clearer research requirements, user-wide controls, and reliable paper work.**
 
@@ -167,4 +167,7 @@ Research Q&A browser pages scroll correctly; literature-specific research and pa
 
 Production deployments use a keyless, guarded release path with a fresh isolated recovery drill, exact-SHA image provenance, and a maintenance window. Recovery checks and deployment status do not independently validate the scientific correctness of generated findings or papers.
 
-**Status:** Candidate notes. Final deployment date and exact merged SHA will be recorded after production verification.
+**Status:** Deployed to production from merged `main` SHA
+`469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. The operations runbook records
+the recovery snapshot, restore verification, image identities, cutover window,
+and production health evidence.

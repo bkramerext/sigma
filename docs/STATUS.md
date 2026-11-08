@@ -1,5 +1,67 @@
 # SIGMA status
 
+## 2026-11-08 — SIGMA v0.2.2 production deployment complete
+
+Production now runs SIGMA v0.2.2 from merged `main` SHA
+`469c955dfadb5a7bd17b72fc069a3365b4f20ba7` (tree
+`0c8513bae7be8decc27101e2e05147bbac162c8d`). The guarded helper built and
+started the backend and frontend from that exact SHA. Backend image
+`sha256:1673bf9eedbdf81aa9f9d9944eb3a8708bc1cd10b77d0add1b64afea83f0096c`
+and frontend image
+`sha256:94721b300106d117b09330092b62797432a3f0d7abf57a195331a00ca65af911`
+carry the matching source revision and are recorded in the host release
+record. Exact-SHA Ruff, SIGMA verification, and frontend build passed. The
+merged-SHA browser acceptance steps passed on attempt 1; the workflow failed
+only during `setup-uv` post-job cache pruning after a 300-second lock wait.
+Attempt 2 was cancelled during Project Types. The complete browser run for PR
+SHA `e5de6f05ef8a8976fffec4a1b6cc54aa9078f205` passed on the identical source
+tree. No full tests or moving-`main` checks were rerun.
+
+Before cutover, snapshot `sigma-state-v021-pre-20261108-1546`, ID
+`6224195028464248741`, reached READY from `sigma-state` and remains retained.
+The service was stopped and the state filesystem synced at 15:46:10 UTC, then
+restarted at 15:46:45 UTC. The isolated VM had no public IP or service account;
+the 30 GB clone was attached read-only and mounted with
+`ro,nosuid,nodev,noexec,norecovery`. The exact-SHA verifier passed all three
+SQLite integrity checks, 3 identities/workspaces, 17 projects, 42 artifacts,
+one TeX/PDF pair with matching hash and size, 10 terminal historical job rows,
+and 46 accounting rows ($5.938237 recorded/reserved, including 15 reserved or
+unknown outcomes). The recovery VM, boot disk, clone disk, and temporary
+OS Login keys were removed; the snapshot remains.
+
+The guarded release helper ran at 16:01:31 UTC and completed at 16:03:35 UTC.
+The public maintenance window was 30 seconds (16:03:05–16:03:35 UTC). The
+production persistent state UUID remains
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. Systemd and all three containers are
+healthy, maintenance is off, the production verifier still reports the same
+aggregate data/accounting baseline, public HTTPS and the endpoint probe pass,
+hosted auth status is 200/ready, and anonymous `/api/health` returns the
+expected 401. The served frontend About label contains `Version 0.2.2 · Build
+469c955`. No paid inference was run, and no user, project, research, paper,
+authorization, or accounting records were reset or deleted.
+
+The two keyless identities passed effective access checks: `sigma-release-ssh`
+described `sigma-gce-01` and used IAP/OS Login with `sudo -n true`; the recovery
+identity described the temporary VM and used IAP/OS Login with noninteractive
+sudo. Snapshot and temporary resource lifecycle checks succeeded without an
+Owner fallback or broad IAM grant. The recovery identity lacks
+`compute.globalOperations.get`, so synchronous `gcloud` operation polling
+returned 403 after accepted operations. Resource state was verified directly
+through the same impersonated identity, and no operation was retried or
+resource recreated. The initial recovery VM also needed the existing
+`sigma-iap-ssh` network tag for the project's IAP-only firewall; the tag was
+added, and the canonical runbook command is being corrected.
+
+Live billing totals remain unavailable because `cloudbilling.googleapis.com`
+is disabled for the project. The recovery drill was bounded to one 30 GB
+snapshot, one 30 GB clone, and one 10 GB boot disk on an `e2-standard-2` VM;
+the snapshot stores 35,513,600 bytes and temporary compute ran for less than
+12 minutes. Published-rate estimate is well below the $25 incremental ceiling;
+the exact billed amount was not independently queried. Full authenticated
+Google login, import/export, email, research execution, and saved-paper viewing
+were not exercised. A code rollback does not roll back data; preserve new
+writes and validate old-binary schema compatibility before any rollback.
+
 ## 2026-11-06 — SIGMA v0.2.1 production deployment complete
 
 Production now runs v0.2.1 from the exact approved commit

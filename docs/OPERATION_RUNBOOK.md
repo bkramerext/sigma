@@ -22,12 +22,14 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#observed-deployment) 
 | Disk | `sigma-state` 30 GB `pd-balanced`, zonal `us-west1-b`; boot disk 100 GiB `pd-standard` | Attached, mounted with approved UUID/options; one-off recovery snapshot READY 2026-10-26 |
 | Network | `sigma-vpc`, subnet `sigma-us-west1` in `us-west1`, primary IPv4 `10.42.0.0/24`; static external IPv4 `sigma-web-ip` = **`136.66.128.82`** (Premium, regional) | Attached to VM; public DNS and HTTPS routing verified 2026-10-26 |
 | VM identity and access | `sigma-runtime` service account; IAP SSH with OS Login | VM identity and IAP access verified 2026-10-26; worker IAM remains broader than least privilege |
-| Billing account / current spend | Billing enabled and required quota available as checked 2026-10-30 before the authorized restore drill | Exact GCP-billed recovery-drill amount was not independently queried; no cost above the authorized $25 incremental ceiling was observed or reported |
-| Recovery | `sigma-state-v021-pre-20261107-0658` READY from `sigma-state` | Created 2026-11-06 22:58:22 PDT before v0.2.1 cutover. Isolated read-only restore drill passed: 3 SQLite integrity checks, 3 identity/workspace mappings, 17 projects, 42 artifacts, one verified TeX/PDF pair, 10 terminal job rows, and 46 accounting call rows ($5.938237 recorded/reserved; 15 reserved or unknown outcomes). Temporary VM and clone disk removed and verified absent. Snapshot retained. Daily backup timer and `/etc/sigma/backup.env` remain absent. |
-| Production release | `5435e14eeea159ab207ad50016577b9a9542ae59` (v0.2.1, approved exact SHA) | Deployed 2026-11-07 UTC using the guarded helper. Backend/frontend image labels and image IDs match; all three containers healthy; systemd and Caddy active; persistent disk mounted; maintenance off. Public HTTPS, hosted auth readiness, anonymous API behavior, and Chrome About build provenance passed. Full authenticated account-dependent workflows remain incomplete; see v0.2.1 outcome below. |
+| Billing account / current spend | Billing was reported enabled and the $300 budget configured in October 2026; regional quota had capacity at the v0.2.2 release | Cloud Billing API is disabled for project `224387813390`, so release identities cannot query current billed spend. The v0.2.2 recovery footprint was bounded and estimated below $25; exact billed amount was not independently queried. |
+| Recovery | `sigma-state-v021-pre-20261108-1546` READY from `sigma-state`, snapshot ID `6224195028464248741` | Created 2026-11-08 15:46:18 UTC before v0.2.2 cutover. Isolated read-only restore passed: 3 SQLite integrity checks, 3 identity/workspace mappings, 17 projects, 42 artifacts, one verified TeX/PDF pair, 10 terminal job rows, and 46 accounting call rows ($5.938237 recorded/reserved; 15 reserved or unknown outcomes). Recovery VM, boot disk, clone disk, and ephemeral keys removed and verified absent. Snapshot retained. Daily backup timer and `/etc/sigma/backup.env` remain absent. |
+| Production release | `469c955dfadb5a7bd17b72fc069a3365b4f20ba7` (v0.2.2, merged exact SHA) | Deployed 2026-11-08 UTC using the guarded helper. Backend/frontend immutable image IDs and source labels match; all three containers healthy; systemd active; persistent disk mounted; maintenance off. Public HTTPS, hosted auth readiness, anonymous API behavior, and served About bundle provenance passed. Full authenticated account-dependent workflows remain incomplete; see v0.2.2 outcome below. |
 | Maintenance page | PR #385 merged at `31ba6c4aba1ed59d2d7e092f589b882d7f134b30` | Installed under `/var/www/sigma-maintenance`; host Caddy 2.6.2 uses the compatible `handle_errors` form; root-owned snippet directory and switch `/usr/local/libexec/sigma/maintenance-switch.py` are installed. Config validation/reload passed. During v0.1.7 cutover the page returned HTTP 503/no-store and the PNG HTTP 200/image/png; maintenance is now off. |
 
 **Change log**
+
+- 2026-11-08: Deployed v0.2.2 from merged exact SHA `469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. Snapshot `sigma-state-v021-pre-20261108-1546` (ID `6224195028464248741`) reached READY and passed the isolated read-only verifier; temporary recovery resources and ephemeral keys were removed. Guarded build/cutover completed at 16:03:35 UTC with a 30-second public maintenance window. All post-deployment health, storage, image provenance, data/accounting, HTTPS, hosted auth readiness, and maintenance-off checks passed. See the detailed v0.2.2 outcome below.
 
 - 2026-11-06: Deployed v0.2.1 from exact approved SHA `5435e14eeea159ab207ad50016577b9a9542ae59` per issue #588. Fresh snapshot `sigma-state-v021-pre-20261107-0658` and isolated read-only restore verification passed; temporary recovery VM/clone disk removed. Guarded build/cutover completed at 07:09 UTC; production smoke and Chrome About verified 0.2.1/build `5435e14`. No paid inference. See detailed outcome below.
 
@@ -746,26 +748,139 @@ with a five-minute OS Login TTL was removed locally after an actual IAP + OS
 Login SSH session succeeded, including `sudo -n true`.
 
 The November 6 setup verified role boundaries and one ephemeral host SSH
-session, but the subsequent v0.2.1 release exposed an **unresolved effective
-access failure**: `gcloud compute ssh` required `compute.instances.get`,
-which was denied for the release identities. Direct SSH also timed out; the
-project Owner ultimately used IAP for cutover. Therefore the #590 acceptance
-for a fully keyless release is **not met**. Under #667, add only the narrowly
-conditioned `compute.instances.get` permission for each actual target
-instance (production `sigma-gce-01` for `sigma-release-ssh` and the
-release-prefixed temporary recovery instance for `sigma-release-operator`),
-plus any other demonstrated minimal discovery permission. Test effective
-`gcloud compute instances describe` and IAP/OS Login SSH under the exact
-impersonated identities, including `sudo -n true`; do not infer success
-from policy text or broaden to project-wide Owner/Editor. No such IAM change
-or new effective-access test is claimed by this documentation update.
+session, but the subsequent v0.2.1 release exposed an effective-access failure:
+`gcloud compute ssh` required `compute.instances.get`, which was then denied for
+the release identities. Direct SSH also timed out; the project Owner ultimately
+used IAP for cutover. During the authorized v0.2.2 deployment on November 8,
+the required instance-read permission was effective in practice for
+`sigma-release-ssh` on `sigma-gce-01` and for `sigma-release-operator` on the
+temporary recovery VM. Both identities completed actual IAP/OS Login sessions
+and noninteractive `sudo -n true`; the recovery identity also completed the
+bounded snapshot and temporary resource lifecycle. No IAM policy change or
+Owner fallback was used for that deployment. See the v0.2.2 outcome below.
 
-The original setup resolved its initial scoped IAM checks; it is not evidence
-of a completed keyless release snapshot or recovery drill. In keeping with the operator's instruction to hold after
-fixing IAM, no production preflight, snapshot, clone disk, recovery VM, cutover,
-or deployment was performed. Positive authorization for creating future
-recovery-prefixed resources is defined by IAM Conditions but remains to be
-exercised during the next release restore drill.
+One narrower limitation remains: `sigma-release-operator` lacks
+`compute.globalOperations.get`. A synchronous `gcloud` create/poll command can
+therefore report 403 after the operation has been accepted. In the v0.2.2
+drill, named resources were verified through resource-specific reads and
+short-lived impersonated API requests; no failed command was blindly retried
+and no resource was recreated. A future IAM change, if selected, should add
+only a justified read-only operation-status permission; never use Owner/Editor
+or a long-lived key.
+
+The November 6 setup itself did not create recovery resources. The first
+bounded keyless snapshot and isolated restore drill completed during the
+authorized v0.2.2 deployment documented below.
+
+## SIGMA v0.2.2 deployment outcome (2026-11-08 UTC)
+
+Issue #667 authorized the routine v0.2.2 release after PR #670 merged.
+Production was running v0.2.1 before this release. The frozen target was merged
+`main` SHA `469c955dfadb5a7bd17b72fc069a3365b4f20ba7`; its tree
+`0c8513bae7be8decc27101e2e05147bbac162c8d` is identical to PR candidate SHA
+`e5de6f05ef8a8976fffec4a1b6cc54aa9078f205`.
+
+Exact merged-SHA source checks:
+
+- [Ruff](https://github.com/bkramerext/sigma/actions/runs/42495800722) passed.
+- [SIGMA verification](https://github.com/bkramerext/sigma/actions/runs/42495800717) passed.
+- [Frontend build](https://github.com/bkramerext/sigma/actions/runs/42495800735) passed.
+- Merged-SHA [Browser verification](https://github.com/bkramerext/sigma/actions/runs/42495800771) attempt 1 completed every browser acceptance step successfully, then the `setup-uv` post-job cache prune timed out after a 300-second cache-lock wait. Attempt 2 was cancelled during the Project Types step. The complete browser workflow passed on the identical source tree at PR SHA `e5de6f05ef8a8976fffec4a1b6cc54aa9078f205` in [run 42457938746](https://github.com/bkramerext/sigma/actions/runs/42457938746). No full suite or moving-`main` workflows were rerun.
+
+### Keyless access and recovery
+
+Effective access was verified with short-lived impersonation, not inferred from
+role configuration. `sigma-release-ssh` described `sigma-gce-01`, connected
+over IAP/OS Login, and passed `sudo -n true`. `sigma-release-operator`
+described the temporary recovery VM, connected over IAP/OS Login, and passed
+`sudo -n true`; it created and inspected the source snapshot, created the clone
+disk and VM, attached/detached the clone, and deleted the recovery VM and disks.
+No Owner fallback, broad IAM grant, long-lived key, or production-data edit was
+used. The targeted `compute.instances.get` checks passed on the production VM
+for `sigma-release-ssh` and on the release-prefixed recovery VM for
+`sigma-release-operator`.
+
+The recovery identity lacks `compute.globalOperations.get`. The label-free
+snapshot request succeeded and the snapshot reached READY, but synchronous
+`gcloud` polling returned 403 after submitting the operation. The accepted
+operation and named resource were checked using short-lived impersonated API
+requests and resource-specific reads; no operation or resource was retried or
+recreated. Exact billing totals also remain unreadable because
+`cloudbilling.googleapis.com` is disabled. The temporary footprint was one
+30 GB clone, one 10 GB boot disk, one `e2-standard-2` VM for under 12 minutes,
+and one snapshot whose reported storage is 35,513,600 bytes. A conservative
+published-rate estimate is below $2 for the first month including a full 30 GB
+snapshot, well within the $25 incremental ceiling. Exact billed spend was not
+queried.
+
+The fresh application-consistent snapshot
+`sigma-state-v021-pre-20261108-1546`, ID `6224195028464248741`, was created
+from `sigma-state` at 2026-11-08 15:46:18 UTC and remains READY/retained. SIGMA
+was stopped and the mounted state filesystem synced from 15:46:10 to 15:46:45
+UTC (about 35 seconds). The 30 GB clone, ID `6890385674874988321`, was attached
+READ_ONLY to an isolated VM with no public IP and no service account. The
+recovery VM had OS Login and blocked project SSH keys at creation. Its first
+IAP attempt showed that the project's existing IAP-only firewall targets
+network tag `sigma-iap-ssh`; that existing tag was added to the temporary VM.
+The state filesystem UUID matched production and mounted read-only with
+`ro,nosuid,nodev,noexec,norecovery` (the kernel reports `norecovery` for the
+requested ext4 `noload` behavior). The verifier from the exact release SHA
+(SHA-256 `1f0f7c7916cc2265784b8dda63993500240ef2d293820470c05e765e8fca049a`)
+passed all checks: 3 SQLite integrity checks, 3 identities/mappings, 17
+projects, 42 artifacts, one TeX/PDF paper with matching hash/size, 10 terminal
+job-history rows, and 46 accounting rows ($5.938237 recorded/reserved; 15
+reserved or unknown outcomes). The recovery VM, its auto-deleted boot disk,
+clone disk, mount, and temporary OS Login keys were removed and confirmed
+absent. Only the READY snapshot was retained.
+
+### Guarded deployment and verification
+
+The release command was:
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py \
+  469c955dfadb5a7bd17b72fc069a3365b4f20ba7 \
+  --backup-verified --schema-compatible
+```
+
+The helper ran from 16:01:31 to 16:03:35 UTC, built both images from the
+selected SHA, and confirmed container health, release identity, and the state
+mount. Systemd stopped the old stack at 16:03:05 and started the new stack at
+16:03:10. Caddy entered and exited maintenance at 16:03:05 and 16:03:35 UTC;
+the observed public maintenance window was 30 seconds. The release record
+`/var/lib/sigma/releases/469c955dfadb5a7bd17b72fc069a3365b4f20ba7.json`, host
+checkout, protected release pin, image labels, and About build agree on the
+full SHA.
+
+| Image | Immutable image ID | `org.opencontainers.image.revision` |
+| --- | --- | --- |
+| Backend | `sha256:1673bf9eedbdf81aa9f9d9944eb3a8708bc1cd10b77d0add1b64afea83f0096c` | `469c955dfadb5a7bd17b72fc069a3365b4f20ba7` |
+| Frontend | `sha256:94721b300106d117b09330092b62797432a3f0d7abf57a195331a00ca65af911` | `469c955dfadb5a7bd17b72fc069a3365b4f20ba7` |
+
+Post-deployment checks passed: `sigma.service` active; backend, frontend, and
+edge containers healthy; maintenance snippet absent; state UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5` mounted at `/srv/sigma-state` with
+`rw,nosuid,nodev,noexec,relatime`; post-deployment data verifier matched the
+pre-release aggregate baseline; public HTTPS root and endpoint probe passed;
+hosted `/api/cloud-auth/status` returned HTTP 200/ready; anonymous
+`/api/health` returned its expected HTTP 401. The served frontend bundle's
+About component renders `Version 0.2.2 · Build 469c955`. No paid inference was
+run, and user, project, research, paper, authorization, and accounting records
+were preserved.
+
+### Remaining limits and rollback
+
+The browser workflow's merged-SHA job conclusion is limited by its post-job
+cache cleanup failure, although all acceptance steps passed and the identical
+tree has a complete successful browser run. The Cloud Billing API remains
+disabled, so exact current spend is unavailable. Auth readiness passed, but an
+authenticated Google sign-in and account-dependent import/export, email,
+research, and saved-paper flows were not exercised. The daily backup timer
+remains absent; the retained snapshot is a one-off recovery point. A code
+rollback does not roll back data. Preserve new writes and verify the old
+binary's compatibility with live schemas before rolling back; the retained
+snapshot predates v0.2.2 and is reserved for separately authorized data
+recovery.
 
 ## SIGMA v0.2.1 deployment outcome (2026-11-06 PDT / 2026-11-07 UTC)
 
