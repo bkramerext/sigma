@@ -24,6 +24,16 @@ an alternate routine-release checklist.
 
 ## Coordinator-led release handoffs (SIGMA v0.3.0)
 
+**Approved source cutoff for v0.3.0:** `ef463bd0fb06dcd9f437651d6dff803bd206b545`.
+This commit still declared v0.2.2. Prepare a minimal release commit that updates
+backend/frontend versions and both lockfiles to v0.3.0 (plus release notes),
+without advancing application code beyond that cutoff. The **final release SHA
+is the resulting merged version-bump commit**, not the cutoff SHA; inspect
+its exact diff and record green CI on the actual chosen commit before Stage C.
+The later documentation-only Stage A environment fix is allowed, but must not
+be confused with a new application feature or authorization to deploy.
+
+
 For this release the **Coordinator is the release driver** and Red (Codex)
 performs only the operational stage explicitly delegated to it. This
 stage-by-stage handoff **supersedes the general unattended completion

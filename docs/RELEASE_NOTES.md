@@ -175,7 +175,7 @@ and production health evidence.
 ---
 
 ## Version 0.3.0 — Durable Paper Recovery and Clearer Controls
-*Release notes draft · Release SHA and production date pending*
+*Release candidate · November 8, 2026 · Production deployment pending*
 
 **A reliability-focused update that makes interrupted paper generation resume where it left off, while making research controls and project actions more consistent.** This draft covers changes merged after the v0.2.2 production source, reviewed through main SHA 666200d0aab76fea700d9904cd7b5ee33580e751. Changes merged before the final freeze will be reviewed for inclusion.
 
@@ -199,11 +199,15 @@ and production health evidence.
 - **Better administrative and saved-answer controls.** Administrator actions, feedback review status, and allowance refresh are clearer. Saved Q&A browser/remove actions and session-log toolbar alignment are standardized.
 - **More predictable dialogs.** Close controls, Escape behavior, menu placement, and layout spacing have been refined.
 
+### Sample research
+
+- **Riemann Hypothesis example project.** A new bundled sample explores how SIGMA investigates this longstanding unsolved mathematical problem. It is a research exercise, not a claim of a proof or solution.
+
 ### Reliability and limitations
 
 SIGMA retains saved research and paper evidence across supported interruptions; a completed stage is only reused when its checkpoint remains valid. Uncertain AI-provider attempts are not assumed to be free or safe to replay.
 
 SIGMA remains an experimental research application. Investigator/Skeptic agreement and editorial paper scores are not scientific validation; review generated findings, evidence, citations, and papers independently.
 
-**Release status:** Preparation only. v0.3.0 is **not yet frozen or deployed**. The version update, exact release SHA, final CI evidence, recovery verification, and production acceptance will be recorded when the release is authorized. The currently documented production version remains v0.2.2.
+**Release status:** The v0.3.0 version files and lockfiles are prepared from source cutoff `ef463bd0fb06dcd9f437651d6dff803bd206b545` with documentation-only additions. The final release commit is the merged version-bump commit after green exact-SHA CI. **Not yet deployed:** isolated restore verification, guarded cutover and production acceptance remain pending. Production is still documented at v0.2.2.
 
