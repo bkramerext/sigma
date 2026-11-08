@@ -866,7 +866,7 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
-    expect(page.get_by_role("button", name="Project type and difficulty")).to_be_visible()
+    expect(page.get_by_role("button", name="Project settings")).to_be_visible()
     assert header.get_by_role("button", name="Project Types").count() == 0
 
     with page.expect_download() as legacy_download:
@@ -907,20 +907,20 @@ with sync_playwright() as playwright:
     assert replaced["project"]["project_type_snapshot"]["id"] == "mathematical"
 
     # Project Settings contains only project type and difficulty.
-    page.get_by_role("button", name="Project type and difficulty", exact=True).click()
+    page.get_by_role("button", name="Project settings", exact=True).click()
     project_settings = page.get_by_role("dialog", name="Project Settings")
     expect(project_settings.get_by_role("tab", name="Preferences")).to_have_count(0)
     expect(project_settings.get_by_label("Difficulty")).to_be_visible()
-    # The close X must be wholly inside the panel, centered about 48px
-    # from the top/right edges (the approved visual reference).
+    # The close X uses the shared dialog header's upper-right inset,
+    # not the former unusually deep 48px offset.
     close_button = project_settings.get_by_role("button", name="Close Project Settings")
     dialog_box = project_settings.bounding_box()
     close_box = close_button.bounding_box()
     assert dialog_box and close_box
     right_inset = dialog_box["x"] + dialog_box["width"] - (close_box["x"] + close_box["width"] / 2)
     top_inset = close_box["y"] + close_box["height"] / 2 - dialog_box["y"]
-    assert 43 <= right_inset <= 53, (dialog_box, close_box)
-    assert 43 <= top_inset <= 53, (dialog_box, close_box)
+    assert 18 <= right_inset <= 35, (dialog_box, close_box)
+    assert 18 <= top_inset <= 35, (dialog_box, close_box)
     assert close_box["x"] >= dialog_box["x"]
     assert close_box["x"] + close_box["width"] <= dialog_box["x"] + dialog_box["width"]
     close_button.click()
