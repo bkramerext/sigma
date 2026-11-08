@@ -96,6 +96,7 @@ with sync_playwright() as playwright:
     assert about_rect and google_rect
     model_pill = grid.get_by_role("button", name="Model", exact=False)
     expect(model_pill).to_be_visible()
+    expect(model_pill).to_be_enabled(timeout=15000)
     assert "cycle" in (model_pill.get_attribute("data-tooltip") or "").lower()
     model_rect = model_pill.bounding_box()
     assert model_rect and model_rect["y"] < about_rect["y"]
@@ -831,7 +832,7 @@ with sync_playwright() as playwright:
     settings.locator("#project-mode").click()
     project_type_menu = settings.locator("#project-mode-options")
     expect(project_type_menu).to_be_visible()
-    assert project_type_menu.evaluate("node => node.matches(\":popover-open\")")
+    assert project_type_menu.evaluate('node => node.matches(":popover-open")')
     assert project_type_menu.evaluate("node => getComputedStyle(node).position") == "fixed"
     settings.get_by_role("option", name="Mathematics").click()
     settings.get_by_role("button", name="Save", exact=True).click()
