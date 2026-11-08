@@ -91,7 +91,7 @@ with sync_playwright() as playwright:
     expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     model_pill = grid.locator(".model-cycle-pill")
     expect(model_pill).to_be_visible()
-    assert "relative published API token cost" in model_pill.get_attribute("data-tooltip").lower()
+    assert "relative published API token cost" in model_pill.get_attribute("data-tooltip")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
         '"google model" "chatgpt about" "admin admin"'
     )

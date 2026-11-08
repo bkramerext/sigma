@@ -533,7 +533,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 /* User-wide Model pill on the right, About directly below it. */
 .workspace-page .project-art-header .header-controls {grid-template-columns:max-content max-content;grid-template-areas:"identity model" "identity about";grid-template-rows:auto auto;align-items:start;}
 .workspace-page .project-art-header .header-controls > .about-action {justify-self:end;width:max-content;min-width:0;}
-.workspace-page .project-header-title-row {grid-template-columns:24px minmax(0,1fr);gap:2px;}
+.workspace-page .project-header-title-row {grid-template-columns:26px minmax(0,1fr);gap:2px;}
 @media (max-width:700px) {
  .workspace-page .project-art-header .header-controls {width:100%;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"identity model" "identity about";grid-template-rows:auto auto;justify-content:end;}
  .workspace-page .project-art-header .header-controls > .model-cycle-container,
