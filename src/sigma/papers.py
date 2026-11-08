@@ -6191,7 +6191,11 @@ async def _provider(
     methodology = _subject_methodology(project_type)
     if methodology:
         instructions += "\n\n" + methodology
-    serialized_context = json.dumps(context, ensure_ascii=False)
+    # Ethos is archived in context for provenance but is supplied to the
+    # provider exactly once, as an instruction rather than evidence JSON.
+    provider_context = dict(context)
+    provider_context.pop("research_ethos", None)
+    serialized_context = json.dumps(provider_context, ensure_ascii=False)
     payload: dict[str, Any] = {
         "model": config["model"],
         "store": False,
@@ -7427,8 +7431,10 @@ Return the complete plan JSON matching the schema."""
     else:
         plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
     plan_input["paper_writing_methodology"] = writing_methodology
-    plan_input["desired_outcomes"] = str(project_data.get("desired_outcomes", ""))[:10_000]
-    plan_input["paper_requirements"] = str(project_data.get("paper_requirements", ""))[:10_000]
+    # The project schema accepts 20,000 characters per field. Never silently
+    # lose a late requirement by trimming a provider input to 10,000.
+    plan_input["desired_outcomes"] = str(project_data.get("desired_outcomes", ""))
+    plan_input["paper_requirements"] = str(project_data.get("paper_requirements", ""))
     long_plan: LongPaperPlan | None = None
     if state.get("plan"):
         try:
@@ -7619,8 +7625,8 @@ or document markup."""
         section_input = {
             "title": long_plan.title,
             "project_question": str(project_data.get("problem", ""))[:3_000],
-            "desired_outcomes": str(project_data.get("desired_outcomes", ""))[:10_000],
-            "paper_requirements": str(project_data.get("paper_requirements", ""))[:10_000],
+            "desired_outcomes": str(project_data.get("desired_outcomes", "")),
+            "paper_requirements": str(project_data.get("paper_requirements", "")),
             "investigation_type": project_type,
             "publication_references": project_data.get("publication_references", []),
             "publication_reference_urls": project_data.get("publication_reference_urls", []),
@@ -9711,7 +9717,37 @@ async def _generate_impl(
         # expensive completed work. A later run may use newer research.
         identifier = uuid4().hex
         timestamp = _now()
-        warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings]))
+        from sigma import publication_audit
+
+        paper_project_source = next(
+            (source.get("data", {}) for source in package["sources"] if source["kind"] == "project"),
+            {},
+        )
+        publication_requirements = publication_audit.reconcile(
+            str(paper_project_source.get("paper_requirements", "")), draft.model_dump()
+        )
+        editorial_overlap_warnings = publication_audit.overlap_warnings(draft.model_dump())
+        incomplete_requirements = sum(
+            item["status"] == "missing" for item in publication_requirements
+        )
+        review_requirements = sum(
+            item["status"] == "needs_review" for item in publication_requirements
+        )
+        # Neither a schema-valid response nor the TeX proofreader is a
+        # scientific/editorial compliance check. Report limitations explicitly.
+        audit_warnings = []
+        if incomplete_requirements or review_requirements:
+            audit_warnings.append(
+                f"Publication requirements: {incomplete_requirements} structurally missing, "
+                f"{review_requirements} require independent editorial review; "
+                "see the saved publication-requirements reconciliation."
+            )
+        if editorial_overlap_warnings:
+            audit_warnings.append(
+                f"Potential repeated prose detected in {len(editorial_overlap_warnings)} "
+                "cross-section comparison(s); inspect the saved editorial warnings."
+            )
+        warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings, *audit_warnings]))
         source_reference_records = _source_reference_records(package)
         source_reference_map = {
             item["source_ref"]: item["label"] for item in source_reference_records
@@ -9750,6 +9786,8 @@ async def _generate_impl(
             "draft": draft.model_dump(),
             "validation_warnings": validation_warnings,
             "obligation_reconciliation": obligation_reconciliation,
+            "publication_requirement_reconciliation": publication_requirements,
+            "editorial_overlap_warnings": editorial_overlap_warnings,
             "author_review_warnings": draft.validation_warnings,
             "generation": {
                 "provider": "openai",
