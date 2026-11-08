@@ -220,7 +220,9 @@ with sync_playwright() as playwright:
     assert (
         model_tab.evaluate("node => getComputedStyle(node).backgroundColor") == "rgba(0, 0, 0, 0)"
     )
-    assert "underline" in model_tab.evaluate("node => getComputedStyle(node).textDecorationLine")
+    # Hover must not underline tabs; the selected tab already has a copper indicator.
+    assert model_tab.evaluate("node => getComputedStyle(node).textDecorationLine") == "none"
+    assert model_tab.get_attribute("aria-selected") == "false"
     for tab_name in ("Model", "Limits", "Preferences", "Project Types"):
         dialog.get_by_role("tab", name=tab_name, exact=True).click()
         next_box = dialog.bounding_box()

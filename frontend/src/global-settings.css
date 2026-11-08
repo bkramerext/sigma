@@ -30,10 +30,16 @@
   color: var(--sigma-copper-foreground); cursor: pointer; font: 13px Inter, sans-serif;
 }
 .sigma-global-settings .settings-tabs button[aria-selected="true"] { border-bottom: 2px solid var(--sigma-copper-foreground); }
-/* Hover signals with an underline, never a filled background. */
+/* Tabs use only their selected indicator. Hover never introduces another underline. */
 .project-settings-dialog.sigma-global-settings .settings-tabs button[role="tab"]:hover {
-  background: transparent !important; background-image: none !important; box-shadow: none !important;
-  color: var(--sigma-copper-foreground); text-decoration: underline; text-underline-offset: 4px;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  text-decoration: none !important;
+  border-bottom-color: transparent !important;
+}
+.project-settings-dialog.sigma-global-settings .settings-tabs button[role="tab"][aria-selected="true"]:hover {
+  border-bottom-color: var(--sigma-copper-foreground) !important;
 }
 .sigma-global-settings .settings-tabs button:focus-visible { outline: 2px solid #edbc77; }
 .sigma-global-settings .settings-body { padding: 20px 24px 26px; }
@@ -168,4 +174,268 @@
 }
 .sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"] {
   gap: 0;
+}
+
+.project-settings-dialog.sigma-global-settings .settings-tabs button[role="tab"][aria-selected="true"]:hover { text-decoration: none !important; }
+/* Compact Limits group: related controls, consistent heights, no wasted columns. */
+.project-settings-dialog.sigma-global-settings .settings-body:has(.sigma-global-limits) { padding-top: 16px; }
+.sigma-global-settings .sigma-global-limits { width: min(100%, 670px); }
+.sigma-global-settings .sigma-global-limits .sigma-global-limit-row {
+  display: grid;
+  grid-template-columns: minmax(185px, 1.1fr) minmax(150px, 1fr) minmax(155px, 1fr);
+  gap: 12px 18px;
+  align-items: start;
+}
+.sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings {
+  grid-template-columns: minmax(235px, 1.3fr) minmax(160px, 1fr) minmax(165px, 1fr);
+  margin-top: 19px;
+}
+.sigma-global-settings .sigma-global-limits .sigma-global-limit-field { min-width: 0; }
+.sigma-global-settings .sigma-global-limits .sigma-global-limit-field > label {
+  display: block; min-height: 0; margin: 0 0 8px; line-height: 1.45;
+}
+.sigma-global-settings .sigma-global-limits input:not([type="checkbox"]) { box-sizing: border-box; width: min(100%, 92px); height: 42px; }
+.sigma-global-settings .sigma-global-limits #sigma-global-concurrent { width: min(100%, 78px); }
+.sigma-global-settings .sigma-global-limits #sigma-global-input { width: min(100%, 160px); }
+.sigma-global-settings .sigma-global-limits #sigma-global-cost { width: min(100%, 145px); }
+.sigma-global-settings .sigma-global-limits .sigma-global-duration-controls {
+  display: flex; align-items: stretch; gap: 8px; max-width: 245px;
+}
+.sigma-global-settings .sigma-global-limits #sigma-global-duration { flex: 0 0 70px; width: 70px; min-width: 0; }
+.sigma-global-settings .sigma-global-limits .sigma-duration-unit-select { flex: 1 1 0; width: auto; min-width: 0; }
+.sigma-global-settings .sigma-global-limits .sigma-duration-unit-select .sigma-select-trigger { height: 42px; min-height: 42px; }
+.sigma-global-settings .sigma-global-limits .sigma-global-limit-field .settings-hint { max-width: 245px; margin: 7px 0 0; }
+.sigma-global-settings .sigma-global-limits .sigma-limit-calculation { margin: 11px 0 0; line-height: 1.55; }
+.sigma-global-settings .sigma-global-limits .sigma-limit-calculation strong { color: var(--sigma-copper-foreground); font-weight: 600; }
+.sigma-global-settings .sigma-global-limits .sigma-global-limit-footer { margin-top: 18px; }
+/* Hide spinner UI but retain type=number, min/max/step, keyboard and form validation. */
+.sigma-global-settings input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.sigma-global-settings input[type="number"]::-webkit-inner-spin-button,
+.sigma-global-settings input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+@media (max-width: 720px) {
+  .sigma-global-settings .sigma-global-limits .sigma-global-limit-row,
+  .sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 460px) {
+  .sigma-global-settings .sigma-global-limits .sigma-global-limit-row,
+  .sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings { grid-template-columns: minmax(0, 1fr); }
+}
+/* Research Ethos uses a compact tab pencil or Save/Cancel transaction. */
+.sigma-global-settings .settings-tabs .sigma-ethos-pencil {
+  margin-left: -10px;
+  flex: 0 0 25px;
+  border: 0 !important;
+  border-radius: 4px;
+  padding: 3px;
+  text-decoration: none !important;
+}
+.sigma-global-settings .settings-tabs .sigma-ethos-pencil:hover:not(:disabled) {
+  background: transparent !important;
+  text-decoration: none !important;
+}
+.sigma-global-settings .settings-tabs .sigma-ethos-tab-actions {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 14px;
+  margin-left: -8px;
+}
+.project-settings-dialog.sigma-global-settings .settings-tabs .sigma-ethos-tab-text-action {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  min-height: 25px;
+  margin: 0;
+  padding: 2px 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  color: var(--sigma-copper-foreground);
+  font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.project-settings-dialog.sigma-global-settings .settings-tabs .sigma-ethos-tab-text-action:disabled {
+  opacity: .45;
+  cursor: default;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-actions > button.text-view-link {
+  appearance: none;
+  display: inline;
+  width: auto;
+  min-height: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Research Ethos editing controls follow the explanatory text, not the tab. */
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 7px 0 16px;
+  min-height: 28px;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-pencil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  text-decoration: none;
+  cursor: pointer;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-pencil svg {
+  width: 18px;
+  height: 18px;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-tab-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-tab-text-action {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  min-height: 25px;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-tab-text-action:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+/* Match the project's copper uppercase section headings in both Ethos modes. */
+.project-settings-dialog.sigma-global-settings .sigma-ethos-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 15px;
+}
+.project-settings-dialog.sigma-global-settings .sigma-ethos-section-heading > h3 {
+  margin: 0;
+  color: var(--sigma-copper-foreground);
+  font: 700 14px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .085em;
+  text-transform: uppercase;
+}
+.project-settings-dialog.sigma-global-settings .sigma-ethos-section-heading .sigma-ethos-inline-controls {
+  margin: 0;
+  min-height: 28px;
+}
+
+/* Research Ethos Copy matches the standard SIGMA 28px action slot. */
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls {
+  gap: 6px;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-copy svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-copy:hover:not(:disabled) {
+  background: #302418;
+}
+.project-settings-dialog.sigma-global-settings .sigma-research-ethos .sigma-ethos-inline-controls .sigma-ethos-copy:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}
+
+/* All three second-row Limits labels remain on one line and their inputs align. */
+.project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings {
+  grid-template-columns: minmax(235px, 1.15fr) minmax(195px, 1fr) minmax(190px, 1fr);
+  gap: 14px;
+}
+.project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings .sigma-global-limit-field > label {
+  white-space: nowrap;
+  min-height: 0;
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 460px) {
+  .project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Keep both Limits rows on identical column tracks and distribute the gaps evenly. */
+.project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row,
+.project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 18px;
+}
+.project-settings-dialog.sigma-global-settings .sigma-global-limits #sigma-global-input,
+.project-settings-dialog.sigma-global-settings .sigma-global-limits #sigma-global-cost {
+  width: min(100%, 92px);
+}
+.project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-duration-controls {
+  max-width: none;
+  justify-content: flex-start;
+}
+.project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-duration-unit-select {
+  flex: 0 0 120px;
+  width: 120px;
+}
+.project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-duration-help span {
+  display: block;
+}
+@media (max-width: 720px) {
+  .project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row,
+  .project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 460px) {
+  .project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row,
+  .project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-global-limit-row--ceilings {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

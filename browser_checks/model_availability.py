@@ -73,9 +73,15 @@ with sync_playwright() as playwright:
         dialog.get_by_role("tab", name="Model").click()
         model = dialog.locator("#sigma-global-model")
         thinking = dialog.locator("#sigma-global-effort")
-        expect(model).to_have_value("gpt-6.1-sol")
-        expect(thinking).to_have_value("high")
-        expect(model.locator("option")).to_have_count(1)
+        # SIGMA's themed dropdowns are combobox buttons, not native <select>s.
+        expect(model).to_have_attribute("role", "combobox")
+        expect(model).to_contain_text("gpt-6.1-sol")
+        expect(thinking).to_have_attribute("role", "combobox")
+        expect(thinking).to_contain_text("High")
+        model.click()
+        expect(dialog.get_by_role("listbox", name="Model").get_by_role("option")).to_have_count(1)
+        expect(dialog.get_by_role("listbox", name="Model").get_by_role("option").first).to_have_attribute("aria-selected", "true")
+        model.click()
         expect(dialog.get_by_role("button", name="Save", exact=True)).to_be_disabled()
         for width in (1280, 390, 320):
             page.set_viewport_size({"width": width, "height": 850})

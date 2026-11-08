@@ -602,3 +602,18 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
   height: 19px;
   margin: 0;
 }
+
+/* Align Show, Copy, Download on the same toolbar centerline. */
+.session-log-page header > .session-log-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-height: 43px; }
+.session-log-page header .session-log-show { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.session-log-page header .session-log-show .sigma-select { display: block; width: 174px; flex: 0 0 174px; }
+.session-log-page header .session-log-show .sigma-select-trigger { min-height: 40px; padding: 7px 10px; }
+.session-log-page header .session-log-toolbar .sigma-select-options { display: block; }
+.session-log-page header .session-log-toolbar > .session-log-toolbar-icon { flex: 0 0 30px; width: 30px; height: 30px; margin: 0; align-self: center; }
+
+/* Log filter menu: left-align options with the selected value in its trigger. */
+.session-log-page .sigma-select-options [role="option"] {
+  justify-content: flex-start;
+  text-align: left;
+  padding-left: 6px;
+}

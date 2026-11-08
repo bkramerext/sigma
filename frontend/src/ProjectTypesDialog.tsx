@@ -2,6 +2,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefO
 import './project-types.css';
 import DialogDismissButton from './DialogDismissButton';
 
+function ProjectTypeNewIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M7.5 12h9"/>
+  </svg>;
+}
+
 function ReferenceActionIcon({ kind }: { kind: 'checked' | 'unchecked' | 'edit' | 'remove' }) {
   return <svg className="pt-reference-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {kind === 'checked' || kind === 'unchecked' ? <>
@@ -569,7 +576,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         if (owner === 'common') editCommonReferences(field, next.slice(immutableCount));
         else if (builtins.some(item => item.id === owner)) editBuiltinReferences(owner, field, next.slice(immutableCount));
         else edit(owner, { [field]: next });
-      }}><span className="pt-circled-plus" aria-hidden="true">+</span></button>;
+      }}><ProjectTypeNewIcon/></button>;
   };
   const listEditor = (owner: string, field: ReferenceField, references: Reference[], readonly: boolean, immutableCount = 0) => {
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
@@ -683,7 +690,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" data-project-type-id={item.id} key={item.id} open={open === item.id}>
     <summary onClick={event => { event.preventDefault(); setOpen(previous => previous === item.id ? null : item.id); }}>
       <span className="project-type-card-icon">{renderEffectiveIcon(item)}</span><strong>{item.name || 'New project type'}</strong>
-      {!readonly && initialCustomIds.current.includes(item.id) && <button type="button" className="project-type-remove" disabled={busy} aria-label={`Remove project type ${item.name}`} onClick={event => { event.preventDefault(); event.stopPropagation(); removeDraft(item.id); }}>Remove</button>}
+      {!readonly && initialCustomIds.current.includes(item.id) && <button type="button" className="project-type-remove" disabled={busy} aria-label={`Remove project type ${item.name}`} data-tooltip="Remove project type" onClick={event => { event.preventDefault(); event.stopPropagation(); removeDraft(item.id); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
       <small>{readonly ? 'Built-in' : 'Custom'}</small>
     </summary>
     <div className="project-type-card-body">
@@ -702,8 +709,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     || JSON.stringify(referencePreferences) !== JSON.stringify(savedReferencePreferences)
     || JSON.stringify(commonCustomReferences) !== JSON.stringify(savedCommonCustomReferences)
     || JSON.stringify(builtinCustomReferences) !== JSON.stringify(savedBuiltinCustomReferences));
-  const pendingNewReference = Array.from(editingReferences)
-    .some(key => referenceEditOrigins.current.get(key) === null);
+  // Inline editors do not block Save once their reference content is valid.
+  // Save validity is governed by the underlying URLs, not focus or blur.
   const invalidBuiltinReferences = Object.entries(builtinCustomReferences).some(([owner, fields]) => {
     const base = builtins.find(item => item.id === owner);
     if (!base) return true;
@@ -711,19 +718,19 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       const references = fields[field] ?? [];
       const urls = [...base[field], ...references].map(ref => preferenceUrl(ref.url)).filter(Boolean);
       return references.length > 100 || new Set(urls).size !== urls.length ||
-        references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
+        references.some(reference => !reference.url.trim() || !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
     });
   });
-  const invalidDraft = pendingNewReference || invalidBuiltinReferences || Object.entries(commonCustomReferences).some(([field, references]) => {
+  const invalidDraft = invalidBuiltinReferences || Object.entries(commonCustomReferences).some(([field, references]) => {
     const urls = [...(commonReferences?.[field as ReferenceField] ?? []), ...references].map(ref => preferenceUrl(ref.url));
     return references.length > 100 || new Set(urls.filter(Boolean)).size !== urls.filter(Boolean).length ||
-      references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
+      references.some(reference => !reference.url.trim() || !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
   }) || drafts.some(item =>
     isDuplicateName(item) || !item.name.trim() || !item.scope.trim() ||
     (item.icon.kind !== 'data' && item.icon.kind !== 'builtin') ||
     item.research_standards_references.length > 100 || item.publication_standards_references.length > 100 ||
     [...item.research_standards_references, ...item.publication_standards_references].some(ref =>
-      !!referenceUrlError(ref.url) || urlValidation[ref.url] === 'invalid')
+      !ref.url.trim() || !!referenceUrlError(ref.url) || urlValidation[ref.url] === 'invalid')
   );
   // Expose the existing validation and save operation to the unified Settings header.
   useEffect(() => {
@@ -739,7 +746,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" data-tooltip="New project type"><span className="pt-circled-plus" aria-hidden="true">+</span></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" data-tooltip="New project type"><ProjectTypeNewIcon/></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <div className="pt-reference-heading"><h4>Research standards references for all project types</h4>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>

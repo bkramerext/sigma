@@ -1397,3 +1397,7 @@
   outline: 2px solid #edbc77;
   outline-offset: 2px;
 }
+
+/* Human feedback uses the Project Settings copper dropdown. */
+.workspace-page .human-intervention-strategy { min-width: 0; width: 100%; }
+.workspace-page .human-intervention-strategy .sigma-select-trigger { min-height: 34px; padding: 6px 8px; font-size: 12px; }

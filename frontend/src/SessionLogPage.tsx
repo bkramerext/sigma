@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
+import SigmaSelect from './SigmaSelect';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
 type SessionState = { number: number; status: string; current_action?: string; termination_reason_code?: string; reason?: string; message?: string };
@@ -117,7 +118,10 @@ export default function SessionLogPage() {
     setJumpVisible(false);
   };
   return <main className="session-log-page">
-    <header><h1>{projectTitle || shortName}, Session {session?.number ?? '…'}</h1><p>Live provider traffic and operational events · {session?.status ?? 'loading'}</p><div><label>Show <select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All events</option><option value="investigator">Investigator</option><option value="skeptic">Skeptic</option><option value="provider">Provider calls</option><option value="session_event">Session events</option></select></label> {jumpVisible && <button className="session-log-secondary-action" type="button" onClick={jumpToEnd}>Jump to end</button>}
+    <header><h1>{projectTitle || shortName}, Session {session?.number ?? '…'}</h1><p>Live provider traffic and operational events · {session?.status ?? 'loading'}</p><div className="session-log-toolbar"><label className="session-log-show">Show <SigmaSelect ariaLabel="Show events" value={filter} onChange={setFilter}
+      options={[{ value: 'all', label: 'All events' }, { value: 'investigator', label: 'Investigator' },
+        { value: 'skeptic', label: 'Skeptic' }, { value: 'provider', label: 'Provider calls' },
+        { value: 'session_event', label: 'Session events' }]}/></label> {jumpVisible && <button className="session-log-secondary-action" type="button" onClick={jumpToEnd}>Jump to end</button>}
       <button type="button" className="session-log-toolbar-icon workspace-icon-button text-copy-button" aria-label="Copy log to clipboard" title={copyState === 'copied' ? 'Copied log to clipboard' : 'Copy log to clipboard'} data-tooltip={copyState === 'copied' ? 'Copied' : 'Copy log to clipboard'} disabled={copyState === 'copying'} onClick={() => { void copyLog(); }}>{copyState === 'copied' ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>
       <a className="session-log-toolbar-icon workspace-icon-button session-log-download" href={downloadUrl} aria-label="Download session log" title="Download session log" data-tooltip="Download session log"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></a>
     </div></header>
