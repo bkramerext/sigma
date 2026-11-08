@@ -127,6 +127,27 @@ def main() -> None:
             assert not publication_audit.overlap_warnings(
                 {"sections": [{"heading": "One", "paragraphs": [paragraph]}]}
             )
+            # Editorial overlap must include non-section prose, not just
+            # repeated paragraphs in the body. Short summaries are allowed.
+            cross_components = {
+                "abstract": paragraph,
+                "problem_framing": ["A distinct framing."],
+                "methods": ["An independent method."],
+                "sections": [{"heading": "Results", "paragraphs": [paragraph]}],
+                "limitations": ["An independent limitation."],
+                "conclusions": ["A separate conclusion."],
+            }
+            assert any("Abstract" in finding and "Results" in finding
+                       for finding in publication_audit.overlap_warnings(cross_components))
+            cross_components["abstract"] = "Short distinct abstract."
+            cross_components["methods"] = [paragraph]
+            cross_components["sections"] = [{"heading": "Results", "paragraphs": ["New findings."]}]
+            cross_components["conclusions"] = [paragraph]
+            assert any("Methods" in finding and "Conclusions" in finding
+                       for finding in publication_audit.overlap_warnings(cross_components))
+            assert not publication_audit.overlap_warnings(
+                {"abstract": "A concise summary.", "conclusions": ["A concise summary."]}
+            )
 
             # Resume keeps the saved model and thinking level by default and
             # refuses an unapproved change to the billing account.
