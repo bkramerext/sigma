@@ -28,6 +28,7 @@ from sigma.projects import ProjectError, initialize_project, inspect_project, re
 
 
 def main_part1() -> None:
+    test_paper_live_model_selection_changes_future_calls_only()
     test_review_proofreader_accepts_safe_patch_but_rejects_mutation()
     test_review_fallback_question_and_tex_safety()
     test_publication_preserves_failed_final_skeptic_as_research_limitation()

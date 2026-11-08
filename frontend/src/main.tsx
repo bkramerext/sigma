@@ -1993,7 +1993,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
                   {!['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
-                  {!['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><DialogDismissButton label={`Cancel removing Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}/></div></div></div>}
+                  {!['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {sessionControlFailures[item.id]
@@ -2394,7 +2394,7 @@ function PaperScoreDialog({ score, onRescore, canRescore, rescoring, error, onCl
 }
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[]; sigma_issues?: string[]; sigma_issues_included?: boolean } };
-type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; output_delta_count?: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
+type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; output_delta_count?: number; substep_started_at?: string | null; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; publication_requirement_reconciliation?: { text: string; status: 'missing' | 'needs_review'; note: string }[]; editorial_overlap_warnings?: string[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 const PAPER_STAGES = [
@@ -2428,13 +2428,7 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
     return 'Write sections';
   }
   if (step === 5) return completed ? 'Validated' : current ? 'Validating' : 'Validate';
-  if (step === 6) {
-    if (completed) return 'Proofreading done';
-    if (!current) return 'Proofread';
-    if (progress.current === 2) return 'Proofreading again';
-    if (progress.current === 3) return 'Proofreading one more time';
-    return 'Proofreading';
-  }
+  if (step === 6) return completed ? 'Proofread' : current ? 'Proofreading' : 'Proofread';
   if (step === 7) return completed ? 'Generated PDF' : current ? 'Generating PDF' : 'Generate PDF';
   if (step === 8) {
     if (progress.detail?.includes('scoring did not finish')) return 'Score unavailable';
@@ -2468,6 +2462,25 @@ function paperErrorSummary(message: string): string {
 }
 
 function paperActivityLabel(progress: PaperProgress, now: number): string {
+  if (progress.stage === 'planning') {
+    const start = Date.parse(progress.substep_started_at ?? progress.last_progress_at ?? progress.started_at);
+    const elapsed = Number.isFinite(start) ? Math.max(0, Math.floor((now - start) / 1000)) : 0;
+    const detail = progress.detail;
+    const substep = detail === 'Waiting for AI response'
+      ? ((progress.output_delta_count ?? 0) > 0 ? 'Receiving' : 'Waiting')
+      : detail === 'Requesting paper plan' ? 'Requesting'
+      : detail === 'Validating outline' ? 'Checking'
+      : detail === 'Saving plan' ? 'Saving'
+      : detail === 'Recovering outline from saved evidence' ? 'Recovering'
+      : 'Preparing';
+    // Minutes are sufficient for long waits; omit noisy per-token timestamps.
+    const duration = elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed / 60)}m`;
+    return `${substep} · ${duration}`;
+  }
+  if (progress.stage === 'proofreading') {
+    const pass = progress.detail?.match(/Pass (\d+) of up to (\d+)/i);
+    return pass ? `${pass[1]} of up to ${pass[2]}` : '1 of up to 3';
+  }
   if (progress.stage === 'retry' || progress.detail?.toLowerCase().startsWith('retrying')) {
     const attempt = progress.detail?.match(/attempt (\d+) of (\d+)/i);
     return attempt ? `Retrying · Attempt ${attempt[1]} of ${attempt[2]}` : 'Retrying…';
@@ -2493,7 +2506,7 @@ function PaperActivityLine({ progress }: { progress: PaperProgress }) {
     const clock = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(clock);
   }, [progress.status]);
-  if (progress.status !== 'active' || !['writing', 'sections', 'retry'].includes(progress.stage)) return null;
+  if (progress.status !== 'active' || !['planning', 'writing', 'sections', 'proofreading', 'retry'].includes(progress.stage)) return null;
   return <span className="paper-activity-line">{paperActivityLabel(progress, now)}</span>;
 }
 
@@ -3082,7 +3095,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
       // A different account/billing connection must never silently take over
-      // already-started paper work. The default Resume keeps the saved model.
+      // already-started paper work. Model/Thinking can change at the next call.
       let authorizedProviderChange = false;
       if (preflight.provider_change_requires_confirmation) {
         const savedModel = preflight.saved_provider_model ?? 'saved model';
@@ -3094,8 +3107,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         if (!authorizedProviderChange) throw new Error('Paper Resume cancelled. Saved work remains unchanged.');
       }
       if (preflight.resume_uses_saved_model && !authorizedProviderChange) {
-        setPhase('Resuming using the saved model ' + (preflight.saved_provider_model ?? '') +
-          ' and thinking level ' + (preflight.saved_provider_thinking ?? '') + '.');
+        setPhase('Resuming saved work; the current Model/Thinking selection applies to the next AI call.');
       }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
       if (recoverSection !== null) {
@@ -3288,7 +3300,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   {confirmPlayRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm new paper generation attempt">
                     <p>The previous attempt cannot resume. Start a new attempt? This may use additional AI calls. Saved research and papers remain.</p>
                     <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => { setConfirmPlayRestartDraft(false); void generatePaper(true); }}>Confirm and play</button>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => { setConfirmPlayRestartDraft(false); void generatePaper(true); }}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmPlayRestartDraft(false)}>Cancel</button>
                     </div>
                   </div></div>}
@@ -3299,7 +3311,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   {confirmRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm start over on paper generation">
                     <p>Start over Paper {draftVersion}? Unfinished generation progress will be discarded. Saved papers and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void restartCheckpoint()}>Confirm</button>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => void restartCheckpoint()}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRestartDraft(false)}>Cancel</button>
                     </div>
                   </div></div>}
@@ -3309,7 +3321,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
                     <p>Remove this unfinished paper and its checkpoint? Saved papers and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void discardDraft()}>Confirm</button>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => void discardDraft()}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDiscardDraft(false)}>Cancel</button>
                     </div>
                   </div></div>}
@@ -3359,7 +3371,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
                     <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link destructive-action" title={`Confirm removal of Paper ${paper.paper_version}`} disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
+                      <button type="button" className="text-view-link" title={`Confirm removal of Paper ${paper.paper_version}`} disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
                     </div>
                   </div></div>}
@@ -5255,7 +5267,7 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}{!entry.pinned && confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><DialogDismissButton label="Cancel project removal" disabled={!!opening} onClick={() => setConfirmRemoveId('')}/></div></div></div>}</div>
+          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}{!entry.pinned && confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
           <span title={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -6323,6 +6335,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           const current = settingsOf(view);
           const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current });
           setView(next);
+          // The parent owns the toolbar mode: a successful save must return
+          // to the pencil even if the updated view re-renders the editor.
+          setDescriptionEditing(false);
+          setDescriptionDirty(false);
+          exitMode('project-title');
+          requestAnimationFrame(() => editDescriptionButton.current?.focus());
         }}/>
       </div>
       </div>

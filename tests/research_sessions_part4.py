@@ -831,6 +831,54 @@ def test_model_switch_preserves_old_hard_budget_costs() -> None:
     else:
         raise AssertionError("Transport migration replayed an unknown provider attempt")
 
+    # A live pill change may occur while an earlier strategy call is still in
+    # flight. The old call's model and price stay pinned; only future calls
+    # inherit the newly selected model/Thinking pair.
+    in_flight = new_ledger(
+        call_limit=5,
+        input_token_limit=500_000,
+        output_tokens_per_call=4000,
+        cost_limit_usd=100,
+        input_price_per_million=max(old_price["input"], old_price["cache_write"]),
+        output_price_per_million=old_price["output"],
+    )
+    reserve_before_dispatch(in_flight, call_id="in-flight", request_body=b"old model")
+    live = {
+        "mode": "api_key",
+        "model": current_model,
+        "reasoning_effort": "high",
+        "steps": [{"id": "in-flight", "role": "investigator", "status": "running"}],
+        "hard_budget_ledger": in_flight,
+    }
+    research_sessions._apply_live_model_selection(
+        live, {"model": target_model, "reasoning_effort": "medium"}
+    )
+    assert (live["model"], live["reasoning_effort"]) == (target_model, "medium")
+    assert live["steps"][0]["model"] == current_model
+    assert live["steps"][0]["reasoning_effort"] == "high"
+    assert live["model_change_history"][-1]["calls_used"] == 0
+    assert "already dispatched" in live["events"][-1]["message"].lower()
+    settle_after_response(
+        in_flight,
+        call_id="in-flight",
+        input_tokens=100,
+        output_tokens=40,
+        input_price_per_million=max(old_price["input"], old_price["cache_write"]),
+        output_price_per_million=old_price["output"],
+    )
+    historical = in_flight["calls"][0]["cost_bound_usd"]
+    assert (
+        abs(
+            historical
+            - (100 * max(old_price["input"], old_price["cache_write"]) + 40 * old_price["output"])
+            / 1_000_000
+        )
+        < 1e-10
+    )
+    reserve_before_dispatch(in_flight, call_id="new-model", request_body=b"new model")
+    assert in_flight["calls"][1]["cost_bound_usd"] > 0
+    assert in_flight["calls"][0]["cost_bound_usd"] == historical
+
 
 async def test_emailed_project_import_resumes_under_recipient_provider(path: Path):
     """Real start/stop/export/import/Resume, not just synthetic path-rewrite tests."""

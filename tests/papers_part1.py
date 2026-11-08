@@ -849,16 +849,23 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
             for item in progress
         )
         assert any(
-            item["detail"] == "Checking and correcting typesetting issues."
+            item["detail"] and "Pass 1 of up to 3 · Checking typesetting" in item["detail"]
             for item in proofread_progress
         )
         assert any(
-            item["detail"] == "Applying mechanical corrections." and item["state"] == "milestone"
+            item["detail"]
+            and "Applying mechanical corrections" in item["detail"]
+            and item["state"] == "milestone"
             for item in proofread_progress
         )
         assert any(
-            item["detail"] == "Verifying corrected TeX." and item["state"] == "milestone"
+            item["detail"]
+            and "Verifying corrected TeX" in item["detail"]
+            and item["state"] == "milestone"
             for item in proofread_progress
+        )
+        assert any(
+            item["detail"] and "Pass 2 of up to 3" in item["detail"] for item in proofread_progress
         )
         completed_calls = calls
         resumed, reused = asyncio.run(run())

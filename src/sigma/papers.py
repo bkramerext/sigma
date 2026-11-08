@@ -127,6 +127,7 @@ class PaperProgressEvent(TypedDict):
     sections_total: NotRequired[int | None]
     last_progress_at: NotRequired[str | None]
     output_delta_count: NotRequired[int]
+    substep_started_at: NotRequired[str | None]
 
 
 PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
@@ -135,6 +136,50 @@ PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
 _paper_output_observer: ContextVar[Callable[[], Awaitable[None]] | None] = ContextVar(
     "sigma_paper_output_observer", default=None
 )
+# Task-local selector: parallel section calls receive independent config snapshots.
+_paper_model_for_call: ContextVar[Callable[[dict[str, Any]], dict[str, Any]] | None] = ContextVar(
+    "sigma_paper_model_for_call", default=None
+)
+
+
+@asynccontextmanager
+async def _paper_model_selection_scope():
+    """Restore the task's previous selector even after failure or cancellation."""
+    token = _paper_model_for_call.set(None)
+    try:
+        yield
+    finally:
+        _paper_model_for_call.reset(token)
+
+
+def _select_paper_call_config(
+    base: dict[str, Any],
+    work: dict[str, Any],
+    settings: dict[str, Any],
+    save_work: Callable[[], None],
+) -> dict[str, Any]:
+    """Freeze the latest user choice for one request, without rewriting prior calls."""
+    model = settings["ai_model"]
+    effort = settings["reasoning_effort"]
+    selected = {**base, "model": model, "reasoning_effort": effort}
+    if not work or (work.get("model"), work.get("reasoning_effort")) == (model, effort):
+        return selected
+    history = work.setdefault("model_change_history", [])
+    history.append(
+        {
+            "at": _now(),
+            "from_model": str(work.get("model", "")),
+            "to_model": model,
+            "from_effort": str(work.get("reasoning_effort", "")),
+            "to_effort": effort,
+            "call_index": int(work.get("provider_calls_total", 0)),
+        }
+    )
+    del history[:-100]
+    work["model"] = model
+    work["reasoning_effort"] = effort
+    save_work()
+    return selected
 
 
 class PaperStageCallback(Protocol):
@@ -3029,6 +3074,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "progress",
         "explicit_restart_pending",
         "planning_fallback_pending",
+        "planning_origin",
         "section_dispatches",
         "legacy_ambiguous_sections",
         "include_diagrams",
@@ -3040,7 +3086,33 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "publication_compiler_calls",
         "generation_issues",
         "provider_change_history",
+        "model_change_history",
     }
+    model_history = value.get("model_change_history", [])
+    if (
+        not isinstance(model_history, list)
+        or len(model_history) > 100
+        or any(
+            not isinstance(item, dict)
+            or set(item)
+            != {
+                "at",
+                "from_model",
+                "to_model",
+                "from_effort",
+                "to_effort",
+                "call_index",
+            }
+            or not all(
+                isinstance(item[key], str) and len(item[key]) <= 128
+                for key in ("at", "from_model", "to_model", "from_effort", "to_effort")
+            )
+            or type(item["call_index"]) is not int
+            or item["call_index"] < 0
+            for item in model_history
+        )
+    ):
+        raise ProjectError("Paper model-selection history is invalid")
     generation_issues = value.get("generation_issues", [])
     if (
         not isinstance(generation_issues, list)
@@ -3050,6 +3122,8 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Saved paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
+    if "planning_origin" in value and value["planning_origin"] not in {"ai", "fallback"}:
+        raise ProjectError("Long-paper checkpoint planning origin is invalid")
     history = value.get("provider_change_history", [])
     history_keys = {
         "at",
@@ -3389,6 +3463,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
                         "sections_total",
                         "last_progress_at",
                         "output_delta_count",
+                        "substep_started_at",
                     }
                 )
             )
@@ -3454,9 +3529,14 @@ def _load_work(path: str) -> dict[str, Any] | None:
             _note_paper_progress_recovery(value)
             progress_state["current"] = None
             progress_state["total"] = None
-        for key in ("started_at", "updated_at", "last_progress_at"):
+        for key in (
+            "started_at",
+            "updated_at",
+            "last_progress_at",
+            "substep_started_at",
+        ):
             timestamp = progress_state.get(key)
-            if key == "last_progress_at" and timestamp is None:
+            if key in {"last_progress_at", "substep_started_at"} and timestamp is None:
                 continue
             if not isinstance(timestamp, str):
                 raise ProjectError("Paper progress timestamp is invalid")
@@ -3517,6 +3597,7 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "sections_total",
         "last_progress_at",
         "output_delta_count",
+        "substep_started_at",
     )
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
@@ -3559,6 +3640,13 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
                 and (
                     not isinstance(state["last_progress_at"], str)
                     or not re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:.+-]+", state["last_progress_at"])
+                )
+            )
+            or (
+                "substep_started_at" in state
+                and (
+                    not isinstance(state["substep_started_at"], str)
+                    or not re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:.+-]+", state["substep_started_at"])
                 )
             )
             or (
@@ -3934,6 +4022,11 @@ def progress_status(path: str) -> dict[str, Any] | None:
             if type(state.get("sections_total")) is int and 1 <= state["sections_total"] <= 100
             else {}
         ),
+        **(
+            {"substep_started_at": state["substep_started_at"]}
+            if isinstance(state.get("substep_started_at"), str)
+            else {}
+        ),
     }
 
 
@@ -4038,11 +4131,10 @@ def _resume_provider_choice(
     current_effort: str,
     authorized_provider_change: bool = False,
 ) -> tuple[str, str]:
-    """Preserve the model/effort frozen at paper start unless explicitly changed.
+    """Use current Model/Thinking at resume, preserving completed work and identity.
 
-    Changing the connected provider identity is a paid-work boundary and
-    cannot happen merely because a user signed into another account. The
-    caller must record a separate affirmative approval before permitting it.
+    A changed account or billing connection still needs explicit approval.
+    Changing only Model/Thinking is a per-call choice, not an account transfer.
     """
     if authorized_provider_change:
         return current_model, current_effort
@@ -4052,11 +4144,11 @@ def _resume_provider_choice(
             "billing connection. Saved work is intact; confirm the provider change "
             "before authorizing further paid calls."
         )
-    model = checkpoint.get("model")
-    effort = checkpoint.get("reasoning_effort")
-    if not isinstance(model, str) or not isinstance(effort, str):
+    if not isinstance(checkpoint.get("model"), str) or not isinstance(
+        checkpoint.get("reasoning_effort"), str
+    ):
         raise ProjectError("Saved paper model or thinking configuration is invalid")
-    return model, effort
+    return current_model, current_effort
 
 
 def _rebind_paper_checkpoint_provider(
@@ -6192,6 +6284,9 @@ async def _provider(
     project_path_value: str | None = None,
     include_diagrams: bool = True,
 ) -> tuple[PaperDraft, str]:
+    model_selector = _paper_model_for_call.get()
+    if model_selector is not None:
+        config = model_selector(config)
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
     )
@@ -6372,6 +6467,9 @@ async def _provider_structured(
     on_output_delta: Callable[[], Awaitable[None]] | None = None,
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
+    model_selector = _paper_model_for_call.get()
+    if model_selector is not None:
+        config = model_selector(config)
     input_text = _provider_input_text(input_value, schema_name, max_input_bytes)
     stage_timeout_seconds = _long_paper_call_timeout(schema_name)
     payload: dict[str, Any] = {
@@ -6887,6 +6985,7 @@ async def _generate_long_draft(
     structured_fast_path: bool = False,
     include_diagrams: bool = True,
     on_output_delta: Callable[[int], Awaitable[None]] | None = None,
+    on_planning_output_delta: Callable[[], Awaitable[None]] | None = None,
     authorized_recovery_section: int | None = None,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
@@ -6989,6 +7088,8 @@ async def _generate_long_draft(
                 schema_name=schema_name,
                 max_input_bytes=max_input_bytes,
             )
+            if progress and schema_name == "sigma_long_paper_plan":
+                await progress("planning", None, None, "active", detail="Requesting paper plan")
             section_number = (
                 input_value.get("section_number") if isinstance(input_value, dict) else None
             )
@@ -7028,6 +7129,8 @@ async def _generate_long_draft(
                     )
                 if type(section) is int:
                     await section_output_observed(section)
+                elif schema_name == "sigma_long_paper_plan" and on_planning_output_delta:
+                    await on_planning_output_delta()
 
             log.info(
                 "paper.provider_attempt_started project_id=%s schema=%s section=%s "
@@ -7041,6 +7144,8 @@ async def _generate_long_draft(
                 len(instructions),
                 str(config.get("reasoning_effort", "unspecified")),
             )
+            if progress and schema_name == "sigma_long_paper_plan":
+                await progress("planning", None, None, "active", detail="Waiting for AI response")
             try:
                 async with asyncio.timeout(remaining):
                     response = await _provider_structured(
@@ -7053,9 +7158,15 @@ async def _generate_long_draft(
                         max_input_bytes=max_input_bytes,
                         on_output_delta=(
                             observe_section_output
-                            if on_output_delta is not None
-                            and schema_name == "sigma_long_paper_section"
-                            and type(section_number) is int
+                            if (
+                                on_output_delta is not None
+                                and schema_name == "sigma_long_paper_section"
+                                and type(section_number) is int
+                            )
+                            or (
+                                on_planning_output_delta is not None
+                                and schema_name == "sigma_long_paper_plan"
+                            )
                             else None
                         ),
                         project_id=project_id,
@@ -7379,6 +7490,8 @@ that occur in the input. Do not add scientific claims or outside citations."""
         if isinstance(project_data, dict)
         else "default"
     )
+    if progress and not state.get("plan"):
+        await progress("planning", None, None, "active", detail="Preparing outline context")
     plan_instructions = (
         INSTRUCTIONS
         + "\n\n"
@@ -7487,9 +7600,17 @@ Return the complete plan JSON matching the schema."""
             long_plan = None
             save_state(state)
     if long_plan is None:
-        if progress:
-            await progress("planning", None, None, "active")
+        used_fallback = False
         if previous_planning_failed:
+            if progress:
+                await progress(
+                    "planning",
+                    None,
+                    None,
+                    "active",
+                    detail="Recovering outline from saved evidence",
+                )
+            used_fallback = True
             # A previous attempt reached planning and stopped without saving
             # a plan. Its provider call may have consumed allowance; do not
             # silently repeat it after a browser sleep, restart, or timeout.
@@ -7507,6 +7628,8 @@ Return the complete plan JSON matching the schema."""
                     max_input_bytes=220_000,
                     legacy=not fast_path,
                 )
+                if progress:
+                    await progress("planning", None, None, "active", detail="Validating outline")
                 long_plan = LongPaperPlan.model_validate(
                     _repair_paper_references(LongPaperPlan.model_validate(plan), indexed_refs)
                 )
@@ -7517,14 +7640,41 @@ Return the complete plan JSON matching the schema."""
                 # potentially paid planning call. Section writing can proceed
                 # from a conservative outline built locally from that evidence.
                 # Cancellation still propagates without publishing.
+                if progress:
+                    await progress(
+                        "planning",
+                        None,
+                        None,
+                        "active",
+                        detail="Recovering outline from saved evidence",
+                    )
+                used_fallback = True
                 long_plan = _evidence_based_long_plan(
                     project_data, notes, source_ids, package["sources"]
                 )
-        state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
+        if progress:
+            await progress("planning", None, None, "active", detail="Saving plan")
+        state.update(
+            {
+                "plan": long_plan.model_dump(),
+                "provider_calls": calls,
+                "planning_origin": "fallback" if used_fallback else "ai",
+            }
+        )
         state.pop("planning_fallback_pending", None)
         save_state(state)
         if progress:
-            await progress("planning", None, None, "milestone")
+            await progress(
+                "planning",
+                None,
+                None,
+                "milestone",
+                detail=(
+                    "Saved locally recovered outline"
+                    if used_fallback
+                    else "Saved AI-generated outline"
+                ),
+            )
 
     # The validated outline is durably checkpointed above. The large input
     # assembled for its provider call serves no later stage.
@@ -8812,7 +8962,10 @@ async def _proofread_tex_single_pass(
             "proofreading",
             index + 1,
             total,
-            detail="Checking and correcting typesetting issues.",
+            detail=(
+                f"Pass {pass_number} of up to {MAX_PROOFREADER_PASSES} · "
+                f"Checking typesetting chunk {index + 1}/{total}"
+            ),
         )
         response_received = False
         try:
@@ -8863,7 +9016,10 @@ async def _proofread_tex_single_pass(
                         "proofreading",
                         index + 1,
                         total,
-                        detail="Retrying a connection failure before provider delivery.",
+                        detail=(
+                            f"Pass {pass_number} of up to {MAX_PROOFREADER_PASSES} · "
+                            "Retrying connection before delivery"
+                        ),
                     )
                     await asyncio.sleep(0.4 * attempt_number)
                 except asyncio.CancelledError:
@@ -8927,7 +9083,10 @@ async def _proofread_tex_single_pass(
                 index + 1,
                 total,
                 "milestone",
-                detail="Applying mechanical corrections.",
+                detail=(
+                    f"Pass {pass_number} of up to {MAX_PROOFREADER_PASSES} · "
+                    "Applying mechanical corrections"
+                ),
             )
         except (ProjectError, ValidationError, ValueError, TypeError, OSError) as exc:
             attempts[index] = "rejected"
@@ -8959,7 +9118,13 @@ async def _proofread_tex_single_pass(
         dict.fromkeys([*checkpoint.get("diagnostics", []), *_tex_static_diagnostics(final_tex)])
     )[:100]
     save_checkpoint()
-    await report("proofreading", total, total, "milestone", detail="Verifying corrected TeX.")
+    await report(
+        "proofreading",
+        total,
+        total,
+        "milestone",
+        detail=f"Pass {pass_number} of up to {MAX_PROOFREADER_PASSES} · Verifying corrected TeX",
+    )
     return final_tex, checkpoint
 
 
@@ -9022,7 +9187,7 @@ async def _generate_impl(
     authorized_recovery_section: int | None = None,
     authorized_provider_change: bool = False,
 ) -> dict[str, Any]:
-    async with _paper_operation(path, generating=True):
+    async with _paper_operation(path, generating=True), _paper_model_selection_scope():
         project_key = str(project_path(path).resolve())
         _started_paper_attempts.add(project_key)
         logging.getLogger("sigma.lifecycle").info(
@@ -9040,7 +9205,8 @@ async def _generate_impl(
         output_delta_count = 0
 
         async def report_activity(
-            stage: Literal["writing", "sections"], section_number: int | None = None
+            stage: Literal["planning", "writing", "sections"],
+            section_number: int | None = None,
         ) -> None:
             """Persist actual output activity; never rewrite the full draft for text deltas."""
             nonlocal last_output_write, output_delta_count
@@ -9091,6 +9257,7 @@ async def _generate_impl(
             *,
             detail: str | None = None,
         ) -> None:
+            nonlocal last_logged_stage, output_delta_count
             if stage == "retry":
                 # Retrying is a substep, not a pipeline stage. Keep the actual
                 # stage and completed-section count visible throughout retry.
@@ -9118,6 +9285,17 @@ async def _generate_impl(
                     _note_paper_progress_recovery(work)
                 current = total = None
             now = _now()
+            previous_active = _active_progress.get(project_key)
+            if (
+                previous_active is None
+                or stage != previous_active.get("stage")
+                or (
+                    stage == "planning"
+                    and detail == "Waiting for AI response"
+                    and previous_active.get("detail") != detail
+                )
+            ):
+                output_delta_count = 0
             elapsed = elapsed_before + max(
                 0, int((datetime.now(UTC) - datetime.fromisoformat(started_at)).total_seconds())
             )
@@ -9131,8 +9309,15 @@ async def _generate_impl(
                 "updated_at": now,
                 "elapsed_seconds": elapsed,
                 "output_delta_count": output_delta_count,
+                "substep_started_at": (
+                    previous_active["substep_started_at"]
+                    if previous_active
+                    and previous_active.get("stage") == stage
+                    and previous_active.get("detail") == detail
+                    and isinstance(previous_active.get("substep_started_at"), str)
+                    else now
+                ),
             }
-            previous_active = _active_progress.get(project_key)
             if state in {"milestone", "complete"}:
                 saved_progress["last_progress_at"] = now
             elif (
@@ -9156,7 +9341,6 @@ async def _generate_impl(
                         sections_total = previous.get("sections_total")
             if type(sections_total) is int and 1 <= sections_total <= 100:
                 saved_progress["sections_total"] = sections_total
-            nonlocal last_logged_stage
             milestone = (str(stage), str(state))
             if milestone != last_logged_stage:
                 logging.getLogger("sigma.lifecycle").info(
@@ -9190,6 +9374,7 @@ async def _generate_impl(
                         "sections_total": saved_progress.get("sections_total"),
                         "last_progress_at": saved_progress.get("last_progress_at"),
                         "output_delta_count": saved_progress.get("output_delta_count", 0),
+                        "substep_started_at": saved_progress.get("substep_started_at"),
                     }
                 )
 
@@ -9233,6 +9418,22 @@ async def _generate_impl(
         if expected_binding and initial_auth["identity"] != expected_binding:
             raise ProjectError("AI account or billing mode changed; review it and retry")
         config = await configuration(view=view, context=initial_auth)
+
+        def model_for_next_paper_call(base: dict[str, Any]) -> dict[str, Any]:
+            # The user may change Model/Thinking during a long paper run.
+            # Resolve at dispatch, never mutate a config held by an in-flight call.
+            from sigma import global_research_settings
+
+            return _select_paper_call_config(
+                base,
+                work,
+                global_research_settings.load_config(),
+                lambda: _save_work(path, work),
+            )
+
+        # _generate_impl runs in its own task; child section tasks inherit this
+        # selector, while unrelated paper scoring and tests never do.
+        _paper_model_for_call.set(model_for_next_paper_call)
         checkpoint = _load_work(path)
         frozen = checkpoint.get("frozen_package") if checkpoint is not None else None
         if frozen_snapshot is not None:
@@ -9740,6 +9941,7 @@ async def _generate_impl(
                 structured_fast_path=True,
                 include_diagrams=include_diagrams,
                 on_output_delta=lambda number: report_activity("sections", number),
+                on_planning_output_delta=lambda: report_activity("planning"),
                 authorized_recovery_section=authorized_recovery_section,
             )
             model = config["model"]
@@ -10086,9 +10288,16 @@ async def _generate_impl(
                 "provider_calls_current_render": proofreading.get("provider_calls_attempted", 0),
                 "prior_render_provider_calls": int(work.get("proofreading_calls_prior", 0)),
                 "elapsed_seconds": proofreading.get("elapsed_seconds", 0),
-                "model": config["model"],
-                "reasoning_effort": config["reasoning_effort"],
+                "model": work.get("model", config["model"]),
+                "reasoning_effort": work.get("reasoning_effort", config["reasoning_effort"]),
             }
+            record["generation"]["model"] = work.get("model", config["model"])
+            record["generation"]["reasoning_effort"] = work.get(
+                "reasoning_effort", config["reasoning_effort"]
+            )
+            record["generation"]["model_change_history"] = list(
+                work.get("model_change_history", [])
+            )
             record["generation"]["publication_status"] = (
                 "needs_review"
                 if proofreading.get("status") == "fallback"

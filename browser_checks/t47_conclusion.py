@@ -309,7 +309,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(papers_pane.get_by_role("button", name="Include in paper")).to_be_visible()
             papers_pane.get_by_role("button", name="New paper").click()
             expect(papers_pane.get_by_role("button", name="Start Paper 1")).to_be_visible()
-            papers_pane.get_by_role("button", name="Cancel starting paper").click()
+            papers_pane.get_by_role("button", name="Cancel", exact=True).click()
             expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
             papers_pane.get_by_role("button", name="New paper").click()
             papers_pane.get_by_role("button", name="Start Paper 1").click()

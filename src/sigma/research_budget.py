@@ -198,7 +198,13 @@ def reserve_before_dispatch(
 
 
 def settle_after_response(
-    ledger: dict[str, Any], *, call_id: str, input_tokens: int, output_tokens: int
+    ledger: dict[str, Any],
+    *,
+    call_id: str,
+    input_tokens: int,
+    output_tokens: int,
+    input_price_per_million: float | None = None,
+    output_price_per_million: float | None = None,
 ) -> None:
     """Replace a reservation with verified provider usage or block on inconsistency."""
     item = next((entry for entry in ledger["calls"] if entry["call_id"] == call_id), None)
@@ -223,7 +229,23 @@ def settle_after_response(
             "status": "settled",
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
-            "cost_bound_usd": _cost_bound(ledger, input_tokens, output_tokens),
+            "cost_bound_usd": _cost_bound(
+                {
+                    **ledger,
+                    "input_price_per_million": (
+                        input_price_per_million
+                        if input_price_per_million is not None
+                        else ledger["input_price_per_million"]
+                    ),
+                    "output_price_per_million": (
+                        output_price_per_million
+                        if output_price_per_million is not None
+                        else ledger["output_price_per_million"]
+                    ),
+                },
+                input_tokens,
+                output_tokens,
+            ),
         }
     )
 
