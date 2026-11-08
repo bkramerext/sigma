@@ -551,8 +551,8 @@
  * Avoid intrinsic-width measurement or centering the animated primary line.
  */
 :is(.home-page, .workspace-page) {
-  --sigma-header-account-width: 190px;
-  --sigma-header-model-width: 240px;
+  --sigma-header-account-width: 165px;
+  --sigma-header-model-width: 170px;
   --sigma-header-row-one: 34px;
   --sigma-header-row-two: 53px;
 }
@@ -643,12 +643,59 @@
 }
 @media (max-width: 700px) {
   :is(.home-page, .workspace-page) {
-    --sigma-header-account-width: 165px;
-    --sigma-header-model-width: 200px;
+    --sigma-header-account-width: 155px;
+    --sigma-header-model-width: 165px;
     --sigma-header-row-one: 28px;
     --sigma-header-row-two: 42px;
   }
   :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
     padding: 5px 9px;
+  }
+}
+
+/* Compact, invariant pill geometry. Astra $$$ is the maximum Model label.
+   Every animated frame and static label starts at the same 12px inset. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  width: 100%;
+  min-width: 0;
+  padding-inline: 12px;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-viewport,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-pair,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-pair > span {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  text-align: left !important;
+}
+/* Google status dot and label follow ChatGPT's left edge. */
+.home-page .home-account-grid > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-inline: 12px;
+  gap: 7px;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill,
+  .home-page .home-account-grid > .project-google-signin,
+  .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin {
+    padding-inline: 9px;
   }
 }
