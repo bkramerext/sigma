@@ -12,13 +12,21 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from sigma import papers, project_bundle, project_types, publication_audit, research_ethos, research_sessions
+from sigma import (
+    papers,
+    project_bundle,
+    project_types,
+    publication_audit,
+    research_ethos,
+    research_sessions,
+)
 from sigma.api import app
 from sigma.projects import (
     _decode,
     _document,
     initialize_project,
     inspect_project,
+    ProjectError,
     project_settings,
 )
 
@@ -84,41 +92,62 @@ def main() -> None:
 
             # All accepted publication obligations remain visible, even when
             # they cannot be verified without independent editorial judgment.
-            reqs = "Include a counterexample table.\\nDiscuss open limitations."
-            empty_draft = {"sections": [{"heading": "Findings", "paragraphs": ["A finding."], "tables": []}], "diagrams": []}
+            reqs = "Include a counterexample table.\nDiscuss open limitations."
+            empty_draft = {
+                "sections": [{"heading": "Findings", "paragraphs": ["A finding."], "tables": []}],
+                "diagrams": [],
+            }
             report = publication_audit.reconcile(reqs, empty_draft)
             assert [item["status"] for item in report] == ["missing", "needs_review"]
             assert all(item["text"] for item in report)
-            table_draft = {"sections": [{"heading": "Findings", "paragraphs": [], "tables": [
-                {"caption": "Counterexamples to the proposed claim"}]}], "diagrams": []}
+            table_draft = {
+                "sections": [
+                    {
+                        "heading": "Findings",
+                        "paragraphs": [],
+                        "tables": [{"caption": "Counterexamples to the proposed claim"}],
+                    }
+                ],
+                "diagrams": [],
+            }
             assert publication_audit.reconcile(reqs, table_draft)[0]["status"] == "needs_review"
-            long_req = "Consider potential failures.\\n" + ("X" * 12000)
+            long_req = "Consider potential failures.\n" + ("X" * 12000)
             assert len(publication_audit.reconcile(long_req, empty_draft)[1]["text"]) == 12000
-            paragraph = ("This derivation establishes a specific intermediate relation " 
-                "while preserving the counterexample boundary and avoiding claims of unearned certainty. ") * 5
-            repeated = {"sections": [{"heading": "One", "paragraphs": [paragraph]},
-                {"heading": "Two", "paragraphs": [paragraph]}]}
+            paragraph = (
+                "This derivation establishes a specific intermediate relation "
+                "while preserving the counterexample boundary and avoiding claims of unearned certainty. "
+            ) * 5
+            repeated = {
+                "sections": [
+                    {"heading": "One", "paragraphs": [paragraph]},
+                    {"heading": "Two", "paragraphs": [paragraph]},
+                ]
+            }
             assert publication_audit.overlap_warnings(repeated)
-            assert not publication_audit.overlap_warnings({"sections": [{"heading": "One", "paragraphs": [paragraph]}]})
+            assert not publication_audit.overlap_warnings(
+                {"sections": [{"heading": "One", "paragraphs": [paragraph]}]}
+            )
 
             # Resume keeps the saved model and thinking level by default and
             # refuses an unapproved change to the billing account.
             fake_fingerprint = "a" * 64
-            checkpoint = {"model": "gpt-6.1-sol", "reasoning_effort": "high",
-                          "binding_fingerprint": fake_fingerprint}
-            assert papers._resume_provider_choice(checkpoint, fake_fingerprint, "other-model", "low") == (
-                "gpt-6.1-sol", "high"
-            )
+            checkpoint = {
+                "model": "gpt-6.1-sol",
+                "reasoning_effort": "high",
+                "binding_fingerprint": fake_fingerprint,
+            }
+            assert papers._resume_provider_choice(
+                checkpoint, fake_fingerprint, "other-model", "low"
+            ) == ("gpt-6.1-sol", "high")
             try:
                 papers._resume_provider_choice(checkpoint, "b" * 64, "other-model", "low")
-            except Exception as exc:
+            except ProjectError as exc:
                 assert "explicit approval" in str(exc)
             else:
                 raise AssertionError("Provider change must require approval")
-            assert papers._resume_provider_choice(checkpoint, "b" * 64, "other-model", "low", True) == (
-                "other-model", "low"
-            )
-
+            assert papers._resume_provider_choice(
+                checkpoint, "b" * 64, "other-model", "low", True
+            ) == ("other-model", "low")
 
             research_ethos.save_override("Different principles for the NEXT run.")
             old = research_sessions._role_request_payload(
@@ -184,7 +213,7 @@ def main() -> None:
             target.write_bytes(old_bytes)
             try:
                 research_ethos.quarantine_invalid_override()
-            except Exception as exc:
+            except ProjectError as exc:
                 assert "valid" in str(exc)
             else:
                 raise AssertionError("Valid Ethos must not be quarantined")

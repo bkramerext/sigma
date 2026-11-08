@@ -159,9 +159,15 @@ def quarantine_invalid_override() -> dict[str, str | bool]:
             return current()
         try:
             info = os.fstat(fd)
-            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
-                    or info.st_mode & 0o077 or info.st_size > MAX_CHARS * 4 + 1024):
-                raise ProjectError("Unsafe Research Ethos file must be repaired by an administrator")
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077
+                or info.st_size > MAX_CHARS * 4 + 1024
+            ):
+                raise ProjectError(
+                    "Unsafe Research Ethos file must be repaired by an administrator"
+                )
         finally:
             os.close(fd)
         try:

@@ -29,13 +29,17 @@ def reconcile(requirements: str, paper: Mapping[str, Any]) -> list[dict[str, str
     if not isinstance(sections, list):
         sections = []
     tables = [
-        table for section in sections if isinstance(section, dict)
+        table
+        for section in sections
+        if isinstance(section, dict)
         for table in section.get("tables", [])
         if isinstance(table, dict)
     ]
     diagrams = [item for item in paper.get("diagrams", []) if isinstance(item, dict)]
     examples = [
-        item for section in sections if isinstance(section, dict)
+        item
+        for section in sections
+        if isinstance(section, dict)
         for item in section.get("examples", [])
         if isinstance(item, dict)
     ]
@@ -49,18 +53,22 @@ def reconcile(requirements: str, paper: Mapping[str, Any]) -> list[dict[str, str
                 status, note = "missing", "A table was requested, but the paper has no table."
             elif re.search(r"\bcounterexamples?\b", lowered):
                 has_counterexample_table = any(
-                    re.search(r"\bcounterexamples?\b", str(table).casefold())
-                    for table in tables
+                    re.search(r"\bcounterexamples?\b", str(table).casefold()) for table in tables
                 )
                 if not has_counterexample_table:
                     note = "Tables exist, but no counterexample table was identified; inspect their contents."
                 else:
-                    note = "A candidate counterexample table exists; verify it meets the requirement."
+                    note = (
+                        "A candidate counterexample table exists; verify it meets the requirement."
+                    )
             else:
                 note = "A table exists; verify its content meets the requirement."
         elif re.search(r"\b(diagrams?|figures?|charts?|plots?)\b", lowered):
             if not diagrams:
-                status, note = "missing", "A diagram or figure was requested, but none was included."
+                status, note = (
+                    "missing",
+                    "A diagram or figure was requested, but none was included.",
+                )
             else:
                 note = "A diagram exists; verify its content meets the requirement."
         elif re.search(r"\b(worked examples?|illustrations?)\b", lowered):
@@ -94,7 +102,7 @@ def overlap_warnings(paper: Mapping[str, Any]) -> list[str]:
             tokens = re.findall(r"[a-z0-9]+", paragraph.casefold())
             if len(tokens) < 35:
                 continue
-            shingles = {" ".join(tokens[i:i + 4]) for i in range(len(tokens) - 3)}
+            shingles = {" ".join(tokens[i : i + 4]) for i in range(len(tokens) - 3)}
             if not shingles:
                 continue
             for older_heading, older_shingles, _ in prior:
@@ -109,5 +117,8 @@ def overlap_warnings(paper: Mapping[str, Any]) -> list[str]:
                     break
             prior.append((heading, shingles, paragraph))
     if len(findings) > 12:
-        return [*findings[:12], f"{len(findings) - 12} more substantial paragraph overlaps require review."]
+        return [
+            *findings[:12],
+            f"{len(findings) - 12} more substantial paragraph overlaps require review.",
+        ]
     return findings

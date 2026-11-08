@@ -9278,24 +9278,25 @@ async def _generate_impl(
             )
             if compatible and not _can_rebase_explicit_restart(checkpoint, view.project.id):
                 frozen_model, frozen_effort = _resume_provider_choice(
-                    checkpoint, binding_fingerprint,
-                    config["model"], config["reasoning_effort"],
+                    checkpoint,
+                    binding_fingerprint,
+                    config["model"],
+                    config["reasoning_effort"],
                     authorized_provider_change,
                 )
-                if (frozen_model, frozen_effort) != (
-                    config["model"], config["reasoning_effort"]
-                ):
+                if (frozen_model, frozen_effort) != (config["model"], config["reasoning_effort"]):
                     config = await configuration(
-                        view=view, context=initial_auth,
-                        frozen_model=frozen_model, frozen_effort=frozen_effort,
+                        view=view,
+                        context=initial_auth,
+                        frozen_model=frozen_model,
+                        frozen_effort=frozen_effort,
                     )
         if not config["available"]:
             raise ProjectError(config["message"])
-        if checkpoint is not None and compatible:
-            if _rebind_paper_checkpoint_provider(
-                checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
-            ):
-                _save_work(path, checkpoint)
+        if checkpoint is not None and compatible and _rebind_paper_checkpoint_provider(
+            checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
+        ):
+            _save_work(path, checkpoint)
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
@@ -9763,7 +9764,11 @@ async def _generate_impl(
         from sigma import publication_audit
 
         paper_project_source = next(
-            (source.get("data", {}) for source in package["sources"] if source["kind"] == "project"),
+            (
+                source.get("data", {})
+                for source in package["sources"]
+                if source["kind"] == "project"
+            ),
             {},
         )
         publication_requirements = publication_audit.reconcile(
@@ -9790,7 +9795,9 @@ async def _generate_impl(
                 f"Potential repeated prose detected in {len(editorial_overlap_warnings)} "
                 "cross-section comparison(s); inspect the saved editorial warnings."
             )
-        warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings, *audit_warnings]))
+        warnings = list(
+            dict.fromkeys([*validation_warnings, *draft.validation_warnings, *audit_warnings])
+        )
         source_reference_records = _source_reference_records(package)
         source_reference_map = {
             item["source_ref"]: item["label"] for item in source_reference_records
@@ -10813,13 +10820,15 @@ def preflight(
         "saved_provider_model": work_state.get("model") if resume_available else None,
         "saved_provider_thinking": work_state.get("reasoning_effort") if resume_available else None,
         "resume_uses_saved_model": bool(
-            resume_available and (
+            resume_available
+            and (
                 work_state.get("model") != model
                 or work_state.get("reasoning_effort") != reasoning_effort
             )
         ),
         "provider_change_requires_confirmation": bool(
-            resume_available and binding_fingerprint
+            resume_available
+            and binding_fingerprint
             and work_state.get("binding_fingerprint") != binding_fingerprint
         ),
         "draft_recovery_available": resume_available and one_shot_draft_available,
