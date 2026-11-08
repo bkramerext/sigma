@@ -91,6 +91,11 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   const next = choices.length > 1 ? choices[(selectedIndex - 1 + choices.length) % choices.length]
     : choices.length === 1 && selectedIndex < 0 ? choices[0] : undefined;
   const nextEffort = next && settings ? suitableEffort(next, settings.reasoning_effort) : null;
+  const supportedEfforts = selected?.efforts.filter(effort => effortOrder.includes(effort))
+    .sort((a, b) => effortOrder.indexOf(a) - effortOrder.indexOf(b)) ?? [];
+  const thinkingIndex = supportedEfforts.indexOf(settings?.reasoning_effort ?? '');
+  const nextThinking = supportedEfforts.length > 1
+    ? supportedEfforts[(thinkingIndex + 1) % supportedEfforts.length] : null;
   const selectedName = modelName(selected, settings?.ai_model ?? 'Unavailable');
   const label = !enabled ? 'Sign in' : settings ? selectedName + (selected?.relative_cost ? ' ' + selected.relative_cost : '') : 'Unavailable';
   const thinkingLabel = settings?.reasoning_effort
@@ -102,11 +107,12 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   const tooltip = !enabled ? 'Sign in to view your default research model.' : settings
     ? 'The selected default model is ' + selectedName + '. Relative published API token cost: ' +
       (selected?.relative_cost ?? 'unknown') + '. Applies to future research and proposals across projects. ' +
-      (thinkingLabel ? ' ' + thinkingLabel + '.' : '') + ' Click to cycle through reviewed models.' + notice
+      (thinkingLabel ? ' ' + thinkingLabel + '.' : '') +
+      ' Click the upper half to cycle models; click the lower half to cycle thinking levels.' + notice
     : error || 'Checking your model selection.';
-  async function save(choice: ModelChoice) {
+  async function save(choice: ModelChoice, requestedEffort?: string) {
     if (!settings || busy) return;
-    const effort = suitableEffort(choice, settings.reasoning_effort);
+    const effort = requestedEffort ?? suitableEffort(choice, settings.reasoning_effort);
     if (!effort) return;
     setBusy(true); setError('');
     try {
@@ -130,12 +136,24 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
     if (selected && costTier(next.relative_cost) > costTier(selected.relative_cost)) setPending(next);
     else void save(next);
   }
+  function cycleThinking() {
+    if (!selected || !nextThinking || !settings) return;
+    void save(selected, nextThinking);
+  }
   const dismiss = () => { setPending(null); trigger.current?.focus(); };
   return <span className="global-model-pill-position">
     <button ref={trigger} type="button" className="global-model-pill"
-      aria-label={'Model ' + label} title={tooltip} data-tooltip={tooltip}
-      disabled={!enabled || !ready || busy || !!pending || !settings || !next || !nextEffort}
-      onClick={cycle}>
+      aria-label={'Model ' + label + (thinkingLabel ? ', ' + thinkingLabel : '')}
+      title={tooltip} data-tooltip={tooltip}
+      disabled={!enabled || !ready || busy || !!pending || !settings || (!next && !nextThinking)}
+      onClick={event => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (event.clientY >= rect.top + rect.height / 2) cycleThinking();
+        else cycle();
+      }}
+      onKeyDown={event => {
+        if (event.key === 'ArrowDown') { event.preventDefault(); cycleThinking(); }
+      }}>
       <span className="global-model-pill-current">
         <span className="global-model-pill-primary">Model · {label}</span>
         {thinkingLabel && <span className="global-model-pill-secondary">{thinkingLabel}</span>}
