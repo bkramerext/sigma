@@ -67,7 +67,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const [ethos, setEthos] = useState<EthosConfig | null>(null);
   const [ethosDraft, setEthosDraft] = useState('');
   const [ethosEditing, setEthosEditing] = useState(false);
-  const [ethosBusy, setEthosBusy] = useState(false);
+  const [restoreDefault, setRestoreDefault] = useState(false);
   const [ethosError, setEthosError] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -127,7 +127,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   };
   const setPref = (patch: Partial<Preference>) => { setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
   const hasOtherChanges = loaded && !!config && savedSnapshot.current !== JSON.stringify({ config, prefs });
-  const hasChanges = typesSaveState.dirty || hasOtherChanges;
+  const ethosDirty = !!ethos && (restoreDefault ? ethos.is_override : ethosDraft !== ethos.markdown);
+  const hasChanges = typesSaveState.dirty || hasOtherChanges || ethosDirty;
   const validLimits = !!config && (['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const)
     .every(field => Number.isInteger(Number(config.limits[field])) && Number(config.limits[field]) >= 1 && String(config.limits[field]).trim() !== '')
     && (['session_duration_minutes', 'maximum_input_tokens_per_session'] as const)
@@ -139,7 +140,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   // is unavailable: never strand changes behind an unrelated Settings fetch.
   const canSave = hasChanges && !busy && !typesSaveState.busy &&
     (!typesSaveState.dirty || typesSaveState.valid) &&
-    (!hasOtherChanges || (loaded && validLimits));
+    (!hasOtherChanges || (loaded && validLimits)) &&
+    (!ethosDirty || restoreDefault || !!ethosDraft.trim());
   async function save() {
     if (!canSave) return;
     setBusy(true); setError(''); setSaved(false);
@@ -148,10 +150,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         const didSave = await typesSaveRef.current?.();
         if (!didSave) return;
       }
-      if (!hasOtherChanges) {
-        setSaved(true);
-        return;
-      }
+      if (hasOtherChanges) {
       if (!config) return;
     const limits = { ...config.limits };
     const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
@@ -186,22 +185,19 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         detail: prefs.expand_one_project_section_at_a_time,
       }));
       savedSnapshot.current = JSON.stringify({ config: next, prefs });
+      }
+      if (ethosDirty) {
+        const next = await putJson('/api/user-preferences/research-ethos', {
+          markdown: restoreDefault ? null : ethosDraft,
+        }) as EthosConfig;
+        setEthos(next);
+        setEthosDraft(next.markdown);
+        setRestoreDefault(false);
+      }
       setSaved(true);
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
-  }
-  async function saveEthos(markdown: string | null) {
-    if (ethosBusy) return;
-    setEthosBusy(true); setEthosError('');
-    try {
-      const next = await putJson('/api/user-preferences/research-ethos', { markdown }) as EthosConfig;
-      setEthos(next);
-      setEthosDraft(next.markdown);
-      setEthosEditing(false);
-    } catch (cause) {
-      setEthosError(cause instanceof Error ? cause.message : String(cause));
-    } finally { setEthosBusy(false); }
   }
   const model = models.find(item => item.id === config?.ai_model);
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
@@ -219,6 +215,14 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       <nav className="settings-tabs" role="tablist" aria-label="Settings">
         {tabs.map(item => <button type="button" key={item.id} role="tab" aria-selected={tab === item.id}
           onClick={() => changeTab(item.id)}>{item.title}</button>)}
+        <button type="button" className="sigma-ethos-pencil text-view-link text-view-icon workspace-icon-button"
+          aria-label="Edit Research Ethos" data-tooltip="Edit Research Ethos"
+          disabled={!ethos || busy} onClick={() => { setTab('ethos'); setEthosEditing(true); setEthosError(''); }}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
+          </svg>
+        </button>
       </nav>
       <section role="tabpanel" hidden={tab !== 'types'}>
         <ProjectTypesDialog embedded onClose={() => {}} onSaveStateChange={onTypesSaveStateChange} saveHandleRef={typesSaveRef} renderIcon={(item: ProjectTypeRecord) =>
@@ -308,23 +312,17 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           <p className="settings-hint">Research Ethos means general principles governing how agents investigate, reason, challenge assumptions, and report findings. It is not a project topic or a publication requirement. Each new run freezes the current Ethos.</p>
           {ethosEditing ? <>
             <label htmlFor="sigma-ethos-edit">Research Ethos Markdown</label>
-            <textarea id="sigma-ethos-edit" rows={16} maxLength={16000} disabled={ethosBusy}
-              value={ethosDraft} onChange={event => setEthosDraft(event.target.value)}/>
-            <div className="sigma-ethos-actions">
-              <button type="button" className="text-view-link" disabled={ethosBusy || !ethosDraft.trim() || ethosDraft === ethos.markdown}
-                onClick={() => void saveEthos(ethosDraft)}>{ethosBusy ? 'Saving…' : 'Save'}</button>
-              <button type="button" className="text-view-link" disabled={ethosBusy} onClick={() => {
-                setEthosDraft(ethos.markdown); setEthosEditing(false); setEthosError('');
-              }}>Cancel</button>
-            </div>
+            <textarea id="sigma-ethos-edit" rows={16} maxLength={16000} disabled={busy}
+              value={ethosDraft} onChange={event => { setEthosDraft(event.target.value); setRestoreDefault(false); setSaved(false); }}/>
           </> : <>
             <div className="sigma-ethos-rendered"><RenderedMarkdown body={ethos.markdown}/></div>
-            <div className="sigma-ethos-actions">
-              <button type="button" className="text-view-link" disabled={ethosBusy}
-                onClick={() => { setEthosDraft(ethos.markdown); setEthosEditing(true); setEthosError(''); }}>Edit</button>
-              {ethos.is_override && <button type="button" className="text-view-link" disabled={ethosBusy}
-                onClick={() => { if (window.confirm('Restore the built-in Research Ethos for future research and paper runs?')) void saveEthos(null); }}>Restore Default</button>}
-            </div>
+            {ethos.is_override && <button type="button" className="text-view-link sigma-ethos-restore"
+              disabled={busy} onClick={() => {
+                if (window.confirm('Restore the built-in Research Ethos when Settings is saved?')) {
+                  setRestoreDefault(true); setEthosEditing(false); setEthosError(''); setSaved(false);
+                }
+              }}>Restore Default</button>}
+            {restoreDefault && <p className="settings-hint">Built-in Research Ethos will be restored when you Save Settings.</p>}
           </>}
           {ethosError && <p role="alert" className="error">{ethosError}</p>}
         </section>}
