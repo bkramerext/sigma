@@ -22,3 +22,894 @@
 @media (max-width: 700px) {
   .global-model-pill { min-height: 28px; padding: 4px 9px; font-size: 9px; line-height: 1.2; }
 }
+
+/* One stable Model-column width, sized for the widest expected Astra $$$ label.
+   Model text uses the neutral identity-pill text color. */
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  display: grid;
+  grid-template-rows: auto auto;
+  row-gap: var(--identity-pill-gap);
+  width: max-content;
+  min-width: 0;
+  max-width: min(280px, calc(100vw - 32px));
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-position {
+  justify-self: start;
+  width: max-content;
+  max-width: 100%;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  display: grid;
+  place-items: center;
+  width: max-content;
+  max-width: 100%;
+  color: var(--sigma-copper-foreground);
+  background: #07111ef2;
+  border: 1px solid #a9654875;
+  border-radius: 999px;
+  box-shadow: none;
+  font-weight: 500;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill:hover:not(:disabled),
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill:focus-visible {
+  color: #fff2e9;
+  background: #172536fa;
+  border-color: #cd9270;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill:disabled {
+  color: var(--sigma-copper-foreground);
+  background: #07111ef2;
+  opacity: 1;
+  cursor: default;
+}
+:is(.home-page, .workspace-page) .sigma-header-secondary-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: calc(var(--identity-pill-gap) * 1.2);
+}
+:is(.home-page, .workspace-page) .sigma-header-secondary-row > :first-child { justify-self: start; }
+:is(.home-page, .workspace-page) .sigma-header-secondary-row > :last-child { justify-self: end; }
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column {
+    min-width: 0;
+    width: max-content;
+    max-width: min(280px, calc(100vw - 32px));
+  }
+}
+
+/* Header pill labels share SIGMA's standard light copper; do not mute
+   Google/ChatGPT/About/Admin while making Model the reference color. */
+:is(.home-page, .workspace-page) :is(
+  .sigma-header-model-column .global-model-pill,
+  .sigma-header-secondary-row .home-about-button,
+  .sigma-header-secondary-row .about-action,
+  .sigma-header-secondary-row .home-settings-pill,
+  .sigma-header-secondary-row .project-global-settings-pill,
+  .project-google-signin,
+  .project-chatgpt-signin > summary,
+  .administrator-settings-link
+) {
+  color: var(--sigma-copper-foreground);
+}
+:is(.home-page, .workspace-page) .project-chatgpt-signin > summary [role="status"] {
+  color: inherit;
+}
+
+/* Account column sizes to its ChatGPT content. Google keeps its own
+   intrinsic pill width and aligns to the ChatGPT pill's right edge. */
+.home-page .home-account-grid {
+  grid-template-columns: repeat(2, max-content);
+}
+.home-page .home-account-grid > .project-google-signin,
+.home-page .home-account-grid > .api-connection {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  justify-self: start;
+}
+.workspace-page .project-art-header .project-identity-pill-stack {
+  display: grid;
+  grid-template-columns: max-content;
+  width: max-content;
+  max-width: none;
+  justify-items: start;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  justify-self: start;
+}
+:is(.home-page, .workspace-page) .project-google-signin,
+:is(.home-page, .workspace-page) .project-chatgpt-signin > summary {
+  box-sizing: border-box;
+  padding-inline: 12px;
+}
+:is(.home-page, .workspace-page) .project-chatgpt-signin > summary {
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  justify-content: center;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  justify-content: flex-start;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .project-google-signin,
+  :is(.home-page, .workspace-page) .api-connection > summary {
+    padding-inline: 9px;
+  }
+}
+/* Each cycle candidate occupies the same grid cell invisibly, so the button
+   always takes the width of the longest available model label. */
+:is(.home-page, .workspace-page) .global-model-pill > :is(.global-model-pill-current, .global-model-pill-measure) {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+:is(.home-page, .workspace-page) .global-model-pill > .global-model-pill-measure {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Project header uses Home's identical two-row pill metrics and spacing.
+   Admin remains a Home-only action; preserve the existing account handlers. */
+.workspace-page .project-art-header .header-controls {
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  row-gap: var(--identity-pill-gap);
+}
+.workspace-page .project-art-header .project-identity-pill-stack {
+  display: grid;
+  grid-template-columns: max-content;
+  grid-template-rows: auto auto;
+  align-self: start;
+  justify-items: stretch;
+  row-gap: var(--identity-pill-gap);
+  width: max-content;
+  max-width: none;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  box-sizing: border-box;
+  justify-self: start;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary,
+.workspace-page .project-art-header .sigma-header-first-row > .about-action {
+  min-height: 34px;
+  padding-block: 7px;
+  padding-inline: 12px;
+  font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--sigma-copper-foreground);
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary:not(.has-sponsored-allowance) {
+  width: max-content;
+  justify-content: center;
+}
+.workspace-page .project-art-header .sigma-header-first-row > .project-global-settings-pill {
+  margin-left: 0;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
+  .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary,
+  .workspace-page .project-art-header .sigma-header-first-row > .about-action {
+    min-height: 28px;
+    padding-block: 4px;
+    padding-inline: 9px;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+}
+
+/* The optional Model pill must not inflate the About/Settings track and
+   create a larger gap before Google. Reserve its second-row height while
+   allowing the longer Model label to extend to the left, away from ChatGPT. */
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  position: relative;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: calc(34px + var(--identity-pill-gap));
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  position: absolute;
+  top: calc(34px + var(--identity-pill-gap));
+  right: 0;
+  justify-self: auto;
+  width: max-content;
+  max-width: none;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+    padding-bottom: calc(28px + var(--identity-pill-gap));
+  }
+  :is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+    top: calc(28px + var(--identity-pill-gap));
+  }
+}
+
+/* Keep the current Model label truly centered. Global button span margins
+   otherwise shift the text despite the pill's centered grid alignment. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  text-align: center;
+  place-items: center;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > :is(.global-model-pill-current, .global-model-pill-measure) {
+  margin: 0;
+  justify-self: center;
+  text-align: center;
+}
+/* The Google and About/Settings rows share one fixed control height, and
+   ChatGPT and Model start at the same second-row vertical offset. */
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  --sigma-header-first-row-height: 34px;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .sigma-header-secondary-row {
+  min-height: var(--sigma-header-first-row-height);
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: calc(var(--sigma-header-first-row-height) + var(--identity-pill-gap));
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  top: calc(var(--sigma-header-first-row-height) + var(--identity-pill-gap));
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column {
+    --sigma-header-first-row-height: 28px;
+  }
+}
+
+/* Google sets the natural account-column width. The ChatGPT row fills exactly
+   that width rather than letting Sponsored/Unlimited enlarge the track. */
+.home-page .home-account-grid > .api-connection,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  box-sizing: border-box;
+  contain: inline-size;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  justify-self: stretch;
+  overflow: visible;
+}
+.home-page .home-account-grid > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin {
+  justify-self: stretch;
+  width: max-content;
+  min-width: 0;
+}
+.home-page .home-account-grid > .api-connection > summary,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary,
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin-left: 0;
+  justify-content: center;
+}
+:is(.home-page, .workspace-page) .api-connection > summary .connection-label-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  gap: 0;
+  text-align: center;
+  line-height: 1.35;
+}
+:is(.home-page, .workspace-page) .api-connection > summary .connection-label-stack > [role="status"] {
+  white-space: nowrap;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .sponsored-allowance-trigger {
+  align-self: center;
+  margin: 0;
+  white-space: nowrap;
+}
+/* Sponsor content adds vertical height only; the normal connection pill
+   remains one line high. */
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  padding-block: 9px;
+}
+
+/* Two-line Model pill mirrors sponsored ChatGPT: primary on the first line,
+   thinking level below. Each half has a distinct click action. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  min-height: 53px;
+  padding-block: 8px;
+  cursor: pointer;
+}
+:is(.home-page, .workspace-page) .global-model-pill > .global-model-pill-current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+:is(.home-page, .workspace-page) .global-model-pill .global-model-pill-primary,
+:is(.home-page, .workspace-page) .global-model-pill .global-model-pill-secondary {
+  display: block;
+  margin: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+:is(.home-page, .workspace-page) .global-model-pill .global-model-pill-secondary {
+  color: #bdc7ce;
+  font: inherit;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: calc(53px + var(--identity-pill-gap));
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    min-height: 42px;
+    padding-block: 5px;
+  }
+  :is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+    padding-bottom: calc(42px + var(--identity-pill-gap));
+  }
+}
+
+/* Circular-label cue: one line exits as the next slides into the same
+   fixed-width viewport. Model moves right (reverse cycle); Thinking left. */
+:is(.home-page, .workspace-page) .global-model-pill-current {
+  width: 100%;
+  min-width: 0;
+}
+:is(.home-page, .workspace-page) .global-model-pill .global-model-pill-slide-viewport {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 1.35em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: center;
+}
+.global-model-pill-slide-static,
+.global-model-pill-slide-pair > span {
+  display: block;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+.global-model-pill-slide-pair {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.global-model-pill-slide-pair > span {
+  position: absolute;
+  inset: 0;
+}
+.global-model-pill-slide-forward .global-model-pill-slide-out {
+  animation: sigma-label-out-left 210ms ease-in-out both;
+}
+.global-model-pill-slide-forward .global-model-pill-slide-in {
+  animation: sigma-label-in-right 210ms ease-in-out both;
+}
+.global-model-pill-slide-reverse .global-model-pill-slide-out {
+  animation: sigma-label-out-right 210ms ease-in-out both;
+}
+.global-model-pill-slide-reverse .global-model-pill-slide-in {
+  animation: sigma-label-in-left 210ms ease-in-out both;
+}
+@keyframes sigma-label-out-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-100%); opacity: 0; }
+}
+@keyframes sigma-label-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes sigma-label-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+@keyframes sigma-label-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .global-model-pill-slide-pair .global-model-pill-slide-out { display: none; animation: none; }
+  .global-model-pill-slide-pair .global-model-pill-slide-in { animation: none; }
+}
+
+/* Header alignment: both second-row pills begin at the same top edge.
+   Left-align the two Model lines (including sliding frames) and the
+   Sponsored ChatGPT label/allowance without altering their pill widths. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  text-align: left;
+  place-items: center stretch;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  width: 100%;
+  align-items: stretch;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-viewport,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-primary,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-secondary,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-pair > span {
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .api-connection > summary,
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  justify-content: flex-start;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .api-connection > summary .connection-label-stack {
+  align-items: flex-start;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .sponsored-allowance-trigger {
+  align-self: flex-start;
+  text-align: left;
+}
+.home-page .home-account-grid > .api-connection,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  align-self: start;
+  margin-top: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  top: calc(var(--sigma-header-first-row-height) + var(--identity-pill-gap));
+}
+
+/* Keep both text lines at the normal pill inset, not centered inside the
+   widest-model measurement cell. Sliding frames inherit this alignment. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  justify-items: stretch;
+  padding-inline: 12px;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  justify-self: stretch;
+  align-self: center;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-start;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-measure {
+  justify-self: stretch;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-viewport,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-pair > span {
+  text-align: left;
+}
+/* Align the sponsorship sublabel directly under "Sponsored ChatGPT":
+   its button should occupy the label stack's left edge, not center. */
+:is(.home-page, .workspace-page) .api-connection > summary .connection-label-stack {
+  align-items: flex-start;
+  justify-content: center;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .connection-label-stack > .sponsored-allowance-trigger {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  justify-content: flex-start;
+  width: max-content;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .sponsored-allowance-inline {
+  margin: 0;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    padding-inline: 9px;
+  }
+}
+
+/* Force the animated Model line and Thinking line to share the exact same
+   content origin: the pill's left padding. Invisible measurement spans still
+   reserve the maximum model width, but never affect text alignment. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  align-content: center;
+  width: 100%;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current > :is(.global-model-pill-primary, .global-model-pill-secondary) {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+  margin: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-viewport > .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-pair > span {
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: left;
+}
+
+/*
+ * Header pill layout contract. Keep these sizes independent of label changes:
+ * - Model: fixed Astra-sized width, one shared left text origin.
+ * - Identity: both rows are the same, slightly wider width.
+ * - Row 2: Model and ChatGPT use the exact same grid-row start.
+ * Avoid intrinsic-width measurement or centering the animated primary line.
+ */
+:is(.home-page, .workspace-page) {
+  --sigma-header-account-width: 165px;
+  --sigma-header-model-width: 139.4px;
+  --sigma-header-row-one: 34px;
+  --sigma-header-row-two: 53px;
+}
+.home-page .home-account-grid {
+  grid-template-rows: var(--sigma-header-row-one) minmax(var(--sigma-header-row-two), auto);
+  align-items: start;
+}
+.workspace-page .project-art-header .project-identity-pill-stack {
+  grid-template-rows: var(--sigma-header-row-one) minmax(var(--sigma-header-row-two), auto);
+  align-content: start;
+  align-items: start;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  --sigma-header-first-row-height: var(--sigma-header-row-one);
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  top: calc(var(--sigma-header-row-one) + var(--identity-pill-gap));
+  right: 0;
+  left: auto;
+  width: var(--sigma-header-model-width);
+  max-width: none;
+  align-items: stretch;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: calc(var(--sigma-header-row-two) + var(--identity-pill-gap));
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  min-height: var(--sigma-header-row-two);
+  padding: 8px 12px;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current > .global-model-pill-slide-viewport {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 1.35em;
+  margin: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-pair > span {
+  width: 100%;
+  margin: 0;
+  text-align: left;
+}
+.home-page .home-account-grid > .project-google-signin,
+.home-page .home-account-grid > .api-connection,
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  box-sizing: border-box;
+  width: var(--sigma-header-account-width);
+  min-width: var(--sigma-header-account-width);
+  max-width: var(--sigma-header-account-width);
+  justify-self: start;
+  margin: 0;
+}
+.home-page .home-account-grid > .api-connection,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  align-self: start;
+  justify-self: start;
+  contain: inline-size;
+}
+.home-page .home-account-grid > .api-connection > summary,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary,
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  justify-content: flex-start;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) {
+    --sigma-header-account-width: 155px;
+    --sigma-header-model-width: 135.3px;
+    --sigma-header-row-one: 28px;
+    --sigma-header-row-two: 42px;
+  }
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    padding: 5px 9px;
+  }
+}
+
+/* Compact, invariant pill geometry. Astra $$$ is the maximum Model label.
+   Every animated frame and static label starts at the same 12px inset. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  width: 100%;
+  min-width: 0;
+  padding-inline: 12px;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-viewport,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-pair,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-pair > span {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  text-align: left !important;
+}
+/* Google status dot and label follow ChatGPT's left edge. */
+.home-page .home-account-grid > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-inline: 12px;
+  gap: 7px;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill,
+  .home-page .home-account-grid > .project-google-signin,
+  .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin {
+    padding-inline: 9px;
+  }
+}
+
+/* The exact widest Model and Thinking labels determine one invariant button
+   width. This measure never animates and is excluded from accessibility. */
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  width: max-content;
+  max-width: none;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  display: grid;
+  grid-template-columns: max-content;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  justify-items: stretch;
+  padding-inline: 12px;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-max-labels,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  grid-area: 1 / 1;
+  margin: 0;
+  justify-self: stretch;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-max-labels {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
+  font: inherit;
+  line-height: 1.35;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-max-labels > span {
+  display: block;
+  width: max-content;
+  margin: 0;
+  padding: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  width: 100%;
+  min-width: 0;
+  align-self: center;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    padding-inline: 9px;
+  }
+}
+
+/* Anchor Model immediately below the About pill on both Home and Project.
+   Nesting avoids width-dependent offsets from Admin/Settings and keeps the
+   Model left edge equal to About's left edge regardless of selection. */
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > :is(.home-about-button, .about-action) {
+  flex: 0 0 auto;
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .global-model-pill-position {
+  position: absolute;
+  top: calc(var(--sigma-header-row-one, 34px) + var(--identity-pill-gap));
+  left: 0;
+  right: auto;
+  width: max-content;
+  max-width: none;
+  margin: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(.sigma-header-about-model-anchor > .global-model-pill-position) {
+  padding-bottom: calc(var(--sigma-header-row-two, 53px) + var(--identity-pill-gap));
+}
+.workspace-page .project-art-header .sigma-header-about-model-anchor > .about-action {
+  width: max-content;
+  min-width: 0;
+}
+
+/* Align the header using normal layout, not oversized minimum widths.
+   About and Model form a two-row stack; the Model's measured Astra $$$
+   width contributes to the first grid track. This gives ChatGPT a true
+   minimum column gap without shifting Model away from About. */
+:is(.home-page, .workspace-page) {
+  --sigma-header-horizontal-gap: calc(var(--identity-pill-gap) * 1.2);
+}
+.home-page .home-account-grid,
+.workspace-page .project-art-header .header-controls {
+  column-gap: var(--sigma-header-horizontal-gap);
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  display: block;
+  min-width: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-secondary-row {
+  align-items: flex-start;
+  gap: var(--sigma-header-horizontal-gap);
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--identity-pill-gap);
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .sigma-header-about-model-anchor > .global-model-pill-position {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  width: max-content;
+  max-width: none;
+  margin: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(.sigma-header-about-model-anchor > .global-model-pill-position) {
+  padding-bottom: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  padding-inline: 12px 16px;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    padding-inline: 9px 13px;
+  }
+}
+
+/* Shared Home/Project header geometry: Settings sits beside About rather than
+   outside the Model-sized column. Both rows contribute to the same intrinsic
+   width; account pills follow at the normal minimum inter-column gap. */
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: var(--sigma-header-horizontal-gap);
+  width: max-content;
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row > :is(.home-about-button, .about-action, .home-settings-pill, .project-global-settings-pill) {
+  flex-shrink: 0;
+}
+
+/* Project header: same two-column order as Home, with tighter vertical rhythm.
+   Top-row About/Settings and Google share a 34px height; equal row gaps
+   place Model and ChatGPT at precisely the same second-row top. */
+.workspace-page .project-art-header {
+  --sigma-project-pill-row-gap: 10px;
+}
+.workspace-page .project-art-header .sigma-header-about-model-anchor {
+  gap: var(--sigma-project-pill-row-gap);
+}
+.workspace-page .project-art-header .sigma-header-first-row {
+  min-height: 34px;
+  height: 34px;
+  align-items: center;
+}
+.workspace-page .project-art-header .project-identity-pill-stack {
+  row-gap: var(--sigma-project-pill-row-gap);
+  grid-template-rows: 34px minmax(0, auto);
+  align-items: start;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection,
+.workspace-page .project-art-header .sigma-header-model-column .sigma-header-about-model-anchor > .global-model-pill-position {
+  align-self: start;
+  margin-top: 0;
+}
+.workspace-page .project-art-header .sigma-header-model-column .global-model-pill {
+  min-height: 46px;
+  padding-block: 5px;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-art-header .sigma-header-first-row {
+    height: 28px;
+    min-height: 28px;
+  }
+  .workspace-page .project-art-header .project-identity-pill-stack {
+    grid-template-rows: 28px minmax(0, auto);
+  }
+  .workspace-page .project-art-header .sigma-header-model-column .global-model-pill {
+    min-height: 38px;
+    padding-block: 4px;
+  }
+}
+
+/* Project header: ChatGPT matches the Model pill's 46px height while its
+   two sponsored-status lines have a slightly more open line rhythm. */
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary {
+  box-sizing: border-box;
+  height: 46px;
+  min-height: 46px;
+  padding-block: 5px;
+  align-items: center;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary .connection-label-stack {
+  line-height: 1.45;
+  gap: 1px;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary .connection-label-stack > [role="status"],
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary .sponsored-allowance-trigger {
+  line-height: 1.45;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary {
+    height: 38px;
+    min-height: 38px;
+    padding-block: 4px;
+  }
+}
+
+/* Shift the complete header pill groups together without changing any internal gaps. */
+.home-page .home-account-grid,
+.workspace-page .project-art-header .header-controls {
+  position: relative;
+  top: -2px;
+}

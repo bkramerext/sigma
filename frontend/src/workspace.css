@@ -540,3 +540,69 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 
 .workspace-page .project-global-settings-pill { display: inline-flex; align-items: center; gap: 6px; justify-self: stretch; width: 100%; }
 .workspace-page .project-global-settings-pill svg { width: 13px; height: 13px; }
+
+/* Project Settings uses the same sliders glyph, size, and copper as paper Include settings. */
+.workspace-page .project-pane-heading .project-pane-actions .project-classification-settings-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+  color: var(--sigma-copper-foreground);
+}
+.workspace-page .project-pane-heading .project-pane-actions .project-classification-settings-button svg {
+  width: 22px;
+  height: 22px;
+}
+/* Preserve the original Q/A wordmark weight and copper despite the generic action reset. */
+.workspace-page .project-pane-heading .project-primary-actions .project-pane-actions .project-qa-button {
+  font: 500 17px/1 Inter, sans-serif;
+  letter-spacing: .02em;
+  color: var(--sigma-copper-foreground);
+}
+
+/* Model / Google on row one; About + icon-only Settings / ChatGPT on row two. */
+.workspace-page .project-art-header .header-controls {
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column identity";
+  align-items: start;
+}
+.workspace-page .project-art-header .header-controls > .sigma-header-model-column {
+  grid-area: model-column;
+  pointer-events: auto;
+}
+.workspace-page .project-art-header .sigma-header-first-row > .about-action {
+  width: auto;
+  min-width: 0;
+  justify-self: start;
+  flex: 0 0 auto;
+}
+.workspace-page .project-art-header .sigma-header-first-row > .project-global-settings-pill {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+}
+.workspace-page .project-art-header .sigma-header-first-row > .project-global-settings-pill svg {
+  width: 19px;
+  height: 19px;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-art-header .header-controls {
+    width: 100%;
+    grid-template-columns: max-content max-content;
+    grid-template-areas: "model-column identity";
+    justify-content: end;
+  }
+}

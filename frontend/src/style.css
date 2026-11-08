@@ -531,3 +531,56 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
     --home-projects-top: max(152px, calc(var(--home-corner-gap) + 3 * var(--home-corner-pill-height) + 2 * var(--identity-pill-gap) + 24px));
   }
 }
+
+/* Home and Project share a two-column header; Admin sits between About and Settings on Home. */
+.home-page .home-account-grid {
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column google" "model-column chatgpt";
+  align-items: start;
+}
+.home-page .home-account-grid > .sigma-header-model-column {
+  grid-area: model-column;
+  align-self: start;
+}
+.home-page .home-account-grid > .sigma-header-model-column .home-about-button {
+  width: max-content;
+  justify-self: start;
+}
+.home-page .sigma-header-first-row > .home-settings-pill {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+  border: 1px solid #a9654875;
+  border-radius: 999px;
+  background: #07111ef2;
+  box-shadow: none;
+  color: #e0d0c8;
+  cursor: pointer;
+}
+.home-page .sigma-header-first-row > .home-settings-pill svg { width: 19px; height: 19px; }
+.home-page .sigma-header-first-row > .home-settings-pill:hover:not(:disabled) {
+  border-color: #cd9270;
+  background: #172536fa;
+  color: #fff2e9;
+}
+.home-page .sigma-header-first-row > .home-settings-pill:focus-visible {
+  outline: 2px solid #e5a785;
+  outline-offset: 3px;
+}
+
+/* Admin shares About/Settings flow rather than owning a third grid column. */
+.home-page .home-account-grid .sigma-header-model-column:has(.administrator-settings-link) {
+  max-width: none;
+}
+.home-page .sigma-header-secondary-row > .administrator-settings-link {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  white-space: nowrap;
+}
