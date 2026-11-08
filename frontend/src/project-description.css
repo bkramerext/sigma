@@ -6,7 +6,6 @@
 
 /* The description pencil shares the Project toolbar's 34px hit target and 7px gap.
    In editing mode it swaps for standard compact, underlined Save / Cancel actions. */
-.workspace-page .project-pane-actions #project-description-toolbar-slot { display: contents; }
 .sigma-description-title-row #project-pane-title-input {
   min-width: 0;
   width: 100%;

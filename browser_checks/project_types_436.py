@@ -866,6 +866,24 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
+    # Regression: editing the Project description swaps the toolbar pencil for
+    # Save / Cancel and keeps those actions mounted after React re-renders.
+    project_edit = page.locator(".project-pane-actions").get_by_role(
+        "button", name="Edit project fields"
+    )
+    expect(project_edit).to_be_visible()
+    project_edit.click()
+    toolbar = page.locator(".project-pane-actions")
+    expect(toolbar.get_by_role("button", name="Save", exact=True)).to_be_visible()
+    expect(toolbar.get_by_role("button", name="Cancel", exact=True)).to_be_visible()
+    expect(toolbar.get_by_role("button", name="Edit project fields")).to_have_count(0)
+    expect(page.get_by_role("textbox", name="Project title")).to_be_visible()
+    page.wait_for_timeout(300)
+    expect(toolbar.get_by_role("button", name="Save", exact=True)).to_be_visible()
+    expect(toolbar.get_by_role("button", name="Cancel", exact=True)).to_be_visible()
+    toolbar.get_by_role("button", name="Cancel", exact=True).click()
+    expect(project_edit).to_be_visible()
+
     expect(page.get_by_role("button", name="Project settings")).to_be_visible()
     assert header.get_by_role("button", name="Project Types").count() == 0
 

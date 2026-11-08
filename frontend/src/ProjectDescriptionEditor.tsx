@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
 import RenderedMarkdown from './RenderedMarkdown';
 import './project-description.css';
 
@@ -19,11 +18,12 @@ const definitions = [
 ] as const;
 
 export default function ProjectDescriptionEditor({
-  view, disabled, onEnterMode, onExitMode, onSave,
+  view, editing, busy, onBusyChange, onExitMode, onSave,
 }: {
   view: ProjectDescriptionView;
-  disabled: boolean;
-  onEnterMode: () => boolean;
+  editing: boolean;
+  busy: boolean;
+  onBusyChange: (busy: boolean) => void;
   onExitMode: () => void;
   onSave: (draft: ProjectDescriptionDraft) => Promise<void>;
 }) {
@@ -33,16 +33,9 @@ export default function ProjectDescriptionEditor({
     desired_outcomes: view.project.desired_outcomes ?? '',
     paper_requirements: view.project.paper_requirements ?? '',
   });
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(original);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const trigger = useRef<HTMLButtonElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
-  const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setToolbarTarget(document.getElementById('project-description-toolbar-slot'));
-  }, []);
   useEffect(() => {
     if (!editing) setDraft(original());
   }, [editing, view.project.title, view.project.problem,
@@ -51,15 +44,6 @@ export default function ProjectDescriptionEditor({
     if (editing) { titleInput.current?.focus(); titleInput.current?.select(); }
   }, [editing]);
 
-  function cancel() {
-    if (busy) return;
-    setDraft(original());
-    setEditing(false);
-    setError('');
-    onExitMode();
-    requestAnimationFrame(() => trigger.current?.focus());
-  }
-
   async function save(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -67,15 +51,13 @@ export default function ProjectDescriptionEditor({
       setError('Project title and Research Subject are required.');
       return;
     }
-    setBusy(true); setError('');
+    onBusyChange(true); setError('');
     try {
       await onSave(draft);
-      setEditing(false);
       onExitMode();
-      requestAnimationFrame(() => trigger.current?.focus());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally { setBusy(false); }
+    } finally { onBusyChange(false); }
   }
 
   const fields = <div className="sigma-description-fields">
@@ -95,26 +77,7 @@ export default function ProjectDescriptionEditor({
     </section>)}
   </div>;
 
-  const toolbarActions = editing ? <>
-    <button type="submit" form="sigma-project-description-form"
-      className="text-view-link sigma-description-toolbar-action" disabled={busy}>
-      {busy ? 'Saving…' : 'Save'}
-    </button>
-    <button type="button" className="text-view-link sigma-description-toolbar-action"
-      disabled={busy} onClick={cancel}>Cancel</button>
-  </> : <button ref={trigger} type="button" disabled={disabled}
-    aria-label={'Edit project title and description: ' + view.project.title}
-    data-tooltip="Edit project fields"
-    className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-description-toolbar-edit"
-    onClick={() => { if (onEnterMode()) { setDraft(original()); setEditing(true); } }}>
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
-    </svg>
-  </button>;
-
-  return <>
-    <div className="sigma-description-editor">
+  return     <div className="sigma-description-editor">
     {editing ? <form id="sigma-project-description-form" onSubmit={save}>
       <div className="project-pane-title-line is-renaming sigma-description-title-row">
         <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
@@ -132,7 +95,5 @@ export default function ProjectDescriptionEditor({
       </div>
       {fields}
     </>}
-    </div>
-    {toolbarTarget && createPortal(toolbarActions, toolbarTarget)}
-  </>;
+  </div>;
 }

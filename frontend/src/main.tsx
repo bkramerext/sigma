@@ -5953,6 +5953,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     modeOwner.current = null; setActiveMode(null);
   }, []);
   const editProjectButton = useRef<HTMLButtonElement>(null);
+  const editDescriptionButton = useRef<HTMLButtonElement>(null);
+  const [descriptionEditing, setDescriptionEditing] = useState(false);
+  const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -6261,7 +6264,33 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
         <SlidersSettingsIcon/>
       </button>
-      <span id="project-description-toolbar-slot"/>
+      {descriptionEditing ? <>
+        <button type="submit" form="sigma-project-description-form"
+          className="text-view-link sigma-description-toolbar-action" disabled={descriptionBusy}>
+          {descriptionBusy ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="text-view-link sigma-description-toolbar-action"
+          disabled={descriptionBusy} onClick={() => {
+            setDescriptionEditing(false);
+            exitMode('project-title');
+            requestAnimationFrame(() => editDescriptionButton.current?.focus());
+          }}>Cancel</button>
+      </> : <button ref={editDescriptionButton} type="button"
+        className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-description-toolbar-edit"
+        aria-label="Edit project fields" data-tooltip="Edit project fields"
+        disabled={closing || ordering || !!dragId || activeMode !== null}
+        onClick={() => {
+          if (!enterMode('project-title')) return;
+          sectionOpen('project');
+          setProjectExpanded(true);
+          window.localStorage.setItem(`sigma.projectPane:${path}`, 'true');
+          setDescriptionEditing(true);
+        }}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
+        </svg>
+      </button>}
     </div>
   </div>;
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView} >
@@ -6278,14 +6307,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
-      <ProjectDescriptionEditor view={view} disabled={closing || ordering || !!dragId || (activeMode !== null && activeMode !== 'project-title')}
-        onEnterMode={() => {
-          if (!enterMode('project-title')) return false;
-          sectionOpen('project');
-          setProjectExpanded(true);
-          window.localStorage.setItem(`sigma.projectPane:${path}`, 'true');
-          return true;
-        }} onExitMode={() => exitMode('project-title')}
+      <ProjectDescriptionEditor view={view}
+        editing={descriptionEditing} busy={descriptionBusy} onBusyChange={setDescriptionBusy}
+        onExitMode={() => {
+          setDescriptionEditing(false);
+          exitMode('project-title');
+          requestAnimationFrame(() => editDescriptionButton.current?.focus());
+        }}
         onSave={async (draft: ProjectDescriptionDraft) => {
           const current = settingsOf(view);
           const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current });
