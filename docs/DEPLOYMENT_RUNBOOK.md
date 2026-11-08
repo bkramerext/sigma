@@ -52,6 +52,61 @@ from merged `main`; verify v0.3.0 version, review delta/release notes,
 and reuse passing CI tied to that exact SHA. Do not begin writer downtime
 or cutover with a previous candidate merely because its CI was green.
 
+### Pre-freeze readiness: finish everything independent of the next SHA
+
+The source is still changing. **Red owns this preparation and should
+continue without Coordinator turn-taking.** This work may run now, before
+a new `main` SHA is selected, provided it does not modify production.
+Do not start recovery snapshots/VMs, stop writers, invoke the guarded
+deploy helper, enable maintenance, or claim v0.3.0 was deployed.
+
+1. **Access and IAM:** Inspect the existing release identities and repair
+   operation-status read permissions through one separately authorized
+   IAM administrator (see below). Once granted, demonstrate effective
+   list/get access on *existing* global/zonal operations using the
+   impersonated recovery account; no Owner account for deployment.
+2. **Host and topology:** Reconfirm IAP/OS Login, noninteractive
+   `sudo -n true`, systemd/Compose and all three containers, release
+   pin, disk UUID/mount flags, quotas, and available recovery instance
+   and disk types. Do not alter anything to produce a green check.
+3. **Budget:** Verify the billing link and spending controls through
+   an authorized billing-administration path if the API is disabled.
+   Independently document a conservative itemized estimate including
+   snapshot retention, clone, boot disk, e2 VM, worst-case duration,
+   and cleanup; `<= $25` incremental is mandatory. If exact spend
+   cannot be accessed, report it as a limitation; never assert observed
+   billed spend from a pricing estimate.
+4. **Maintenance and baseline:** Inspect the existing maintenance
+   switch state and confirm the public site is serving normally.
+   Prepare the read-only identity, project, paper, job and accounting
+   queries, baseline thresholds, and the restore-verifier invocation.
+   Capture a *fresh* baseline close to the actual snapshot, not from
+   old v0.2.2 numbers. Do not run paid inference.
+5. **Readiness proof:** Record the checked environment, impersonated
+   identities, commands, statuses, quotas/costs, and remaining
+   limitations in one concise readiness report. If all source-independent
+   gates pass, mark **READY FOR SHA**; otherwise name the actual blocked
+   gate and the smallest administrative corrective action. Do not
+   convert `UNVERIFIED` into `PASS`.
+
+Only when the operator says development is finished does Red select the
+new approved merged SHA. Then verify backend/frontend 0.3.0, update
+release notes, reuse exact-SHA green CI, perform final schema-compatibility
+review against the *actual selected commit*, and recapture the live
+data/accounting baseline. Proceed with the existing snapshot/restore,
+guarded cutover, acceptance, cleanup, and merged deployment record
+without routine intermediary approval requests. Stop only on a genuine
+safety gate or a task requiring new privileges/scope.
+
+**Expired operation IDs:** Operations are retained for a limited time.
+An expired or unavailable ID is `UNVERIFIED`, not IAM denial. Do not
+create cloud resources merely to prove `.get` before the release.
+Gather known operation IDs from the previous release evidence and
+prove existing `.list` where applicable. If no IDs remain, record
+the verified grant, absence of operations, and the remaining actual-get
+test as a gate to resolve before writer downtime; do not invent a
+success or repeat the same blocked request.
+
 ### Remediate operation-status reads, without Owner fallback
 
 Red's latest effective-identity test using the established GCP SDK
@@ -63,7 +118,7 @@ be discovered). A denied `getIamPolicy` only prevents Red from viewing
 the binding; it is **not** required for polling operations and must not
 be added to the runtime identity just for discovery.
 
-Under issues #590 and #667, an **independently authorized IAM
+Under issues #590 and #667, a **separately authorized IAM
 administrator** should inspect the effective existing custom role and
 bindings and propose the smallest correction. The working target is a
 dedicated project-level **read-only** custom role containing only:
@@ -82,11 +137,22 @@ ineffective. Prefer the minimal permission-only project binding, after
 reviewing project-wide operation-metadata visibility and any eligible
 time limit. Existing resource-scoped write grants remain unchanged.
 
-Do not use the personal Owner account or modify existing Owner grants
-as an implicit workaround. If there is no authorized non-Owner
-administrator, **stop and obtain the operator's separate, explicit
-authorization for one bounded IAM administrative action**. No IAM change
-has been authorized by this runbook entry or performed by this PR.
+**One-time bootstrap exception (explicit approval required):** The existing
+personal Owner account may be used **only** to inspect the policy and make
+the minimal IAM role/binding repair, *if the operator explicitly authorizes
+that exact administrative action*. This is not permission to use Owner for
+the snapshot, recovery VM, SSH, deploy helper, billing, or any other release
+operation. Do not create or distribute Owner tokens, service-account keys,
+or additional users, and do not alter the Owner grant or other IAM bindings.
+Prefer a separate non-Owner IAM administrator if one is actually available.
+Where the only available administrator is the Owner, escalate **once** with
+the bounded repair proposal rather than repeatedly seeking a fictional
+non-Owner administrator. Preserve the original policy/role configuration
+and use conditional/etag-protected updates so unrelated concurrent edits
+are not overwritten. Do not perform this one-time exception until the
+operator's explicit authorization is received. Afterwards, stop using
+Owner credentials and retest everything under the two existing keyless
+release identities.
 
 After an authorized admin applies the correction, Red must repeat
 effective checks with the **same impersonated recovery identity**:
