@@ -1,0 +1,79 @@
+{
+  "schema_version": 13,
+  "id": "a1e70000-0000-4000-8000-000000000102",
+  "title": "The Self-Amending Digital Trust",
+  "problem": "In 2006, a Washington settlor creates the fictional Evergreen Learning Trust to support descendants' educational advancement for fifty years. Its instrument authorizes a trustee to employ a documented algorithm to adjust annual scholarship allocations for inflation, family circumstances, and changes in recognized educational pathways, while requiring the trustee to retain ultimate fiduciary responsibility. It also instructs that the trust's core purpose is 'long-term educational opportunity.' In 2026 the trustee approves an algorithmic update that redirects most distributions from university tuition to accredited vocational retraining, citing changes in cost and earnings evidence. Two university-bound beneficiaries allege that the update rewrites settlor intent and dilutes their expected benefits; other beneficiaries claim the new allocation better advances the trust's purpose. The trustee can explain the inputs and outcomes but cannot reconstruct every intermediate model decision. No beneficiary has a fixed dollar entitlement; no court has previously interpreted the ambiguous clause. Analyze whether the change is authorized and how a court should supervise it. Analyze under the law of Washington State and applicable federal law as of November 2026. Clearly distinguish binding authority, persuasive authority, analogy, policy argument, and proposed doctrine. Treat the incident as wholly fictional. Do not invent judicial holdings, legal citations, statutory provisions, or case histories; explicitly identify any authority requiring verification. Seek a reasoned outcome without presupposing that either claimant wins.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-11-08T19:10:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:10:00+00:00",
+      "strategy_id": "a1e70000-0000-4000-8000-000000001020"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:10:00+00:00",
+      "strategy_id": "a1e70000-0000-4000-8000-000000001021"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:10:00+00:00",
+      "strategy_id": "a1e70000-0000-4000-8000-000000001022"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "a1e70000-0000-4000-8000-000000001020",
+      "title": "Settlor Intent and Trust Purpose",
+      "approach": "Interpret the instrument and the educational-purpose language, separating changing implementation from fundamental alterations of beneficial interests.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:10:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Find the legal boundary between adaptation and purpose substitution.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "a1e70000-0000-4000-8000-000000001021",
+      "title": "Delegation and Fiduciary Control",
+      "approach": "Analyze trustee delegation, care, loyalty, impartiality, monitoring, recordkeeping and explanation under applicable law and analogy.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:10:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Examine fiduciary responsibility despite algorithmic delegation.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "a1e70000-0000-4000-8000-000000001022",
+      "title": "Judicial Standard and Remedies",
+      "approach": "Design competing standards of review and proportionate remedies; test variants concerning transparency, oversight and express beneficiary entitlement.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:10:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Construct and challenge a practical judicial review framework.",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "law",
+  "active_order": [
+    "a1e70000-0000-4000-8000-000000001020",
+    "a1e70000-0000-4000-8000-000000001021",
+    "a1e70000-0000-4000-8000-000000001022"
+  ],
+  "difficulty": "hard",
+  "desired_outcomes": "Determine the bounds of trustee discretion, delegation, fiduciary oversight, purposes, beneficiary rights, information duties, and modification under Washington trust law and persuasive authority. Distinguish adaptive implementation of settlor directions from unauthorized rewriting of purpose. Propose an auditable judicial test with burden, remedy, and evidence standards. Compare results when trustee oversight, express intent, or model transparency changes; recognize strong original doctrinal synthesis as a positive discovery without claiming a novel binding legal rule.",
+  "paper_requirements": "Produce a research paper with the trust provision and facts, legal framework, competing interpretations, detailed application, an actionable standard for bounded algorithmic discretion, fiduciary safeguards, strongest counterarguments, and alternative dispositions. Discuss evidentiary limits, nonreproducible model decisions, remedies, and what remains uncertain. Cite verified authority; distinguish the hypothetical instrument and original legal framework from established law.",
+  "project_type_snapshot": null
+}
