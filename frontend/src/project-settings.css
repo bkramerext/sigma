@@ -636,3 +636,6 @@
 .project-settings-dialog.research-qa-dialog .research-qa-form textarea {
   margin-top: 0;
 }
+
+/* Popup is in the native browser top layer, not clipped by Project Settings. */
+.project-settings-dialog.sigma-project-classification-dialog .research-type-options[popover] {position:fixed;inset:auto;margin:0;z-index:2147483647;box-sizing:border-box;overflow-y:auto;}

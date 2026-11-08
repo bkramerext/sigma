@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import DialogDismissButton from './DialogDismissButton';
 import ProjectTypesDialog, { type ProjectTypeRecord, type ProjectTypesSaveState } from './ProjectTypesDialog';
 import './global-settings.css';
+import { relativeModelCostRank } from './model-cost';
 
 type Tab = 'types' | 'research' | 'limits' | 'preferences';
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
@@ -157,6 +158,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         show_advanced_outcome_details: config.show_advanced_outcome_details,
       });
       setConfig(next);
+      window.dispatchEvent(new Event('sigma-research-settings-updated'));
       await putJson('/api/user-preferences/unattended-execution', {
         allow_unattended_background_execution: prefs.allow_unattended_background_execution,
       });
@@ -175,6 +177,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     finally { setBusy(false); }
   }
   const model = models.find(item => item.id === config?.ai_model);
+  const sortedModels = [...models].sort((a,b) => relativeModelCostRank(a.relative_cost)-relativeModelCostRank(b.relative_cost) || a.label.localeCompare(b.label));
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
   return <dialog ref={dialog} className={`project-settings-dialog sigma-global-settings sigma-global-settings--${tab}`} aria-labelledby="sigma-global-settings-title"
     onCancel={event => { event.preventDefault(); event.stopPropagation(); }}
@@ -207,7 +210,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
                 ? config.reasoning_effort : selected?.efforts[0] ?? config.reasoning_effort });
           }}>
             {!model && <option value={config.ai_model}>{config.ai_model}</option>}
-            {models.map(item => <option key={item.id} value={item.id}>{item.label} · {item.relative_cost}</option>)}
+            {sortedModels.map(item => <option key={item.id} value={item.id}>{item.label} · {item.relative_cost}</option>)}
           </select>
           <label htmlFor="sigma-global-effort">Thinking level</label>
           <select id="sigma-global-effort" className="sigma-effort-select" value={config.reasoning_effort}

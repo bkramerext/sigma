@@ -26,6 +26,7 @@ import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
+import ModelPill from './ModelPill';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // A failure while presenting historical research must never unmount the app.
@@ -4173,7 +4174,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
 
-      <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
+      <MockAuthSelector/><ModelPill/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
     <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
     </div>
@@ -4520,6 +4521,29 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
     setActiveIndex((index + choices.length) % choices.length);
   }
   const selected = choices[selectedIndex];
+  const menu = useRef<HTMLDivElement>(null);
+  const [menuStyle,setMenuStyle] = useState({top:-10000,left:-10000,width:0,maxHeight:256});
+  useLayoutEffect(() => {
+    if(!open||!menu.current) return;
+    const panel=menu.current;
+    panel.showPopover();
+    const place=() => {
+      const rect=trigger.current?.getBoundingClientRect();
+      if(!rect) return;
+      const below=window.innerHeight-rect.bottom-12,above=rect.top-12;
+      const height=Math.min(256,Math.max(80,Math.max(below,above)));
+      const top=below<180&&above>below?Math.max(8,rect.top-height-4):rect.bottom+4;
+      setMenuStyle({top,left:Math.max(8,Math.min(rect.left,window.innerWidth-rect.width-8)),width:rect.width,maxHeight:height});
+    };
+    place();
+    window.addEventListener('resize',place);
+    window.addEventListener('scroll',place,true);
+    return () => {
+      window.removeEventListener('resize',place);
+      window.removeEventListener('scroll',place,true);
+      if(panel.matches(':popover-open')) panel.hidePopover();
+    };
+  },[open]);
   return <div className="research-type-picker" ref={root}>
     <button ref={trigger} id="project-mode" type="button" role="combobox" aria-labelledby="project-mode-label project-mode-value" aria-haspopup="listbox" aria-expanded={open} aria-controls="project-mode-options" onClick={() => { setActiveIndex(Math.max(0, selectedIndex)); setOpen(current => !current); }} onKeyDown={event => {
       if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex(Math.max(0, selectedIndex)); setOpen(true); }
@@ -4527,7 +4551,7 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
     }}>
       {selected && <ResearchTypeIcon type={selected.value}/>}<span id="project-mode-value">{selected?.label ?? (value ? `Project type no longer available · ${value}` : 'Choose a project type')}</span><svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
     </button>
-    {open && <div className="research-type-options" id="project-mode-options" role="listbox" aria-label={fieldLabel}>
+    {open && <div ref={menu} popover="manual" style={menuStyle} className="research-type-options" id="project-mode-options" role="listbox" aria-label={fieldLabel}>
       {choices.map((type, index) => <button ref={element => { options.current[index] = element; }} id={`project-mode-option-${type.value}`} key={type.value} type="button" role="option" aria-selected={value === type.value} tabIndex={activeIndex === index ? 0 : -1} onFocus={() => setActiveIndex(index)} onClick={() => choose(type.value)} onKeyDown={event => {
         if (event.key === 'ArrowDown') { event.preventDefault(); move(index + 1); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); move(index - 1); }
@@ -5328,6 +5352,7 @@ function Home({ initialPath, onOpen }: {
         <div className="home-left-actions"/>
         <div className="home-right-actions"><div className="home-auth-pills"><MockAuthSelector/>
           <div className="home-account-grid">
+            <ModelPill/>
             <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
             <GoogleIdentityPill inviteInHeader/>
             {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}

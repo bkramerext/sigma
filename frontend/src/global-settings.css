@@ -1,22 +1,23 @@
 /* User-scoped Settings, preserving the existing Project Settings visual language. */
 .sigma-global-settings {
   width: min(820px, calc(100vw - 32px));
-  max-height: min(90dvh, 860px);
+  box-sizing: border-box;
+  height: min(690px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
   overflow: hidden;
   padding: 0;
 }
 .sigma-global-settings .sigma-global-settings-content {
   display: flex;
   flex-direction: column;
-  max-height: min(90dvh, 860px);
+  height: 100%;
+  max-height: none;
   min-height: 0;
 }
 .sigma-global-settings .settings-header,
 .sigma-global-settings .settings-tabs { flex: 0 0 auto; }
 .sigma-global-settings .settings-body { min-height: 0; overflow-y: auto; }
-.sigma-global-settings--research,
-.sigma-global-settings--preferences { width: min(520px, calc(100vw - 32px)); }
-.sigma-global-settings--limits { width: min(580px, calc(100vw - 32px)); }
+/* Stable width and height across all Settings tabs. */
 .sigma-global-settings .settings-body .sigma-model-select {
   display: block;
   width: min(100%, 300px);
@@ -126,3 +127,9 @@
 .sigma-project-classification-dialog .settings-header .settings-actions > button:first-child {
   margin-right: auto;
 }
+
+.sigma-global-settings .sigma-global-settings-content {height:100%;}
+.sigma-global-settings .settings-body {flex:1 1 auto;}
+.sigma-global-settings [role="tabpanel"] {flex:1 1 auto;}
+.sigma-global-settings .settings-tabs button:hover {background:transparent !important;box-shadow:none !important;text-decoration:underline;text-underline-offset:6px;}
+.sigma-global-settings .settings-tabs button[aria-selected="true"]:hover {text-decoration:none;}

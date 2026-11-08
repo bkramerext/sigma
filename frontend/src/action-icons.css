@@ -331,3 +331,6 @@
 }
 
 .admin-new-entry-heading .admin-new-entry-actions { position: static; }
+
+/* Match approved compact Project Settings close inset. */
+.sigma-project-classification-dialog .settings-header .sigma-dialog-dismiss.sigma-dialog-dismiss {top:-7px !important;right:-9px !important;}

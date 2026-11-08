@@ -325,3 +325,6 @@
   font-weight: 400;
   color: #abbac8;
 }
+
+/* Star-to-number gap unchanged; shift the entire title/actions row to align star with description. */
+.workspace-page .papers-pane .saved-paper-title-first-line {position:relative;left:-16px;}
