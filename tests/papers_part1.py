@@ -3782,11 +3782,6 @@ def test_literature_paper_prompts_are_literary_and_preserve_citations() -> None:
     assert papers._subject_methodology("default") == ""
 
 
-if __name__ == "__main__":
-    from papers_split_runner import run
-
-    run(1)
-
 
 def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
     """Stop/Play must never repeat paid authoring or completed PDF work."""
@@ -3901,3 +3896,8 @@ def test_score_interruption_resumes_published_pdf_without_reauthoring() -> None:
 
 def test_pdf_pass_interruption_resumes_next_pass_without_reauthoring() -> None:
     _run_publication_checkpoint_recovery_scenario("pdf")
+
+if __name__ == "__main__":
+    from papers_split_runner import run
+
+    run(1)
