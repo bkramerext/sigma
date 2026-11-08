@@ -759,33 +759,62 @@ and noninteractive `sudo -n true`; the recovery identity also completed the
 bounded snapshot and temporary resource lifecycle. No IAM policy change or
 Owner fallback was used for that deployment. See the v0.2.2 outcome below.
 
-**Current v0.3.0 IAM blocker (2026-11-08):** the read-only release
-preflight established a real denial of `compute.globalOperations.get`
-and `compute.zoneOperations.list` under the impersonated
-`sigma-release-operator`; `compute.zoneOperations.get` remains unverified.
-The previous v0.2.2 workaround confirmed named resources after ambiguous
-operation polling, but is **not** a repeatable preflight substitute. A
-separately authorized IAM administrator must inspect the existing custom
-roles and consider a **permission-only**, project-scoped operation metadata
-reader granting the minimum `globalOperations.get`,
-`zoneOperations.list`, and `zoneOperations.get` permissions. Compute
-Operation resources do not expose name-based IAM Conditions in the supported
-resource-type list, so avoid copying a legacy resource-prefix condition that
-makes the read grant ineffective. Never add Owner/Editor, broad write
-permissions, service-account keys, or `getIamPolicy` to the runtime identity
-just to perform operation polling.
+**v0.3.0 IAM operation-read repair succeeded (2026-11-08).** After explicit
+operator approval, Red used the already-existing Owner account **once for
+IAM inspection and repair only**. Project custom role
+`sigmaOperationMetadataReaderV1` was created with **only**
+`compute.globalOperations.get`, `compute.zoneOperations.list`, and
+`compute.zoneOperations.get`, bound unconditionally to **only**
+`sigma-release-operator@sigma-research-prod.iam.gserviceaccount.com`.
+The original Owner and other bindings were preserved and the existing
+recovery-discovery role was not broadened. Owner was not used for
+deployment, snapshots, host access, billing, or operational tests.
 
-No such IAM grant has been made or verified. If no non-Owner administrator
-exists, a one-time, **explicitly approved** use of the existing Owner account
-is permitted solely for the bounded IAM role/binding repair, never for release
-execution. This exception is not preapproved by this documentation; see the
-pre-freeze readiness and bootstrap safeguards in the deployment runbook.
-The next v0.3.0 source SHA is
-**not frozen** because additional features are being merged; production
-remains v0.2.2. The current one-operator hold, proposed minimal binding,
-read-only retest commands, separate admin approval, and remaining billing,
-maintenance, schema and data baseline checks are recorded in
-[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#sigma-v030--red-owned-deployment-and-current-iam-blocker).
+The post-repair effective test used short-lived impersonation of
+`sigma-release-operator` and succeeded: zonal operation
+`operation-1794153415633-65fc5e502e935-d1ec7554-4d9d3a8e`
+and global operation
+`operation-1794152778212-65fc5bf04a54f-24773804-b221c4f8`
+were both read successfully and `DONE`. The earlier operation-status
+blocker is resolved; do not remove or widen the precise grant, and retest
+if IAM changes later.
+
+**Production still v0.2.2, SHA**
+`469c955dfadb5a7bd17b72fc069a3365b4f20ba7`.
+Red's later read-only check passed actual keyless IAP/sudo, systemd,
+all three containers, disk UUID/mount, maintenance-OFF, public hosted
+probes, region and snapshot quotas, and the existing v0.2.2 verifier
+on live data. The live verifier reported 3 identities/workspaces,
+17 projects, 42 artifacts, 1 verified TeX/PDF pair, 10 terminal jobs,
+and 46 accounting calls ($5.938237 recorded; 15 reserved/unknown).
+It did **not** verify a fresh snapshot clone or future code/schema
+compatibility.
+
+**New operator funding restriction (2026-11-08):** no new temporary
+recovery VM, clone disk, snapshot, or other incremental cloud storage
+is approved for v0.3.0. The earlier $16.11/$21.11 modeled scenario is
+**not an authorized spend**, even though it was within the former
+$25 ceiling. The existing v0.2.2 point-in-time snapshot cannot
+replace fresh protection for later data. Red may investigate existing
+resources read-only and propose a secure, independent, zero-new-cloud-
+infrastructure recovery path, but **must not run the canonical
+snapshot/VM recovery path or production cutover** until the operator
+has separately accepted a viable recovery design and a future source
+SHA. Retain healthy v0.2.2 in the meantime. Never delete existing
+snapshots as a cost-saving shortcut without separate authorization.
+See the explicit funding override in
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#operator-funding-constraint--no-additional-recovery-infrastructure).
+
+**Remaining source-independent gate: billing.** The Cloud Billing API
+is disabled and the recovery identity cannot inspect billing-account
+budgets. Current project/account linkage, active billing status, budget/
+alerts and actual current spend remain unverified. The **modeled** recovery
+cost is $16.11, or $21.11 with $5 contingency, under the $25 ceiling.
+No Owner-account billing inspection has been authorized. The next v0.3.0
+source SHA is not frozen while new features are being developed.
+The [canonical deployment runbook](DEPLOYMENT_RUNBOOK.md#sigma-v030--red-owned-deployment-and-current-iam-blocker)
+documents the exact remaining billing evidence, the authorized read-only
+options and future source-dependent recovery/cutover gates.
 
 The November 6 setup itself did not create recovery resources. The first
 bounded keyless snapshot and isolated restore drill completed during the
