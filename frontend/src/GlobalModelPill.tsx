@@ -34,7 +34,7 @@ function suitableEffort(model: ModelChoice, current: string): string | null {
 }
 
 /** Slide only the changed label, preserving the pill's measured width. */
-function ScrollingLabel({ value, direction, className }: {
+function ScrollingLabel({ value, direction, className, userCycleRevision }: {
   value: string;
   direction: 'forward' | 'reverse';
   className: string;
