@@ -55,8 +55,8 @@ export default function ProjectDescriptionEditor({
     requestAnimationFrame(() => trigger.current?.focus());
   }
 
-  async function save(event: FormEvent) {
-    event.preventDefault();
+  async function save(event?: FormEvent) {
+    event?.preventDefault();
     if (busy) return;
     if (!draft.title.trim() || !draft.problem.trim()) {
       setError('Project title and Research Subject are required.');
@@ -91,7 +91,14 @@ export default function ProjectDescriptionEditor({
   </div>;
 
   return <div className="sigma-description-editor">
-    {editing ? <form onSubmit={save}>
+    {editing ? <form onSubmit={save} onKeyDownCapture={event => {
+      if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
+      // Escape commits the entire project description, not the browser's
+      // enclosing dialog/panel shortcut. Failed validation keeps editing open.
+      event.preventDefault();
+      event.stopPropagation();
+      void save();
+    }}>
       <div className="project-pane-title-line is-renaming">
         <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
         <input id="project-pane-title-input" ref={titleInput} required
