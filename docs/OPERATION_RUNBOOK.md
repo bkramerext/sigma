@@ -759,14 +759,28 @@ and noninteractive `sudo -n true`; the recovery identity also completed the
 bounded snapshot and temporary resource lifecycle. No IAM policy change or
 Owner fallback was used for that deployment. See the v0.2.2 outcome below.
 
-One narrower limitation remains: `sigma-release-operator` lacks
-`compute.globalOperations.get`. A synchronous `gcloud` create/poll command can
-therefore report 403 after the operation has been accepted. In the v0.2.2
-drill, named resources were verified through resource-specific reads and
-short-lived impersonated API requests; no failed command was blindly retried
-and no resource was recreated. A future IAM change, if selected, should add
-only a justified read-only operation-status permission; never use Owner/Editor
-or a long-lived key.
+**Current v0.3.0 IAM blocker (2026-11-08):** the read-only release
+preflight established a real denial of `compute.globalOperations.get`
+and `compute.zoneOperations.list` under the impersonated
+`sigma-release-operator`; `compute.zoneOperations.get` remains unverified.
+The previous v0.2.2 workaround confirmed named resources after ambiguous
+operation polling, but is **not** a repeatable preflight substitute. An
+authorized non-Owner IAM administrator must inspect the existing custom
+roles and consider a **permission-only**, project-scoped operation metadata
+reader granting the minimum `globalOperations.get`,
+`zoneOperations.list`, and `zoneOperations.get` permissions. Compute
+Operation resources do not expose name-based IAM Conditions in the supported
+resource-type list, so avoid copying a legacy resource-prefix condition that
+makes the read grant ineffective. Never add Owner/Editor, broad write
+permissions, service-account keys, or `getIamPolicy` to the runtime identity
+just to perform operation polling.
+
+No such IAM grant has been made or verified. The next v0.3.0 source SHA is
+**not frozen** because additional features are being merged; production
+remains v0.2.2. The current one-operator hold, proposed minimal binding,
+read-only retest commands, separate admin approval, and remaining billing,
+maintenance, schema and data baseline checks are recorded in
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#sigma-v030--red-owned-deployment-and-current-iam-blocker).
 
 The November 6 setup itself did not create recovery resources. The first
 bounded keyless snapshot and isolated restore drill completed during the

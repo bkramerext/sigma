@@ -22,111 +22,120 @@ See [Operations Runbook](OPERATION_RUNBOOK.md) for host/incident procedures and
 old compatibility notes, and historical outcomes. Archived procedures are not
 an alternate routine-release checklist.
 
-## Coordinator-led release handoffs (SIGMA v0.3.0)
+## SIGMA v0.3.0 — Red-owned deployment and current IAM blocker
 
-**Approved source cutoff for v0.3.0:** `ef463bd0fb06dcd9f437651d6dff803bd206b545`.
-This commit still declared v0.2.2. Prepare a minimal release commit that updates
-backend/frontend versions and both lockfiles to v0.3.0 (plus release notes),
-without advancing application code beyond that cutoff. The **final release SHA
-is the resulting merged version-bump commit**, not the cutoff SHA; inspect
-its exact diff and record green CI on the actual chosen commit before Stage C.
-The later documentation-only Stage A environment fix is allowed, but must not
-be confused with a new application feature or authorization to deploy.
+**Status (2026-11-08): HELD before recovery or cutover.** The prior
+v0.3.0 attempt stopped at read-only GCP preflight. The documented production
+version remains v0.2.2 at
+`469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. Red verified host
+IAP/OS Login and `sudo -n true`, systemd, containers, state disk/UUID, and
+read access to the existing disk/snapshots. No writer stop, snapshot,
+temporary recovery VM/disk, IAM change, or deployment was performed.
 
+**Owner and authority.** Red owns the complete routine deployment after
+preflight is repaired and a new release SHA is approved: evidence, recovery
+drill, guarded cutover, production acceptance, cleanup, and records. Red
+should work through ordinary recoverable problems without Coordinator
+stage handoffs, and end with an explicit `DEPLOYMENT SUCCEEDED` or
+`DEPLOYMENT FAILED` report. A real safety gate stops work; Red must not
+waive that gate, use project Owner/Editor as a fallback, or infer a passed
+permission check from a prior deployment. A completed docs PR is not a
+completed release.
 
-For this release the **Coordinator is the release driver** and Red (Codex)
-performs only the operational stage explicitly delegated to it. This
-stage-by-stage handoff **supersedes the general unattended completion
-instruction for this release**: Red must stop at the end of each assigned
-stage and return its evidence. The operator forwards Red's response to the
-Coordinator, who determines the next step. No extra approval is necessary
-for read-only checks, but a successful handoff is **not** permission to
-proceed to the next stage.
+**Release freeze is on hold while new UI/features are being merged.** The
+earlier v0.3.0 cutoff `ef463bd0fb06dcd9f437651d6dff803bd206b545`,
+version-bump SHA `063d980f31161792068c8957beb134ca81caa10b`,
+and candidate `a53e50cd9ba076a8e4996acf8ebe590159fbdf08` are
+**historical release candidates, not current deployment authorization**.
+When the operator declares `main` ready again, freeze a new **full** SHA
+from merged `main`; verify v0.3.0 version, review delta/release notes,
+and reuse passing CI tied to that exact SHA. Do not begin writer downtime
+or cutover with a previous candidate merely because its CI was green.
 
-**Stage A execution-environment preflight (do this first).** Before calling
-any host or cloud check, confirm Red is in a checkout of this repository
-whose `origin/main` contains this Coordinator-led v0.3.0 section. Local
-working directories and older branches can contain historical v0.1.x
-runbooks; a stale local file is **not** current operational guidance.
-Read the current maintained runbook from `origin/main` (fetch first) or
-from the repository's live default branch, without overwriting untracked
-work. If the checkout cannot be updated/read, report an
-`ENVIRONMENT_UNAVAILABLE` failure instead of diagnosing GCP.
+### Remediate operation-status reads, without Owner fallback
 
-Confirm the **Google Cloud SDK exists in the execution environment**.
-The v0.2.2 operator log used
-`/Users/admin/google-cloud-sdk/bin/gcloud`; check `command -v gcloud`
-and that path, but do not assume every Codex shell is the same host.
-Use only the established keyless impersonation configuration. An
-unavailable SDK or credential/impersonation facility is
-`ENVIRONMENT_UNAVAILABLE`, **not** evidence that a GCP permission was
-denied. Do not install SDKs, create credentials, SSH keys, aliases, or
-IAM grants to conceal an unavailable runtime. Return the blocker and
-ask the Coordinator for the existing GCP-enabled operator environment.
+Red's latest effective-identity test using the established GCP SDK
+reported `compute.globalOperations.get` **DENIED** and
+`compute.zoneOperations.list` **DENIED** for
+`sigma-release-operator@sigma-research-prod.iam.gserviceaccount.com`.
+`compute.zoneOperations.get` is **UNVERIFIED** (no operation ID could
+be discovered). A denied `getIamPolicy` only prevents Red from viewing
+the binding; it is **not** required for polling operations and must not
+be added to the runtime identity just for discovery.
 
-**Identity versus destination:** `sigma-release-ssh` and
-`sigma-release-operator` are **service-account names**, not SSH host
-aliases. The destination is the actual Compute VM `sigma-gce-01`,
-accessed with `gcloud compute ssh ... --tunnel-through-iap
---impersonate-service-account=...`. Never run
-`ssh sigma-release-ssh` or direct public SSH as a substitute.
-For example, with `GCLOUD` set to the verified SDK executable:
+Under issues #590 and #667, an **independently authorized IAM
+administrator** should inspect the effective existing custom role and
+bindings and propose the smallest correction. The working target is a
+dedicated project-level **read-only** custom role containing only:
+
+- `compute.globalOperations.get` — inspect a known global operation;
+- `compute.zoneOperations.list` — discover existing zonal operations;
+- `compute.zoneOperations.get` — inspect a known zonal operation.
+
+Do not add create, delete, update, `*IamPolicy`, or project Owner/Editor
+permissions. These are operation **metadata** reads for this project,
+not grants to operate on production resources. Compute operation
+resources are not listed among the resource types supporting
+`resource.name` IAM Conditions: do **not** attach an untested
+resource-name-prefix condition that silently makes the new grant
+ineffective. Prefer the minimal permission-only project binding, after
+reviewing project-wide operation-metadata visibility and any eligible
+time limit. Existing resource-scoped write grants remain unchanged.
+
+Do not use the personal Owner account or modify existing Owner grants
+as an implicit workaround. If there is no authorized non-Owner
+administrator, **stop and obtain the operator's separate, explicit
+authorization for one bounded IAM administrative action**. No IAM change
+has been authorized by this runbook entry or performed by this PR.
+
+After an authorized admin applies the correction, Red must repeat
+effective checks with the **same impersonated recovery identity**:
 
 ```sh
-"$GCLOUD" compute instances describe sigma-gce-01 \
-  --project=sigma-research-prod --zone=us-west1-b \
-  --impersonate-service-account=sigma-release-ssh@sigma-research-prod.iam.gserviceaccount.com \
-  --format='value(name,status)'
-"$GCLOUD" compute ssh sigma-gce-01 \
-  --project=sigma-research-prod --zone=us-west1-b --tunnel-through-iap \
-  --impersonate-service-account=sigma-release-ssh@sigma-research-prod.iam.gserviceaccount.com \
-  --command='sudo -n true'
+GCLOUD=${GCLOUD:-gcloud}
+PROJECT=sigma-research-prod
+RECOVERY_ID=sigma-release-operator@sigma-research-prod.iam.gserviceaccount.com
+"$GCLOUD" compute operations list --zones=us-west1-b --limit=10 \
+  --project="$PROJECT" --impersonate-service-account="$RECOVERY_ID"
+# Pick a real existing zonal operation NAME from the list, then:
+"$GCLOUD" compute operations describe ZONAL_OPERATION_NAME \
+  --zone=us-west1-b --project="$PROJECT" \
+  --impersonate-service-account="$RECOVERY_ID"
+# With the already-known existing GLOBAL_OPERATION_NAME, then:
+"$GCLOUD" compute operations describe GLOBAL_OPERATION_NAME \
+  --global --project="$PROJECT" \
+  --impersonate-service-account="$RECOVERY_ID"
 ```
 
-The second command is a **read-only access/sudo capability test**, not
-permission to change the VM. Inspect global/zonal operation reads under
-`sigma-release-operator` using **existing** operation IDs as required
-below. Do not create a recovery VM in Stage A; its IAP connection is
-a Stage C test. Public HTTPS/JavaScript or hosted-auth readiness
-checks are only supplementary: they cannot prove the full production
-SHA, host health, state mount, IAM, or quotas.
+Use actual operation names, not literal placeholders. If operations
+have expired, a check is **UNVERIFIED**, not passed; do not create
+resources merely to obtain an operation. Record exact response codes
+and permission evidence, including the authorized administrator's
+limited role/binding details. A successful resource-specific
+`describe` does not prove successful operation-status reads.
 
-In Stage A's mandatory `FAILED` response distinguish
-`ENVIRONMENT_UNAVAILABLE` (wrong checkout, SDK absent, no authorized
-impersonation runtime) from `GCP_PERMISSION_DENIED` (a real API 403
-through the actual impersonated account), and from `UNVERIFIED`
-(no suitable read-only evidence). Never prescribe an IAM grant without
-a real impersonated-denial response.
+**Other preflight gates remain.** Quota was reported sufficient and a
+bounded ~$16 estimate was below the $25 incremental recovery ceiling,
+but the Cloud Billing API was disabled and billing association/actual
+spend were not verified. Maintenance-off evidence, schema compatibility,
+and production data/accounting baseline were also missing. Complete
+these independently before creating a recovery point or asserting
+`--backup-verified` / `--schema-compatible`. No paid inference or
+production modification during IAM remediation.
 
-| Stage | Owner | Scope / advancement gate |
-| --- | --- | --- |
-| **A — Access readiness** | Red, then Coordinator review | Read-only, impersonated GCP access and host health checks: actual production-host IAP/OS Login and noninteractive sudo, effective global/zonal operation-status polling, disk/snapshot reads, quota, and a bounded cost estimate with truthful billing limitations. No recovery VM exists in this stage, so its live IAP test belongs to Stage C. Do not stop writers, create recovery resources, change IAM, build images, or deploy. A missing required permission is **FAILED** with the exact denial and narrow proposed remedy; prior v0.2.2 success alone is not proof. |
-| **B — Source and release freeze** | Coordinator, with Red on separately delegated repository tasks | Draft release notes and version 0.3.0 preparation can proceed while main changes. **Do not freeze a commit until the operator says the source is ready.** Confirm all versioned files and release notes agree, select the final merged 40-character SHA, and reuse that SHA's passing CI. A moving branch or green tests alone never authorize cutover. |
-| **C — Fresh recovery verification** | Red, after Coordinator go-ahead | With Stage A access proven and a frozen Stage B SHA, perform only the documented application-consistent snapshot, isolated read-only restore verification, and bounded cleanup (steps 3–6 below). Retain the verified snapshot. Report the snapshot/restore evidence and any downtime; **do not cut over** in this stage. |
-| **D — Guarded cutover and production acceptance** | Red, after Coordinator go-ahead | Confirm Stage C evidence and schema compatibility, run the existing guarded helper for the exact frozen SHA (step 7), then complete step 8 and the release record. Never repeat an uncertain cutover without reconciling production's actual release pin and image provenance. |
+**Stage A execution environment:** use the current maintained runbook
+from `origin/main` and the approved keyless GCP operator runtime.
+Confirm `gcloud` is available (`command -v gcloud` or previously used
+`/Users/admin/google-cloud-sdk/bin/gcloud`) before testing access.
+`sigma-release-ssh` and `sigma-release-operator` name **service accounts**,
+not SSH hosts. The production destination is `sigma-gce-01`, through
+`gcloud compute ssh ... --tunnel-through-iap --impersonate-service-account`.
+An absent SDK is `ENVIRONMENT_UNAVAILABLE`, not GCP permission denial.
 
-**Mandatory response after *each* Red stage:** the first line must be
-\`SIGMA v0.3.0 | STAGE <A/B/C/D> | SUCCEEDED\` or
-\`SIGMA v0.3.0 | STAGE <A/B/C/D> | FAILED\`.
-Then report (1) exact commands/checks and observed evidence (redacted),
-(2) source SHA and production SHA if checked, (3) permissions or recovery
-resources created/deleted, (4) health and data/maintenance state, (5) any
-unresolved gate and the smallest safe next action. The response is meant
-to be copied verbatim to the Coordinator. **SUCCEEDED** means every assigned
-gate is established; **FAILED** includes a partial result, unsupported
-attestation, timed-out operation, or genuine safety block. Never turn a
-failed check into implicit success. Both statuses end the current stage:
-wait for the Coordinator's next explicit handoff.
-
-**Operational safeguards:** no Owner/Editor fallback, long-lived keys,
-unapproved IAM broadening, paid inference, state deletion, or data restore.
-Keep the pre-release downtime and incremental recovery spend within the
-existing $25 ceiling and record truthfully what was actually verified.
-The Coordinator owns sequencing and repository documentation; Red owns
-on-host/GCP execution and observation. Work on v0.3.0 **does not itself
-authorize a production deployment** until the frozen release and stages
-are explicitly advanced.
-
+Proceed through the eight routine gates **below** only after these
+preflight issues are resolved, the operator approves the new frozen SHA,
+and appropriate exact-SHA CI is green. Preserve all existing recovery,
+least-privilege, cost, state, and rollback safeguards.
 ## Routine keyless GCE release — canonical ordered path (issue #667)
 
 Follow these eight gates in order only after a separate release authorization
@@ -174,9 +183,10 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
    `gcloud compute operations describe OPERATION --global` or
    `--zone=us-west1-b`, respectively, with `--project` and
    `--impersonate-service-account`. Required read permissions are
-   `compute.globalOperations.get` and `compute.zoneOperations.get`
-   (and `compute.regionOperations.get` only if the chosen procedure uses
-   regional operations). A successful resource `describe` does **not** prove
+   `compute.globalOperations.get`, `compute.zoneOperations.get`, and
+   `compute.zoneOperations.list` when an existing zonal operation ID must
+   be discovered (and regional operation permissions only if that path is
+   used). A successful resource `describe` does **not** prove
    permission to poll its operation. Grant only the missing, narrowly scoped
    operation-read permissions under #590/#667 and retest with the **same
    impersonated identity**; never grant Owner/Editor or use human Owner
@@ -184,11 +194,11 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
    **unverified**, not passed, and resolve it before downtime. Do not
    repeatedly stop production to discover missing permissions.
 
-   **Outstanding IAM follow-up:** v0.2.2 proved both keyless IAP/OS Login
-   paths end-to-end but not operation-polling permissions. #667/#590 track
-   the narrow read-only fix. Do not accept the previous successful resource
-   reads as a substitute for the operation-read preflight on the *next*
-   deployment; see the [v0.2.2 outcome](OPERATION_RUNBOOK.md#sigma-v022-deployment-outcome-2026-11-08-utc).
+   **Confirmed v0.3.0 preflight blocker:** the recovery identity was denied
+   `compute.globalOperations.get` and `compute.zoneOperations.list`;
+   `compute.zoneOperations.get` remains unverified. Follow the specific
+   read-only IAM remediation above; do not accept historical resource reads
+   or v0.2.2's workaround as proof of current operation-polling access.
 3. **Create a fresh application-consistent snapshot.** Declare the approved
    maintenance window and verify baseline identity, project, paper, job and
    accounting counts. Stop SIGMA writers cleanly on `sigma-gce-01`, sync the
@@ -326,11 +336,11 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
 `HTTPS/auth/About + maintenance off + data/accounting preservation`;
 `no paid inference + limitations`.
 
-A documented dry-run is **not** live-credential acceptance. The v0.2.2 release
-demonstrated keyless host access and isolated recovery with no Owner fallback.
-Issue #667 remains open for the missing narrowly scoped operation-read
-permissions and a clean repeatable preflight at a *future separately
-authorized* release; housekeeping does not authorize one.
+A documented dry-run is **not** live-credential acceptance. The v0.2.2
+release demonstrated keyless host access, but the v0.3.0 preflight confirmed
+operation-read denials. The next release remains on hold until a separately
+authorized IAM remediation is **effectively retested**, the selected v0.3.0
+SHA is refreshed after ongoing feature work, and all safety gates pass.
 
 Historical authorizations, release controls, schema-specific rollback notes
 and past cutover records are retained in
