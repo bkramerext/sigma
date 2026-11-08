@@ -64,6 +64,18 @@ has already shipped; **do not redeploy it** as part of #667.
    access. If there is no valid existing operation to test, mark the gate
    **unverified**, not passed, and resolve it before downtime. Do not
    repeatedly stop production to discover missing permissions.
+   **A denied connection is a release blocker, not a passed preflight.**
+
+   **v0.2.2 deployment outcome (2026-11-08):** effective instance-read access
+   and actual IAP/OS Login plus `sudo -n true` were verified for both
+   identities, without an IAM policy change or Owner fallback. The recovery
+   identity still lacked `compute.globalOperations.get`; synchronous `gcloud`
+   polling returned 403 after snapshot creation had been accepted. The named
+   snapshot was independently verified READY, and subsequent temporary
+   resource operations were checked by resource state. This outcome does not
+   satisfy the operation-polling preflight above for a future deployment; grant
+   only the documented narrowly scoped read permissions and test them before
+   downtime. See the v0.2.2 operations-runbook outcome for the evidence.
 3. **Create a fresh application-consistent snapshot.** Declare the approved
    maintenance window and verify baseline identity, project, paper, job and
    accounting counts. Stop SIGMA writers cleanly on `sigma-gce-01`, sync the
@@ -98,9 +110,10 @@ has already shipped; **do not redeploy it** as part of #667.
    READY snapshot and a `sigma-v021-recovery-*` VM in `us-west1-b`.
    Use an approved Ubuntu image, bounded machine/disk size, the existing
    `sigma-us-west1` subnet, `--no-address`,
-   `--no-service-account`, `--no-scopes`, and
-   `--metadata=enable-oslogin=TRUE,block-project-ssh-keys=TRUE`
-   **at initial VM creation**. Do not attach any production credentials
+   `--no-service-account`, `--no-scopes`, `--tags=sigma-iap-ssh`, and
+   `--metadata=enable-oslogin=TRUE,block-project-ssh-keys=TRUE` **at initial
+   VM creation**. The project IAP-only firewall selects the
+   `sigma-iap-ssh` network tag. Do not attach any production credentials
    or the production disk. Attach the clone **READ_ONLY** (`--mode=ro`);
    inspect the device/UUID, mount ext4 only with
    `ro,noload,nosuid,nodev,noexec,norecovery`, and verify flags via
@@ -118,7 +131,7 @@ has already shipped; **do not redeploy it** as part of #667.
    gcloud compute instances create "$RECOVERY_VM" --project="$PROJECT" --zone="$ZONE" \
      --machine-type=e2-standard-2 --image-project=ubuntu-os-cloud \
      --image-family=ubuntu-2404-lts-amd64 --subnet=sigma-us-west1 \
-     --no-address --no-service-account --no-scopes \
+     --no-address --no-service-account --no-scopes --tags=sigma-iap-ssh \
      --metadata=enable-oslogin=TRUE,block-project-ssh-keys=TRUE \
      --impersonate-service-account="$RECOVERY_ID"
    gcloud compute instances attach-disk "$RECOVERY_VM" \
