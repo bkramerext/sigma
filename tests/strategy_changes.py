@@ -43,6 +43,8 @@ def fixture(path: Path):
         raw.pop(key, None)
     raw.pop("difficulty", None)
     raw.pop("show_advanced_outcome_details", None)
+    raw.pop("desired_outcomes", None)
+    raw.pop("paper_requirements", None)
     for item in raw.get("strategies", []):
         item.pop("enabled", None)
     (path / STATE).write_text(json.dumps(raw))

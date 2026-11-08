@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "a7d72eb8-95c5-4e48-9d6b-96b63c7c7b6d",
   "title": "Investigate an Unexpected Oscillation in a Controlled Experiment",
   "problem": "A precision sensor began oscillating after its control software changed. Is this a physical signal, an instrument or software artifact, or coincidence? The raw observations, calibration records, environmental logs, and software history are missing; identifying what evidence is needed is part of the investigation. Form competing hypotheses spanning genuine physical effects, instrument artifacts, environmental coupling, aliasing, software defects, and statistical coincidence. Design a preregisterable, blinded where feasible investigation: identify indispensable measurements and metadata, controls, sample-size and power assumptions, quantitative analyses, falsification tests, replication criteria, and how to handle multiple comparisons. Explicitly distinguish simulated or proposed observations from actual evidence. Do not claim that a novel physical effect exists without data. Deliver a ranked experimental plan, predicted signatures of each hypothesis, decision rules, and unresolved uncertainties.",
@@ -20,6 +20,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-25T16:45:41.426852+00:00",
       "strategy_id": "5f676881-9f37-421e-83b1-683fdee9cfc4"
+    },
+    {
+      "sequence": 4,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Investigate an Unexpected Oscillation in a Controlled Experiment",
+          "problem": "A precision sensor began oscillating after its control software changed. Is this a physical signal, an instrument or software artifact, or coincidence? The raw observations, calibration records, environmental logs, and software history are missing; identifying what evidence is needed is part of the investigation. Form competing hypotheses spanning genuine physical effects, instrument artifacts, environmental coupling, aliasing, software defects, and statistical coincidence. Design a preregisterable, blinded where feasible investigation: identify indispensable measurements and metadata, controls, sample-size and power assumptions, quantitative analyses, falsification tests, replication criteria, and how to handle multiple comparisons. Explicitly distinguish simulated or proposed observations from actual evidence. Do not claim that a novel physical effect exists without data. Deliver a ranked experimental plan, predicted signatures of each hypothesis, decision rules, and unresolved uncertainties.",
+          "investigation_type": "physics",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "medium",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Investigate an Unexpected Oscillation in a Controlled Experiment",
+          "problem": "A precision sensor began oscillating after its control software changed. Is this a physical signal, an instrument or software artifact, or coincidence? The raw observations, calibration records, environmental logs, and software history are missing; identifying what evidence is needed is part of the investigation. Form competing hypotheses spanning genuine physical effects, instrument artifacts, environmental coupling, aliasing, software defects, and statistical coincidence. Design a preregisterable, blinded where feasible investigation: identify indispensable measurements and metadata, controls, sample-size and power assumptions, quantitative analyses, falsification tests, replication criteria, and how to handle multiple comparisons. Explicitly distinguish simulated or proposed observations from actual evidence. Do not claim that a novel physical effect exists without data. Deliver a ranked experimental plan, predicted signatures of each hypothesis, decision rules, and unresolved uncertainties.",
+          "investigation_type": "physics",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "medium",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Construct falsifiable competing hypotheses and a preregisterable experimental program with discriminating measurements, controls, replications and decision rules.",
+          "paper_requirements": "Provide predicted signatures per hypothesis, measurement metadata and calibration needs, blinding/randomization where feasible, analysis and power assumptions, multiple-comparison safeguards, and a ranked experiment plan. Clearly mark proposed and simulated observations; do not claim discovery without data."
+        }
+      }
     }
   ],
   "strategies": [
@@ -53,7 +82,8 @@
     "8a83da97-2fc6-4fcc-8aa4-e1281349df3a",
     "5f676881-9f37-421e-83b1-683fdee9cfc4"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "medium"
+  "difficulty": "medium",
+  "desired_outcomes": "Construct falsifiable competing hypotheses and a preregisterable experimental program with discriminating measurements, controls, replications and decision rules.",
+  "paper_requirements": "Provide predicted signatures per hypothesis, measurement metadata and calibration needs, blinding/randomization where feasible, analysis and power assumptions, multiple-comparison safeguards, and a ranked experiment plan. Clearly mark proposed and simulated observations; do not claim discovery without data.",
+  "project_type_snapshot": null
 }

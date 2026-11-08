@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "cec11fe5-9c2f-4ca3-af2d-a46da30f7782",
   "title": "Prime Factorization and the Euler Product",
   "problem": "What does prime factorization reveal about the Riemann zeta function, and where is its prime product genuinely valid? For complex s with Re(s) > 1, compare ζ(s) = Σ(n≥1) n^(-s) with products indexed by primes. Determine and prove any exact factorization, with precise convergence conditions. Separate finite-product identities from infinite limits and justify every interchange using absolute convergence or another explicit bound. Check a small numerical case with a certified tail estimate. Explain what prime-power information follows from logarithmic differentiation, and why that does not by itself prove the Riemann Hypothesis. Distinguish recalled standard results from facts derived in this investigation; do not invent sources or claim computation that was not performed.",
@@ -20,6 +20,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-23T06:16:05.804773+00:00",
       "strategy_id": "8b147df8-b8d1-40a1-85ac-a0393443e323"
+    },
+    {
+      "sequence": 4,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Prime Factorization and the Euler Product",
+          "problem": "What does prime factorization reveal about the Riemann zeta function, and where is its prime product genuinely valid? For complex s with Re(s) > 1, compare ζ(s) = Σ(n≥1) n^(-s) with products indexed by primes. Determine and prove any exact factorization, with precise convergence conditions. Separate finite-product identities from infinite limits and justify every interchange using absolute convergence or another explicit bound. Check a small numerical case with a certified tail estimate. Explain what prime-power information follows from logarithmic differentiation, and why that does not by itself prove the Riemann Hypothesis. Distinguish recalled standard results from facts derived in this investigation; do not invent sources or claim computation that was not performed.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "medium",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Prime Factorization and the Euler Product",
+          "problem": "What does prime factorization reveal about the Riemann zeta function, and where is its prime product genuinely valid? For complex s with Re(s) > 1, compare ζ(s) = Σ(n≥1) n^(-s) with products indexed by primes. Determine and prove any exact factorization, with precise convergence conditions. Separate finite-product identities from infinite limits and justify every interchange using absolute convergence or another explicit bound. Check a small numerical case with a certified tail estimate. Explain what prime-power information follows from logarithmic differentiation, and why that does not by itself prove the Riemann Hypothesis. Distinguish recalled standard results from facts derived in this investigation; do not invent sources or claim computation that was not performed.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "medium",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Derive the Euler product from finite prime factorizations, justify its domain of equality with the Dirichlet series, and examine what its logarithmic derivative establishes about prime powers.",
+          "paper_requirements": "Provide convergence bounds, exact derivations and a small numerical illustration with a certified tail estimate. Clearly separate finite identities, infinite limits, recalled standard results and any unsupported implication for the Riemann Hypothesis."
+        }
+      }
     }
   ],
   "strategies": [
@@ -53,7 +82,8 @@
     "f7f92cc4-160e-4556-bc78-f0603a1100a9",
     "8b147df8-b8d1-40a1-85ac-a0393443e323"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "medium"
+  "difficulty": "medium",
+  "desired_outcomes": "Derive the Euler product from finite prime factorizations, justify its domain of equality with the Dirichlet series, and examine what its logarithmic derivative establishes about prime powers.",
+  "paper_requirements": "Provide convergence bounds, exact derivations and a small numerical illustration with a certified tail estimate. Clearly separate finite identities, infinite limits, recalled standard results and any unsupported implication for the Riemann Hypothesis.",
+  "project_type_snapshot": null
 }

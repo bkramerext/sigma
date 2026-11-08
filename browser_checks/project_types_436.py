@@ -717,7 +717,7 @@ with sync_playwright() as playwright:
 
     open_project(page, affected["path"])
     expect(page.get_by_role("heading", name="Deleted custom parent")).to_be_visible()
-    expect(page.get_by_text("DESCRIPTION AND ACCEPTANCE CRITERIA", exact=True)).to_be_visible()
+    expect(page.get_by_text("PROJECT DESCRIPTION", exact=True)).to_be_visible()
     expect(page.get_by_text("Project type unavailable", exact=True).first).to_be_visible()
     expect(page.get_by_role("button", name="Export project")).to_be_visible()
     with page.expect_download() as download_info:
@@ -803,7 +803,7 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
-    expect(page.get_by_role("button", name="Project settings")).to_be_visible()
+    expect(page.get_by_role("button", name="Project type and difficulty")).to_be_visible()
     assert header.get_by_role("button", name="Project Types").count() == 0
 
     with page.expect_download() as legacy_download:
@@ -844,7 +844,7 @@ with sync_playwright() as playwright:
     assert replaced["project"]["project_type_snapshot"]["id"] == "mathematical"
 
     # Project Settings contains only project type and difficulty.
-    page.get_by_role("button", name="Project settings", exact=True).click()
+    page.get_by_role("button", name="Project type and difficulty", exact=True).click()
     project_settings = page.get_by_role("dialog", name="Project Settings")
     expect(project_settings.get_by_role("tab", name="Preferences")).to_have_count(0)
     expect(project_settings.get_by_label("Difficulty")).to_be_visible()

@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "74c892da-1c36-4480-8dac-d9ccc17154ba",
   "title": "Riemann Hypothesis: A Research Portfolio",
   "problem": "Can every nontrivial zero of the Riemann zeta function lie on the critical line? This is the Riemann Hypothesis, a famous open problem. Test bounded claims without assuming the answer or expecting a proof. Begin with a precise statement of the analytic continuation and zero domain your argument uses. Treat each proposed lemma as a separate obligation, seek counterexamples to intermediate claims, and distinguish theorem, heuristic, numerical check, and recollection. This workspace has no external-source search or formal proof-assistant tools. Local scientific Python or SageMath computation is permitted only when the session execution_tools explicitly reports an available runtime; otherwise no numerical or symbolic runtime is available. Require saved execution evidence for every computation claim; never claim to have searched, computed, or machine-verified anything without that evidence. Finite computation is not proof of a statement about all zeros. A useful partial result must be exact, nontrivial, and independently checkable from the text. If no defensible advance is made, report the obstacle and a discriminating next step without presenting a research program as a candidate proof.",
@@ -32,6 +32,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-25T16:45:41.425424+00:00",
       "strategy_id": "aaa73abb-17bd-48e6-af08-91cc6b623933"
+    },
+    {
+      "sequence": 6,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Riemann Hypothesis: A Research Portfolio",
+          "problem": "Can every nontrivial zero of the Riemann zeta function lie on the critical line? This is the Riemann Hypothesis, a famous open problem. Test bounded claims without assuming the answer or expecting a proof. Begin with a precise statement of the analytic continuation and zero domain your argument uses. Treat each proposed lemma as a separate obligation, seek counterexamples to intermediate claims, and distinguish theorem, heuristic, numerical check, and recollection. This workspace has no external-source search or formal proof-assistant tools. Local scientific Python or SageMath computation is permitted only when the session execution_tools explicitly reports an available runtime; otherwise no numerical or symbolic runtime is available. Require saved execution evidence for every computation claim; never claim to have searched, computed, or machine-verified anything without that evidence. Finite computation is not proof of a statement about all zeros. A useful partial result must be exact, nontrivial, and independently checkable from the text. If no defensible advance is made, report the obstacle and a discriminating next step without presenting a research program as a candidate proof.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Riemann Hypothesis: A Research Portfolio",
+          "problem": "Can every nontrivial zero of the Riemann zeta function lie on the critical line? This is the Riemann Hypothesis, a famous open problem. Test bounded claims without assuming the answer or expecting a proof. Begin with a precise statement of the analytic continuation and zero domain your argument uses. Treat each proposed lemma as a separate obligation, seek counterexamples to intermediate claims, and distinguish theorem, heuristic, numerical check, and recollection. This workspace has no external-source search or formal proof-assistant tools. Local scientific Python or SageMath computation is permitted only when the session execution_tools explicitly reports an available runtime; otherwise no numerical or symbolic runtime is available. Require saved execution evidence for every computation claim; never claim to have searched, computed, or machine-verified anything without that evidence. Finite computation is not proof of a statement about all zeros. A useful partial result must be exact, nontrivial, and independently checkable from the text. If no defensible advance is made, report the obstacle and a discriminating next step without presenting a research program as a candidate proof.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Establish any defensible partial result precisely, falsify unsupported intermediate lemmas, and identify concrete discriminating next steps when the available evidence is insufficient.",
+          "paper_requirements": "Define the analytic setting and zero domain, enumerate proof obligations and exact premises, distinguish recalled standard results from newly derived steps, and document failed approaches and unverified conjectures. Never present finite computation or agent agreement as a proof of the Riemann Hypothesis."
+        }
+      }
     }
   ],
   "strategies": [
@@ -91,7 +120,8 @@
     "80c175ae-d783-4087-bd13-0585f1342664",
     "aaa73abb-17bd-48e6-af08-91cc6b623933"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "hard"
+  "difficulty": "hard",
+  "desired_outcomes": "Establish any defensible partial result precisely, falsify unsupported intermediate lemmas, and identify concrete discriminating next steps when the available evidence is insufficient.",
+  "paper_requirements": "Define the analytic setting and zero domain, enumerate proof obligations and exact premises, distinguish recalled standard results from newly derived steps, and document failed approaches and unverified conjectures. Never present finite computation or agent agreement as a proof of the Riemann Hypothesis.",
+  "project_type_snapshot": null
 }

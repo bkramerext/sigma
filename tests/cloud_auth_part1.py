@@ -792,7 +792,7 @@ class CloudAuthTests(CloudAuthFixture):
             )
             self.assertEqual(listed_sample["investigation_type"], "physics")
             self.assertEqual(listed_sample["problem"], source["problem"])
-            self.assertEqual(source["schema_version"], 8)
+            self.assertEqual(source["schema_version"], 13)
             opened = guest.post(
                 "/api/projects/samples/open",
                 json={"sample_id": sample_id},
@@ -804,7 +804,7 @@ class CloudAuthTests(CloudAuthFixture):
             self.assertTrue((project_path / "project.json").is_file())
             copied = opened.json()["project"]
             self.assertEqual(copied["investigation_type"], "physics")
-            self.assertEqual(copied["schema_version"], 8)
+            self.assertEqual(copied["schema_version"], 13)
             self.assertEqual(copied["problem"], source["problem"])
             self.assertEqual(copied["project_type_snapshot"]["name"], "Physics")
             self.assertEqual(copied["project_type_snapshot"]["icon"]["key"], "physics")

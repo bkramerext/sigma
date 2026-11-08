@@ -22,7 +22,7 @@ from research_sessions import (
     wait_for,
 )
 
-from sigma import papers, python_sandbox, research_sessions, research_tools
+from sigma import papers, python_sandbox, research_ethos, research_sessions, research_tools
 from sigma.api import app, export_project_view
 from sigma.project_reports import render_report
 
@@ -135,8 +135,11 @@ async def test_integrated(path, status, available=True):
         context = json.loads(payload["input"])
         role = payload["text"]["format"]["name"]
         assert context["execution_tools"] == tools
+        # The frozen Ethos is supplied in instructions, not duplicated in
+        # provider JSON input. The snapshot is stable for this test session.
         assert payload["instructions"] == research_sessions._role_instructions(
-            role.removeprefix("research_"), context
+            role.removeprefix("research_"),
+            {**context, "research_ethos": research_ethos.frozen_snapshot()},
         )
         assert (
             f"SageMath is {'available' if available else 'unavailable'}" in payload["instructions"]

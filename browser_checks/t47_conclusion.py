@@ -1,6 +1,5 @@
 """Real Chrome checks for saved session Conclusions at desktop and phone widths."""
 
-import hashlib
 import json
 import os
 import socket
@@ -249,68 +248,31 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             page.route("**/api/projects/proposals/config**", mock_conversion_settings)
             page.route("**/api/projects/text/convert", queue_text_conversion)
             page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
-            project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
-            # Hosted CI can still be in the asynchronous "Opening project…"
-            # state after navigation. Keep the assertion, but allow backend
-            # fixture initialization to finish before declaring a UI failure.
-            expect(project_markdown).to_be_visible(timeout=20000)
-            project_copy = page.locator("#project-markdown-slot-copy .text-copy-button")
-            expect(project_copy).to_be_enabled()
+            # Schema-v13 project descriptions render Markdown directly. The
+            # legacy project-level plain/Markdown conversion controls were
+            # removed; retain browser coverage for the new subject/outcome/
+            # publication display and the existing strategy conversion UI.
+            subject = page.locator(".sigma-description-field").first
+            expect(subject.get_by_role("heading", name="Research Subject")).to_be_visible(
+                timeout=20000
+            )
+            expect(subject.locator(".sigma-description-rendered")).to_contain_text(
+                project["problem"]
+            )
+            expect(page.get_by_role("heading", name="Desired Outcomes")).to_be_visible()
+            expect(page.get_by_role("heading", name="Paper Requirements")).to_be_visible()
+            expect(page.locator("#project-markdown-slot .sigma-render-toggle")).to_have_count(0)
             page.locator(".project-pane-title-line").screenshot(
                 path="/tmp/sigma-copy-buttons-desktop.png"
             )
-            project_copy.click()
-            expect(project_copy).to_have_accessible_name("Copied research problem to clipboard")
-            assert page.evaluate("navigator.clipboard.readText()") == project["problem"]
-            # The confirmation checkmark does not disable the button; a second click copies again.
-            project_copy.click()
-            assert page.evaluate("navigator.clipboard.readText()") == project["problem"]
-            project_markdown.click()
-            project_status = page.locator("#project-markdown-slot .text-view-format-status")
-            expect(project_status).to_be_visible()
-            assert (
-                project_status.evaluate("element => getComputedStyle(element.parentElement).gap")
-                == "6px"
-            )
-            page.locator(".project-pane-title-line").screenshot(
-                path="/tmp/sigma-project-markdown-formatting.png"
-            )
             page.set_viewport_size({"width": 390, "height": 844})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-            expect(project_status).to_be_visible()
+            expect(subject).to_be_visible()
             page.screenshot(path="/tmp/sigma-project-markdown-formatting-mobile.png")
             page.locator(".project-pane-title-line").screenshot(
                 path="/tmp/sigma-copy-buttons-mobile.png"
             )
             page.set_viewport_size({"width": 1440, "height": 1000})
-            project_copy_response = {
-                "scope": "project",
-                "strategy_id": None,
-                "source_format": "plain",
-                "source_digest": hashlib.sha256(project["problem"].encode("utf-8")).hexdigest(),
-                "plain": {"body": project["problem"], "current": True},
-                "markdown": {
-                    "body": "## Fixture\n\nThis **description** has regular text.",
-                    "current": True,
-                },
-            }
-            pending_text_routes.pop(0).fulfill(
-                status=200,
-                content_type="application/json",
-                body=json.dumps(project_copy_response),
-            )
-            expect(page.locator(".project-intro .rendered-text")).to_contain_text(
-                "This description has regular text."
-            )
-            project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
-            expect(project_markdown).to_have_attribute("aria-pressed", "true")
-            project_copy.click()
-            expect(project_copy).to_have_accessible_name("Copied research problem to clipboard")
-            copied_rendered_text = page.evaluate("navigator.clipboard.readText()")
-            assert copied_rendered_text == "Fixture\n\nThis description has regular text.", repr(
-                copied_rendered_text
-            )
-            assert "**" not in copied_rendered_text
             strategy_markdown = page.locator(".strategy-markdown-slot .sigma-render-toggle").first
             expect(strategy_markdown).to_be_visible()
             strategy_copy = page.locator(".strategy-copy-slot .text-copy-button").first

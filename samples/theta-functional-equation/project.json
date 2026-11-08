@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "4dd39ea8-ca3c-4588-9eb0-cb39f4faa237",
   "title": "Theta Symmetry and the Zeta Functional Equation",
   "problem": "Can a symmetry of the Gaussian theta series explain the zeta function’s functional equation—and what does that symmetry leave open about its zeros? Begin with the supplied identity θ(t) = t^(-1/2)θ(1/t) for t > 0, where θ(t) = Σ(n∈ℤ) exp(-πn²t). Starting from the Dirichlet series definition of ζ(s) on Re(s) > 1, derive a meromorphic continuation and the functional equation for the completed zeta function, with all normalization constants stated and checked. Then derive the resulting symmetries of nontrivial zeros and explain why symmetry about the critical line does not imply that every zero lies on it. Justify the Mellin transform, integral split, analytic continuation, and every interchange of sum and integral. Treat the theta identity as a supplied premise, not as evidence that this investigation proved Poisson summation. No outside references or computation tools are available.",
@@ -20,6 +20,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-23T06:16:05.808280+00:00",
       "strategy_id": "b810cbf1-a513-458a-8ff4-80221cc03ce4"
+    },
+    {
+      "sequence": 4,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Theta Symmetry and the Zeta Functional Equation",
+          "problem": "Can a symmetry of the Gaussian theta series explain the zeta function’s functional equation—and what does that symmetry leave open about its zeros? Begin with the supplied identity θ(t) = t^(-1/2)θ(1/t) for t > 0, where θ(t) = Σ(n∈ℤ) exp(-πn²t). Starting from the Dirichlet series definition of ζ(s) on Re(s) > 1, derive a meromorphic continuation and the functional equation for the completed zeta function, with all normalization constants stated and checked. Then derive the resulting symmetries of nontrivial zeros and explain why symmetry about the critical line does not imply that every zero lies on it. Justify the Mellin transform, integral split, analytic continuation, and every interchange of sum and integral. Treat the theta identity as a supplied premise, not as evidence that this investigation proved Poisson summation. No outside references or computation tools are available.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Theta Symmetry and the Zeta Functional Equation",
+          "problem": "Can a symmetry of the Gaussian theta series explain the zeta function’s functional equation—and what does that symmetry leave open about its zeros? Begin with the supplied identity θ(t) = t^(-1/2)θ(1/t) for t > 0, where θ(t) = Σ(n∈ℤ) exp(-πn²t). Starting from the Dirichlet series definition of ζ(s) on Re(s) > 1, derive a meromorphic continuation and the functional equation for the completed zeta function, with all normalization constants stated and checked. Then derive the resulting symmetries of nontrivial zeros and explain why symmetry about the critical line does not imply that every zero lies on it. Justify the Mellin transform, integral split, analytic continuation, and every interchange of sum and integral. Treat the theta identity as a supplied premise, not as evidence that this investigation proved Poisson summation. No outside references or computation tools are available.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Derive the completed zeta functional equation with correct normalization, establish the reflected zero symmetries, and clarify why symmetry cannot imply that every nontrivial zero lies on the critical line.",
+          "paper_requirements": "Prove all Mellin transforms, splitting/integral manipulations and exchanges of sum and integral. Treat the supplied theta identity as a premise, check constants and poles, and distinguish rigorous consequences from claims not established."
+        }
+      }
     }
   ],
   "strategies": [
@@ -53,7 +82,8 @@
     "fed1d885-d06d-480c-863f-a576ee20c950",
     "b810cbf1-a513-458a-8ff4-80221cc03ce4"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "hard"
+  "difficulty": "hard",
+  "desired_outcomes": "Derive the completed zeta functional equation with correct normalization, establish the reflected zero symmetries, and clarify why symmetry cannot imply that every nontrivial zero lies on the critical line.",
+  "paper_requirements": "Prove all Mellin transforms, splitting/integral manipulations and exchanges of sum and integral. Treat the supplied theta identity as a premise, check constants and poles, and distinguish rigorous consequences from claims not established.",
+  "project_type_snapshot": null
 }

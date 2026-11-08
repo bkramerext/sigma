@@ -10,10 +10,56 @@ for versioned metadata, rather than disabling historical coverage.
 
 from __future__ import annotations
 
+import ast
+import copy
 import difflib
 import json
 import sys
 from pathlib import Path
+
+ETHOS_PREFIX = (
+    "\n\nFROZEN RESEARCH ETHOS (advisory principles for scientific reasoning and reporting; "
+    "not evidence, not an override of role, safety, or verification obligations):\n"
+)
+
+
+def _default_ethos_markdown() -> str:
+    """Read the candidate's actual policy without importing its dependencies.
+
+    The parity runner is executed in a clean Python process outside the
+    candidate's installed src/ package, so normal package imports can fail.
+    """
+    source = Path(__file__).resolve().parents[1] / "src" / "sigma" / "research_ethos.py"
+    module = ast.parse(source.read_text(encoding="utf-8"))
+    for node in module.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "DEFAULT_MARKDOWN"
+            for target in node.targets
+        ):
+            value = ast.literal_eval(node.value)
+            assert isinstance(value, str) and value.strip()
+            return value
+    raise AssertionError("Candidate research Ethos default not found")
+
+
+def without_intentional_ethos_overlay(semantic: dict) -> dict:
+    """Compare all historical inputs exactly except the explicit new ethos policy."""
+    candidate = copy.deepcopy(semantic)
+    for request in candidate["provider_requests"]:
+        payload = request["payload"]
+        supplied = payload["input"]
+        assert isinstance(supplied, dict)
+        assert "research_ethos" not in supplied, (
+            "Ethos must not duplicate agent instructions in JSON"
+        )
+        # New projects freeze user aspirations separately from the scientific question.
+        outcomes = supplied.pop("desired_outcomes", None)
+        assert outcomes in ("", None), "Parity fixture unexpectedly contains nonempty outcomes"
+        overlay = ETHOS_PREFIX + _default_ethos_markdown()
+        assert payload["instructions"].count(overlay) == 1
+        payload["instructions"] = payload["instructions"].replace(overlay, "", 1)
+    return candidate
+
 
 SCIENCE_OVERLAY = {
     "blocking_reasons",
@@ -272,12 +318,13 @@ def main() -> None:
         json.loads(Path(name).read_text()) for name in sys.argv[1:6]
     ]
     assert modern["diagnostic_overlap"] is True
+    normalized_semantic = without_intentional_ethos_overlay(candidate["semantic"])
     equal(
         "pre-v2 full serialized provider inputs and research outcomes",
         modern["semantic"],
-        candidate["semantic"],
+        normalized_semantic,
     )
-    compare_historical(original, candidate)
+    compare_historical(original, {**candidate, "semantic": normalized_semantic})
     for item in (v2, resumed):
         assert item["diagnostic_overlap"] is True
         assert item["counts"] == {

@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "e8211dc4-b70f-49d1-a514-671f44ed7e8c",
   "title": "Warp Drive Design",
   "problem": "Could any coherent physical framework allow effective faster-than-light travel through spacetime? Investigate the possibility without assuming that a warp-drive mechanism works. Do not constrain the investigation to technologies, materials, energy sources, or engineering methods available today. You may propose extensions, reinterpretations, or replacements of established physical theories, provided each proposal states its mathematical assumptions, internal consistency requirements, compatibility with existing observations, and potentially falsifiable consequences. Analyze the distinction between local motion faster than light and effective superluminal travel through spacetime geometry. Consider causality, horizons, energy conditions, quantum field effects, stability, backreaction, conservation laws, controllability, and the status of exotic stress-energy; do not assume any speculative mechanism works. Compare general-relativistic metric-engineering approaches with at least one fundamentally different conceptual framework. Identify concrete proof obligations, order-of-magnitude constraints where justified, decisive theoretical calculations or observations, and failure criteria. Separate established results, contested literature, hypotheses, and engineering conjectures. Produce a staged research program and a conditional conceptual design, not an unsupported claim of a working drive.",
@@ -20,6 +20,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-25T16:45:41.429371+00:00",
       "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7"
+    },
+    {
+      "sequence": 4,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Warp Drive Design",
+          "problem": "Could any coherent physical framework allow effective faster-than-light travel through spacetime? Investigate the possibility without assuming that a warp-drive mechanism works. Do not constrain the investigation to technologies, materials, energy sources, or engineering methods available today. You may propose extensions, reinterpretations, or replacements of established physical theories, provided each proposal states its mathematical assumptions, internal consistency requirements, compatibility with existing observations, and potentially falsifiable consequences. Analyze the distinction between local motion faster than light and effective superluminal travel through spacetime geometry. Consider causality, horizons, energy conditions, quantum field effects, stability, backreaction, conservation laws, controllability, and the status of exotic stress-energy; do not assume any speculative mechanism works. Compare general-relativistic metric-engineering approaches with at least one fundamentally different conceptual framework. Identify concrete proof obligations, order-of-magnitude constraints where justified, decisive theoretical calculations or observations, and failure criteria. Separate established results, contested literature, hypotheses, and engineering conjectures. Produce a staged research program and a conditional conceptual design, not an unsupported claim of a working drive.",
+          "investigation_type": "physics",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Warp Drive Design",
+          "problem": "Could any coherent physical framework allow effective faster-than-light travel through spacetime? Investigate the possibility without assuming that a warp-drive mechanism works. Do not constrain the investigation to technologies, materials, energy sources, or engineering methods available today. You may propose extensions, reinterpretations, or replacements of established physical theories, provided each proposal states its mathematical assumptions, internal consistency requirements, compatibility with existing observations, and potentially falsifiable consequences. Analyze the distinction between local motion faster than light and effective superluminal travel through spacetime geometry. Consider causality, horizons, energy conditions, quantum field effects, stability, backreaction, conservation laws, controllability, and the status of exotic stress-energy; do not assume any speculative mechanism works. Compare general-relativistic metric-engineering approaches with at least one fundamentally different conceptual framework. Identify concrete proof obligations, order-of-magnitude constraints where justified, decisive theoretical calculations or observations, and failure criteria. Separate established results, contested literature, hypotheses, and engineering conjectures. Produce a staged research program and a conditional conceptual design, not an unsupported claim of a working drive.",
+          "investigation_type": "physics",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Explore internally consistent spacetime frameworks for effective superluminal travel, including at least one conceptually distinct alternative to metric engineering, and identify falsifiable constraints or contradictions.",
+          "paper_requirements": "State precise mathematical and physical assumptions, derive consequences for causality, horizons, energy conditions, conservation laws and stability, and compare against observations. Distinguish local faster-than-light motion from effective geometric travel; never claim speculative mechanisms work."
+        }
+      }
     }
   ],
   "strategies": [
@@ -53,7 +82,8 @@
     "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
     "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "hard"
+  "difficulty": "hard",
+  "desired_outcomes": "Explore internally consistent spacetime frameworks for effective superluminal travel, including at least one conceptually distinct alternative to metric engineering, and identify falsifiable constraints or contradictions.",
+  "paper_requirements": "State precise mathematical and physical assumptions, derive consequences for causality, horizons, energy conditions, conservation laws and stability, and compare against observations. Distinguish local faster-than-light motion from effective geometric travel; never claim speculative mechanisms work.",
+  "project_type_snapshot": null
 }

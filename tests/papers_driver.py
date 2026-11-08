@@ -68,6 +68,7 @@ def main_part1() -> None:
     test_optional_table_tex_failure_keeps_paper_and_publishes_text_pdf()
     test_persistent_invalid_paper_validation_still_blocks_publication()
     test_long_paper_planning_timeout_is_stage_specific()
+    test_paper_section_count_tracks_scientific_complexity()
     test_structured_evidence_short_tail_does_not_crash()
     test_readable_paper_download_names_keep_stable_versions_and_server_headers()
     test_unexpected_paper_exception_yields_sanitized_sse_error()

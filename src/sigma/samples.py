@@ -7,6 +7,7 @@ import re
 import shutil
 import stat
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -718,6 +719,27 @@ def open_sample_project(identifier: str) -> ProjectView:
         staged: Path | None = None
         try:
             copied = {**raw, "id": str(uuid4()), "title": working_title}
+            # A v13 sample has an audited three-field Project Description.
+            # Do not rewrite or discard its historical edits just to rename
+            # a working copy: append this copy's own title event instead.
+            if copied["schema_version"] >= 13:
+                from sigma.projects import project_settings
+
+                previous = asdict(project_settings(_decode(raw)))
+                latest = datetime.fromisoformat(raw["events"][-1]["timestamp"])
+                stamped = max(datetime.now(UTC), latest).isoformat()
+                copied["events"] = [
+                    *raw["events"],
+                    {
+                        "sequence": len(raw["events"]) + 1,
+                        "kind": "project.updated",
+                        "timestamp": stamped,
+                        "project_change": {
+                            "previous": previous,
+                            "current": {**previous, "title": working_title},
+                        },
+                    },
+                ]
             # Keep the strategies and their history, but give this project
             # its own identity and a distinct display name.
             _decode(copied)

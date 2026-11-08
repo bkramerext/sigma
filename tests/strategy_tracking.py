@@ -51,6 +51,8 @@ def main():
                 item.pop("enabled", None)
             raw.pop("ai_model", None)
             raw.pop("reasoning_effort", None)
+            raw.pop("desired_outcomes", None)
+            raw.pop("paper_requirements", None)
             raw.pop("show_advanced_outcome_details", None)
             if version < 4:
                 raw.pop("research_mode", None)

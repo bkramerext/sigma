@@ -233,7 +233,8 @@ def check(root: Path, base: Path) -> None:
     qubit_source = json.loads(
         (ROOT / "samples" / "qubit-non-markovian-decoherence" / "project.json").read_bytes()
     )
-    assert qubit_source["schema_version"] == 8
+    assert qubit_source["schema_version"] == 13
+    assert qubit_source["desired_outcomes"] and qubit_source["paper_requirements"]
     qubit_root = base / "qubit-projects"
     qubit_root.mkdir()
     with patch.dict(
@@ -247,7 +248,7 @@ def check(root: Path, base: Path) -> None:
     qubit_copy = json.loads((Path(qubit_sample.path) / "project.json").read_bytes())
     assert qubit_copy["problem"] == qubit_source["problem"]
     assert qubit_sample.project.investigation_type == "physics"
-    assert qubit_sample.project.schema_version == 8
+    assert qubit_sample.project.schema_version == 13
     qubit_snapshot = qubit_sample.project.project_type_snapshot
     assert qubit_snapshot is not None
     assert qubit_snapshot["name"] == "Physics"

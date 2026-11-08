@@ -321,6 +321,8 @@ def main():
                     change_stage(path, first.id, "ready")
             raw = json.loads((path / "project.json").read_bytes())
             raw["schema_version"] = version
+            raw.pop("desired_outcomes", None)
+            raw.pop("paper_requirements", None)
             raw.pop("backend_build_commit", None)  # True legacy files never carried the field.
             if version < 8:
                 raw.pop("difficulty", None)
@@ -379,7 +381,7 @@ def main():
             }
             result = edit(path, values, prior)
             assert result.path == view.path and result.project.id == view.project.id
-            assert result.project.schema_version == max(version, 12)
+            assert result.project.schema_version == max(version, 13)
             assert result.project.difficulty is not None
             assert result.project.difficulty.value == "hard"
             assert result.project.show_advanced_outcome_details is False
@@ -408,6 +410,8 @@ def main():
         initialize_project(legacy, "Legacy unknown", "Retain unknown difficulty")
         legacy_raw = json.loads((legacy / "project.json").read_bytes())
         legacy_raw["schema_version"] = 7
+        legacy_raw.pop("desired_outcomes", None)
+        legacy_raw.pop("paper_requirements", None)
         legacy_raw["ai_model"] = "gpt-6.1-sol"
         legacy_raw["reasoning_effort"] = "high"
         legacy_raw.pop("difficulty")
@@ -416,7 +420,7 @@ def main():
         legacy_view = inspect_project(legacy)
         legacy_settings = asdict(project_settings(legacy_view.project))
         renamed = edit(legacy, {**legacy_settings, "title": "Still unknown"}, legacy_settings)
-        assert renamed.project.schema_version == 12 and renamed.project.difficulty is None
+        assert renamed.project.schema_version == 13 and renamed.project.difficulty is None
         assert "difficulty" in json.loads((legacy / "project.json").read_bytes())
         assert inspect_project(legacy).project.difficulty is None
         with TestClient(app) as client:
@@ -438,7 +442,7 @@ def main():
             lambda: initialize_project(root / "invalid-model.sigma", "Bad", "Question", ai_model="")
         )
         assert not (root / "invalid-model.sigma").exists()
-        assert initial.project.schema_version == 12
+        assert initial.project.schema_version == 13
         assert initial.project.difficulty is not None
         assert initial.project.difficulty.value == "medium"
         assert initial.project.show_advanced_outcome_details is False
@@ -478,7 +482,7 @@ def main():
         change_stage(path, item.id, "exploring")
         edit_strategy(path, item.id, "Edited strategy", "New approach")
         remove_strategy(path, item.id)
-        assert inspect_project(path).project.schema_version == 12
+        assert inspect_project(path).project.schema_version == 13
         print(
             "PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes"
         )
@@ -503,12 +507,8 @@ def main():
         with TestClient(app) as client:
             expected = asdict(project_settings(inspect_project(path).project))
             body = {"path": str(path), **expected, "title": "API name", "expected": expected}
-            assert (
-                client.post(
-                    "/api/projects/update", json={**body, "difficulty": "trivial"}
-                ).status_code
-                == 400
-            )
+            rejected = client.post("/api/projects/update", json={**body, "difficulty": "trivial"})
+            assert rejected.status_code == 400, rejected.text
             response = client.post("/api/projects/update", json=body)
             assert response.status_code == 200, response.text
             assert response.json()["project"]["difficulty"] == "medium"

@@ -1149,6 +1149,31 @@ def global_research_settings_update(body: GlobalResearchSettingsRequest):
     return global_research_settings.save_config(changes)
 
 
+class ResearchEthosPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    markdown: str | None
+
+
+@app.get("/api/user-preferences/research-ethos")
+def research_ethos_preference():
+    from sigma import research_ethos
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(403, "Sign in to view Research Ethos.")
+    return research_ethos.current()
+
+
+@app.put("/api/user-preferences/research-ethos")
+def update_research_ethos_preference(body: ResearchEthosPreference):
+    from sigma import research_ethos
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(403, "Sign in to change Research Ethos.")
+    return research_ethos.save_override(body.markdown)
+
+
 @app.get("/api/projects/research-limits")
 def research_limits_view(path: str):
     inspect_project(path)
@@ -2281,6 +2306,8 @@ class ProjectSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
     problem: str
+    desired_outcomes: str | None = None
+    paper_requirements: str | None = None
     investigation_type: str = Field(
         validation_alias=AliasChoices("investigation_type", "research_mode")
     )
@@ -2377,6 +2404,8 @@ def update_project_view(body: UpdateProjectRequest):
             body.expected.model_dump(exclude_none=True),
             difficulty=body.difficulty,
             show_advanced_outcome_details=body.show_advanced_outcome_details,
+            desired_outcomes=body.desired_outcomes,
+            paper_requirements=body.paper_requirements,
         )
     )
 

@@ -537,3 +537,6 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 @media (max-width: 700px) {
   .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0, 1fr); gap: 2px; }
 }
+
+.workspace-page .project-global-settings-pill { display: inline-flex; align-items: center; gap: 6px; justify-self: stretch; width: 100%; }
+.workspace-page .project-global-settings-pill svg { width: 13px; height: 13px; }

@@ -1,0 +1,10 @@
+.sigma-description-fields { display: grid; gap: 1rem; width: 100%; min-width: 0; }
+.sigma-description-field { min-width: 0; width: 100%; }
+.sigma-description-field h4 { margin: 0 0 .25rem; font-size: .94rem; font-weight: 600; }
+.sigma-description-field .settings-hint { margin: .1rem 0 .4rem; }
+.sigma-description-field textarea { box-sizing: border-box; display: block; width: 100%; min-height: 5rem; max-width: 100%; resize: vertical; font: inherit; line-height: 1.5; }
+.sigma-description-editor { width: 100%; min-width: 0; }
+.sigma-description-editor form { width: 100%; }
+.sigma-description-rendered { overflow-wrap: anywhere; }
+.sigma-description-rendered p:first-child { margin-top: 0; }
+.sigma-description-actions { display: flex; gap: 1rem; margin-top: 1rem; }

@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 13,
   "id": "2b7628b3-9e25-445a-a3b4-54d69239e8bf",
   "title": "Did Jesus Use Cannabis?",
   "problem": "What can the surviving evidence tell us about whether the historical Jesus used cannabis, for any purpose? Evaluate direct and indirect evidence from early texts, historical languages, archaeology, and first-century social practices. Distinguish whether cannabis existed in the region, whether it was used by some people, and whether there is credible evidence that Jesus personally used it. Do not assume either answer; identify uncertainty and explain what evidence would change the conclusion.",
@@ -38,6 +38,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-21T04:30:00+00:00",
       "strategy_id": "1a8deae1-7e23-4b92-93ab-8749c4503005"
+    },
+    {
+      "sequence": 7,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Did Jesus Use Cannabis?",
+          "problem": "What can the surviving evidence tell us about whether the historical Jesus used cannabis, for any purpose? Evaluate direct and indirect evidence from early texts, historical languages, archaeology, and first-century social practices. Distinguish whether cannabis existed in the region, whether it was used by some people, and whether there is credible evidence that Jesus personally used it. Do not assume either answer; identify uncertainty and explain what evidence would change the conclusion.",
+          "investigation_type": "religion",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": null,
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Did Jesus Use Cannabis?",
+          "problem": "What can the surviving evidence tell us about whether the historical Jesus used cannabis, for any purpose? Evaluate direct and indirect evidence from early texts, historical languages, archaeology, and first-century social practices. Distinguish whether cannabis existed in the region, whether it was used by some people, and whether there is credible evidence that Jesus personally used it. Do not assume either answer; identify uncertainty and explain what evidence would change the conclusion.",
+          "investigation_type": "religion",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": null,
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Separate the presence of cannabis in the region, possible contemporary practices, and any direct evidence concerning Jesus himself. Identify which historical claims are supported, merely plausible, or unresolvable.",
+          "paper_requirements": "Assess the earliest relevant texts, language interpretations, archaeological context, genre and dating. Distinguish firsthand attestation from speculation and absence of evidence; state explicitly which new evidence could revise the conclusion."
+        }
+      }
     }
   ],
   "strategies": [
@@ -50,7 +79,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Examine what the earliest relevant texts actually attest.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "1a8deae1-7e23-4b92-93ab-8749c4503002",
@@ -61,7 +91,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Test cannabis-related word identifications against linguistic evidence.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "1a8deae1-7e23-4b92-93ab-8749c4503003",
@@ -72,7 +103,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Assess physical evidence and its chronological and geographic limits.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "1a8deae1-7e23-4b92-93ab-8749c4503004",
@@ -83,7 +115,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Separate cultural possibility from evidence about an individual.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "1a8deae1-7e23-4b92-93ab-8749c4503005",
@@ -94,15 +127,20 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Audit modern claims and independently weigh their sources.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     }
   ],
-  "research_mode": "religion",
   "active_order": [
     "1a8deae1-7e23-4b92-93ab-8749c4503001",
     "1a8deae1-7e23-4b92-93ab-8749c4503002",
     "1a8deae1-7e23-4b92-93ab-8749c4503003",
     "1a8deae1-7e23-4b92-93ab-8749c4503004",
     "1a8deae1-7e23-4b92-93ab-8749c4503005"
-  ]
+  ],
+  "desired_outcomes": "Separate the presence of cannabis in the region, possible contemporary practices, and any direct evidence concerning Jesus himself. Identify which historical claims are supported, merely plausible, or unresolvable.",
+  "paper_requirements": "Assess the earliest relevant texts, language interpretations, archaeological context, genre and dating. Distinguish firsthand attestation from speculation and absence of evidence; state explicitly which new evidence could revise the conclusion.",
+  "investigation_type": "religion",
+  "difficulty": null,
+  "project_type_snapshot": null
 }

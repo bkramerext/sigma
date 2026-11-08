@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "ac47cd7a-99be-48d8-83bb-b70b7e046f10",
   "title": "Counting Constrained Binary Strings",
   "problem": "How many length-n binary strings avoid two consecutive 1s? Find a rule that works for every n, counting the empty string at n = 0. Derive and justify a general formula or recurrence for the count, including the necessary initial values. Check the result on small n. Do not assume a particular proof method.",
@@ -14,6 +14,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-25T16:45:33.121994+00:00",
       "strategy_id": "e175a29c-df91-48e9-af8c-d72f77014333"
+    },
+    {
+      "sequence": 3,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Counting Constrained Binary Strings",
+          "problem": "How many length-n binary strings avoid two consecutive 1s? Find a rule that works for every n, counting the empty string at n = 0. Derive and justify a general formula or recurrence for the count, including the necessary initial values. Check the result on small n. Do not assume a particular proof method.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "easy",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Counting Constrained Binary Strings",
+          "problem": "How many length-n binary strings avoid two consecutive 1s? Find a rule that works for every n, counting the empty string at n = 0. Derive and justify a general formula or recurrence for the count, including the necessary initial values. Check the result on small n. Do not assume a particular proof method.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "easy",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Discover a general recurrence or formula with its proper initial conditions and explain the combinatorial mechanism behind it.",
+          "paper_requirements": "Give a concise, rigorous counting proof and verify the base cases and a few small values. Avoid unnecessary narrative restatement of the recurrence."
+        }
+      }
     }
   ],
   "strategies": [
@@ -34,7 +63,8 @@
   "active_order": [
     "e175a29c-df91-48e9-af8c-d72f77014333"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "easy"
+  "difficulty": "easy",
+  "desired_outcomes": "Discover a general recurrence or formula with its proper initial conditions and explain the combinatorial mechanism behind it.",
+  "paper_requirements": "Give a concise, rigorous counting proof and verify the base cases and a few small values. Avoid unnecessary narrative restatement of the recurrence.",
+  "project_type_snapshot": null
 }
