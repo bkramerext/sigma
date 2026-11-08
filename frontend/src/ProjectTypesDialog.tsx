@@ -2,6 +2,19 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefO
 import './project-types.css';
 import DialogDismissButton from './DialogDismissButton';
 
+function ReferenceActionIcon({ kind }: { kind: 'eye' | 'eye-off' | 'edit' | 'remove' }) {
+  return <svg className="pt-reference-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {kind === 'eye' || kind === 'eye-off' ? <>
+      <path d="M2 12s3.7-7 10-7 10 7 10 7-3.7 7-10 7S2 12 2 12Z"/>
+      <circle cx="12" cy="12" r="3"/>
+      {kind === 'eye-off' && <path d="M3 3 21 21" strokeWidth="2.2"/>}
+    </> : kind === 'edit' ? <>
+      <path d="M12 20H4a1 1 0 0 1-1-1v-7"/>
+      <path d="m8 16 9.7-9.7 3 3L11 19l-4 1zM16.7 7.3l2-2a2.1 2.1 0 0 1 3 3l-1 1"/>
+    </> : <path d="M5 5 19 19M19 5 5 19"/>}
+  </svg>;
+}
+
 export type ProjectTypeRecord = {
   id: string;
   name: string;
@@ -398,7 +411,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     const label = field === 'research_standards_references' ? 'research' : 'publication';
     return <button type="button" className="pt-reference-toggle" aria-pressed={disabled}
       aria-label={`${action} ${label} reference ${reference.name || reference.url} for ${owner === 'common' ? 'all project types' : owner}`}
-      disabled={busy} onClick={() => toggleReference(owner, field, reference.url)}>{action}</button>;
+      disabled={busy} title={`${action} reference`} onClick={() => toggleReference(owner, field, reference.url)}><ReferenceActionIcon kind={disabled ? 'eye-off' : 'eye'}/></button>;
   }
   const isDuplicateName = (item: ProjectTypeRecord) => {
     const normalized = item.name.normalize("NFKC").trim().toLocaleLowerCase();
@@ -657,12 +670,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
             <button type="button" disabled={busy} onClick={() => {
               referenceEditOrigins.current.set(rowKey, reference);
               setEditingReferences(previous => new Set(previous).add(rowKey));
-            }}>Edit</button>
+            }} aria-label="Edit reference" title="Edit reference"><ReferenceActionIcon kind="edit"/></button>
             <button type="button" disabled={busy} onClick={() => {
               referenceEditOrigins.current.delete(rowKey);
               setEditingReferences(previous => { const next = new Set(previous); next.delete(rowKey); return next; });
               update(references.filter((_, i) => i !== index));
-            }}>Remove</button>
+            }} aria-label="Remove reference" title="Remove reference"><ReferenceActionIcon kind="remove"/></button>
           </>}
         </div></td></tr>;
       })}
