@@ -332,9 +332,3 @@
 
 .admin-new-entry-heading .admin-new-entry-actions { position: static; }
 
-/* Compact Project Settings close-X inset. */
-.sigma-project-classification-dialog .settings-header .sigma-dialog-dismiss.sigma-dialog-dismiss {
-  /* Center the 28px target approximately 48px from the outer top/right borders. */
-  top: 34px !important;
-  right: 34px !important;
-}

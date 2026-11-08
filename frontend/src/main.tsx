@@ -4204,13 +4204,21 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    {close && projectView && onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/> Settings</button>}
     {close && projectView && onProjectUpdated ? <>
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
-    {close && projectView && <GlobalModelPill enabled={showConnectionStatus}/> }
-    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
+    {close && projectView && <div className="sigma-header-model-column">
+      <div className="sigma-header-secondary-row">
+        <div className="sigma-header-about-model-anchor">
+          <div className="sigma-header-first-row">
+            <button type="button" className="about-action" aria-label="About SIGMA" data-tooltip-disabled onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
+            {onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/></button>}
+          </div>
+          <ConnectedModelPill enabled={showConnectionStatus}/>
+        </div>
+      </div>
+    </div>}
     </div>
     {globalSettingsOpen && <GlobalSettingsDialog onClose={() => setGlobalSettingsOpen(false)}/>}
   </header>;
@@ -4599,6 +4607,99 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
   </div>;
 }
 
+function DifficultyPicker({ value, onChange }: {
+  value: ProjectDifficulty | null;
+  onChange: (next: ProjectDifficulty | null) => void;
+}) {
+  const choices: { value: ProjectDifficulty | null; label: string }[] = [
+    ...(value === null ? [{ value: null, label: 'Not set' }] : []),
+    { value: 'easy', label: 'Easy' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'hard', label: 'Hard' },
+  ];
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const options = useRef<Array<HTMLButtonElement | null>>([]);
+  const [menuStyle, setMenuStyle] = useState({ top: -10000, left: -10000, width: 0, maxHeight: 180 });
+  const current = Math.max(0, choices.findIndex(item => item.value === value));
+  useEffect(() => { if (open) options.current[active]?.focus(); }, [open, active]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [open]);
+  useLayoutEffect(() => {
+    if (!open || !menu.current) return;
+    const panel = menu.current;
+    panel.showPopover();
+    const place = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const height = Math.min(180, Math.max(80, Math.max(below, above)));
+      setMenuStyle({
+        top: below < 130 && above > below ? Math.max(8, rect.top - height - 4) : rect.bottom + 4,
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
+        width: rect.width, maxHeight: height,
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      if (panel.matches(':popover-open')) panel.hidePopover();
+    };
+  }, [open]);
+  function choose(next: ProjectDifficulty | null) {
+    onChange(next);
+    setOpen(false);
+    requestAnimationFrame(() => trigger.current?.focus());
+  }
+  return <div className="research-type-picker sigma-difficulty-picker" ref={root}>
+    <button ref={trigger} id="sigma-project-difficulty" type="button" role="combobox"
+      aria-label="Difficulty" aria-haspopup="listbox" aria-expanded={open}
+      aria-controls="sigma-project-difficulty-options"
+      onClick={() => { setActive(current); setOpen(previous => !previous); }}
+      onKeyDown={event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          setActive(event.key === 'ArrowDown' ? current : choices.length - 1);
+          setOpen(true);
+        }
+      }}>
+      <span>{value ? difficultyLabels[value] : 'Not set'}</span>
+      <svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
+    </button>
+    {open && <div ref={menu} popover="manual" style={menuStyle}
+      className="research-type-options" id="sigma-project-difficulty-options"
+      role="listbox" aria-label="Difficulty">
+      {choices.map((item, index) => <button key={item.value ?? 'unset'}
+        ref={element => { options.current[index] = element; }}
+        type="button" role="option" aria-selected={item.value === value}
+        tabIndex={active === index ? 0 : -1}
+        onFocus={() => setActive(index)}
+        onClick={() => choose(item.value)}
+        onKeyDown={event => {
+          if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index + 1) % choices.length); }
+          else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index - 1 + choices.length) % choices.length); }
+          else if (event.key === 'Home') { event.preventDefault(); setActive(0); }
+          else if (event.key === 'End') { event.preventDefault(); setActive(choices.length - 1); }
+          else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); }
+          else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(item.value); }
+        }}><span>{item.label}</span></button>)}
+    </div>}
+  </div>;
+}
+
 function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   initial: ProjectView; onSaved: (next: ProjectView) => void; onCancel: () => void;
 }) {
@@ -4639,14 +4740,8 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
         <fieldset disabled={busy}>
           <label id="sigma-project-type-label">Project Type</label>
           <ResearchTypePicker fieldLabel="Project Type" value={projectType} onChange={setProjectType}/>
-          <label htmlFor="sigma-project-difficulty">Difficulty</label>
-          <select id="sigma-project-difficulty" value={difficulty ?? ''}
-            onChange={event => setDifficulty((event.target.value || null) as ProjectDifficulty | null)}>
-            {difficulty === null && <option value="">Not set</option>}
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
+          <label id="sigma-project-difficulty-label">Difficulty</label>
+          <DifficultyPicker value={difficulty} onChange={setDifficulty}/>
         </fieldset>
         {error && <p role="alert" className="error">{error}</p>}
       </div>
@@ -5391,10 +5486,19 @@ function Home({ initialPath, onOpen }: {
         <div className="home-left-actions"/>
         <div className="home-right-actions"><div className="home-auth-pills"><MockAuthSelector/>
           <div className="home-account-grid">
-            <GlobalModelPill enabled={showConnectionStatus}/>
-            <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
+            <div className="sigma-header-model-column">
+              <div className="sigma-header-secondary-row">
+                {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
+                <div className="sigma-header-about-model-anchor">
+                  <div className="sigma-header-first-row">
+                    <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" data-tooltip-disabled aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
+                    <button type="button" ref={settingsButton} className="home-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
+                  </div>
+                  <ConnectedModelPill enabled={showConnectionStatus}/>
+                </div>
+              </div>
+            </div>
             <GoogleIdentityPill inviteInHeader/>
-            {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
             {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
           </div>
           <HomeInvitationAction/>
@@ -5407,7 +5511,6 @@ function Home({ initialPath, onOpen }: {
           {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
             <button type="button" ref={newButton} className="home-project-action home-icon-action" aria-label="New project" data-tooltip="New project" onClick={() => setEntry('new')}><CirclePlusIcon/></button>
           <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>
-          <button type="button" ref={settingsButton} className="home-project-action home-icon-action" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
           </>}
         </div>
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
@@ -6155,8 +6258,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
         </svg>
       </button>
-      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project type and difficulty" data-tooltip="Project type and difficulty" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h9l9 9-8 8-10-10z"/><circle cx="8" cy="9" r="1.1"/></svg>
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+        <SlidersSettingsIcon/>
       </button>
     </div>
   </div>;
@@ -6463,6 +6566,27 @@ const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
 function cloudFundingFor(cloud: CloudIdentityState | null): CloudFunding | undefined {
   return cloud?.funding;
+}
+
+/** Match ConnectionStatus's connected state, including sponsored sessions.
+ * Google authentication alone is not sufficient to show the model selector. */
+function ConnectedModelPill({ enabled }: { enabled: boolean }) {
+  const ai = useAI();
+  const cloud = useCloudIdentity();
+  const funding = cloudFundingFor(cloud);
+  const googleRequired = !!funding?.authenticationEnabled && !funding.authorized;
+  // Match the *displayed* ChatGPT pill rather than the provider health check:
+  // the sponsored pill is shown for an authorized sponsored connection even
+  // when its provider status has not yet been fetched.
+  const sponsoredSelected = funding?.selectedConnection === 'sponsored';
+  const sponsoredPillVisible = !!funding?.authorized && sponsoredSelected
+    && (funding.target === 'hosted' || funding.sponsorshipEligible);
+  const personalConnected = !ai.connecting && !ai.initialLoading && !ai.healthError
+    && ai.info?.status === 'connected';
+  const visible = sponsoredPillVisible || (!sponsoredSelected && personalConnected);
+  return enabled && visible && !googleRequired
+    ? <GlobalModelPill enabled/>
+    : null;
 }
 
 type CloudDemoAudit = { export_version: 2; project: ProjectView['project']; agentic_runs: Record<string, any>[]; research_sessions: Record<string, any>[] };

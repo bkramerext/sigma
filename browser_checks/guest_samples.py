@@ -230,8 +230,9 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         page.on("response", capture)
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        # Guest has no per-user default; its visible model pill must not poll protected settings.
-        expect(page.get_by_role("button", name="Model Sign in")).to_be_visible()
+        # A guest has no connected provider; the Model pill is intentionally hidden.
+        # It must not poll protected per-user research settings.
+        expect(page.locator(".home-account-grid .global-model-pill-position")).to_have_count(0)
         welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
         expect(welcome).to_be_visible()
         expect(welcome).to_contain_text("Explore as a guest without running or saving projects")

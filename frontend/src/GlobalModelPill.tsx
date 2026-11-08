@@ -17,7 +17,13 @@ type ResearchSettings = {
 };
 const costTier = (s: string) => /^\${1,3}$/.test(s) ? s.length : Number.POSITIVE_INFINITY;
 const effortOrder = ['low', 'medium', 'high', 'xhigh'];
-const modelName = (m: ModelChoice | undefined, fallback: string) => m?.label.split(' · ')[0] ?? fallback;
+const modelNames: Record<string, string> = {
+  'gpt-6-luna': 'GPT-6-Luna',
+  'gpt-6.1-sol': 'GPT-6.1-Sol',
+  'gpt-6-astra': 'GPT-6-Astra',
+};
+const modelName = (m: ModelChoice | undefined, fallback: string) =>
+  (m && modelNames[m.id]) ?? m?.label.split(' · ')[0] ?? modelNames[fallback] ?? fallback;
 function suitableEffort(model: ModelChoice, current: string): string | null {
   if (!model.efforts?.length) return null;
   if (model.efforts.includes(current)) return current;
@@ -25,6 +31,36 @@ function suitableEffort(model: ModelChoice, current: string): string | null {
   return [...model.efforts].sort((a, b) =>
     Math.abs(effortOrder.indexOf(a) - index) - Math.abs(effortOrder.indexOf(b) - index)
     || effortOrder.indexOf(a) - effortOrder.indexOf(b))[0];
+}
+
+/** Slide only the changed label, preserving the pill's measured width. */
+function ScrollingLabel({ value, direction, className, userCycleRevision }: {
+  value: string;
+  direction: 'forward' | 'reverse';
+  className: string;
+  userCycleRevision: number;
+}) {
+  const previous = useRef(value);
+  const previousRevision = useRef(userCycleRevision);
+  const sequence = useRef(0);
+  const [slide, setSlide] = useState<{ from: string; to: string; sequence: number } | null>(null);
+  useEffect(() => {
+    const from = previous.current;
+    const userInitiated = userCycleRevision !== previousRevision.current;
+    previous.current = value;
+    previousRevision.current = userCycleRevision;
+    if (from === value) return;
+    if (!userInitiated) { setSlide(null); return; }
+    sequence.current += 1;
+    setSlide({ from, to: value, sequence: sequence.current });
+  }, [value, userCycleRevision]);
+  const active = slide?.to === value ? slide : null;
+  return <span className={`${className} global-model-pill-slide-viewport`}>
+    {active ? <span key={active.sequence} className={`global-model-pill-slide-pair global-model-pill-slide-${direction}`} aria-hidden="true">
+      <span className="global-model-pill-slide-out">{active.from}</span>
+      <span className="global-model-pill-slide-in">{active.to}</span>
+    </span> : <span className="global-model-pill-slide-static">{value}</span>}
+  </span>;
 }
 
 /** Restores the historic model cycle pill, now persisted as a per-user default. */
@@ -36,6 +72,8 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   const [error, setError] = useState('');
   const [pending, setPending] = useState<ModelChoice | null>(null);
   const [popup, setPopup] = useState({ left: 8, top: 8 });
+  const [modelCycleRevision, setModelCycleRevision] = useState(0);
+  const [thinkingCycleRevision, setThinkingCycleRevision] = useState(0);
   const trigger = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -88,21 +126,31 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   const choices = models.filter(m => m.availability !== 'unavailable' && m.efforts?.length)
     .sort((a, b) => costTier(a.relative_cost) - costTier(b.relative_cost) || a.label.localeCompare(b.label));
   const selectedIndex = choices.findIndex(m => m.id === settings?.ai_model);
-  const next = choices.length > 1 ? choices[(selectedIndex + 1 + choices.length) % choices.length]
+  const next = choices.length > 1 ? choices[(selectedIndex - 1 + choices.length) % choices.length]
     : choices.length === 1 && selectedIndex < 0 ? choices[0] : undefined;
   const nextEffort = next && settings ? suitableEffort(next, settings.reasoning_effort) : null;
+  const supportedEfforts = selected?.efforts.filter(effort => effortOrder.includes(effort))
+    .sort((a, b) => effortOrder.indexOf(a) - effortOrder.indexOf(b)) ?? [];
+  const thinkingIndex = supportedEfforts.indexOf(settings?.reasoning_effort ?? '');
+  const nextThinking = supportedEfforts.length > 1
+    ? supportedEfforts[(thinkingIndex + 1) % supportedEfforts.length] : null;
   const selectedName = modelName(selected, settings?.ai_model ?? 'Unavailable');
   const label = !enabled ? 'Sign in' : settings ? selectedName + (selected?.relative_cost ? ' ' + selected.relative_cost : '') : 'Unavailable';
+  const thinkingLabel = settings?.reasoning_effort
+    ? 'Thinking · ' + (settings.reasoning_effort === 'xhigh' ? 'Extra High'
+      : settings.reasoning_effort.charAt(0).toUpperCase() + settings.reasoning_effort.slice(1))
+    : null;
   const notice = nextEffort && settings && nextEffort !== settings.reasoning_effort
     ? ' Switching to ' + modelName(next, '') + ' also changes Thinking to ' + nextEffort + '.' : '';
   const tooltip = !enabled ? 'Sign in to view your default research model.' : settings
     ? 'The selected default model is ' + selectedName + '. Relative published API token cost: ' +
       (selected?.relative_cost ?? 'unknown') + '. Applies to future research and proposals across projects. ' +
-      'Click to cycle through reviewed models.' + notice
+      (thinkingLabel ? ' ' + thinkingLabel + '.' : '') +
+      ' Click the upper half to cycle models; click the lower half to cycle thinking levels.' + notice
     : error || 'Checking your model selection.';
-  async function save(choice: ModelChoice) {
+  async function save(choice: ModelChoice, requestedEffort?: string, userCycle?: 'model' | 'thinking') {
     if (!settings || busy) return;
-    const effort = suitableEffort(choice, settings.reasoning_effort);
+    const effort = requestedEffort ?? suitableEffort(choice, settings.reasoning_effort);
     if (!effort) return;
     setBusy(true); setError('');
     try {
@@ -117,6 +165,8 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail ?? result.error ?? 'Model could not be changed.');
       setSettings(result as ResearchSettings);
+      if (userCycle === 'model') setModelCycleRevision(revision => revision + 1);
+      if (userCycle === 'thinking') setThinkingCycleRevision(revision => revision + 1);
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
@@ -124,14 +174,35 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   function cycle() {
     if (!next || !settings || !nextEffort) return;
     if (selected && costTier(next.relative_cost) > costTier(selected.relative_cost)) setPending(next);
-    else void save(next);
+    else void save(next, undefined, 'model');
+  }
+  function cycleThinking() {
+    if (!selected || !nextThinking || !settings) return;
+    void save(selected, nextThinking, 'thinking');
   }
   const dismiss = () => { setPending(null); trigger.current?.focus(); };
   return <span className="global-model-pill-position">
     <button ref={trigger} type="button" className="global-model-pill"
-      aria-label={'Model ' + label} title={tooltip} data-tooltip={tooltip}
-      disabled={!enabled || !ready || busy || !!pending || !settings || !next || !nextEffort}
-      onClick={cycle}>Model · {label}</button>
+      aria-label={'Model ' + label + (thinkingLabel ? ', ' + thinkingLabel : '')}
+      title={tooltip} data-tooltip={tooltip}
+      disabled={!enabled || !ready || busy || !!pending || !settings || (!next && !nextThinking)}
+      onClick={event => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (event.clientY >= rect.top + rect.height / 2) cycleThinking();
+        else cycle();
+      }}
+      onKeyDown={event => {
+        if (event.key === 'ArrowDown') { event.preventDefault(); cycleThinking(); }
+      }}>
+      <span className="global-model-pill-current">
+        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="forward" userCycleRevision={modelCycleRevision}/>
+        {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward" userCycleRevision={thinkingCycleRevision}/>}
+      </span>
+      <span className="global-model-pill-max-labels" aria-hidden="true">
+        <span>Model · GPT-6-Astra $$$</span>
+        <span>Thinking · Extra High</span>
+      </span>
+    </button>
     {settings && error && <span className="global-model-error" role="alert">{error}</span>}
     {pending && createPortal(<div className="project-model-confirm-popover global-model-confirm-popover"
       role="group" aria-label={'Confirm switch to ' + modelName(pending, pending.id)} style={popup}>
@@ -139,7 +210,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
         ({pending.relative_cost}) is higher than the current tier ({selected?.relative_cost ?? 'unknown'}).
         Continue with this user-wide default?</p>
       <div className="project-model-confirm-actions">
-        <button ref={confirm} type="button" onClick={() => { const choice = pending; dismiss(); void save(choice); }}>Confirm</button>
+        <button ref={confirm} type="button" onClick={() => { const choice = pending; dismiss(); void save(choice, undefined, 'model'); }}>Confirm</button>
         <button type="button" onClick={dismiss}>Cancel</button>
       </div>
     </div>, document.body)}

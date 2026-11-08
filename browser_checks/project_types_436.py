@@ -84,24 +84,32 @@ with sync_playwright() as playwright:
         "window.__projectTypeConfirmations = []; window.confirm = message => { window.__projectTypeConfirmations.push(String(message)); return true; }"
     )
 
-    # Account pills read right-to-left, then top-to-bottom at right.
+    # Approved Home layout: About and Settings share the first left row,
+    # Model is immediately below About, and Google/ChatGPT form the right column.
     grid = page.locator(".home-account-grid")
     expect(grid).to_be_visible()
     expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
-        '"google model" "chatgpt about" ". admin"'
+        '"model-column google" "model-column chatgpt"'
     )
     about_rect = grid.locator(".home-about-button").bounding_box()
+    settings_rect = grid.locator(".home-settings-pill").bounding_box()
     google_rect = grid.locator(".project-google-signin").first.bounding_box()
-    assert about_rect and google_rect
+    chatgpt_rect = grid.locator(".api-connection > summary").first.bounding_box()
+    assert about_rect and settings_rect and google_rect and chatgpt_rect
     model_pill = grid.get_by_role("button", name="Model", exact=False)
     expect(model_pill).to_be_visible()
     expect(model_pill).to_be_enabled(timeout=15000)
     assert "cycle" in (model_pill.get_attribute("data-tooltip") or "").lower()
     model_rect = model_pill.bounding_box()
-    assert model_rect and model_rect["y"] < about_rect["y"]
-    assert abs(model_rect["x"] + model_rect["width"] - about_rect["x"] - about_rect["width"]) < 3
-    assert about_rect["x"] > google_rect["x"]
+    assert model_rect
+    assert abs(model_rect["x"] - about_rect["x"]) < 3
+    assert model_rect["y"] >= about_rect["y"] + about_rect["height"]
+    assert settings_rect["x"] >= about_rect["x"] + about_rect["width"]
+    assert abs(settings_rect["y"] - about_rect["y"]) < 3
+    assert google_rect["x"] >= model_rect["x"] + model_rect["width"]
+    assert chatgpt_rect["x"] >= model_rect["x"] + model_rect["width"]
+    assert abs(model_rect["y"] - chatgpt_rect["y"]) < 3
 
     # The restored pill cycles user-wide defaults (not project settings),
     # prompting before a cost-tier increase and preserving unrelated limits.
@@ -858,7 +866,7 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
-    expect(page.get_by_role("button", name="Project type and difficulty")).to_be_visible()
+    expect(page.get_by_role("button", name="Project settings")).to_be_visible()
     assert header.get_by_role("button", name="Project Types").count() == 0
 
     with page.expect_download() as legacy_download:
@@ -899,20 +907,20 @@ with sync_playwright() as playwright:
     assert replaced["project"]["project_type_snapshot"]["id"] == "mathematical"
 
     # Project Settings contains only project type and difficulty.
-    page.get_by_role("button", name="Project type and difficulty", exact=True).click()
+    page.get_by_role("button", name="Project settings", exact=True).click()
     project_settings = page.get_by_role("dialog", name="Project Settings")
     expect(project_settings.get_by_role("tab", name="Preferences")).to_have_count(0)
     expect(project_settings.get_by_label("Difficulty")).to_be_visible()
-    # The close X must be wholly inside the panel, centered about 48px
-    # from the top/right edges (the approved visual reference).
+    # The close X uses the shared dialog header's upper-right inset,
+    # not the former unusually deep 48px offset.
     close_button = project_settings.get_by_role("button", name="Close Project Settings")
     dialog_box = project_settings.bounding_box()
     close_box = close_button.bounding_box()
     assert dialog_box and close_box
     right_inset = dialog_box["x"] + dialog_box["width"] - (close_box["x"] + close_box["width"] / 2)
     top_inset = close_box["y"] + close_box["height"] / 2 - dialog_box["y"]
-    assert 43 <= right_inset <= 53, (dialog_box, close_box)
-    assert 43 <= top_inset <= 53, (dialog_box, close_box)
+    assert 18 <= right_inset <= 35, (dialog_box, close_box)
+    assert 18 <= top_inset <= 35, (dialog_box, close_box)
     assert close_box["x"] >= dialog_box["x"]
     assert close_box["x"] + close_box["width"] <= dialog_box["x"] + dialog_box["width"]
     close_button.click()
