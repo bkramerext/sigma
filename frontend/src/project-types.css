@@ -119,3 +119,14 @@
 .project-types-dialog button.pt-new-action:not([role="combobox"]):not([role="option"]):focus-visible {
   color: #ffe5a6 !important;
 }
+
+/* A native top-layer popover escapes the scrollport and dialog border. */
+.project-types-dialog .pt-based-on-picker .research-type-options[popover] {
+  position: fixed;
+  inset: auto;
+  right: auto;
+  bottom: auto;
+  box-sizing: border-box;
+  margin: 0;
+  min-width: 0;
+}
