@@ -180,7 +180,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
         if (event.key === 'ArrowDown') { event.preventDefault(); cycleThinking(); }
       }}>
       <span className="global-model-pill-current">
-        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="reverse"/>
+        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="forward"/>
         {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward"/>}
       </span>
       {choices.map(choice => <span key={choice.id} className="global-model-pill-measure" aria-hidden="true">
