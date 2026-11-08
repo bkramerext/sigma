@@ -7057,11 +7057,12 @@ function allowanceInput(value: number | null) { return value === null ? '' : val
 type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string; request_type?: 'invitation' | 'reload' };
 type CloudFeedbackRequest = { id: string; account_email: string | null; contact_email: string | null; message: string; submitted_at: number; status: string };
 /** Icon-only administrator actions use SIGMA hovertext, not native titles. */
-function AdminActionIcon({ kind }: { kind: 'new' | 'add' | 'remove' }) {
+function AdminActionIcon({ kind }: { kind: 'new' | 'add' | 'remove' | 'reload' }) {
   return <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none"
     stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {kind === 'new' ? <><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></>
       : kind === 'add' ? <path d="M12 5v14M5 12h14"/>
+      : kind === 'reload' ? <><path d="M20 11a8 8 0 1 0-2.5 6"/><path d="M20 4v7h-7"/></>
       : <path d="M8 8 16 16M16 8 8 16" strokeWidth="4"/>}
   </svg>;
 }
@@ -7295,7 +7296,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
             <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
             <td className="admin-allowance-cell">{draft.role === 'admin' ? <span>Unlimited</span> : <><label className="admin-allowance-input"><span className="sr-only">Sponsorship allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></>}</td>
-            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove admin-icon-action" aria-label={`Remove access for ${grant.value}`} data-tooltip="Remove access rule" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}><AdminActionIcon kind="remove"/></button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
+            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-icon-action" aria-label={`Reload allowance for ${grant.value}`} data-tooltip="Reload allowance" disabled={busy} onClick={() => void reload(grant)}><AdminActionIcon kind="reload"/></button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove admin-icon-action" aria-label={`Remove access for ${grant.value}`} data-tooltip="Remove access rule" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}><AdminActionIcon kind="remove"/></button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
           </tr>;
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
