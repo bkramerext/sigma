@@ -39,6 +39,8 @@
   max-width: 100%;
 }
 :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  display: grid;
+  place-items: center;
   width: max-content;
   max-width: 100%;
   color: var(--sigma-copper-foreground);
@@ -157,4 +159,15 @@
     width: min(180px, 100%);
     min-width: 0;
   }
+}
+
+/* Each cycle candidate occupies the same grid cell invisibly, so the button
+   always takes the width of the longest available model label. */
+:is(.home-page, .workspace-page) .global-model-pill > :is(.global-model-pill-current, .global-model-pill-measure) {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+:is(.home-page, .workspace-page) .global-model-pill > .global-model-pill-measure {
+  visibility: hidden;
+  pointer-events: none;
 }
