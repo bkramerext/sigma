@@ -540,7 +540,7 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 }
 .home-page .home-account-grid:has(> .administrator-settings-link) {
   grid-template-columns: max-content max-content max-content;
-  grid-template-areas: "model-column google ." "model-column chatgpt admin";
+  grid-template-areas: "admin model-column google" ". model-column chatgpt";
 }
 .home-page .home-account-grid > .sigma-header-model-column {
   grid-area: model-column;
