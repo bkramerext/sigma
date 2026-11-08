@@ -777,3 +777,30 @@
   width: max-content;
   min-width: 0;
 }
+
+/* Keep the Model anchored to About, but reserve its full Astra $$$ width in
+   the left grid track so the ChatGPT column cannot crowd the Model pill. */
+.home-page .home-account-grid,
+.workspace-page .project-art-header .header-controls {
+  column-gap: 28px;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  min-width: 330px;
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .global-model-pill-position {
+  left: 0;
+  right: auto;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  padding-left: 12px;
+  padding-right: 20px; /* room for the third $ at the right edge of the slide viewport */
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column {
+    min-width: 0;
+  }
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    padding-left: 9px;
+    padding-right: 17px;
+  }
+}
