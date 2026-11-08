@@ -1,0 +1,79 @@
+{
+  "schema_version": 13,
+  "id": "a1e70000-0000-4000-8000-000000000101",
+  "title": "The Right to Correct an AI-Derived Inference",
+  "problem": "A hypothetical Washington statute, the Personal Decision Data Accuracy Act (PDDAA), gives a person the right to correct 'materially inaccurate personal data used in a consequential decision,' but does not define whether model-generated inferences are data or opinions. The PDDAA is invented for this exercise and is not Washington law. Meridian Health Systems uses a hiring risk model that accurately receives an applicant's dates of employment, layoffs, and career gaps. It assigns a high 'professional misconduct risk' score from correlations in population-level training data, with no individualized evidence of misconduct. Meridian declines the applicant and provides the score and factual inputs but refuses to modify the inference. The applicant seeks correction; Meridian argues the score is a probabilistic prediction, not an erroneous personal fact, and raises speech, administrative burden, and predictive-validity objections. Assume the statute provides an agency review process but no explicit burden-of-proof standard. Analyze what counts as correctable inaccuracy while avoiding a blanket right to erase unwelcome evaluations. Analyze under the law of Washington State and applicable federal law as of November 2026. Clearly distinguish binding authority, persuasive authority, analogy, policy argument, and proposed doctrine. Treat the incident as wholly fictional. Do not invent judicial holdings, legal citations, statutory provisions, or case histories; explicitly identify any authority requiring verification. Seek a reasoned outcome without presupposing that either claimant wins.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-11-08T19:10:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:10:00+00:00",
+      "strategy_id": "a1e70000-0000-4000-8000-000000001010"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:10:00+00:00",
+      "strategy_id": "a1e70000-0000-4000-8000-000000001011"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:10:00+00:00",
+      "strategy_id": "a1e70000-0000-4000-8000-000000001012"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "a1e70000-0000-4000-8000-000000001010",
+      "title": "Text and Legal Characterization",
+      "approach": "Determine whether a prediction is a fact, opinion, or mixed representation under the invented statute, considering purpose, text and relevant real-world analogies.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:10:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Interpret what 'inaccurate personal data' can reasonably include.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "a1e70000-0000-4000-8000-000000001011",
+      "title": "Process and Evidentiary Fairness",
+      "approach": "Investigate disclosure, contestability, burden of proof, evidence required, and implications of meaningful procedural review.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:10:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Build fair and administrable challenges to consequential inferences.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "a1e70000-0000-4000-8000-000000001012",
+      "title": "Develop a Limiting Test",
+      "approach": "Develop a test for correctability that preserves legitimate predictions, probes constitutional and regulatory objections, and tests edge cases.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:10:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Create a workable rule that resists both overcorrection and unchecked inference.",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "law",
+  "active_order": [
+    "a1e70000-0000-4000-8000-000000001010",
+    "a1e70000-0000-4000-8000-000000001011",
+    "a1e70000-0000-4000-8000-000000001012"
+  ],
+  "difficulty": "hard",
+  "desired_outcomes": "Construct a defensible interpretive approach to data versus inference, material accuracy, predictive uncertainty, individual fairness, burden and standard of proof, and proportionate remedies. Consider statutory text, analogous privacy and anti-discrimination doctrines, procedural protections, and constitutional limits without treating the fictional PDDAA as actual law. Derive operational criteria separating erroneous inferences from debatable but permissible assessments, and test both false-positive and legitimate-risk cases. Treat useful novel interpretive frameworks as positive outcomes even if no unique answer emerges.",
+  "paper_requirements": "Produce a legal scholarship paper setting out the fictional statute verbatim enough to ground interpretation, the actual bodies of law invoked by analogy, two competing interpretations, a justified recommended standard, a review procedure, remedies, counterarguments, and concrete borderline hypotheticals. Distinguish law from policy proposals and invented assumptions. Do not cite the fictional PDDAA as an actual authority; verify all real legal citations.",
+  "project_type_snapshot": null
+}
