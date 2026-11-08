@@ -466,3 +466,51 @@
 :is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
   top: calc(var(--sigma-header-first-row-height) + var(--identity-pill-gap));
 }
+
+/* Keep both text lines at the normal pill inset, not centered inside the
+   widest-model measurement cell. Sliding frames inherit this alignment. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  justify-items: stretch;
+  padding-inline: 12px;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  justify-self: stretch;
+  align-self: center;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-start;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-measure {
+  justify-self: stretch;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-viewport,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill .global-model-pill-slide-pair > span {
+  text-align: left;
+}
+/* Align the sponsorship sublabel directly under "Sponsored ChatGPT":
+   its button should occupy the label stack's left edge, not center. */
+:is(.home-page, .workspace-page) .api-connection > summary .connection-label-stack {
+  align-items: flex-start;
+  justify-content: center;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .connection-label-stack > .sponsored-allowance-trigger {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  justify-content: flex-start;
+  width: max-content;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .sponsored-allowance-inline {
+  margin: 0;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    padding-inline: 9px;
+  }
+}
