@@ -140,7 +140,9 @@ with sync_playwright() as playwright:
             and response.request.method == "PUT"
         )
     ):
-        model_pill.click()
+        # The pill has distinct click regions: upper half cycles model, lower half cycles thinking.
+        # A centered Playwright click would change thinking rather than the model.
+        model_pill.click(position={"x": 10, "y": 8})
         cost_confirmation = page.locator(".global-model-confirm-popover")
         if cost_confirmation.is_visible():
             cost_confirmation.get_by_role("button", name="Confirm").click()
