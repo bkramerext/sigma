@@ -1109,51 +1109,223 @@ _SAFE_MATH_COMMANDS = {
 # piecemeal for a particular paper. This remains a positive allowlist:
 # TeX primitives, file I/O, macro definitions, catcode changes, and unknown
 # control sequences must never be passed through from research text.
-_STANDARD_GREEK_MATH = set("""
-    alpha beta gamma delta epsilon varepsilon zeta eta theta vartheta
-    iota kappa lambda mu nu xi pi varpi rho varrho sigma varsigma tau
-    upsilon phi varphi chi psi omega
-    Gamma Delta Theta Lambda Xi Pi Sigma Upsilon Phi Psi Omega
-""".split())
-_STANDARD_MATH_OPERATORS = set("""
-    sin cos tan cot sec csc arcsin arccos arctan
-    sinh cosh tanh coth
-    log ln lg exp lim liminf limsup inf sup min max
-    det dim deg gcd ker Pr arg
-""".split())
-_STANDARD_MATH_ARROWS = set("""
-    leftarrow rightarrow leftrightarrow longleftarrow longrightarrow
-    longleftrightarrow Leftarrow Rightarrow Leftrightarrow
-    Longleftarrow Longrightarrow Longleftrightarrow
-    mapsto longmapsto hookleftarrow hookrightarrow xrightarrow xleftarrow
-    to gets uparrow downarrow Uparrow Downarrow updownarrow Updownarrow
-    nearrow searrow swarrow nwarrow
-    rightharpoonup leftharpoonup rightharpoondown leftharpoondown
-    rightleftharpoons leftrightharpoons
-""".split())
-_STANDARD_MATH_SYMBOLS = set("""
-    Re Im aleph beth gimel daleth hbar ell imath jmath
-    emptyset varnothing nabla partial infty prime
-    top bot forall exists nexists
-    subset subseteq supset supseteq subsetneq supsetneq
-    in notin ni owns
-    leq geq le ge neq ne equiv approx cong sim simeq
-    propto perp parallel mid nmid
-    cup cap bigcup bigcap setminus sqcup sqcap
-    land lor neg wedge vee bigwedge bigvee
-    oplus otimes odot ominous oslash circ bullet
-    cdot times div pm mp ast star
-    sum prod coprod int iint iiint oint
-    intop
-    ldots cdots vdots ddots dots
-    lfloor rfloor lceil rceil langle rangle lvert rvert lVert rVert
-    triangleleft triangleright
-""".split())
+_STANDARD_GREEK_MATH = {
+    "alpha",
+    "beta",
+    "gamma",
+    "delta",
+    "epsilon",
+    "varepsilon",
+    "zeta",
+    "eta",
+    "theta",
+    "vartheta",
+    "iota",
+    "kappa",
+    "lambda",
+    "mu",
+    "nu",
+    "xi",
+    "pi",
+    "varpi",
+    "rho",
+    "varrho",
+    "sigma",
+    "varsigma",
+    "tau",
+    "upsilon",
+    "phi",
+    "varphi",
+    "chi",
+    "psi",
+    "omega",
+    "Gamma",
+    "Delta",
+    "Theta",
+    "Lambda",
+    "Xi",
+    "Pi",
+    "Sigma",
+    "Upsilon",
+    "Phi",
+    "Psi",
+    "Omega",
+}
+_STANDARD_MATH_OPERATORS = {
+    "sin",
+    "cos",
+    "tan",
+    "cot",
+    "sec",
+    "csc",
+    "arcsin",
+    "arccos",
+    "arctan",
+    "sinh",
+    "cosh",
+    "tanh",
+    "coth",
+    "log",
+    "ln",
+    "lg",
+    "exp",
+    "lim",
+    "liminf",
+    "limsup",
+    "inf",
+    "sup",
+    "min",
+    "max",
+    "det",
+    "dim",
+    "deg",
+    "gcd",
+    "ker",
+    "Pr",
+    "arg",
+}
+_STANDARD_MATH_ARROWS = {
+    "leftarrow",
+    "rightarrow",
+    "leftrightarrow",
+    "longleftarrow",
+    "longrightarrow",
+    "longleftrightarrow",
+    "Leftarrow",
+    "Rightarrow",
+    "Leftrightarrow",
+    "Longleftarrow",
+    "Longrightarrow",
+    "Longleftrightarrow",
+    "mapsto",
+    "longmapsto",
+    "hookleftarrow",
+    "hookrightarrow",
+    "xrightarrow",
+    "xleftarrow",
+    "to",
+    "gets",
+    "uparrow",
+    "downarrow",
+    "Uparrow",
+    "Downarrow",
+    "updownarrow",
+    "Updownarrow",
+    "nearrow",
+    "searrow",
+    "swarrow",
+    "nwarrow",
+    "rightharpoonup",
+    "leftharpoonup",
+    "rightharpoondown",
+    "leftharpoondown",
+    "rightleftharpoons",
+    "leftrightharpoons",
+}
+_STANDARD_MATH_SYMBOLS = {
+    "Re",
+    "Im",
+    "aleph",
+    "beth",
+    "gimel",
+    "daleth",
+    "hbar",
+    "ell",
+    "imath",
+    "jmath",
+    "emptyset",
+    "varnothing",
+    "nabla",
+    "partial",
+    "infty",
+    "prime",
+    "top",
+    "bot",
+    "forall",
+    "exists",
+    "nexists",
+    "subset",
+    "subseteq",
+    "supset",
+    "supseteq",
+    "subsetneq",
+    "supsetneq",
+    "in",
+    "notin",
+    "ni",
+    "owns",
+    "leq",
+    "geq",
+    "le",
+    "ge",
+    "neq",
+    "ne",
+    "equiv",
+    "approx",
+    "cong",
+    "sim",
+    "simeq",
+    "propto",
+    "perp",
+    "parallel",
+    "mid",
+    "nmid",
+    "cup",
+    "cap",
+    "bigcup",
+    "bigcap",
+    "setminus",
+    "sqcup",
+    "sqcap",
+    "land",
+    "lor",
+    "neg",
+    "wedge",
+    "vee",
+    "bigwedge",
+    "bigvee",
+    "oplus",
+    "otimes",
+    "odot",
+    "ominous",
+    "oslash",
+    "circ",
+    "bullet",
+    "cdot",
+    "times",
+    "div",
+    "pm",
+    "mp",
+    "ast",
+    "star",
+    "sum",
+    "prod",
+    "coprod",
+    "int",
+    "iint",
+    "iiint",
+    "oint",
+    "intop",
+    "ldots",
+    "cdots",
+    "vdots",
+    "ddots",
+    "dots",
+    "lfloor",
+    "rfloor",
+    "lceil",
+    "rceil",
+    "langle",
+    "rangle",
+    "lvert",
+    "rvert",
+    "lVert",
+    "rVert",
+    "triangleleft",
+    "triangleright",
+}
 _SAFE_MATH_COMMANDS.update(
-    _STANDARD_GREEK_MATH
-    | _STANDARD_MATH_OPERATORS
-    | _STANDARD_MATH_ARROWS
-    | _STANDARD_MATH_SYMBOLS
+    _STANDARD_GREEK_MATH | _STANDARD_MATH_OPERATORS | _STANDARD_MATH_ARROWS | _STANDARD_MATH_SYMBOLS
 )
 _MATH_SPAN = re.compile(
     r"(\$\$[\s\S]*?\$\$|(?<!\\)\\\[[\s\S]*?(?<!\\)\\\]|"
@@ -8716,10 +8888,7 @@ def _tex_static_diagnostics(tex: str) -> list[str]:
         diagnostics.append("A literal TeX command may be double-escaped into printable text.")
     if r"\textbackslash{}[" in tex or r"\textbackslash{}]" in tex:
         diagnostics.append("A display-math delimiter was escaped into printable text.")
-    if any(
-        r"\textbackslash{}" in match.group(0)
-        for match in _ESCAPED_MATH_SPAN.finditer(tex)
-    ):
+    if any(r"\textbackslash{}" in match.group(0) for match in _ESCAPED_MATH_SPAN.finditer(tex)):
         diagnostics.append("An inline mathematical expression was escaped into printable text.")
     for index, line in enumerate(tex.splitlines(), start=1):
         if len(line) > 180 and (r"\node" in line or r"&" in line):

@@ -4,13 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from sigma.papers import (
-    _latex_prose,
-    _restore_escaped_math_in_tex,
-    _safe_math,
-    _tex_static_diagnostics,
-)
-from sigma.project_reports import _latex
+from sigma import papers, project_reports
 
 
 # Exact math shapes previously rendered as visible dollar signs and
@@ -34,8 +28,8 @@ class MathTypesettingTests(unittest.TestCase):
     def test_valid_research_math_remains_math(self) -> None:
         for body in RH_MATH_EXPRESSIONS:
             with self.subTest(math=body):
-                self.assertTrue(_safe_math(body))
-                rendered = _latex_prose("Given $" + body + "$.")
+                self.assertTrue(papers._safe_math(body))
+                rendered = papers._latex_prose("Given $" + body + "$.")
                 self.assertNotIn(r"\textbackslash{}", rendered)
                 self.assertNotIn(r"\$", rendered)
                 self.assertTrue("$" + body + "$" in rendered or r"\[" + body in rendered)
@@ -44,8 +38,8 @@ class MathTypesettingTests(unittest.TestCase):
         for body in RH_MATH_EXPRESSIONS:
             with self.subTest(math=body):
                 original = "$" + body + "$"
-                escaped = _latex(original)
-                repaired, count = _restore_escaped_math_in_tex(
+                escaped = project_reports._latex(original)
+                repaired, count = papers._restore_escaped_math_in_tex(
                     r"\begin{document}" + "\n" + escaped + "\n" + r"\end{document}"
                 )
                 self.assertEqual(count, 1)
@@ -53,22 +47,23 @@ class MathTypesettingTests(unittest.TestCase):
                 self.assertNotIn(r"\$", repaired)
                 self.assertNotIn(
                     "An inline mathematical expression was escaped into printable text.",
-                    _tex_static_diagnostics(repaired),
+                    papers._tex_static_diagnostics(repaired),
                 )
 
     def test_unknown_tex_command_is_never_unescaped(self) -> None:
-        unsafe = _latex(r"$\input{private-file}$")
-        rendered = _latex_prose(r"$\input{private-file}$")
+        unsafe = project_reports._latex(r"$\input{private-file}$")
+        rendered = papers._latex_prose(r"$\input{private-file}$")
         self.assertEqual(rendered, unsafe)
-        repaired, count = _restore_escaped_math_in_tex(
+        repaired, count = papers._restore_escaped_math_in_tex(
             r"\begin{document}" + "\n" + unsafe + "\n" + r"\end{document}"
         )
         self.assertEqual(count, 0)
         self.assertIn(unsafe, repaired)
         self.assertIn(
             "An inline mathematical expression was escaped into printable text.",
-            _tex_static_diagnostics(repaired),
+            papers._tex_static_diagnostics(repaired),
         )
+
 
 if __name__ == "__main__":
     unittest.main()
