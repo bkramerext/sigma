@@ -339,6 +339,6 @@
 .cloud-access-dialog { position: relative; }
 .cloud-access-dialog .admin-dialog-heading { position: static; }
 .cloud-access-dialog .admin-dialog-heading > .sigma-dialog-dismiss.sigma-dialog-dismiss {
-  top: 10px;
-  right: 10px;
+  top: 10px !important;
+  right: 10px !important;
 }
