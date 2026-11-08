@@ -628,7 +628,7 @@ def require_not_leased(path: str) -> None:
 
 def forget_project(path: str, title: str | None = None) -> None:
     """Revoke a deleted project's ACL and notify its former collaborators."""
-    if cloud_workspaces.current() is None:
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return
     from sigma.projects import ProjectError
 
@@ -640,9 +640,7 @@ def forget_project(path: str, title: str | None = None) -> None:
             raise ProjectError("Only the project owner may delete a shared project.")
         members = [
             record["email"]
-            for record in db.execute(
-                "SELECT email FROM shared_collaborators WHERE path=?", (path,)
-            )
+            for record in db.execute("SELECT email FROM shared_collaborators WHERE path=?", (path,))
         ]
         # Once the project is gone, queued additions must not invite access.
         db.execute("DELETE FROM shared_email_outbox WHERE project_path=?", (path,))

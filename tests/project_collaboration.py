@@ -254,6 +254,34 @@ class CollaborationTests(TestCase):
                 [(self.other.email, "Study", "removed")],
             )
 
+    def test_notification_claim_is_single_dispatch_across_workers(self) -> None:
+        import time
+
+        with shared._db() as db:
+            db.execute(
+                """INSERT INTO shared_email_outbox
+                (id,recipient,project_path,project_title,event,created_at)
+                VALUES (?,?,?,?,?,?)""",
+                ("single-notice", self.other.email, self.path, "Study", "added", self.clock[0]),
+            )
+        calls: list[str] = []
+
+        def deliver(_message, *, recipients):
+            calls.append(recipients[0])
+            time.sleep(0.04)
+
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.enabled", return_value=True),
+            patch(
+                "sigma.project_collaboration.cloud_auth.config",
+                return_value=SimpleNamespace(origin="https://sigma.example.org"),
+            ),
+            patch("sigma.mail_transport.send_message", side_effect=deliver),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                list(pool.map(lambda _: shared.drain_notifications(), range(2)))
+        self.assertEqual(calls, [self.other.email])
+
     def test_global_research_limits_save_does_not_take_project_lease(self) -> None:
         from sigma import research_sessions
 
