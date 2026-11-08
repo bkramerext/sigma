@@ -699,3 +699,52 @@
     padding-inline: 9px;
   }
 }
+
+/* The exact widest Model and Thinking labels determine one invariant button
+   width. This measure never animates and is excluded from accessibility. */
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  width: max-content;
+  max-width: none;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  display: grid;
+  grid-template-columns: max-content;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  justify-items: stretch;
+  padding-inline: 12px;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-max-labels,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  grid-area: 1 / 1;
+  margin: 0;
+  justify-self: stretch;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-max-labels {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
+  font: inherit;
+  line-height: 1.35;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-max-labels > span {
+  display: block;
+  width: max-content;
+  margin: 0;
+  padding: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  width: 100%;
+  min-width: 0;
+  align-self: center;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    padding-inline: 9px;
+  }
+}
