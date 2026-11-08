@@ -838,3 +838,46 @@
 :is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row > :is(.home-about-button, .about-action, .home-settings-pill, .project-global-settings-pill) {
   flex-shrink: 0;
 }
+
+/* Project header: same two-column order as Home, with tighter vertical rhythm.
+   Top-row About/Settings and Google share a 34px height; equal row gaps
+   place Model and ChatGPT at precisely the same second-row top. */
+.workspace-page .project-art-header {
+  --sigma-project-pill-row-gap: 10px;
+}
+.workspace-page .project-art-header .sigma-header-about-model-anchor {
+  gap: var(--sigma-project-pill-row-gap);
+}
+.workspace-page .project-art-header .sigma-header-first-row {
+  min-height: 34px;
+  height: 34px;
+  align-items: center;
+}
+.workspace-page .project-art-header .project-identity-pill-stack {
+  row-gap: var(--sigma-project-pill-row-gap);
+  grid-template-rows: 34px minmax(0, auto);
+  align-items: start;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection,
+.workspace-page .project-art-header .sigma-header-model-column .sigma-header-about-model-anchor > .global-model-pill-position {
+  align-self: start;
+  margin-top: 0;
+}
+.workspace-page .project-art-header .sigma-header-model-column .global-model-pill {
+  min-height: 46px;
+  padding-block: 5px;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-art-header .sigma-header-first-row {
+    height: 28px;
+    min-height: 28px;
+  }
+  .workspace-page .project-art-header .project-identity-pill-stack {
+    grid-template-rows: 28px minmax(0, auto);
+  }
+  .workspace-page .project-art-header .sigma-header-model-column .global-model-pill {
+    min-height: 38px;
+    padding-block: 4px;
+  }
+}
