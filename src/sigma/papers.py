@@ -1098,6 +1098,31 @@ _SAFE_MATH_COMMANDS = {
     "dagger",
     "supseteq",
     "tfrac",
+    # Safe presentation-only commands occurring in mathematical research.
+    # Keep this an explicit allowlist: never admit arbitrary TeX macros.
+    "Gamma",
+    "Phi",
+    "Xi",
+    "Theta",
+    "Upsilon",
+    "cosh",
+    "sinh",
+    "tanh",
+    "coth",
+    "arcsin",
+    "arccos",
+    "arctan",
+    "liminf",
+    "limsup",
+    "longrightarrow",
+    "longleftarrow",
+    "downarrow",
+    "uparrow",
+    "Rightarrow",
+    "Longrightarrow",
+    "leftrightarrow",
+    "Re",
+    "Im",
 }
 _MATH_SPAN = re.compile(
     r"(\$\$[\s\S]*?\$\$|(?<!\\)\\\[[\s\S]*?(?<!\\)\\\]|"
@@ -8647,6 +8672,11 @@ def _tex_static_diagnostics(tex: str) -> list[str]:
         diagnostics.append("A literal TeX command may be double-escaped into printable text.")
     if r"\textbackslash{}[" in tex or r"\textbackslash{}]" in tex:
         diagnostics.append("A display-math delimiter was escaped into printable text.")
+    if any(
+        r"\textbackslash{}" in match.group(0)
+        for match in _ESCAPED_MATH_SPAN.finditer(tex)
+    ):
+        diagnostics.append("An inline mathematical expression was escaped into printable text.")
     for index, line in enumerate(tex.splitlines(), start=1):
         if len(line) > 180 and (r"\node" in line or r"&" in line):
             diagnostics.append(
