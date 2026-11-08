@@ -1,0 +1,79 @@
+{
+  "schema_version": 13,
+  "id": "d6ed1fb7-b29e-4690-b941-a2f5cc709e3e",
+  "title": "Solve the Riemann Hypothesis",
+  "problem": "Resolve the Riemann Hypothesis by discovering a rigorous proof that every nontrivial zero of the Riemann zeta function has real part 1/2, or by constructing and rigorously certifying a counterexample.\n\nPursue this as an active mathematical discovery problem, not a literature survey or an exercise in explaining why the problem is difficult. Explore unconventional representations, structural properties, contradictions, novel invariants, and unexpected connections across mathematics. Challenge the assumption that a solution must follow existing research programs or require incremental progress through established approaches.\n\nBe intellectually adventurous. Formulate bold, precise conjectures and investigate them without prejudice toward novelty or established methods. Mathematical validity—not conventionality, popularity, or historical precedent—determines whether an idea survives.\n\nPrior work is essential intelligence, not a boundary on creativity. Identify known approaches, their precise obstructions, and what has already been established. Do not repeat a recognized dead end unless a specific new construction, assumption, or mechanism plausibly escapes its obstruction. Conversely, do not reject a potentially fruitful idea merely because related approaches have failed.\n\nSeek the simplest decisive mathematical insight capable of resolving the entire hypothesis.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-11-08T16:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T16:00:00+00:00",
+      "strategy_id": "0264f791-ec24-4d59-954b-6e5ea897bb75"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T16:00:00+00:00",
+      "strategy_id": "e4eb2f04-a5b9-4b9c-a5e2-5d8aebd3560f"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T16:00:00+00:00",
+      "strategy_id": "df55b8d3-f12c-4c31-98af-68e4ad8cb697"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "0264f791-ec24-4d59-954b-6e5ea897bb75",
+      "title": "Transform the Problem",
+      "approach": "Search for a representation of the completed zeta function, its zeros, or a related mathematical object in which the critical-line property follows from a more fundamental structural principle. Investigate candidate positivity, spectral, geometric, or analytic mechanisms. Avoid merely translating RH into another equivalent unsolved statement; identify what genuinely new property could be proved independently.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T16:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Seek a new representation that makes the critical-line property structurally necessary.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "e4eb2f04-a5b9-4b9c-a5e2-5d8aebd3560f",
+      "title": "Derive a Contradiction from an Off-Line Zero",
+      "approach": "Assume a nontrivial zero exists away from the critical line. Derive its necessary consequences for analytic behavior, zero symmetries, prime distributions, or other mathematical structures. Seek a contradiction with an established theorem. Carefully distinguish consequences that are genuinely incompatible from those already accommodated by known results. Pivot when the contradiction argument depends on an unproved equivalent of RH.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T16:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Assume an off-line zero and seek a contradiction with established mathematics.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "df55b8d3-f12c-4c31-98af-68e4ad8cb697",
+      "title": "Invent a New Mathematical Mechanism",
+      "approach": "Seek a previously unrecognized invariant, construction, ordering, conservation principle, or relationship capable of constraining every nontrivial zero to the critical line. Explore unexpected connections across fields without committing prematurely to established proof programs. Formulate every novel mechanism precisely, test it on tractable cases, identify the exact theorem needed, and aggressively search for counterexamples.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T16:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Develop and stress-test a new structural constraint on the nontrivial zeros.",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "mathematical",
+  "active_order": [
+    "0264f791-ec24-4d59-954b-6e5ea897bb75",
+    "e4eb2f04-a5b9-4b9c-a5e2-5d8aebd3560f",
+    "df55b8d3-f12c-4c31-98af-68e4ad8cb697"
+  ],
+  "difficulty": "hard",
+  "desired_outcomes": "**Primary objective:** Discover a complete, unconditional proof or a rigorously certified counterexample to the Riemann Hypothesis. Do not substitute partial progress, numerical evidence, or an equivalent reformulation for a resolution.\n\n**Independent positive outcome — novel mathematical discovery:** Any genuinely new, mathematically sound and significant theorem, proof, method, identity, bound, construction, or structural insight discovered during the investigation is a positive research outcome in its own right, even if it does not resolve the Riemann Hypothesis.\n\nActively recognize and preserve such discoveries. Clearly identify their mathematical contribution, supporting argument, novelty relative to known results, assumptions, limitations, and outstanding verification requirements. Recommend sufficiently substantiated original results for standalone publication rather than allowing them to be buried in an unsuccessful attempt to solve the larger problem.\n\nA discovery need not be directly applicable to RH to be valuable. Unexpected results in related mathematical fields may warrant independent investigation and publication. Do not label an unverified or previously known result as a novel discovery.\n\n**Research disposition:**\n- Seek conceptual breakthroughs rather than defaulting to incremental refinement of familiar techniques.\n- Explore radically different mathematical representations and connections when they offer a concrete mechanism for progress.\n- Challenge hidden assumptions about which methods are necessary, possible, or promising.\n- Favor precise, surprising, falsifiable ideas over lengthy speculative discussions.\n- Attempt to derive results, construct counterexamples, or perform discriminating computations rather than repeatedly proposing future work.\n- Recognize quickly when an approach is circular, equivalent to the original unsolved obligation, already exhausted, or blocked by a known result. Record the obstruction and redirect.\n- Preserve genuine partial discoveries, but never confuse their significance with proof of the overall hypothesis.\n\n**Continuous strategic evolution:**\n\nEvery Investigator/Skeptic cycle should contribute to both the present investigation and the next generation of research strategies.\n\nRecord:\n1. The strongest new mathematical insight or candidate mechanism, including its exact assumptions.\n2. What was established, refuted, conditionally derived, computationally supported, or left unverified.\n3. The most consequential remaining obstruction and the best attempted attack on it.\n4. Any unexpected connection, new representation, or alternative method deserving independent investigation.\n5. The precise next mathematical question or experiment most likely to resolve uncertainty.\n6. Whether the strategy should continue, change direction, be abandoned, or inspire a distinct successor strategy—and why.\n\nMake these findings concrete, evidence-linked, and reusable by **Infer strategy #n**. Identify promising strategy forks explicitly, including the proposed successor's distinct objective, motivating evidence, known obstacles, and first decisive test. Preserve negative results so successor strategies do not unknowingly repeat failed work.\n\nThe Skeptic must attack mathematical validity aggressively without suppressing unconventional thinking. An unfamiliar argument is not an invalid argument. A convincing argument is not necessarily a correct one.\n\nWhen a line of investigation fails, extract the maximum useful information from that failure and move toward a materially different approach.\n\nSuccess is measured by genuine advances toward resolving the hypothesis **and by independently valuable original mathematical discoveries**, not research volume, apparent consensus, or the number of strategies explored.",
+  "paper_requirements": "Produce a mathematically rigorous research paper that faithfully communicates the strongest results of the investigation.\n\nIf a complete resolution is proposed, state the theorem precisely and provide a self-contained, auditable proof or counterexample certificate. Explicitly identify every assumption, lemma, dependency, nontrivial inference, and verification obligation. Subject decisive claims to adversarial examination and independent verification where available.\n\nIf the hypothesis remains unresolved, do not manufacture a solution or present speculative deductions as theorems. Instead, document substantive original insights, valid partial results, decisive counterexamples to attempted approaches, and the precise mathematical obstructions that remain.\n\n**Publication of novel discoveries:** If the investigation produces a potentially original and significant mathematical result, explicitly identify it as a positive research outcome independent of the status of RH. Develop a publication-ready presentation centered on that discovery, including its precise theorem statement, proof or supporting derivation, significance, relationship to prior work, limitations, and verification status. Recommend a separate paper when the contribution merits standalone treatment. A confirmed solution to RH is not a prerequisite for publishing valuable new mathematics.\n\nDistinguish established mathematics, independently verified deductions, conditional results, numerical experiments, and conjectures. Cite relevant prior work accurately; never invent sources or claim novelty without sufficient examination of the literature.\n\nInclude a concise assessment of which approaches were productive, which were ruled out, and which genuinely new directions merit investigation.\n\n**Most importantly, conclude with a research handoff suitable for the next strategy inference:** identify the strongest unexplored mechanisms, unresolved proof obligations, potentially fruitful combinations of findings, and specific hypotheses that a successor strategy could attempt to establish or falsify.\n\nPrefer mathematical substance, originality, precision, and intellectual honesty over length, presentation, or rhetorical confidence.",
+  "project_type_snapshot": null
+}
