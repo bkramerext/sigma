@@ -57,9 +57,9 @@ class CollaborationTests(TestCase):
                 ),
             ),
         ):
-            patcher = patch(target, value if callable(value) else None, **(
-                {} if callable(value) else {"return_value": value}
-            ))
+            patcher = patch(target, value) if callable(value) else patch(
+                target, return_value=value
+            )
             patcher.start()
             self.addCleanup(patcher.stop)
         with shared._db() as db:
