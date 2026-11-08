@@ -139,3 +139,21 @@
 .sigma-ethos-rendered p { line-height: 1.5; }
 .sigma-ethos-rendered li { margin-bottom: .5rem; }
 .sigma-ethos-actions { display: flex; gap: 1rem; margin-top: 1rem; }
+
+/* Match the project-title pencil; keep it tight against the Research Ethos tab. */
+.sigma-global-settings .settings-tabs .sigma-ethos-pencil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 25px;
+  height: 25px;
+  min-height: 25px;
+  padding: 3px;
+  margin-left: -14px;
+  background: transparent;
+  border: 0;
+  color: var(--sigma-copper-foreground);
+}
+.sigma-global-settings .settings-tabs .sigma-ethos-pencil svg { width: 17px; height: 17px; }
+.sigma-global-settings .settings-tabs .sigma-ethos-pencil:hover { background: transparent; }
