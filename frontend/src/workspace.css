@@ -564,3 +564,45 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   letter-spacing: .02em;
   color: var(--sigma-copper-foreground);
 }
+
+/* Model / Google on row one; About + icon-only Settings / ChatGPT on row two. */
+.workspace-page .project-art-header .header-controls {
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column identity";
+  align-items: start;
+}
+.workspace-page .project-art-header .header-controls > .sigma-header-model-column {
+  grid-area: model-column;
+  pointer-events: auto;
+}
+.workspace-page .project-art-header .sigma-header-secondary-row > .about-action {
+  width: auto;
+  min-width: 0;
+  justify-self: start;
+  flex: 0 0 auto;
+}
+.workspace-page .project-art-header .sigma-header-secondary-row > .project-global-settings-pill {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+}
+.workspace-page .project-art-header .sigma-header-secondary-row > .project-global-settings-pill svg {
+  width: 19px;
+  height: 19px;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-art-header .header-controls {
+    width: 100%;
+    grid-template-columns: max-content max-content;
+    grid-template-areas: "model-column identity";
+    justify-content: end;
+  }
+}
