@@ -249,8 +249,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const model = models.find(item => item.id === config?.ai_model);
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
   return <dialog ref={dialog} className={`project-settings-dialog sigma-global-settings sigma-global-settings--${tab}`} aria-labelledby="sigma-global-settings-title"
-    onCancel={event => { event.preventDefault(); event.stopPropagation(); }}
-    onKeyDownCapture={event => { if (event.key === "Escape") event.preventDefault(); }}>
+    onCancel={event => { event.preventDefault(); event.stopPropagation(); if (!busy && !typesSaveState.busy && !ethosBusy) onClose(); }}
+    onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!busy && !typesSaveState.busy && !ethosBusy) onClose(); } }}>
     <div className="sigma-global-settings-content">
       <header className="settings-header">
         <h2 id="sigma-global-settings-title">Settings</h2>
