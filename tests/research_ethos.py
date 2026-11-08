@@ -137,14 +137,18 @@ def main() -> None:
                 "limitations": ["An independent limitation."],
                 "conclusions": ["A separate conclusion."],
             }
-            assert any("Abstract" in finding and "Results" in finding
-                       for finding in publication_audit.overlap_warnings(cross_components))
+            assert any(
+                "Abstract" in finding and "Results" in finding
+                for finding in publication_audit.overlap_warnings(cross_components)
+            )
             cross_components["abstract"] = "Short distinct abstract."
             cross_components["methods"] = [paragraph]
             cross_components["sections"] = [{"heading": "Results", "paragraphs": ["New findings."]}]
             cross_components["conclusions"] = [paragraph]
-            assert any("Methods" in finding and "Conclusions" in finding
-                       for finding in publication_audit.overlap_warnings(cross_components))
+            assert any(
+                "Methods" in finding and "Conclusions" in finding
+                for finding in publication_audit.overlap_warnings(cross_components)
+            )
             assert not publication_audit.overlap_warnings(
                 {"abstract": "A concise summary.", "conclusions": ["A concise summary."]}
             )
