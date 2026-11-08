@@ -4176,13 +4176,17 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    {close && projectView && onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/> Settings</button>}
     {close && projectView && onProjectUpdated ? <>
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
-    {close && projectView && <GlobalModelPill enabled={showConnectionStatus}/> }
-    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
+    {close && projectView && <div className="sigma-header-model-column">
+      <GlobalModelPill enabled={showConnectionStatus}/>
+      <div className="sigma-header-secondary-row">
+        <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
+        {onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/></button>}
+      </div>
+    </div>}
     </div>
     {globalSettingsOpen && <GlobalSettingsDialog onClose={() => setGlobalSettingsOpen(false)}/>}
   </header>;
@@ -5363,8 +5367,13 @@ function Home({ initialPath, onOpen }: {
         <div className="home-left-actions"/>
         <div className="home-right-actions"><div className="home-auth-pills"><MockAuthSelector/>
           <div className="home-account-grid">
-            <GlobalModelPill enabled={showConnectionStatus}/>
-            <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
+            <div className="sigma-header-model-column">
+              <GlobalModelPill enabled={showConnectionStatus}/>
+              <div className="sigma-header-secondary-row">
+                <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>
+                <button type="button" ref={settingsButton} className="home-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
+              </div>
+            </div>
             <GoogleIdentityPill inviteInHeader/>
             {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
             {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
@@ -5379,7 +5388,6 @@ function Home({ initialPath, onOpen }: {
           {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
             <button type="button" ref={newButton} className="home-project-action home-icon-action" aria-label="New project" data-tooltip="New project" onClick={() => setEntry('new')}><CirclePlusIcon/></button>
           <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>
-          <button type="button" ref={settingsButton} className="home-project-action home-icon-action" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
           </>}
         </div>
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
