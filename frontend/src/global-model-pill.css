@@ -748,3 +748,32 @@
     padding-inline: 9px;
   }
 }
+
+/* Anchor Model immediately below the About pill on both Home and Project.
+   Nesting avoids width-dependent offsets from Admin/Settings and keeps the
+   Model left edge equal to About's left edge regardless of selection. */
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > :is(.home-about-button, .about-action) {
+  flex: 0 0 auto;
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .global-model-pill-position {
+  position: absolute;
+  top: calc(var(--sigma-header-row-one, 34px) + var(--identity-pill-gap));
+  left: 0;
+  right: auto;
+  width: max-content;
+  max-width: none;
+  margin: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(.sigma-header-about-model-anchor > .global-model-pill-position) {
+  padding-bottom: calc(var(--sigma-header-row-two, 53px) + var(--identity-pill-gap));
+}
+.workspace-page .project-art-header .sigma-header-about-model-anchor > .about-action {
+  width: max-content;
+  min-width: 0;
+}
