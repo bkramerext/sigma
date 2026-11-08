@@ -15,9 +15,13 @@ concurrency:
 
 jobs:
   browser:
-    name: Browser acceptance
+    name: Browser acceptance (${{ matrix.group }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ['1', '2']
     env:
       CI: "true"
       SIGMA_CLOUD_AUTH_ENABLED: "false"
@@ -30,9 +34,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # Runner-local uv caching remains available during the job. Disable
+      # setup-uv's cross-run cache, whose post-job prune can block on a
+      # surviving uvicorn fixture launched by "uv run".
       - uses: astral-sh/setup-uv@v6
         with:
-          enable-cache: true
+          enable-cache: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -45,7 +52,7 @@ jobs:
         id: chromium
         run: uv run --with playwright python -m playwright install --with-deps chromium
       - name: Project diagnostics copy/download browser acceptance (#525)
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '1' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -53,7 +60,7 @@ jobs:
           uv run --with playwright python browser_checks/issue525_project_diagnostics.py
       - name: Public Samples guest star and PDF acceptance
         # Independent suites should all run, even after another suite fails.
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '1' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -61,7 +68,7 @@ jobs:
           uv run --with playwright python browser_checks/guest_samples.py
       - name: Research Outcome browser acceptance
         # Independent suites should all run, even after another suite fails.
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '1' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -69,7 +76,7 @@ jobs:
           uv run --with playwright python browser_checks/t47_conclusion.py
       - name: Project Types browser acceptance
         # Independent suites should all run, even after another suite fails.
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '1' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -89,7 +96,7 @@ jobs:
           uv run --with playwright python browser_checks/project_email.py
       - name: Research Q/A browser acceptance
         # Validate the exact Q/A toolbar, scroll and source navigation in real Chrome.
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -112,7 +119,7 @@ jobs:
           uv run --with playwright python browser_checks/research_qa.py
       - name: Model availability browser acceptance
         # Independent suites should all run, even after another suite fails.
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -130,7 +137,7 @@ jobs:
           uv run --with playwright python browser_checks/model_availability.py
       - name: Obligation recovery and public legal pages browser acceptance
         # Independent suites should all run, even after another suite fails.
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -149,7 +156,7 @@ jobs:
           uv run --with playwright python browser_checks/t81_public_legal_pages.py
       - name: Recent Projects browser acceptance
         # Independent suites should all run, even after another suite fails.
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -166,7 +173,7 @@ jobs:
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           uv run --with playwright python browser_checks/t92_recent_running.py
       - name: Save As browser acceptance
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -186,7 +193,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: consolidated-browser-evidence
+          name: consolidated-browser-evidence-${{ matrix.group }}
           path: |
             /tmp/sigma-outcome-acceptance/sigma-increment13-*.png
             /tmp/sigma-t201-recovery.png
@@ -205,3 +212,15 @@ jobs:
             /tmp/save-as-ui.log
           if-no-files-found: ignore
           retention-days: 14
+
+  # Preserve the existing required check name while the suites run in parallel.
+  browser-gate:
+    name: Browser acceptance
+    if: ${{ always() }}
+    needs: browser
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require both browser groups to pass
+        env:
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: test "$BROWSER_RESULT" = "success"
