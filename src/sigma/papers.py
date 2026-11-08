@@ -11212,6 +11212,21 @@ def preflight(
     view = inspect_project(path)
     existing = _load_work(path)
     reset_ledger = _read_reset_ledger(path)
+    legacy_scoring_available = False
+    if existing is None and reset_ledger is None:
+        # Older builds cleared the generation checkpoint before Score, but
+        # retained the published paper ID in the progress sidecar.
+        prior = _read_progress_status(path)
+        if (
+            prior is not None
+            and prior.get("stage") in {"scoring", "score_failed", "finishing"}
+            and isinstance(prior.get("paper_id"), str)
+        ):
+            try:
+                published = get_paper(path, prior["paper_id"], include_tex=False)
+                legacy_scoring_available = bool(published["pdf_available"])
+            except ProjectError:
+                pass
     # A running or resumable paper uses the original saved evidence. Avoid
     # refreshing live research at all when a frozen checkpoint is available.
     frozen = existing.get("frozen_package") if existing is not None else None
@@ -11252,7 +11267,7 @@ def preflight(
         and work_state.get("project_id") == view.project.id
         and (expected_project_id is None or expected_project_id == view.project.id)
         and work_state.get("snapshot_sha256") == fingerprint
-    )
+    ) or legacy_scoring_available
     checkpoint_kind_matches = bool(
         work_state.get("kind") == ("long_form" if long_form else "one_shot")
     )
@@ -11280,6 +11295,8 @@ def preflight(
         and (long_form or one_shot_draft_available or work_state.get("provider_calls", 0) == 0)
     )
     if not resume_available and _can_rebase_explicit_restart(work_state, view.project.id):
+        resume_available = True
+    if legacy_scoring_available:
         resume_available = True
     saved_progress = work_state.get("progress") or {}
     planning_fallback_available = bool(
@@ -11335,6 +11352,7 @@ def preflight(
     cached_compilation = work_state.get("publication_compilation")
     publication_compiler_remaining = int(
         has_publication_refs
+        and not legacy_scoring_available
         and not (
             resume_available
             and isinstance(cached_compilation, dict)
@@ -11349,11 +11367,11 @@ def preflight(
     saved_proofreading = work_state.get("proofreading") if resume_available else None
     completed_authoring = bool(
         resume_available
-        and (work_state.get("validated_draft") or work_state.get("published_paper_id"))
+        and (legacy_scoring_available or work_state.get("validated_draft") or work_state.get("published_paper_id"))
     )
     completed_proofreading = bool(
         resume_available
-        and (work_state.get("proofread_ready") or work_state.get("published_paper_id"))
+        and (legacy_scoring_available or work_state.get("proofread_ready") or work_state.get("published_paper_id"))
     )
     saved_proofreading_status = (
         saved_proofreading.get("status") if isinstance(saved_proofreading, dict) else None
@@ -11450,7 +11468,7 @@ def preflight(
         "maximum_structured_input_bytes": maximum_structured_input_bytes,
         "max_evidence_batches": 0 if fast_preflight else MAX_EVIDENCE_BATCHES,
         "max_sections": MAX_LONG_PAPER_SECTIONS,
-        "checkpoint_exists": work is not None,
+        "checkpoint_exists": work is not None or legacy_scoring_available,
         "checkpoint_matches_snapshot": same_project_and_snapshot,
         "resume_available": resume_available,
         "saved_provider_model": work_state.get("model") if resume_available else None,
