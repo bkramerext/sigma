@@ -86,11 +86,11 @@ class SampleCopyTests(unittest.TestCase):
         self.assertTrue(any("formalist" in title for title in methods))
         self.assertTrue(any("historical" in title for title in methods))
         self.assertTrue(any("reception" in title for title in methods))
-        self.assertIn("CENTRAL RESEARCH QUESTION", project.problem)
-        self.assertIn("EVIDENCE AND CITATION CRITERIA", project.problem)
-        self.assertIn("published literary criticism", project.problem)
-        self.assertIn("bibliography", project.problem)
-        self.assertIn("NON-OVERLAPPING", project.problem.upper())
+        self.assertIn("How does Arthur Miller's The Crucible", project.problem)
+        self.assertIn("published literary criticism", project.paper_requirements)
+        self.assertIn("bibliography", project.paper_requirements)
+        self.assertIn("Run three separate strategies", project.desired_outcomes)
+        self.assertIn("non-overlapping primary methods", project.desired_outcomes)
         self.assertEqual(
             project.events[-1].sequence,
             len(json.loads((catalog_root / "the-crucible" / "project.json").read_text())["events"])
