@@ -1,10 +1,105 @@
-.sigma-description-fields { display: grid; gap: 1rem; width: 100%; min-width: 0; }
-.sigma-description-field { min-width: 0; width: 100%; }
-.sigma-description-field h4 { margin: 0 0 .25rem; font-size: .94rem; font-weight: 600; }
-.sigma-description-field .settings-hint { margin: .1rem 0 .4rem; }
-.sigma-description-field textarea { box-sizing: border-box; display: block; width: 100%; min-height: 5rem; max-width: 100%; resize: vertical; font: inherit; line-height: 1.5; }
-.sigma-description-editor { width: 100%; min-width: 0; }
+.sigma-description-editor {
+  width: 100%;
+  min-width: 0;
+}
 .sigma-description-editor form { width: 100%; }
-.sigma-description-rendered { overflow-wrap: anywhere; }
+
+/* The pencil becomes inline Save/Cancel actions during editing. */
+.sigma-description-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+.sigma-description-title-row #project-pane-title-input {
+  flex: 1 1 20rem;
+  min-width: 0;
+  width: auto;
+  max-width: 100%;
+}
+.sigma-description-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: .9rem;
+  white-space: nowrap;
+}
+.sigma-description-actions button.text-view-link {
+  display: inline-block;
+  min-height: 0;
+  width: auto;
+  margin: 0;
+  padding: .25rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground, #edc38d);
+  font: 500 .9rem/1.35 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.sigma-description-actions button.text-view-link:hover:not(:disabled) {
+  color: #ffe0b5;
+  background: transparent;
+  box-shadow: none;
+}
+.sigma-description-actions button.text-view-link:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
+}
+.sigma-description-actions button.text-view-link:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+/* Distinct, readable sections in both the viewed and edited project fields. */
+.sigma-description-fields {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  margin-top: 1.25rem;
+}
+.sigma-description-field {
+  min-width: 0;
+  width: 100%;
+}
+.sigma-description-field + .sigma-description-field {
+  padding-top: 1rem;
+  border-top: 1px solid #344353;
+}
+.sigma-description-field h4 {
+  margin: 0 0 .5rem;
+  color: #edc38d;
+  font: 700 .82rem/1.35 Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.sigma-description-field .settings-hint {
+  margin: 0 0 .75rem;
+  line-height: 1.5;
+}
+.sigma-description-field textarea {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-height: 5rem;
+  padding: .75rem .85rem;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.55;
+}
+.sigma-description-rendered {
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
 .sigma-description-rendered p:first-child { margin-top: 0; }
-.sigma-description-actions { display: flex; gap: 1rem; margin-top: 1rem; }
+.sigma-description-rendered p:last-child { margin-bottom: 0; }
+@media (max-width: 600px) {
+  .sigma-description-title-row #project-pane-title-input { flex-basis: 100%; }
+  .sigma-description-fields { margin-top: 1rem; }
+  .sigma-description-field + .sigma-description-field { padding-top: .85rem; }
+}

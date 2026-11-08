@@ -92,17 +92,17 @@ export default function ProjectDescriptionEditor({
 
   return <div className="sigma-description-editor">
     {editing ? <form onSubmit={save}>
-      <div className="project-pane-title-line is-renaming">
+      <div className="project-pane-title-line is-renaming sigma-description-title-row">
         <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
         <input id="project-pane-title-input" ref={titleInput} required
           aria-label="Project title" value={draft.title} maxLength={200} disabled={busy}
           onChange={event => setDraft(old => ({ ...old, title: event.target.value }))}/>
+        <div className="sigma-description-actions">
+          <button type="submit" className="text-view-link" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
+        </div>
       </div>
       {fields}
-      <div className="sigma-description-actions">
-        <button type="submit" className="text-view-link" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-        <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
-      </div>
       {error && <p className="error" role="alert">{error}</p>}
     </form> : <>
       <div className="project-pane-title-line">
