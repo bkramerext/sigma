@@ -241,16 +241,12 @@ with sync_playwright() as playwright:
     common_section = dialog.locator(".pt-common-references")
     expect(common_section.locator(".pt-reference-link")).to_have_count(4)
     expect(common_section.locator("input")).to_have_count(0)
-    expect(common_section.locator('.pt-reference-toggle[aria-pressed="true"]')).to_have_count(
-        4
-    )
+    expect(common_section.locator('.pt-reference-toggle[aria-pressed="true"]')).to_have_count(4)
     expect(common_section.locator(".pt-reference-url")).to_have_count(0)
     expect(common_section.locator(".pt-reference-link a")).to_have_count(4)
     common_section.locator('.pt-reference-toggle[aria-pressed="true"]').first.click()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
-    expect(common_section.locator('.pt-reference-toggle[aria-pressed="false"]')).to_have_count(
-        1
-    )
+    expect(common_section.locator('.pt-reference-toggle[aria-pressed="false"]')).to_have_count(1)
     common_section.locator('.pt-reference-toggle[aria-pressed="false"]').first.click()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     # Both Common categories can add references; the curated ones stay immutable.
