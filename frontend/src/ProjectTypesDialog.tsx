@@ -558,7 +558,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   const referenceAddButton = (owner: string, field: ReferenceField, references: Reference[], readonly = false, immutableCount = 0) => {
     const pending = references.some((reference, index) => index >= immutableCount &&
       (!reference.url.trim() || (editingReferences.has(`${owner}:${field}:${index}`) &&
-        referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null));
+        referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null)));
     if (readonly || references.length - immutableCount >= 100 || pending) return null;
     return <button type="button" className="pt-new-action pt-reference-add" aria-label="New reference"
       data-tooltip="New reference" disabled={busy} onClick={() => {
