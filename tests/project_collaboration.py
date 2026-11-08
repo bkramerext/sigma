@@ -277,9 +277,9 @@ class CollaborationTests(TestCase):
                 return_value=SimpleNamespace(origin="https://sigma.example.org"),
             ),
             patch("sigma.mail_transport.send_message", side_effect=deliver),
+            ThreadPoolExecutor(max_workers=2) as pool,
         ):
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                list(pool.map(lambda _: shared.drain_notifications(), range(2)))
+            list(pool.map(lambda _: shared.drain_notifications(), range(2)))
         self.assertEqual(calls, [self.other.email])
 
     def test_global_research_limits_save_does_not_take_project_lease(self) -> None:
