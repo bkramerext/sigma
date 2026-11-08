@@ -173,7 +173,11 @@ def main() -> None:
             # the invalid override and refuses valid or unsafe files.
             old_bytes = target.read_bytes()
             target.write_text('{"version": 1, "markdown": ""}', encoding="utf-8")
-            assert research_ethos.quarantine_invalid_override() == defaults
+            with TestClient(app) as client:
+                assert client.get("/api/user-preferences/research-ethos").status_code == 400
+                result = client.post("/api/user-preferences/research-ethos/recover")
+                assert result.status_code == 200, result.text
+                assert result.json() == defaults
             archived = list(alice.glob(".sigma-research-ethos.invalid-*.json"))
             assert len(archived) == 1
             assert archived[0].read_text() == '{"version": 1, "markdown": ""}'
