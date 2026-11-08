@@ -53,7 +53,17 @@ has already shipped; **do not redeploy it** as part of #667.
    `sigma-state-v021-pre-` until conditional IAM is deliberately updated.
    **Do not pass `--labels`**: this path does not grant
    `compute.snapshots.setLabels`, and snapshot name, source, creation time,
-   immutable ID and verification evidence are sufficient. Wait for READY
+   immutable ID and verification evidence are sufficient. With `PROJECT`,
+   `ZONE`, `SNAPSHOT`, and `RECOVERY_ID` set to reviewed exact values
+   (for example, project `sigma-research-prod`, zone `us-west1-b`),
+   the label-free snapshot command is:
+   ```sh
+   gcloud compute snapshots create "$SNAPSHOT" --project="$PROJECT" \
+     --source-disk=sigma-state --source-disk-zone="$ZONE" \
+     --storage-location=us-west1 \
+     --impersonate-service-account="$RECOVERY_ID"
+   ```
+   Wait for READY
    and confirm source disk, snapshot ID, and creation timestamp. Restart
    SIGMA and recheck health as soon as consistency is captured. If a
    snapshot cannot be verified, stop the release; do not claim
@@ -73,7 +83,26 @@ has already shipped; **do not redeploy it** as part of #667.
    Connect through IAP/OS Login with the recovery identity, not Owner.
    The IAM conditions presently permit only the documented v0.2.1-style
    resource prefixes; any new prefix needs an explicit narrow IAM review
-   before a subsequent release.
+   before a subsequent release. With `CLONE_DISK=sigma-state-restore-*`
+   and `RECOVERY_VM=sigma-v021-recovery-*` set to unique, verified actual
+   names (no literal asterisks), create and attach once:
+   ```sh
+   gcloud compute disks create "$CLONE_DISK" --project="$PROJECT" --zone="$ZONE" \
+     --source-snapshot="$SNAPSHOT" --type=pd-balanced \
+     --impersonate-service-account="$RECOVERY_ID"
+   gcloud compute instances create "$RECOVERY_VM" --project="$PROJECT" --zone="$ZONE" \
+     --machine-type=e2-standard-2 --image-project=ubuntu-os-cloud \
+     --image-family=ubuntu-2404-lts-amd64 --subnet=sigma-us-west1 \
+     --no-address --no-service-account --no-scopes \
+     --metadata=enable-oslogin=TRUE,block-project-ssh-keys=TRUE \
+     --impersonate-service-account="$RECOVERY_ID"
+   gcloud compute instances attach-disk "$RECOVERY_VM" \
+     --project="$PROJECT" --zone="$ZONE" --disk="$CLONE_DISK" \
+     --device-name=sigma-state-restore --mode=ro \
+     --impersonate-service-account="$RECOVERY_ID"
+   ```
+   Confirm actual disk attachment is read-only before mounting. Abort
+   safely on any create/attach failure; do not recreate with weaker flags.
 5. **Verify the isolated restore, read-only.** Transfer the verifier from
    the **selected exact SHA** to the isolated recovery VM and run
    `deploy/verify-state-restore.py` against the mounted filesystem with
