@@ -26,6 +26,7 @@ import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
+import SigmaSelect from './SigmaSelect';
 import GlobalModelPill from './GlobalModelPill';
 import ProjectDescriptionEditor, { type ProjectDescriptionDraft } from './ProjectDescriptionEditor';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
@@ -1277,7 +1278,9 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
         {canIntervene && <form className="human-intervention-form" onSubmit={submitIntervention}>
           <fieldset className="human-intervention-type" aria-label="Feedback type"><label><input type="radio" name={`feedback-type-${session.id}`} value="priority" checked={interventionKind === 'priority'} onChange={() => setInterventionKind('priority')}/> Priority</label><label><input type="radio" name={`feedback-type-${session.id}`} value="objection" checked={interventionKind === 'objection'} onChange={() => setInterventionKind('objection')}/> Objection</label><label><input type="radio" name={`feedback-type-${session.id}`} value="evidence" checked={interventionKind === 'evidence'} onChange={() => setInterventionKind('evidence')}/> New Evidence</label></fieldset>
           <fieldset className="human-intervention-target" aria-label="Feedback recipient"><label><input type="radio" name={`feedback-target-${session.id}`} value="investigator" checked={targetAgentRole === 'investigator'} onChange={() => setTargetAgentRole('investigator')}/> For investigator</label><label><input type="radio" name={`feedback-target-${session.id}`} value="skeptic" checked={targetAgentRole === 'skeptic'} onChange={() => setTargetAgentRole('skeptic')}/> For skeptic</label></fieldset>
-          <label className="human-intervention-strategy"><span className="sr-only">Strategy</span><select aria-label="Strategy" value={interventionStrategy} onChange={event => setInterventionStrategy(event.target.value)}><option value="*">All strategies</option>{targetStrategies.map(item => <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_title}</option>)}</select></label>
+          <div className="human-intervention-strategy"><SigmaSelect ariaLabel="Strategy" value={interventionStrategy}
+            options={[{ value: '*', label: 'All strategies' }, ...targetStrategies.map(item => ({ value: item.strategy_id, label: item.strategy_title }))]}
+            onChange={setInterventionStrategy}/></div>
           <label className="human-intervention-text">Feedback<textarea value={interventionText} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a research instruction or evidence note."/></label>
           <div className="human-intervention-submit"><button type="submit" className="text-view-link" aria-describedby={`human-feedback-help-${session.id}`} disabled={interventionBusy || busy || !interventionText.trim()}>{interventionBusy ? 'Adding…' : 'Add'}</button><small id={`human-feedback-help-${session.id}`}>Applies on next resume.</small></div>
           {interventionError && <p className="error" role="alert">{interventionError}</p>}
@@ -3320,9 +3323,9 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
               actions={<>
                 {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
                   {confirmRecoverDraft && recoverySection !== null && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Authorize unfinished paper section recovery">
-                    <p>Retry Section {recoverySection}? Its previous AI call was dispatched but no section was saved and allowance may have been consumed. Completed sections will be reused. This authorizes a new section generation with bounded pre-stream retries.</p>
+                    <p>Retry Section {recoverySection}? The previous call may have consumed allowance without saving this section. Completed sections will be reused.</p>
                     <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link" disabled={busy} onClick={() => { setConfirmRecoverDraft(false); void generatePaper(false, recoverySection); }}>Authorize</button>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => { setConfirmRecoverDraft(false); void generatePaper(false, recoverySection); }}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRecoverDraft(false)}>Cancel</button>
                     </div>
                   </div></div>}

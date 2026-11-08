@@ -200,3 +200,91 @@
   min-width: 22px;
   text-align: center;
 }
+
+/* New uses the same single-stroke SVG as Home/Strategy New, never a font glyph in a drawn circle. */
+.project-types-dialog .pt-new-action .sigma-action-glyph {
+  display: block; width: 24px; height: 24px;
+}
+.project-types-dialog .pt-reference-heading .pt-new-action .sigma-action-glyph {
+  width: 19px; height: 19px;
+}
+
+/* Keep the New glyph directly beside and centered on the project-types title. */
+.project-types-dialog .project-types-section-heading:has(> .pt-new-action) {
+  align-items: center;
+  gap: 8px;
+}
+.project-types-dialog .project-types-section-heading:has(> .pt-new-action) > h3 {
+  margin: 0;
+}
+.project-types-dialog .project-types-section-heading > .pt-new-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 2px;
+  line-height: 0;
+  text-decoration: none;
+}
+
+/* All reference heading Add buttons share one centered baseline and icon slot. */
+.project-types-dialog .pt-reference-heading {
+  align-items: center;
+  column-gap: 8px;
+}
+.project-types-dialog .pt-reference-heading > :is(h3, h4) {
+  margin: 0;
+}
+.project-types-dialog .pt-reference-heading > .pt-new-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  flex: 0 0 24px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px;
+  margin: 0;
+  line-height: 0;
+  text-decoration: none;
+}
+
+/* Custom project-type removal matches the small standard icon actions. */
+.project-types-dialog .project-type-card > summary .project-type-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 24px; width: 24px; min-width: 24px; height: 24px; min-height: 24px;
+  margin: 0; padding: 3px; line-height: 0; text-decoration: none;
+}
+.project-types-dialog .project-type-card > summary .project-type-remove .pt-reference-action-icon {
+  display: block; width: 18px; height: 18px;
+}
+
+/* Match the standard SIGMA close/remove X geometry and hover treatment. */
+.project-types-dialog .project-type-card > summary .project-type-remove > svg {
+  display: block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+}
+.project-types-dialog .project-type-card > summary .project-type-remove:hover:not(:disabled) {
+  background: #3b3029;
+  border: 1px solid #ac7054;
+  border-radius: 6px;
+}
+
+/* The Based-on picker follows the same unfilled hover convention. */
+.project-types-dialog .pt-based-on-picker [role="combobox"]:hover:not(:disabled),
+.project-types-dialog .pt-based-on-picker [role="combobox"]:focus,
+.project-types-dialog .pt-based-on-picker [role="combobox"][aria-expanded="true"] {
+  background: #030b14 !important; background-image: none !important;
+  color: #e3edf6 !important; box-shadow: none !important;
+}
+.project-types-dialog .pt-based-on-picker .research-type-options [role="option"]:hover:not([aria-selected="true"]) {
+  background: transparent !important; border-color: #a87950;
+}

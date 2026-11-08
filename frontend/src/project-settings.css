@@ -695,3 +695,14 @@
   border-color: #ac7054;
   background: #3b3029;
 }
+
+/* Shared custom project-type pickers: no copper fill when hovering the trigger. */
+.project-settings-dialog .research-type-picker [role="combobox"]:hover:not(:disabled),
+.project-settings-dialog .research-type-picker [role="combobox"]:focus,
+.project-settings-dialog .research-type-picker [role="combobox"][aria-expanded="true"] {
+  background: #030b14 !important; background-image: none !important;
+  color: #e3edf6 !important; box-shadow: none !important;
+}
+.project-settings-dialog .research-type-options [role="option"]:hover:not([aria-selected="true"]) {
+  background: transparent !important; border-color: #a87950;
+}

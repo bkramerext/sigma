@@ -1,0 +1,39 @@
+/* Dark/copper picker matches Project Settings, including the top-layer option menu. */
+.sigma-select { display: block; width: 100%; min-width: 0; }
+.sigma-select .sigma-select-trigger, .session-log-page .sigma-select .sigma-select-trigger {
+  box-sizing: border-box; display: flex; align-items: center; gap: 6px;
+  width: 100%; min-height: 43px; margin: 0; padding: 9px 12px;
+  border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6;
+  font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-align: left; cursor: pointer;
+}
+.sigma-select .sigma-select-trigger > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sigma-select .sigma-select-trigger:disabled { opacity: .6; cursor: not-allowed; }
+.sigma-select .sigma-select-chevron { width: 12px; height: 12px; flex: 0 0 12px; fill: none; stroke: var(--sigma-copper-foreground); stroke-width: 1.5; transition: transform 120ms ease; }
+.sigma-select .sigma-select-trigger[aria-expanded="true"] .sigma-select-chevron { transform: rotate(180deg); }
+.sigma-select .sigma-select-trigger:focus-visible, .sigma-select-options [role="option"]:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+.sigma-select-options[popover] { position: fixed; inset: auto; right: auto; z-index: 2147483647; box-sizing: border-box; overflow-y: auto; margin: 0; padding: 4px; border: 1px solid #806247; border-radius: 6px; background: #091522; box-shadow: 0 14px 35px #000b; }
+.sigma-select-options [role="option"] { display: flex; align-items: center; gap: 10px; box-sizing: border-box; width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #dce7f0; font: 13px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; }
+.sigma-select-options [role="option"]:hover, .sigma-select-options [role="option"]:focus-visible, .sigma-select-options [role="option"][aria-selected="true"] { border-color: #a87950; background: #241a16; color: var(--sigma-copper-foreground); }
+
+/* No fill-on-hover for any SIGMA dropdown trigger (Model, Thinking, duration,
+   feedback strategy and session log). Focus indication remains an outline. */
+.sigma-select .sigma-select-trigger:hover:not(:disabled),
+.sigma-select .sigma-select-trigger:focus,
+.sigma-select .sigma-select-trigger[aria-expanded="true"],
+.session-log-page .sigma-select .sigma-select-trigger:hover:not(:disabled) {
+  background: #030b14 !important;
+  background-image: none !important;
+  color: #e3edf6 !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+/* Hovered menu items stay neutral; selection remains communicated by an outline. */
+.sigma-select-options [role="option"]:hover:not([aria-selected="true"]) {
+  background: transparent !important;
+  border-color: #a87950;
+  color: #e3edf6;
+}
+.sigma-select-options [role="option"][aria-selected="true"]:hover {
+  background: #241a16;
+}

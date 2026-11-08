@@ -220,7 +220,9 @@ with sync_playwright() as playwright:
     assert (
         model_tab.evaluate("node => getComputedStyle(node).backgroundColor") == "rgba(0, 0, 0, 0)"
     )
-    assert "underline" in model_tab.evaluate("node => getComputedStyle(node).textDecorationLine")
+    # Hover must not underline tabs; the selected tab already has a copper indicator.
+    assert model_tab.evaluate("node => getComputedStyle(node).textDecorationLine") == "none"
+    assert model_tab.get_attribute("aria-selected") == "false"
     for tab_name in ("Model", "Limits", "Preferences", "Project Types"):
         dialog.get_by_role("tab", name=tab_name, exact=True).click()
         next_box = dialog.bounding_box()
@@ -421,6 +423,9 @@ with sync_playwright() as playwright:
 
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
+    # Settings remembers the most recently selected tab when reopened.
+    expect(dialog.get_by_role("tab", name="Preferences")).to_have_attribute("aria-selected", "true")
+    dialog.get_by_role("tab", name="Project Types").click()
     add_button = dialog.locator(".project-types-section-heading").first.get_by_role(
         "button", name="New"
     )

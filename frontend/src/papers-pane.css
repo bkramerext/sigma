@@ -419,3 +419,21 @@
   color: #ffe0b5;
   background: transparent;
 }
+
+/* Reserve room for the absolutely positioned activity text below the stage row.
+   Keep stage-to-stage horizontal gaps untouched, including on narrow screens. */
+.workspace-page .papers-pane .paper-draft-card:has(.paper-stage-list li.is-active > .paper-activity-line) {
+  padding-bottom: 28px;
+}
+
+/* Active substep text overlays the next step's lower line, never widening spacing. */
+.workspace-page .papers-pane .paper-stage-list li.is-active:has(> .paper-activity-line),
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step='Planning'].is-active:has(> .paper-activity-line) {
+  display: inline-flex; position: relative; flex-wrap: nowrap; align-items: baseline;
+  gap: 5px; grid-template-columns: none; white-space: nowrap;
+}
+.workspace-page .papers-pane .paper-stage-list li.is-active:has(> .paper-activity-line) > .paper-activity-line,
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step='Planning'] > .paper-activity-line {
+  position: absolute; top: calc(100% + 3px); left: 15px; display: block; white-space: nowrap;
+  max-width: none; overflow: visible; text-overflow: clip; pointer-events: none; z-index: 1;
+}
