@@ -9739,7 +9739,12 @@ async def _generate_impl(
             # Render-affecting option changes explicitly invalidate downstream
             # validation/TeX/PDF artifacts, but never paid authoring outputs.
             if not work.get("published_paper_id"):
-                for key in ("validated_draft", "validated_warnings", "proofread_ready", "pdf_checkpoint"):
+                for key in (
+                    "validated_draft",
+                    "validated_warnings",
+                    "proofread_ready",
+                    "pdf_checkpoint",
+                ):
                     work.pop(key, None)
                 resume_floor = None
             work["include_diagrams"] = include_diagrams
