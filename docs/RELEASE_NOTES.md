@@ -171,3 +171,39 @@ Production deployments use a keyless, guarded release path with a fresh isolated
 `469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. The operations runbook records
 the recovery snapshot, restore verification, image identities, cutover window,
 and production health evidence.
+
+---
+
+## Version 0.3.0 — Durable Paper Recovery and Clearer Controls
+*Release notes draft · Release SHA and production date pending*
+
+**A reliability-focused update that makes interrupted paper generation resume where it left off, while making research controls and project actions more consistent.** This draft covers changes merged after the v0.2.2 production source, reviewed through main SHA 666200d0aab76fea700d9904cd7b5ee33580e751. Changes merged before the final freeze will be reviewed for inclusion.
+
+### Paper generation that continues from saved work
+
+- **Checkpoints through the entire paper workflow.** Accepted drafts, corrected LaTeX after proofreading, individual verified PDF passes, the published PDF, and scoring progress retain enough evidence to resume at the next unfinished stage instead of returning to Writing sections.
+- **Resume at Score or Finish.** Stopping and restarting after the PDF is saved can resume scoring without authoring the paper again or creating a duplicate paper version. Previously interrupted papers that have an existing published PDF and a legacy progress record can also recover.
+- **More reliable PDF retries.** Individual compilation passes retain their inputs, output hashes, pass cursor, and diagnostics. Resume validates what was saved, reuses completed work, and cleans up temporary staged PDFs at completion.
+- **Correct invalidation when options change.** Changes that invalidate corrected LaTeX can trigger the appropriate proofreading again; unchanged, verified stages are not needlessly repeated. Existing provider-accounting protections still apply.
+
+### Model, Markdown, and scoring controls
+
+- **Model/Thinking changes no longer block Markdown conversion.** A model or reasoning-effort selection can change while a conversion is running. Each saved result retains the model and effort actually used for that request, while account/billing and source-integrity checks remain in place.
+- **More accurate Rescore availability.** Paper scoring checks current provider eligibility and account binding when the action is used, and explains why Rescore is unavailable rather than relying on stale page state.
+- **Clearer model visibility.** Compact, consistently sized model, reasoning-effort, and sponsored-provider controls make the current selection easier to see.
+
+### Consistent project and administrator interfaces
+
+- **Simpler project creation.** Project Type and Difficulty fields align consistently, Difficulty uses SIGMA's styled dropdown, and redundant explanatory text is removed.
+- **Cleaner reference and strategy editing.** Common and custom Project Type references use consistent add, enable, edit, and remove controls. Strategy actions and paper/browser actions use consistent icon sizes, order, hover text, and dismissal behavior.
+- **Better administrative and saved-answer controls.** Administrator actions, feedback review status, and allowance refresh are clearer. Saved Q&A browser/remove actions and session-log toolbar alignment are standardized.
+- **More predictable dialogs.** Close controls, Escape behavior, menu placement, and layout spacing have been refined.
+
+### Reliability and limitations
+
+SIGMA retains saved research and paper evidence across supported interruptions; a completed stage is only reused when its checkpoint remains valid. Uncertain AI-provider attempts are not assumed to be free or safe to replay.
+
+SIGMA remains an experimental research application. Investigator/Skeptic agreement and editorial paper scores are not scientific validation; review generated findings, evidence, citations, and papers independently.
+
+**Release status:** Preparation only. v0.3.0 is **not yet frozen or deployed**. The version update, exact release SHA, final CI evidence, recovery verification, and production acceptance will be recorded when the release is authorized. The currently documented production version remains v0.2.2.
+
