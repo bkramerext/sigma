@@ -102,6 +102,40 @@ with sync_playwright() as playwright:
     assert abs(model_rect["x"] + model_rect["width"] - about_rect["x"] - about_rect["width"]) < 3
     assert about_rect["x"] > google_rect["x"]
 
+    # The restored pill cycles user-wide defaults (not project settings),
+    # prompting before a cost-tier increase and preserving unrelated limits.
+    original_model_settings = page.request.get(
+        f"{FIXTURE_URL}/api/user-preferences/research-settings"
+    ).json()
+    expect(model_pill).to_be_enabled(timeout=15000)
+    with page.expect_response(
+        lambda response: response.url.endswith("/api/user-preferences/research-settings")
+        and response.request.method == "PUT"
+    ):
+        model_pill.click()
+        cost_confirmation = page.locator(".global-model-confirm-popover")
+        if cost_confirmation.is_visible():
+            cost_confirmation.get_by_role("button", name="Confirm").click()
+    changed_model_settings = page.request.get(
+        f"{FIXTURE_URL}/api/user-preferences/research-settings"
+    ).json()
+    assert changed_model_settings["ai_model"] != original_model_settings["ai_model"]
+    assert changed_model_settings["limits"] == original_model_settings["limits"]
+    restore_response = page.request.put(
+        f"{FIXTURE_URL}/api/user-preferences/research-settings",
+        data={
+            key: original_model_settings[key]
+            for key in (
+                "limits",
+                "ai_model",
+                "reasoning_effort",
+                "show_advanced_outcome_details",
+            )
+        },
+    )
+    assert restore_response.ok
+    page.evaluate("window.dispatchEvent(new Event('sigma-global-settings-saved'))")
+
     # A visible test host avoids the default Samples tab hiding Saved's
     # animations. Compare the CSSAnimation timeline anchors directly.
     page.emulate_media(reduced_motion="no-preference")
