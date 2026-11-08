@@ -529,3 +529,41 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .home-page .home-recents .recent-type-group > summary small { display: inline-flex; align-items: center; gap: 4px; }
 .home-page .home-recents .recent-type-group > ul { margin-top: 2px; }
 .home-page .home-recents .recent-meta-row .research-running-indicator { display: inline-block; vertical-align: middle; margin-left: 6px; }
+
+/* Admin Settings icon-only actions share SIGMA's copper hover treatment.
+   Save, confirmation and other decision actions remain text. */
+.cloud-access-dialog .admin-icon-action.admin-icon-action {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  text-decoration: none;
+}
+.cloud-access-dialog .admin-icon-action svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+/* Use the same 20px X glyph as the paper removal action. */
+.cloud-access-dialog .admin-icon-action:has(svg path[stroke-width="4"]) svg {
+  width: 20px;
+  height: 20px;
+}
+.cloud-access-dialog .admin-icon-action:hover:not(:disabled) {
+  background: #3b3029;
+  border-color: #ac7054;
+}
+.cloud-access-dialog .admin-icon-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}

@@ -333,3 +333,12 @@
 
 .admin-new-entry-heading .admin-new-entry-actions { position: static; }
 
+
+/* Position the Admin X against the modal itself, not its padded title row.
+   This gives the same 10px edge inset as other dialog dismissal controls. */
+.cloud-access-dialog { position: relative; }
+.cloud-access-dialog .admin-dialog-heading { position: static; }
+.cloud-access-dialog .admin-dialog-heading > .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 10px !important;
+  right: 10px !important;
+}

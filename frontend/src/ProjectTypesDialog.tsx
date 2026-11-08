@@ -2,6 +2,18 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefO
 import './project-types.css';
 import DialogDismissButton from './DialogDismissButton';
 
+function ReferenceActionIcon({ kind }: { kind: 'checked' | 'unchecked' | 'edit' | 'remove' }) {
+  return <svg className="pt-reference-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {kind === 'checked' || kind === 'unchecked' ? <>
+      <rect x="4" y="4" width="16" height="16" rx="2"/>
+      {kind === 'checked' && <path d="m8 12 3 3 5-6" strokeWidth="2.3"/>}
+    </> : kind === 'edit' ? <>
+      <path d="M12 20H4a1 1 0 0 1-1-1v-7"/>
+      <path d="m8 16 9.7-9.7 3 3L11 19l-4 1zM16.7 7.3l2-2a2.1 2.1 0 0 1 3 3l-1 1"/>
+    </> : <path d="M5 5 19 19M19 5 5 19"/>}
+  </svg>;
+}
+
 export type ProjectTypeRecord = {
   id: string;
   name: string;
@@ -242,7 +254,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     // without swallowing inline editor key handlers.
     const preserveModal = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && element.open && !explicitlyClosing.current) {
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest('input, textarea, [role="combobox"], [role="listbox"]')) return;
         event.preventDefault();
+        if (!busy) close();
       }
     };
     document.addEventListener('keydown', preserveModal, true);
@@ -393,9 +408,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     const disabled = referenceDisabled(owner, field, reference.url);
     const action = disabled ? 'Enable' : 'Disable';
     const label = field === 'research_standards_references' ? 'research' : 'publication';
-    return <button type="button" className="pt-reference-toggle" aria-pressed={disabled}
+    return <button type="button" className="pt-reference-toggle" aria-pressed={!disabled}
       aria-label={`${action} ${label} reference ${reference.name || reference.url} for ${owner === 'common' ? 'all project types' : owner}`}
-      disabled={busy} onClick={() => toggleReference(owner, field, reference.url)}>{action}</button>;
+      disabled={busy} data-tooltip={`${action} reference`} onClick={() => toggleReference(owner, field, reference.url)}><ReferenceActionIcon kind={disabled ? 'unchecked' : 'checked'}/></button>;
   }
   const isDuplicateName = (item: ProjectTypeRecord) => {
     const normalized = item.name.normalize("NFKC").trim().toLocaleLowerCase();
@@ -540,6 +555,22 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false; }
     finally { setBusy(false); }
   }
+  const referenceAddButton = (owner: string, field: ReferenceField, references: Reference[], readonly = false, immutableCount = 0) => {
+    const pending = references.some((reference, index) => index >= immutableCount &&
+      (!reference.url.trim() || (editingReferences.has(`${owner}:${field}:${index}`) &&
+        referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null)));
+    if (readonly || references.length - immutableCount >= 100 || pending) return null;
+    return <button type="button" className="pt-new-action pt-reference-add" aria-label="New reference"
+      data-tooltip="New reference" disabled={busy} onClick={() => {
+        const newKey = `${owner}:${field}:${references.length}`;
+        referenceEditOrigins.current.set(newKey, null);
+        setEditingReferences(previous => new Set(previous).add(newKey));
+        const next = [...references, { name: '', url: '' }];
+        if (owner === 'common') editCommonReferences(field, next.slice(immutableCount));
+        else if (builtins.some(item => item.id === owner)) editBuiltinReferences(owner, field, next.slice(immutableCount));
+        else edit(owner, { [field]: next });
+      }}><span className="pt-circled-plus" aria-hidden="true">+</span></button>;
+  };
   const listEditor = (owner: string, field: ReferenceField, references: Reference[], readonly: boolean, immutableCount = 0) => {
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
     const update = (next: Reference[]) => {
@@ -638,28 +669,15 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
             <button type="button" disabled={busy} onClick={() => {
               referenceEditOrigins.current.set(rowKey, reference);
               setEditingReferences(previous => new Set(previous).add(rowKey));
-            }}>Edit</button>
+            }} aria-label="Edit reference" data-tooltip="Edit reference"><ReferenceActionIcon kind="edit"/></button>
             <button type="button" disabled={busy} onClick={() => {
               referenceEditOrigins.current.delete(rowKey);
               setEditingReferences(previous => { const next = new Set(previous); next.delete(rowKey); return next; });
               update(references.filter((_, i) => i !== index));
-            }}>Remove</button>
+            }} aria-label="Remove reference" data-tooltip="Remove reference"><ReferenceActionIcon kind="remove"/></button>
           </>}
         </div></td></tr>;
       })}
-      {!readonly && references.length - immutableCount < 100 &&
-        !references.some((reference, index) => index >= immutableCount &&
-          (!reference.url.trim() || (editingReferences.has(`${owner}:${field}:${index}`) &&
-            referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null))) &&
-        <tr className="pt-reference-new-row"><td>
-        <button type="button" disabled={busy}
-          onClick={() => {
-            const newKey = `${owner}:${field}:${references.length}`;
-            referenceEditOrigins.current.set(newKey, null);
-            setEditingReferences(previous => new Set(previous).add(newKey));
-            update([...references, { name: '', url: '' }]);
-          }} className="pt-new-action">New</button>
-      </td></tr>}
     </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" data-project-type-id={item.id} key={item.id} open={open === item.id}>
@@ -672,10 +690,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderEffectiveIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      <section><h3>Research standards references</h3>{listEditor(item.id, 'research_standards_references', [
+      <section><div className="pt-reference-heading"><h3>Research standards references</h3>{referenceAddButton(item.id, 'research_standards_references', [...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : [])], false, readonly ? item.research_standards_references.length : 0)}</div>{listEditor(item.id, 'research_standards_references', [
         ...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : []),
       ], false, readonly ? item.research_standards_references.length : 0)}</section>
-      <section><h3>Publication standards references</h3>{listEditor(item.id, 'publication_standards_references', [
+      <section><div className="pt-reference-heading"><h3>Publication standards references</h3>{referenceAddButton(item.id, 'publication_standards_references', [...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : [])], false, readonly ? item.publication_standards_references.length : 0)}</div>{listEditor(item.id, 'publication_standards_references', [
         ...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : []),
       ], false, readonly ? item.publication_standards_references.length : 0)}</section>
     </div>
@@ -721,15 +739,15 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" data-tooltip="New project type"><span className="pt-circled-plus" aria-hidden="true">+</span></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
-        <h4>Research standards references for all project types</h4>
+        <div className="pt-reference-heading"><h4>Research standards references for all project types</h4>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>
         {listEditor('common', 'research_standards_references', [
           ...(commonReferences?.research_standards_references ?? []),
           ...commonCustomReferences.research_standards_references,
         ], false, commonReferences?.research_standards_references.length ?? 0)}
-        <h4>Publication standards references for all project types</h4>
+        <div className="pt-reference-heading"><h4>Publication standards references for all project types</h4>{referenceAddButton('common', 'publication_standards_references', [...(commonReferences?.publication_standards_references ?? []), ...commonCustomReferences.publication_standards_references], false, commonReferences?.publication_standards_references.length ?? 0)}</div>
         {listEditor('common', 'publication_standards_references', [
           ...(commonReferences?.publication_standards_references ?? []),
           ...commonCustomReferences.publication_standards_references,
@@ -739,7 +757,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   </>;
   if (embedded) return <div ref={embeddedRoot} className="project-types-dialog project-types-embedded" aria-label="Project Types settings">{content}</div>;
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title"
-    onCancel={event => { event.preventDefault(); }}
+    onCancel={event => { event.preventDefault(); if (!busy) close(); }}
     onClose={() => {
       // Some browsers can still dispatch a native close despite a cancelled
       // Escape. Only Close/Save may dismiss this dialog. Restore modal status
@@ -749,7 +767,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       }
     }}
     onKeyDown={event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!busy) close(); }
     }}
     onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;

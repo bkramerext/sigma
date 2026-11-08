@@ -2362,17 +2362,18 @@ const paperScoreCategories: { key: keyof PaperScore['categories']; title: string
   { key: 'visuals', title: 'Useful visuals', standard: 'Accurate figures or tables clarify difficult relationships, with clear captions and provenance.' },
 ];
 
-function PaperScoreDialog({ score, onRescore, canRescore, rescoring, error, onClose }: { score: PaperScore; onRescore: () => void; canRescore: boolean; rescoring: boolean; error: string; onClose: () => void }) {
+function PaperScoreDialog({ score, onRescore, canRescore, rescoreUnavailableReason, rescoring, error, onClose }: { score: PaperScore; onRescore: () => void; canRescore: boolean; rescoreUnavailableReason: string; rescoring: boolean; error: string; onClose: () => void }) {
   const element = useRef<HTMLDialogElement>(null);
   useEffect(() => { element.current?.showModal(); }, []);
   return <dialog ref={element} className="project-settings-dialog paper-score-dialog" aria-labelledby="paper-score-title"
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header paper-score-header">
       <h2 id="paper-score-title">Paper Score</h2>
-      <div className="settings-actions"><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" data-tooltip={canRescore ? "Evaluate again using an AI call" : "Connect an AI provider to rescore"} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button><DialogDismissButton label="Close paper score" onClick={onClose}/></div>
+      <div className="settings-actions"><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" data-tooltip={canRescore ? "Evaluate again using an AI call" : rescoreUnavailableReason} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button><DialogDismissButton label="Close paper score" onClick={onClose}/></div>
     </header>
     <div className="settings-body paper-score-body">
       {error && <p className="error" role="alert">{error}</p>}
+      {!canRescore && rescoreUnavailableReason && <p className="settings-hint" role="status">{rescoreUnavailableReason}</p>}
       <div className="paper-score-overall" aria-label={`Weighted paper score ${score.total} out of 100`}>
         <strong>Weighted score</strong><strong className="paper-score-points">{score.total}/100</strong>
       </div>
@@ -2614,6 +2615,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [scoringId, setScoringId] = useState('');
   const [scoreDialog, setScoreDialog] = useState<{ paperId: string; score: PaperScore } | null>(null);
   const [scoreError, setScoreError] = useState('');
+  const [scoreConfig, setScoreConfig] = useState<{ available: boolean; binding: string; message: string } | null>(null);
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
   const [copiedPaperId, setCopiedPaperId] = useState('');
@@ -2895,19 +2897,46 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     } catch (cause) { setEli5ErrorId(paper.paper_id); setEli5Error(errorMessage(cause)); }
     finally { explainingRef.current = false; setExplainingId(''); }
   }
+  // Paper score access must be checked independently of the initial pane load:
+  // reconnecting the AI account does not remount this pane.
+  useEffect(() => {
+    if (!scoreDialog) { setScoreConfig(null); return; }
+    let active = true;
+    const check = async () => {
+      try {
+        const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+        const config = await response.json();
+        if (active) setScoreConfig({
+          available: response.ok && config.available === true && !!config.binding,
+          binding: response.ok && config.available === true ? (config.binding ?? '') : '',
+          message: config.message ?? (response.ok ? 'Selected AI model is unavailable for scoring.' : 'Could not check scoring availability.'),
+        });
+      } catch (cause) {
+        if (active) setScoreConfig({ available: false, binding: '', message: errorMessage(cause) });
+      }
+    };
+    void check();
+    window.addEventListener('focus', check);
+    return () => { active = false; window.removeEventListener('focus', check); };
+  }, [scoreDialog?.paperId, path, ai.info?.status, ai.info?.mode, ai.info?.active_account]);
   async function scorePaper(paper: PaperSummary, force = false) {
     setScoreError('');
     // Reading an existing score never depends on ongoing generation/scoring.
     if (paper.score && !force) { setScoreDialog({ paperId: paper.paper_id, score: paper.score }); return; }
     if (scoringRef.current) return;
     if (!paper.pdf_available) { setScoreError('A saved PDF is required before this paper can be scored.'); return; }
-    if (!binding) { setScoreError('Connect an eligible AI provider before scoring.'); return; }
     scoringRef.current = true;
     setScoringId(paper.paper_id);
     try {
+      const configResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+      const config = await configResponse.json();
+      if (!configResponse.ok || !config.available || !config.binding)
+        throw new Error(config.message ?? 'Current AI model or connection is unavailable for scoring.');
+      setBinding(config.binding);
+      setScoreConfig({ available: true, binding: config.binding, message: config.message ?? '' });
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/score`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, force }),
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: config.binding, force }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not score the paper.');
@@ -3358,6 +3387,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
                   : <button type="button" className={`ai-paper-eli5-balloon${explainingId === paper.paper_id ? ' is-explaining' : ''}`} disabled={!!explainingId} data-tooltip={explainingId === paper.paper_id ? undefined : "Explain it to me like I'm 5"} aria-label="Explain it to me like I'm 5" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
+                {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label="View paper in a new browser tab" data-tooltip="View paper in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
                 <span className="paper-action-menu">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-download-button" aria-label={`Download ${paper.title}`} data-tooltip="Download paper" aria-haspopup="menu" aria-expanded={paperMenu?.paperId === paper.paper_id && paperMenu.kind === 'download'} onClick={event => { positionPaperPopup(event.currentTarget, 145, 100); setPaperMenu(current => current?.paperId === paper.paper_id && current.kind === 'download' ? null : { paperId: paper.paper_id, kind: 'download' }); }}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                   {paperMenu?.paperId === paper.paper_id && paperMenu.kind === 'download' && <span className="paper-action-popover" style={paperPopupStyle} role="menu" aria-label={`Download ${paper.title}`} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setPaperMenu(null); } }}>
@@ -3365,7 +3395,6 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.tex`} onClick={() => setPaperMenu(null)}>Download LaTeX source</a>
                   </span>}
                 </span>
-                {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label="View paper in a new browser tab" data-tooltip="View paper in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
                 <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
@@ -3442,7 +3471,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       {success && <p className="ai-paper-status" role="status">{success}</p>}
 
       </>}
-      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={!!binding && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
+      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={!!scoreConfig?.available && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoreUnavailableReason={!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available ? 'A compiled PDF is required to rescore this paper.' : !scoreConfig ? 'Checking current AI model and connection…' : scoreConfig.available ? '' : scoreConfig.message} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
       </div>
     </div>
   </section>;
@@ -4225,7 +4254,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
         <div className="sigma-header-about-model-anchor">
           <div className="sigma-header-first-row">
             <button type="button" className="about-action" aria-label="About SIGMA" data-tooltip-disabled onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
-            {onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/></button>}
+            {onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="SIGMA Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/></button>}
           </div>
           <ConnectedModelPill enabled={showConnectionStatus}/>
         </div>
@@ -4442,7 +4471,10 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
         <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
         {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <DialogDismissButton label="Dismiss error" onClick={() => setError('')}/></p>}
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
-          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} title={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : 'Convert to Markdown'} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p><button type="button" className="text-view-link" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}>Open in browser</button><button type="button" className="text-view-link" onClick={() => setRemoveId(record.qa_id)}>Remove</button></div></div></div>
+          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} title={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : 'Convert to Markdown'} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
+            <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-view-pdf-icon" aria-label="View answer in a new browser tab" data-tooltip="View answer in a new browser tab" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></button>
+            <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label="Remove saved answer" data-tooltip="Remove saved answer" onClick={() => setRemoveId(record.qa_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
+          </>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p></div></div></div>
           {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this saved answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><DialogDismissButton label="Cancel answer removal" onClick={() => setRemoveId('')}/></div>}
           <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><div className="research-qa-answer-heading"><h3>Answer</h3></div>{renderedAnswerIds.has(record.qa_id) && record.markdown_answer ? <div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.markdown_answer}/></Suspense></div> : <div className="research-qa-answer-plain">{record.answer}</div>}<h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => <li key={`${source.source_id}-${index}`}>{source.navigation_available && source.navigation_url ? <a href={source.navigation_url}>{source.label || source.kind}</a> : <>{source.label || source.kind} · navigation unavailable{source.navigation_unavailable_reason ? `: ${source.navigation_unavailable_reason}` : ''}</>}</li>) : <li>No verified source links available.</li>}</ul></article></div>
         </article>)}</section>}
@@ -4656,8 +4688,9 @@ function DifficultyPicker({ value, onChange }: {
       const below = window.innerHeight - rect.bottom - 12;
       const above = rect.top - 12;
       const height = Math.min(180, Math.max(80, Math.max(below, above)));
+      const menuHeight = Math.min(height, choices.length * 34 + 10);
       setMenuStyle({
-        top: below < 130 && above > below ? Math.max(8, rect.top - height - 4) : rect.bottom + 4,
+        top: below < 130 && above > below ? Math.max(8, rect.top - menuHeight - 4) : rect.bottom + 4,
         left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
         width: rect.width, maxHeight: height,
       });
@@ -4959,7 +4992,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setBusy(false); }
   }
-  return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
+  return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby={initial ? "project-settings-help" : undefined} onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
       {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their saved research configuration; some limits can be adjusted when resuming.</p>}
@@ -4968,14 +5001,14 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => changeSettingsTab('limits')}>Limits</button>
         <button type="button" role="tab" data-settings-tab="preferences" id="settings-tab-preferences" aria-selected={activeTab === 'preferences'} aria-controls="settings-panel-preferences" tabIndex={activeTab === 'preferences' ? 0 : -1} onClick={() => changeSettingsTab('preferences')}>Preferences</button>
       </div>}
-      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Set this project’s research type and AI options.' : 'Name a project and choose its research category.'}</p>
+      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}>{initial && <p id="project-settings-help">Set this project’s research type and AI options.</p>}
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research Subject</label><p className="settings-hint">What are we investigating?</p><textarea id="project-problem" required maxLength={20000} rows={3} value={values.problem} onChange={event => change('problem', event.target.value)}/>
       <label htmlFor="project-desired-outcomes">Desired Outcomes</label><p className="settings-hint">What insights or advances are we hoping for?</p><textarea id="project-desired-outcomes" maxLength={20000} rows={4} value={values.desired_outcomes} onChange={event => change('desired_outcomes', event.target.value)}/>
       <label htmlFor="project-paper-requirements">Paper Requirements</label><p className="settings-hint">What should the finished publication contain?</p><textarea id="project-paper-requirements" maxLength={20000} rows={4} value={values.paper_requirements} onChange={event => change('paper_requirements', event.target.value)}/></>}
-      <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/>{!initial && <p className="settings-hint">Need another project type? Use Project Types to create one.</p>}</div>
-      <div><label htmlFor="project-difficulty">Difficulty</label><select id="project-difficulty" value={values.difficulty ?? ''} onChange={event => change('difficulty', (event.target.value || null) as ProjectDifficulty | null)}>{values.difficulty === null && <option value="">Not set</option>}<option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>
+      <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
+      <div><label id="sigma-project-difficulty-label">Difficulty</label><DifficultyPicker value={values.difficulty} onChange={value => change('difficulty', value)}/></div></div>
       {initial && <div className="settings-model-row">
       <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
@@ -4990,7 +5023,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <p className="settings-hint">Used for future AI proposals. Higher levels use more time and usage.</p></div>
       </div>}
       {initial && pairError && <p className="error" role="alert">{pairError}</p>}
-      <p className="project-destination"><span>Project location</span><code>{initial ? initial.path : previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code><small>{initial ? 'Editing the display name never renames or moves this directory.' : 'The project name determines its directory; existing files are never overwritten.'}</small></p>
+      {initial && <p className="project-destination"><span>Project location</span><code>{initial.path}</code><small>Editing the display name never renames or moves this directory.</small></p>}
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
       {error && <p className="error" role="alert">{error}</p>}
@@ -5504,7 +5537,7 @@ function Home({ initialPath, onOpen }: {
                 <div className="sigma-header-about-model-anchor">
                   <div className="sigma-header-first-row">
                     <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" data-tooltip-disabled aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
-                    <button type="button" ref={settingsButton} className="home-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
+                    <button type="button" ref={settingsButton} className="home-settings-pill" aria-label="Settings" data-tooltip="SIGMA Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
                   </div>
                   <ConnectedModelPill enabled={showConnectionStatus}/>
                 </div>
@@ -5579,8 +5612,8 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptio
       <button type="button" className="text-view-link" title="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
       <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
-      <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and approach: ${shownTitle}`} data-tooltip="Edit strategy title and approach" disabled={modeDisabled}
-        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`strategy-markdown-slot-${strategy.id}-copy`} className="strategy-copy-slot"/>
+      <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><span id={`strategy-markdown-slot-${strategy.id}-copy`} className="strategy-copy-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and approach: ${shownTitle}`} data-tooltip="Edit strategy title and approach" disabled={modeDisabled}
+        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
       {commands}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
@@ -5592,13 +5625,25 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
 }) {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   return <span className="strategy-inline-commands">
-    <button type="button" className="text-view-link" disabled={disabled}
-      title={`${strategy.enabled ? 'Disable' : 'Enable'} strategy`} onClick={() => onCommand('toggle', strategy)}>{strategy.enabled ? 'Disable' : 'Enable'}</button>
-    <button type="button" className="text-view-link" disabled={disabled}
-      title="Fork strategy" onClick={() => onCommand('fork', strategy)}>Fork</button>
+    <button type="button" className="text-view-link strategy-icon-action" disabled={disabled}
+      aria-label={`${strategy.enabled ? 'Disable' : 'Enable'} strategy`} aria-pressed={strategy.enabled}
+      data-tooltip={`${strategy.enabled ? 'Disable' : 'Enable'} strategy`} onClick={() => onCommand('toggle', strategy)}>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="2"/>{strategy.enabled && <path d="m8 12 3 3 5-6" strokeWidth="2.3"/>}
+      </svg>
+    </button>
+    <button type="button" className="text-view-link strategy-icon-action" disabled={disabled}
+      aria-label="Fork strategy" data-tooltip="Fork strategy" onClick={() => onCommand('fork', strategy)}>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="6" cy="3.5" r="2"/><circle cx="18" cy="6.5" r="2"/><circle cx="6" cy="20.5" r="2"/>
+        <path d="M6 5.5v13M18 8.5v2a6 6 0 0 1-6 6H6"/>
+      </svg>
+    </button>
     <span className="strategy-remove-anchor">
-      <button type="button" id={`commands-${strategy.id}`} className="text-view-link" disabled={disabled}
-        title="Remove strategy" onClick={() => setConfirmingRemove(true)}>Remove</button>
+      <button type="button" id={`commands-${strategy.id}`} className="text-view-link strategy-icon-action" disabled={disabled}
+        aria-label="Remove strategy" data-tooltip="Remove strategy" onClick={() => setConfirmingRemove(true)}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round"><path d="M8 8 16 16M16 8 8 16"/></svg>
+      </button>
       {confirmingRemove && <div className="strategy-remove-popover"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove strategy ${strategy.title}`}>
         <p>Remove “{strategy.title}” from Strategies? Its research and history will be kept in the project.</p>
         <div className="session-remove-confirm-actions">
@@ -7015,6 +7060,17 @@ function InvitationRequestControls({ error, onError, onRecorded, buttonLabel = '
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
 type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string; request_type?: 'invitation' | 'reload' };
 type CloudFeedbackRequest = { id: string; account_email: string | null; contact_email: string | null; message: string; submitted_at: number; status: string };
+/** Icon-only administrator actions use SIGMA hovertext, not native titles. */
+function AdminActionIcon({ kind }: { kind: 'new' | 'add' | 'remove' | 'reload' }) {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none"
+    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {kind === 'new' ? <><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></>
+      : kind === 'add' ? <path d="M12 5v14M5 12h14"/>
+      : kind === 'reload' ? <><path d="M20 11a8 8 0 1 0-2.5 6"/><path d="M20 4v7h-7"/></>
+      : <path d="M8 8 16 16M16 8 8 16" strokeWidth="4"/>}
+  </svg>;
+}
+
 function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, feedbackRequests, error, busy, onClose, onAdd, onSave, onRevoke, onReload, onUpdateInvitation, onUpdateFeedback, onRemoveFeedback }: {
   bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
   invitationRequests: CloudInvitationRequest[];
@@ -7025,7 +7081,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   onRevoke: (grant: CloudGrant) => Promise<void>;
   onReload: (grant: CloudGrant) => Promise<void>;
   onUpdateInvitation: (request: CloudInvitationRequest, status: 'reviewed' | 'declined') => Promise<void>;
-  onUpdateFeedback: (request: CloudFeedbackRequest, status: 'reviewed' | 'closed') => Promise<void>;
+  onUpdateFeedback: (request: CloudFeedbackRequest, status: 'new' | 'reviewed') => Promise<void>;
   onRemoveFeedback: (request: CloudFeedbackRequest) => Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -7218,11 +7274,11 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
       <details className="admin-collapsible-section admin-invitation-section" open><summary><h3>Invitation/reload requests</h3></summary>
       {visibleInvitationRequests.length ? <div className="admin-table-scroll admin-invitation-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{visibleInvitationRequests.map(item => {
-        return <tr key={item.subject}><th scope="row">{item.email}{item.request_type === 'reload' && <small>Allowance reload request</small>}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td><div className="admin-invitation-actions"><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void addInvitation(item)}>Add</button><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void removeInvitation(item)}>Remove</button></div></td></tr>;
+        return <tr key={item.subject}><th scope="row">{item.email}{item.request_type === 'reload' && <small>Allowance reload request</small>}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td><div className="admin-invitation-actions"><button type="button" className="admin-text-action admin-icon-action" aria-label={`Add user ${item.email}`} data-tooltip="Add user" disabled={busy} onClick={() => void addInvitation(item)}><AdminActionIcon kind="add"/></button><button type="button" className="admin-text-action admin-remove admin-icon-action" aria-label={`Remove invitation request for ${item.email}`} data-tooltip="Remove invitation request" disabled={busy} onClick={() => void removeInvitation(item)}><AdminActionIcon kind="remove"/></button></div></td></tr>;
       })}</tbody></table></div> : <p className="cloud-access-bootstrap">No invitation requests.</p>}
       </details>
       <details className="admin-collapsible-section admin-feedback-section" open><summary><h3>Product feedback</h3></summary>
-      {feedbackRequests.length ? <div className="admin-table-scroll admin-feedback-scroll"><table className="admin-grants-table admin-feedback-table"><colgroup><col style={{ width: '33%' }}/><col style={{ width: '22%' }}/><col style={{ width: '15%' }}/><col style={{ width: '9%' }}/><col style={{ width: '21%' }}/></colgroup><thead><tr><th scope="col">Feedback</th><th scope="col">Google account</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}</th><td className="admin-feedback-account">{item.account_email || 'Not signed in'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td><div className="admin-feedback-actions">{item.status !== 'closed' && <><button type="button" className="admin-text-action" disabled={busy || item.status === 'reviewed'} onClick={() => void onUpdateFeedback(item, 'reviewed')}>Mark reviewed</button><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateFeedback(item, 'closed')}>Close</button></>}<button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onRemoveFeedback(item)}>Remove</button></div></td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
+      {feedbackRequests.length ? <div className="admin-table-scroll admin-feedback-scroll"><table className="admin-grants-table admin-feedback-table"><colgroup><col style={{ width: '33%' }}/><col style={{ width: '22%' }}/><col style={{ width: '15%' }}/><col style={{ width: '9%' }}/><col style={{ width: '21%' }}/></colgroup><thead><tr><th scope="col">Feedback</th><th scope="col">Google account</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}</th><td className="admin-feedback-account">{item.account_email || 'Not signed in'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td><div className="admin-feedback-actions"><button type="button" className="admin-text-action admin-icon-action" disabled={busy || item.status === 'closed'} aria-pressed={item.status === 'reviewed'} aria-label={item.status === 'reviewed' ? 'Mark feedback unreviewed' : 'Mark feedback reviewed'} data-tooltip={item.status === 'reviewed' ? 'Mark unreviewed' : 'Mark reviewed'} onClick={() => void onUpdateFeedback(item, item.status === 'reviewed' ? 'new' : 'reviewed')}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/>{item.status === 'reviewed' && <path d="m8 12 3 3 5-6" strokeWidth="2.3"/>}</svg></button><button type="button" className="admin-text-action admin-remove admin-icon-action" disabled={busy} aria-label="Remove feedback" data-tooltip="Remove feedback" onClick={() => void onRemoveFeedback(item)}><AdminActionIcon kind="remove"/></button></div></td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
       </details>
       <details className="admin-collapsible-section admin-authorized-users-section" open><summary><h3>Authorized users</h3></summary>
       <div className="admin-table-scroll admin-authorized-table-scroll"><table className="admin-grants-table admin-authorized-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col" className="admin-allowance-heading">Sponsorship allowance</th><th scope="col">Actions</th></tr></thead><tbody>
@@ -7236,11 +7292,11 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
             <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
             <td className="admin-allowance-cell">{draft.role === 'admin' ? <span>Unlimited</span> : <><label className="admin-allowance-input"><span className="sr-only">Sponsorship allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></>}</td>
-            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
+            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-icon-action" aria-label={`Reload allowance for ${grant.value}`} data-tooltip="Reload allowance" disabled={busy} onClick={() => void reload(grant)}><AdminActionIcon kind="reload"/></button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove admin-icon-action" aria-label={`Remove access for ${grant.value}`} data-tooltip="Remove access rule" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}><AdminActionIcon kind="remove"/></button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
           </tr>;
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
-        <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action admin-remove" aria-expanded={addOpen} onClick={() => setAddOpen(true)}>New</button></td></tr>
+        <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action admin-icon-action" aria-label="New access rule" data-tooltip="New access rule" aria-expanded={addOpen} onClick={() => setAddOpen(true)}><AdminActionIcon kind="new"/></button></td></tr>
       </tbody></table></div></details>
       {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p></div>}
       {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
@@ -7455,7 +7511,7 @@ function CloudAuthGate() {
       setInvitationRequests(current => current.filter(request => request.subject !== item.subject));
     } finally { setBusy(false); }
   }
-  async function updateFeedback(item: CloudFeedbackRequest, next: 'reviewed' | 'closed') {
+  async function updateFeedback(item: CloudFeedbackRequest, next: 'new' | 'reviewed') {
     setBusy(true);
     try {
       const response = await fetch(`/api/cloud-auth/admin/feedback/${encodeURIComponent(item.id)}`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: next }) });

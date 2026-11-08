@@ -140,7 +140,9 @@ with sync_playwright() as playwright:
             and response.request.method == "PUT"
         )
     ):
-        model_pill.click()
+        # The pill has distinct click regions: upper half cycles model, lower half cycles thinking.
+        # A centered Playwright click would change thinking rather than the model.
+        model_pill.click(position={"x": 10, "y": 8})
         cost_confirmation = page.locator(".global-model-confirm-popover")
         if cost_confirmation.is_visible():
             cost_confirmation.get_by_role("button", name="Confirm").click()
@@ -239,27 +241,25 @@ with sync_playwright() as playwright:
     common_section = dialog.locator(".pt-common-references")
     expect(common_section.locator(".pt-reference-link")).to_have_count(4)
     expect(common_section.locator("input")).to_have_count(0)
-    expect(common_section.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(
-        4
-    )
+    expect(common_section.locator('.pt-reference-toggle[aria-pressed="true"]')).to_have_count(4)
     expect(common_section.locator(".pt-reference-url")).to_have_count(0)
     expect(common_section.locator(".pt-reference-link a")).to_have_count(4)
-    common_section.locator(".pt-reference-toggle").filter(has_text="Disable").first.click()
+    common_section.locator('.pt-reference-toggle[aria-pressed="true"]').first.click()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
-    expect(common_section.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(
-        1
-    )
-    common_section.locator(".pt-reference-toggle").filter(has_text="Enable").first.click()
+    expect(common_section.locator('.pt-reference-toggle[aria-pressed="false"]')).to_have_count(1)
+    common_section.locator('.pt-reference-toggle[aria-pressed="false"]').first.click()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     # Both Common categories can add references; the curated ones stay immutable.
-    expect(common_section.get_by_role("button", name="New", exact=True)).to_have_count(2)
-    expect(common_section.get_by_role("button", name="Remove", exact=True)).to_have_count(0)
+    expect(common_section.get_by_role("button", name="New reference", exact=True)).to_have_count(2)
+    expect(common_section.get_by_role("button", name="Remove reference", exact=True)).to_have_count(
+        0
+    )
     # The shared, built-in, and custom reference actions use the same yellow.
-    # New is flush with the left edge of the URL above, without a 4px inset.
+    # New reference is placed immediately after its section heading.
     common_link = (
         common_section.locator(".pt-reference-table").first.locator(".pt-reference-link a").first
     )
-    common_new = common_section.get_by_role("button", name="New", exact=True).first
+    common_new = common_section.get_by_role("button", name="New reference", exact=True).first
     common_toggle = common_section.locator(".pt-reference-toggle").first
     page.mouse.move(1, 1)  # Clear the previous toggle's hover before checking idle colors.
     idle_new_color = common_new.evaluate("node => getComputedStyle(node).color")
@@ -267,7 +267,7 @@ with sync_playwright() as playwright:
     common_link_box = common_link.bounding_box()
     common_new_box = common_new.bounding_box()
     assert common_link_box and common_new_box
-    assert abs(common_link_box["x"] - common_new_box["x"]) < 1
+    assert common_new_box["x"] > common_link_box["x"]
     common_new.hover()
     expect(common_new).not_to_have_css("color", idle_new_color)
     # Leaving New blank cancels the insertion rather than trapping a row in edit mode.
@@ -287,23 +287,23 @@ with sync_playwright() as playwright:
     expect(common_input).to_have_count(0)
     common_added = common_section.locator(".pt-reference-entry").nth(2)
     expect(common_added.locator(".pt-reference-link a")).to_be_visible()
-    expect(common_added.get_by_role("button", name="Edit")).to_be_visible()
-    expect(common_added.get_by_role("button", name="Remove")).to_be_visible()
-    expect(common_added.locator(".pt-reference-toggle")).to_have_text("Disable")
-    common_added.get_by_role("button", name="Edit").click()
+    expect(common_added.get_by_role("button", name="Edit reference")).to_be_visible()
+    expect(common_added.get_by_role("button", name="Remove reference")).to_be_visible()
+    expect(common_added.locator(".pt-reference-toggle")).to_have_attribute("aria-pressed", "true")
+    common_added.get_by_role("button", name="Edit reference").click()
     common_input = common_section.get_by_label("Research reference URL 3")
     expect(common_input).to_be_visible()
-    expect(common_added.get_by_role("button", name="Remove")).to_have_count(0)
+    expect(common_added.get_by_role("button", name="Remove reference")).to_have_count(0)
     expect(common_added.locator(".pt-reference-toggle")).to_have_count(0)
     # Clearing an edited URL restores its old value on blur, exposing Remove.
     common_input.fill("")
     common_input.press("Tab")
     expect(common_input).to_have_count(0)
-    expect(common_added.get_by_role("button", name="Remove")).to_be_visible()
+    expect(common_added.get_by_role("button", name="Remove reference")).to_be_visible()
     expect(common_added.locator(".pt-reference-link a")).to_have_attribute(
         "href", "https://example.org/shared-research-guide"
     )
-    common_added.get_by_role("button", name="Remove").click()
+    common_added.get_by_role("button", name="Remove reference").click()
     expect(common_section.locator(".pt-reference-link")).to_have_count(4)
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     math_card = dialog.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
@@ -311,17 +311,17 @@ with sync_playwright() as playwright:
     expect(math_card.locator(".pt-reference-link")).to_have_count(2)
     expect(math_card.locator("input:not([disabled])")).to_have_count(0)
     # Built-in additions use the same blank-New cancellation path.
-    math_card.get_by_role("button", name="New", exact=True).first.click()
+    math_card.get_by_role("button", name="New reference", exact=True).first.click()
     math_blank = math_card.get_by_label("Research reference URL 2")
     expect(math_blank).to_have_value("")
     math_blank.press("Tab")
     expect(math_blank).to_have_count(0)
     expect(math_card.locator(".pt-reference-link")).to_have_count(2)
-    expect(math_card.get_by_role("button", name="New", exact=True).first).to_be_enabled()
-    expect(math_card.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(2)
-    math_card.locator(".pt-reference-toggle").filter(has_text="Disable").first.click()
-    expect(math_card.locator(".pt-reference-toggle").filter(has_text="Enable")).to_have_count(1)
-    math_card.locator(".pt-reference-toggle").filter(has_text="Enable").first.click()
+    expect(math_card.get_by_role("button", name="New reference", exact=True).first).to_be_enabled()
+    expect(math_card.locator('.pt-reference-toggle[aria-pressed="true"]')).to_have_count(2)
+    math_card.locator('.pt-reference-toggle[aria-pressed="true"]').first.click()
+    expect(math_card.locator('.pt-reference-toggle[aria-pressed="false"]')).to_have_count(1)
+    math_card.locator('.pt-reference-toggle[aria-pressed="false"]').first.click()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     math_card.locator("summary").click()
     expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_have_count(0)
@@ -341,7 +341,7 @@ with sync_playwright() as playwright:
     expect(literature.get_by_text("Research standards references")).to_have_count(1)
     expect(literature.get_by_text("Publication standards references")).to_have_count(1)
     expect(literature.locator(".pt-reference-link a")).to_have_count(2)
-    expect(literature.locator(".pt-reference-toggle").filter(has_text="Disable")).to_have_count(2)
+    expect(literature.locator('.pt-reference-toggle[aria-pressed="true"]')).to_have_count(2)
     expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(0)
     expect(literature.get_by_role("columnheader", name="URL")).to_have_count(0)
     builtin_names = (
@@ -358,14 +358,9 @@ with sync_playwright() as playwright:
         mobile_box
     )
     page.screenshot(path=str(EVIDENCE / "types-mobile.png"), full_page=True)
-    page.keyboard.press("Escape")
-    expect(dialog).to_be_visible()
-    assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
-        "Escape must leave Project Types in the browser's modal top layer"
-    )
     page.mouse.click(1, 1)  # Clicking the backdrop must not close the dialog.
     expect(dialog).to_be_visible()
-    dialog.locator("header").get_by_role("button", name="Close Settings").click()
+    page.keyboard.press("Escape")
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_visible()
     page.set_viewport_size({"width": 1440, "height": 1000})
@@ -436,13 +431,7 @@ with sync_playwright() as playwright:
     assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
     page.keyboard.press("Shift+Tab")
     assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
-    for _ in range(3):
-        page.keyboard.press("Escape")
-        expect(dialog).to_be_visible()
-        assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
-            "Repeated Escape must not dismiss or demote Project Types"
-        )
-    dialog.locator("header").get_by_role("button", name="Close Settings").click()
+    page.keyboard.press("Escape")
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()
 
@@ -450,7 +439,9 @@ with sync_playwright() as playwright:
     # another top-level Save. The placeholder is free and replaceable.
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
-    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
+    dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="New project type"
+    ).click()
     parent = dialog.locator(".project-types-body > section").first.locator(
         ".project-type-card[open]"
     )
@@ -479,18 +470,20 @@ with sync_playwright() as playwright:
     expect(parent.get_by_role("button", name="Remove project type")).to_have_count(0)
     expect(parent.get_by_role("columnheader", name="URL")).to_have_count(0)
     expect(parent.get_by_text("http://temp.com/style.html")).to_have_count(0)
-    parent.get_by_role("button", name="New", exact=True).first.click()
+    parent.get_by_role("button", name="New reference", exact=True).first.click()
     # The next New remains unavailable until the just-created row contains a URL.
     expect(
-        parent.locator(".pt-reference-table").first.get_by_role("button", name="New", exact=True)
+        parent.locator(".pt-reference-heading").first.get_by_role(
+            "button", name="New reference", exact=True
+        )
     ).to_have_count(0)
     # A new empty custom reference also cancels cleanly on blur.
     url_input = parent.get_by_label("Research reference URL 1")
     url_input.press("Tab")
     expect(url_input).to_have_count(0)
-    expect(parent.get_by_role("button", name="New", exact=True).first).to_be_enabled()
+    expect(parent.get_by_role("button", name="New reference", exact=True).first).to_be_enabled()
     expect(parent.locator(".pt-reference-entry")).to_have_count(0)
-    parent.get_by_role("button", name="New", exact=True).first.click()
+    parent.get_by_role("button", name="New reference", exact=True).first.click()
     # Editable references show URL fields without duplicate title/URL captions.
     expect(parent.locator(".pt-reference-link")).to_have_count(0)
     url_input = parent.get_by_label("Research reference URL 1")
@@ -515,7 +508,7 @@ with sync_playwright() as playwright:
     expect(parent.get_by_text("Website could not be found. Check the address.")).to_be_visible()
     expect(save).to_be_disabled()
     first_entry = parent.locator(".pt-reference-entry").first
-    first_entry.get_by_role("button", name="Edit").click()
+    first_entry.get_by_role("button", name="Edit reference").click()
     page.unroute("**/api/reference-title?*badbadbad.bad*", invalid_domain)
     url_input = parent.get_by_label("Research reference URL 1")
 
@@ -537,14 +530,14 @@ with sync_playwright() as playwright:
         "href", "https://google.com"
     )
     expect(first_entry.locator(".pt-reference-link a")).to_have_text("Google")
-    first_entry.get_by_role("button", name="Edit").click()
+    first_entry.get_by_role("button", name="Edit reference").click()
     url_input = parent.get_by_label("Research reference URL 1")
     expect(url_input).to_have_value("google.com")
     # Escape is also a valid commit action and must restore the display title.
     url_input.press("Escape")
     expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
     expect(first_entry.locator(".pt-reference-link a")).to_have_text("Google")
-    first_entry.get_by_role("button", name="Edit").click()
+    first_entry.get_by_role("button", name="Edit reference").click()
     url_input = parent.get_by_label("Research reference URL 1")
     page.unroute("**/api/reference-title?*google.com*", google_title)
 
@@ -556,23 +549,23 @@ with sync_playwright() as playwright:
     # URL edits commit on Enter or blur; action buttons hide while editing.
     first_entry = parent.locator(".pt-reference-entry").first
     expect(first_entry.locator(".pt-reference-toggle")).to_have_count(0)
-    expect(first_entry.get_by_role("button", name="Remove")).to_have_count(0)
+    expect(first_entry.get_by_role("button", name="Remove reference")).to_have_count(0)
     url_input.press("Enter")
     expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
     expect(first_entry.locator(".pt-reference-link a")).to_have_attribute(
         "href", "https://example.org/research-standard"
     )
-    expect(first_entry.get_by_role("button", name="Edit")).to_be_visible()
-    expect(first_entry.get_by_role("button", name="Remove")).to_be_visible()
-    first_entry.get_by_role("button", name="Edit").click()
+    expect(first_entry.get_by_role("button", name="Edit reference")).to_be_visible()
+    expect(first_entry.get_by_role("button", name="Remove reference")).to_be_visible()
+    first_entry.get_by_role("button", name="Edit reference").click()
     url_input = parent.get_by_label("Research reference URL 1")
     expect(url_input).to_have_value("example.org/research-standard")
-    expect(parent.get_by_role("button", name="New", exact=True).first).to_be_enabled()
+    expect(parent.get_by_role("button", name="New reference", exact=True).first).to_be_enabled()
     assert url_input.evaluate("element => document.activeElement === element"), (
         "URL input remounted during typing"
     )
-    research_new = parent.locator(".pt-reference-table").first.get_by_role(
-        "button", name="New", exact=True
+    research_new = parent.locator(".pt-reference-heading").first.get_by_role(
+        "button", name="New reference", exact=True
     )
     research_new.click()
     second_reference = parent.get_by_label("Research reference URL 2")
@@ -591,19 +584,19 @@ with sync_playwright() as playwright:
     expect(third_reference).to_have_count(0)
     expect(research_new).to_be_enabled()
     expect(save).to_be_enabled()
-    # Rows and the New row have identical vertical spacing and no rules.
+    # URL rows keep compact vertical spacing and no separators.
     reference_layout = parent.locator(".pt-reference-table").first.evaluate(
         """table => [...table.querySelectorAll('td')].map(td => ({
           paddingTop: getComputedStyle(td).paddingTop,
           borderBottom: getComputedStyle(td).borderBottomWidth
         }))"""
     )
-    assert len(reference_layout) >= 3, reference_layout
+    assert len(reference_layout) >= 2, reference_layout
     assert all(
         row["paddingTop"] == "2px" and row["borderBottom"] == "0px" for row in reference_layout
     ), reference_layout
     expect(first_entry.locator(".pt-reference-toggle")).to_have_count(1)
-    expect(first_entry.get_by_role("button", name="Remove")).to_be_visible()
+    expect(first_entry.get_by_role("button", name="Remove reference")).to_be_visible()
     # A new draft uses local Cancel, not Remove or a second Save.
     expect(
         dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")
@@ -629,7 +622,9 @@ with sync_playwright() as playwright:
 
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
-    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
+    dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="New project type"
+    ).click()
     custom_section = dialog.locator(".project-types-body > section").nth(0)
     child = custom_section.locator(".project-type-card[open]")
     child.get_by_label("Name").fill("Browser Derived")
@@ -687,7 +682,9 @@ with sync_playwright() as playwright:
     )
     assert title_order == ["span", "strong", "button", "small"], title_order
     parent_card.locator(".project-type-remove").click()
-    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
+    dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="New project type"
+    ).click()
     pending = dialog.locator(".project-types-body > section").first.locator(
         ".project-type-card[open]"
     )
@@ -718,7 +715,9 @@ with sync_playwright() as playwright:
     # Remove multiple referenced types in one Save and retain each original name.
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
-    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
+    dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="New project type"
+    ).click()
     second_card = dialog.locator(".project-type-card[open]")
     second_card.get_by_label("Name").fill("Browser Second")
     second_card.get_by_label("Scope").fill("Second saved scope")
