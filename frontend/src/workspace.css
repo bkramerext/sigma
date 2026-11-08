@@ -575,13 +575,13 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   grid-area: model-column;
   pointer-events: auto;
 }
-.workspace-page .project-art-header .sigma-header-secondary-row > .about-action {
+.workspace-page .project-art-header .sigma-header-first-row > .about-action {
   width: auto;
   min-width: 0;
   justify-self: start;
   flex: 0 0 auto;
 }
-.workspace-page .project-art-header .sigma-header-secondary-row > .project-global-settings-pill {
+.workspace-page .project-art-header .sigma-header-first-row > .project-global-settings-pill {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -594,7 +594,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   min-height: 34px;
   padding: 4px;
 }
-.workspace-page .project-art-header .sigma-header-secondary-row > .project-global-settings-pill svg {
+.workspace-page .project-art-header .sigma-header-first-row > .project-global-settings-pill svg {
   width: 19px;
   height: 19px;
 }
