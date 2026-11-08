@@ -694,6 +694,9 @@ class PaperGenerateRequest(OpenRequest):
     # Only an affirmative, section-specific user action may replay a paid
     # request that was dispatched but not saved. This is never a default.
     authorized_recovery_section: int | None = Field(default=None, ge=1, le=48)
+    # This may change the model or billing account of unfinished paid work.
+    # Only an explicit, informed user authorization may set it to True.
+    authorized_provider_change: bool = False
 
 
 class PaperCancelRequest(OpenRequest):
@@ -1018,6 +1021,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             include_sigma_issues=body.include_sigma_issues,
             include_diagrams=body.include_diagrams,
             authorized_recovery_section=body.authorized_recovery_section,
+            **({"authorized_provider_change": True} if body.authorized_provider_change else {}),
             **presence_kwargs,
         )
     )
@@ -1172,6 +1176,17 @@ def update_research_ethos_preference(body: ResearchEthosPreference):
     if principal is not None and principal.role == "guest":
         raise HTTPException(403, "Sign in to change Research Ethos.")
     return research_ethos.save_override(body.markdown)
+
+
+@app.post("/api/user-preferences/research-ethos/recover")
+def recover_invalid_research_ethos():
+    """Requires explicit UI confirmation; preserve malformed data in a backup."""
+    from sigma import research_ethos
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(403, "Sign in to recover Research Ethos.")
+    return research_ethos.quarantine_invalid_override()
 
 
 @app.get("/api/projects/research-limits")

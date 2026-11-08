@@ -135,3 +135,52 @@ def save_override(markdown: str | None) -> dict[str, str | bool]:
         return current()
     finally:
         os.close(lockfd)
+
+
+def quarantine_invalid_override() -> dict[str, str | bool]:
+    """Explicit recovery only: retain corrupt content in a private archive.
+
+    Never unlink or replace an unsafe file (symlink, foreign owner or broad
+    permissions). A valid override cannot be quarantined through this route.
+    """
+    from uuid import uuid4
+
+    root = _root()
+    lockfd = os.open(root / LOCK, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        info = os.fstat(lockfd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+            raise ProjectError("Research Ethos lock is unsafe")
+        fcntl.flock(lockfd, fcntl.LOCK_EX)
+        target = root / FILENAME
+        try:
+            fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except FileNotFoundError:
+            return current()
+        try:
+            info = os.fstat(fd)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077
+                or info.st_size > MAX_CHARS * 4 + 1024
+            ):
+                raise ProjectError(
+                    "Unsafe Research Ethos file must be repaired by an administrator"
+                )
+        finally:
+            os.close(fd)
+        try:
+            _override(root)
+        except ProjectError:
+            archive = root / (".sigma-research-ethos.invalid-" + uuid4().hex + ".json")
+            os.replace(target, archive)
+            parent = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)
+            return current()
+        raise ProjectError("Research Ethos is valid; use the normal Restore Default control")
+    finally:
+        os.close(lockfd)

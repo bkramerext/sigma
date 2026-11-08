@@ -4031,6 +4031,34 @@ def _new_work(
     }
 
 
+def _resume_provider_choice(
+    checkpoint: dict[str, Any],
+    binding_fingerprint: str,
+    current_model: str,
+    current_effort: str,
+    authorized_provider_change: bool = False,
+) -> tuple[str, str]:
+    """Preserve the model/effort frozen at paper start unless explicitly changed.
+
+    Changing the connected provider identity is a paid-work boundary and
+    cannot happen merely because a user signed into another account. The
+    caller must record a separate affirmative approval before permitting it.
+    """
+    if authorized_provider_change:
+        return current_model, current_effort
+    if checkpoint.get("binding_fingerprint") != binding_fingerprint:
+        raise ProjectError(
+            "Paper Resume requires explicit approval to switch the AI account or "
+            "billing connection. Saved work is intact; confirm the provider change "
+            "before authorizing further paid calls."
+        )
+    model = checkpoint.get("model")
+    effort = checkpoint.get("reasoning_effort")
+    if not isinstance(model, str) or not isinstance(effort, str):
+        raise ProjectError("Saved paper model or thinking configuration is invalid")
+    return model, effort
+
+
 def _rebind_paper_checkpoint_provider(
     checkpoint: dict[str, Any], binding_fingerprint: str, model: str, reasoning_effort: str
 ) -> bool:
@@ -6191,7 +6219,11 @@ async def _provider(
     methodology = _subject_methodology(project_type)
     if methodology:
         instructions += "\n\n" + methodology
-    serialized_context = json.dumps(context, ensure_ascii=False)
+    # Ethos is archived in context for provenance but is supplied to the
+    # provider exactly once, as an instruction rather than evidence JSON.
+    provider_context = dict(context)
+    provider_context.pop("research_ethos", None)
+    serialized_context = json.dumps(provider_context, ensure_ascii=False)
     payload: dict[str, Any] = {
         "model": config["model"],
         "store": False,
@@ -7427,8 +7459,10 @@ Return the complete plan JSON matching the schema."""
     else:
         plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
     plan_input["paper_writing_methodology"] = writing_methodology
-    plan_input["desired_outcomes"] = str(project_data.get("desired_outcomes", ""))[:10_000]
-    plan_input["paper_requirements"] = str(project_data.get("paper_requirements", ""))[:10_000]
+    # The project schema accepts 20,000 characters per field. Never silently
+    # lose a late requirement by trimming a provider input to 10,000.
+    plan_input["desired_outcomes"] = str(project_data.get("desired_outcomes", ""))
+    plan_input["paper_requirements"] = str(project_data.get("paper_requirements", ""))
     long_plan: LongPaperPlan | None = None
     if state.get("plan"):
         try:
@@ -7619,8 +7653,8 @@ or document markup."""
         section_input = {
             "title": long_plan.title,
             "project_question": str(project_data.get("problem", ""))[:3_000],
-            "desired_outcomes": str(project_data.get("desired_outcomes", ""))[:10_000],
-            "paper_requirements": str(project_data.get("paper_requirements", ""))[:10_000],
+            "desired_outcomes": str(project_data.get("desired_outcomes", "")),
+            "paper_requirements": str(project_data.get("paper_requirements", "")),
             "investigation_type": project_type,
             "publication_references": project_data.get("publication_references", []),
             "publication_reference_urls": project_data.get("publication_reference_urls", []),
@@ -8986,6 +9020,7 @@ async def _generate_impl(
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
     authorized_recovery_section: int | None = None,
+    authorized_provider_change: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -9198,8 +9233,6 @@ async def _generate_impl(
         if expected_binding and initial_auth["identity"] != expected_binding:
             raise ProjectError("AI account or billing mode changed; review it and retry")
         config = await configuration(view=view, context=initial_auth)
-        if not config["available"]:
-            raise ProjectError(config["message"])
         checkpoint = _load_work(path)
         frozen = checkpoint.get("frozen_package") if checkpoint is not None else None
         if frozen_snapshot is not None:
@@ -9243,10 +9276,31 @@ async def _generate_impl(
                     ("project_id", view.project.id),
                 )
             )
-            if compatible and _rebind_paper_checkpoint_provider(
+            if compatible and not _can_rebase_explicit_restart(checkpoint, view.project.id):
+                frozen_model, frozen_effort = _resume_provider_choice(
+                    checkpoint,
+                    binding_fingerprint,
+                    config["model"],
+                    config["reasoning_effort"],
+                    authorized_provider_change,
+                )
+                if (frozen_model, frozen_effort) != (config["model"], config["reasoning_effort"]):
+                    config = await configuration(
+                        view=view,
+                        context=initial_auth,
+                        frozen_model=frozen_model,
+                        frozen_effort=frozen_effort,
+                    )
+        if not config["available"]:
+            raise ProjectError(config["message"])
+        if (
+            checkpoint is not None
+            and compatible
+            and _rebind_paper_checkpoint_provider(
                 checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
-            ):
-                _save_work(path, checkpoint)
+            )
+        ):
+            _save_work(path, checkpoint)
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
@@ -9711,18 +9765,10 @@ async def _generate_impl(
         # expensive completed work. A later run may use newer research.
         identifier = uuid4().hex
         timestamp = _now()
-        warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings]))
-        source_reference_records = _source_reference_records(package)
-        source_reference_map = {
-            item["source_ref"]: item["label"] for item in source_reference_records
-        }
-        for item in source_reference_records:
-            for source_id in re.findall(
-                r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-                item["source_ref"],
-            ):
-                source_reference_map.setdefault(source_id, item["label"])
+        from sigma import publication_audit
+
         valid_diagrams: list[PaperDiagram] = []
+        invalid_diagram_count = 0
         for diagram in draft.diagrams:
             diagram_ids = [node.id for node in diagram.nodes]
             known_ids = set(diagram_ids)
@@ -9734,12 +9780,59 @@ async def _generate_impl(
                 )
                 or any(set(boundary.node_ids) - known_ids for boundary in diagram.boundaries)
             ):
-                warnings.append(
-                    "An experimental diagram had invalid node references and was omitted; the paper continues as text."
-                )
+                invalid_diagram_count += 1
             else:
                 valid_diagrams.append(diagram)
         draft = draft.model_copy(update={"diagrams": valid_diagrams})
+        paper_project_source = next(
+            (
+                source.get("data", {})
+                for source in package["sources"]
+                if source["kind"] == "project"
+            ),
+            {},
+        )
+        publication_requirements = publication_audit.reconcile(
+            str(paper_project_source.get("paper_requirements", "")), draft.model_dump()
+        )
+        editorial_overlap_warnings = publication_audit.overlap_warnings(draft.model_dump())
+        incomplete_requirements = sum(
+            item["status"] == "missing" for item in publication_requirements
+        )
+        review_requirements = sum(
+            item["status"] == "needs_review" for item in publication_requirements
+        )
+        # Neither a schema-valid response nor the TeX proofreader is a
+        # scientific/editorial compliance check. Report limitations explicitly.
+        audit_warnings = []
+        if incomplete_requirements or review_requirements:
+            audit_warnings.append(
+                f"Publication requirements: {incomplete_requirements} structurally missing, "
+                f"{review_requirements} require independent editorial review; "
+                "see the saved publication-requirements reconciliation."
+            )
+        if editorial_overlap_warnings:
+            audit_warnings.append(
+                f"Potential repeated prose detected in {len(editorial_overlap_warnings)} "
+                "cross-section comparison(s); inspect the saved editorial warnings."
+            )
+        warnings = list(
+            dict.fromkeys([*validation_warnings, *draft.validation_warnings, *audit_warnings])
+        )
+        if invalid_diagram_count:
+            warnings.append(
+                "An experimental diagram had invalid node references and was omitted; the paper continues as text."
+            )
+        source_reference_records = _source_reference_records(package)
+        source_reference_map = {
+            item["source_ref"]: item["label"] for item in source_reference_records
+        }
+        for item in source_reference_records:
+            for source_id in re.findall(
+                r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+                item["source_ref"],
+            ):
+                source_reference_map.setdefault(source_id, item["label"])
         record = {
             "schema_version": 1,
             "paper_id": identifier,
@@ -9750,6 +9843,8 @@ async def _generate_impl(
             "draft": draft.model_dump(),
             "validation_warnings": validation_warnings,
             "obligation_reconciliation": obligation_reconciliation,
+            "publication_requirement_reconciliation": publication_requirements,
+            "editorial_overlap_warnings": editorial_overlap_warnings,
             "author_review_warnings": draft.validation_warnings,
             "generation": {
                 "provider": "openai",
@@ -10380,6 +10475,7 @@ async def generate(
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
     authorized_recovery_section: int | None = None,
+    authorized_provider_change: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     from sigma.memory_guard import require_capacity
@@ -10406,6 +10502,7 @@ async def generate(
             include_sigma_issues,
             browser_presence_required,
             authorized_recovery_section,
+            authorized_provider_change,
         )
     )
     _generation_tasks[key] = task
@@ -10727,6 +10824,20 @@ def preflight(
         "checkpoint_exists": work is not None,
         "checkpoint_matches_snapshot": same_project_and_snapshot,
         "resume_available": resume_available,
+        "saved_provider_model": work_state.get("model") if resume_available else None,
+        "saved_provider_thinking": work_state.get("reasoning_effort") if resume_available else None,
+        "resume_uses_saved_model": bool(
+            resume_available
+            and (
+                work_state.get("model") != model
+                or work_state.get("reasoning_effort") != reasoning_effort
+            )
+        ),
+        "provider_change_requires_confirmation": bool(
+            resume_available
+            and binding_fingerprint
+            and work_state.get("binding_fingerprint") != binding_fingerprint
+        ),
         "draft_recovery_available": resume_available and one_shot_draft_available,
         "proofreading_status": saved_proofreading_status or "not_started",
         "publication_status": preflight_publication_status,

@@ -92,12 +92,9 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       readJson('/api/user-preferences/section-layout'),
       readJson('/api/user-preferences/progress-email').catch(() => ({ enabled: false, available: false })),
       readJson('/api/ai/models').catch(() => ({ models: [] })),
-      readJson('/api/user-preferences/research-ethos'),
-    ]).then(([research, unattended, layout, progress, catalog, ethosData]) => {
+    ]).then(([research, unattended, layout, progress, catalog]) => {
       if (controller.signal.aborted) return;
       setConfig(research as ResearchConfig);
-      setEthos(ethosData as EthosConfig);
-      setEthosDraft((ethosData as EthosConfig).markdown);
       const minutes = (research as ResearchConfig).limits.session_duration_minutes;
       setDurationUnit(minutes === null ? 'unlimited'
         : minutes % 1440 === 0 ? 'days' : minutes % 60 === 0 ? 'hours' : 'minutes');
@@ -115,6 +112,16 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       } });
       setLoaded(true);
     }).catch(cause => { if (!controller.signal.aborted) setError(String(cause)); });
+    // Ethos is optional to the other tabs. Its read failure must not make
+    // unrelated model/limits/preferences unavailable.
+    void readJson('/api/user-preferences/research-ethos')
+      .then((value: EthosConfig) => {
+        if (controller.signal.aborted) return;
+        setEthos(value);
+        setEthosDraft(value.markdown);
+        setEthosError('');
+      })
+      .catch(cause => { if (!controller.signal.aborted) setEthosError(String(cause)); });
     return () => { controller.abort(); element?.removeEventListener("cancel", preventCancel); };
   }, []);
   const setLimit = (key: keyof LimitSettings, value: number | string | null) => {
@@ -143,10 +150,12 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   async function save() {
     if (!canSave) return;
     setBusy(true); setError(''); setSaved(false);
+    const completed: string[] = [];
     try {
       if (typesSaveState.dirty) {
         const didSave = await typesSaveRef.current?.();
         if (!didSave) return;
+        completed.push('Project Types');
       }
       if (!hasOtherChanges) {
         setSaved(true);
@@ -173,14 +182,18 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         show_advanced_outcome_details: config.show_advanced_outcome_details,
       });
       setConfig(next);
+      completed.push('Model, Limits, and Outcome preference');
       await putJson('/api/user-preferences/unattended-execution', {
         allow_unattended_background_execution: prefs.allow_unattended_background_execution,
       });
+      completed.push('Unattended execution');
       await putJson('/api/user-preferences/section-layout', {
         expand_one_project_section_at_a_time: prefs.expand_one_project_section_at_a_time,
       });
+      completed.push('Section layout');
       if (progressAvailable) {
         await putJson('/api/user-preferences/progress-email', { enabled: prefs.progress_email });
+        completed.push('Progress email');
       }
       window.dispatchEvent(new CustomEvent('sigma-section-layout-preference-changed', {
         detail: prefs.expand_one_project_section_at_a_time,
@@ -188,8 +201,38 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       savedSnapshot.current = JSON.stringify({ config: next, prefs });
       setSaved(true);
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      // Never claim atomicity across independent settings endpoints. The
+      // unsaved edits stay on screen, and retry replays idempotent PUTs.
+      setError(completed.length
+        ? message + '. Partially saved: ' + completed.join(', ') + '. Other edits remain unsaved; retry Save to finish.'
+        : message);
+    }
     finally { setBusy(false); }
+  }
+  async function reloadEthos() {
+    setEthosBusy(true); setEthosError('');
+    try {
+      const next = await readJson('/api/user-preferences/research-ethos') as EthosConfig;
+      setEthos(next);
+      setEthosDraft(next.markdown);
+    } catch (cause) { setEthosError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setEthosBusy(false); }
+  }
+  async function recoverEthos() {
+    if (!window.confirm('This preserves an invalid Research Ethos override in a private backup, then restores the built-in Ethos. Continue?')) return;
+    setEthosBusy(true); setEthosError('');
+    try {
+      const response = await fetch('/api/user-preferences/research-ethos/recover', {
+        method: 'POST', headers,
+      });
+      const next = await response.json();
+      if (!response.ok) throw new Error(next.detail ?? next.error ?? 'Research Ethos recovery failed');
+      setEthos(next as EthosConfig);
+      setEthosDraft((next as EthosConfig).markdown);
+    } catch (cause) { setEthosError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setEthosBusy(false); }
   }
   async function saveEthos(markdown: string | null) {
     if (ethosBusy) return;
@@ -304,6 +347,15 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
             onChange={e => setPref({ allow_unattended_background_execution: e.target.checked })}/>Allow unattended background execution</label>
           <p className="settings-hint">Unattended execution may incur provider usage.</p>
         </fieldset>}
+        {tab === 'ethos' && !ethos && <section className="sigma-research-ethos" aria-label="Research Ethos unavailable">
+          <p role="status">Research Ethos could not be loaded. Other Settings remain available.</p>
+          {ethosError && <p role="alert" className="error">{ethosError}</p>}
+          <div className="sigma-ethos-actions">
+            <button type="button" disabled={ethosBusy} onClick={() => void reloadEthos()}>Retry</button>
+            <button type="button" disabled={ethosBusy} onClick={() => void recoverEthos()}>Recover invalid override</button>
+          </div>
+          <p className="settings-hint">Recovery is refused for a valid or unsafe file. An invalid override is archived privately, not deleted.</p>
+        </section>}
         {tab === 'ethos' && ethos && <section className="sigma-research-ethos" aria-label="Research Ethos">
           <p className="settings-hint">Research Ethos means general principles governing how agents investigate, reason, challenge assumptions, and report findings. It is not a project topic or a publication requirement. Each new run freezes the current Ethos.</p>
           {ethosEditing ? <>

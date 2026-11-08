@@ -12,9 +12,17 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from sigma import papers, project_bundle, project_types, research_ethos, research_sessions
+from sigma import (
+    papers,
+    project_bundle,
+    project_types,
+    publication_audit,
+    research_ethos,
+    research_sessions,
+)
 from sigma.api import app
 from sigma.projects import (
+    ProjectError,
     _decode,
     _document,
     initialize_project,
@@ -82,6 +90,90 @@ def main() -> None:
                 assert payload["instructions"].count(override) == 1
             assert override in papers._paper_ethos_instructions({"research_ethos": state})
 
+            # All accepted publication obligations remain visible, even when
+            # they cannot be verified without independent editorial judgment.
+            reqs = "Include a counterexample table.\nDiscuss open limitations."
+            empty_draft = {
+                "sections": [{"heading": "Findings", "paragraphs": ["A finding."], "tables": []}],
+                "diagrams": [],
+            }
+            report = publication_audit.reconcile(reqs, empty_draft)
+            assert [item["status"] for item in report] == ["missing", "needs_review"]
+            assert all(item["text"] for item in report)
+            table_draft = {
+                "sections": [
+                    {
+                        "heading": "Findings",
+                        "paragraphs": [],
+                        "tables": [{"caption": "Counterexamples to the proposed claim"}],
+                    }
+                ],
+                "diagrams": [],
+            }
+            assert publication_audit.reconcile(reqs, table_draft)[0]["status"] == "needs_review"
+            long_req = "Consider potential failures.\n" + ("X" * 12000)
+            assert len(publication_audit.reconcile(long_req, empty_draft)[1]["text"]) == 12000
+            paragraph = (
+                "This derivation establishes a specific intermediate relation "
+                "while preserving the counterexample boundary and avoiding claims of unearned certainty. "
+            ) * 5
+            repeated = {
+                "sections": [
+                    {"heading": "One", "paragraphs": [paragraph]},
+                    {"heading": "Two", "paragraphs": [paragraph]},
+                ]
+            }
+            assert publication_audit.overlap_warnings(repeated)
+            assert not publication_audit.overlap_warnings(
+                {"sections": [{"heading": "One", "paragraphs": [paragraph]}]}
+            )
+            # Editorial overlap must include non-section prose, not just
+            # repeated paragraphs in the body. Short summaries are allowed.
+            cross_components = {
+                "abstract": paragraph,
+                "problem_framing": ["A distinct framing."],
+                "methods": ["An independent method."],
+                "sections": [{"heading": "Results", "paragraphs": [paragraph]}],
+                "limitations": ["An independent limitation."],
+                "conclusions": ["A separate conclusion."],
+            }
+            assert any(
+                "Abstract" in finding and "Results" in finding
+                for finding in publication_audit.overlap_warnings(cross_components)
+            )
+            cross_components["abstract"] = "Short distinct abstract."
+            cross_components["methods"] = [paragraph]
+            cross_components["sections"] = [{"heading": "Results", "paragraphs": ["New findings."]}]
+            cross_components["conclusions"] = [paragraph]
+            assert any(
+                "Methods" in finding and "Conclusions" in finding
+                for finding in publication_audit.overlap_warnings(cross_components)
+            )
+            assert not publication_audit.overlap_warnings(
+                {"abstract": "A concise summary.", "conclusions": ["A concise summary."]}
+            )
+
+            # Resume keeps the saved model and thinking level by default and
+            # refuses an unapproved change to the billing account.
+            fake_fingerprint = "a" * 64
+            checkpoint = {
+                "model": "gpt-6.1-sol",
+                "reasoning_effort": "high",
+                "binding_fingerprint": fake_fingerprint,
+            }
+            assert papers._resume_provider_choice(
+                checkpoint, fake_fingerprint, "other-model", "low"
+            ) == ("gpt-6.1-sol", "high")
+            try:
+                papers._resume_provider_choice(checkpoint, "b" * 64, "other-model", "low")
+            except ProjectError as exc:
+                assert "explicit approval" in str(exc)
+            else:
+                raise AssertionError("Provider change must require approval")
+            assert papers._resume_provider_choice(
+                checkpoint, "b" * 64, "other-model", "low", True
+            ) == ("other-model", "low")
+
             research_ethos.save_override("Different principles for the NEXT run.")
             old = research_sessions._role_request_payload(
                 record, "investigator", {"investigation_type": "mathematical"}
@@ -131,6 +223,34 @@ def main() -> None:
                 research_ethos.save_override("Independent user ethos")
                 assert research_ethos.current()["markdown"] == "Independent user ethos"
             assert research_ethos.current()["markdown"] == "Different principles for the NEXT run."
+            # Explicit invalid-data recovery archives rather than destroys
+            # the invalid override and refuses valid or unsafe files.
+            old_bytes = target.read_bytes()
+            target.write_text('{"version": 1, "markdown": ""}', encoding="utf-8")
+            with TestClient(app) as client:
+                assert client.get("/api/user-preferences/research-ethos").status_code == 400
+                result = client.post("/api/user-preferences/research-ethos/recover")
+                assert result.status_code == 200, result.text
+                assert result.json() == defaults
+            archived = list(alice.glob(".sigma-research-ethos.invalid-*.json"))
+            assert len(archived) == 1
+            assert archived[0].read_text() == '{"version": 1, "markdown": ""}'
+            target.write_bytes(old_bytes)
+            # A recreated file defaults to 0644 and must be rejected until
+            # its private permissions have been explicitly restored.
+            try:
+                research_ethos.quarantine_invalid_override()
+            except ProjectError as exc:
+                assert "unsafe" in str(exc).casefold()
+            else:
+                raise AssertionError("Unsafe Ethos file must be refused")
+            target.chmod(0o600)
+            try:
+                research_ethos.quarantine_invalid_override()
+            except ProjectError as exc:
+                assert "valid" in str(exc)
+            else:
+                raise AssertionError("Valid Ethos must not be quarantined")
             assert research_ethos.save_override(None) == defaults
 
         print("PASS user-scoped Research Ethos API, frozen I/S prompts, v12 reads, v13 bundles")

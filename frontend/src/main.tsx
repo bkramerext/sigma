@@ -2395,7 +2395,7 @@ function PaperScoreDialog({ score, onRescore, canRescore, rescoring, error, onCl
 
 type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[]; sigma_issues?: string[]; sigma_issues_included?: boolean } };
 type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; output_delta_count?: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
-type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
+type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; publication_requirement_reconciliation?: { text: string; status: 'missing' | 'needs_review'; note: string }[]; editorial_overlap_warnings?: string[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 const PAPER_STAGES = [
   { label: 'Wait', stages: ['queued'] },
@@ -3081,6 +3081,22 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         setCheckpointMismatch(preflight);
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
+      // A different account/billing connection must never silently take over
+      // already-started paper work. The default Resume keeps the saved model.
+      let authorizedProviderChange = false;
+      if (preflight.provider_change_requires_confirmation) {
+        const savedModel = preflight.saved_provider_model ?? 'saved model';
+        authorizedProviderChange = window.confirm(
+          'This paper started using ' + savedModel + '. Your AI account or billing connection changed. ' +
+          'Continuing will explicitly switch future paper calls to ' + model +
+          ' using the current connection. Previously completed writing will stay unchanged. Continue?'
+        );
+        if (!authorizedProviderChange) throw new Error('Paper Resume cancelled. Saved work remains unchanged.');
+      }
+      if (preflight.resume_uses_saved_model && !authorizedProviderChange) {
+        setPhase('Resuming using the saved model ' + (preflight.saved_provider_model ?? '') +
+          ' and thinking level ' + (preflight.saved_provider_thinking ?? '') + '.');
+      }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
       if (recoverSection !== null) {
         if (pendingRecovery.length !== 1 || pendingRecovery[0] !== recoverSection)
@@ -3095,7 +3111,8 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
-          ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}) }) });
+          ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}),
+          authorized_provider_change: authorizedProviderChange }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -3383,6 +3400,17 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         <h4>Limitations</h4><ul>{selected.draft.limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
         {selected.draft.open_obligations.length > 0 && <><h4>Open obligations</h4><ul>{selected.draft.open_obligations.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
         {!!selected.obligation_reconciliation?.length && <><h4>Frozen obligation reconciliation</h4><p className="settings-hint">Unlisted evidence obligations are not presumed resolved. References point to the saved evidence source and field.</p><ul>{selected.obligation_reconciliation.map((item, index) => <li key={index}><strong>{item.status}.</strong> {item.text}<br/><span className="settings-hint">{item.source_refs.join(', ') || 'No exact frozen-record match'}</span></li>)}</ul></>}
+        {!!selected.publication_requirement_reconciliation?.length && <section aria-label="Paper Requirements review">
+          <h4>Paper Requirements review</h4>
+          <p className="settings-hint">These checks flag missing structures. They do not certify scientific or editorial compliance.</p>
+          <ul>{selected.publication_requirement_reconciliation.map((item, index) =>
+            <li key={index}><strong>{item.status === 'missing' ? 'Missing structure' : 'Review required'}:</strong> {item.text} — {item.note}</li>
+          )}</ul>
+        </section>}
+        {!!selected.editorial_overlap_warnings?.length && <section aria-label="Editorial repetition review">
+          <h4>Editorial repetition review</h4>
+          <ul>{selected.editorial_overlap_warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+        </section>}
         <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
         <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
         {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}

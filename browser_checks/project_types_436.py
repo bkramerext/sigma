@@ -344,6 +344,61 @@ with sync_playwright() as playwright:
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_visible()
     page.set_viewport_size({"width": 1440, "height": 1000})
+
+    # A corrupt Ethos override must not disable unrelated global Settings.
+    def broken_ethos(route):
+        route.fulfill(
+            status=400,
+            content_type="application/json",
+            body='{"detail":"Invalid Research Ethos override"}',
+        )
+
+    page.route("**/api/user-preferences/research-ethos", broken_ethos)
+    types_button.click()
+    dialog = page.get_by_role("dialog", name="Settings")
+    dialog.get_by_role("tab", name="Model", exact=True).click()
+    expect(dialog.locator("#sigma-global-model")).to_be_visible()
+    dialog.get_by_role("tab", name="Research Ethos", exact=True).click()
+    expect(
+        dialog.get_by_role("status").filter(has_text="Research Ethos could not be loaded")
+    ).to_be_visible()
+    expect(dialog.get_by_role("button", name="Recover invalid override")).to_be_visible()
+    dialog.locator("header").get_by_role("button", name="Close Settings").click()
+    page.unroute("**/api/user-preferences/research-ethos", broken_ethos)
+
+    # Separate settings endpoints are not atomic. A partial failure must be
+    # explained, preserve the pending form data, and permit an idempotent retry.
+    def fail_unattended_save(route):
+        if route.request.method == "PUT":
+            route.fulfill(
+                status=503,
+                content_type="application/json",
+                body='{"detail":"simulated settings failure"}',
+            )
+        else:
+            proxy(route)
+
+    page.route("**/api/user-preferences/unattended-execution", fail_unattended_save)
+    types_button.click()
+    dialog = page.get_by_role("dialog", name="Settings")
+    dialog.get_by_role("tab", name="Preferences").click()
+    unattended = dialog.get_by_label("Allow unattended background execution")
+    initial_unattended = unattended.is_checked()
+    unattended.set_checked(not initial_unattended)
+    dialog.locator("header").get_by_role("button", name="Save").click()
+    expect(dialog.get_by_role("alert").filter(has_text="Partially saved")).to_be_visible()
+    if initial_unattended:
+        expect(unattended).not_to_be_checked()
+    else:
+        expect(unattended).to_be_checked()
+    page.unroute("**/api/user-preferences/unattended-execution", fail_unattended_save)
+    dialog.locator("header").get_by_role("button", name="Save").click()
+    expect(dialog.get_by_role("status").filter(has_text="Settings saved")).to_be_visible()
+    unattended.set_checked(initial_unattended)
+    dialog.locator("header").get_by_role("button", name="Save").click()
+    expect(dialog.get_by_role("status").filter(has_text="Settings saved")).to_be_visible()
+    dialog.locator("header").get_by_role("button", name="Close Settings").click()
+
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
     add_button = dialog.locator(".project-types-section-heading").first.get_by_role(
