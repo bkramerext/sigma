@@ -638,4 +638,4 @@
 }
 
 /* Popup is in the native browser top layer, not clipped by Project Settings. */
-.project-settings-dialog.sigma-project-classification-dialog .research-type-options[popover] {position:fixed;inset:auto;margin:0;z-index:2147483647;box-sizing:border-box;overflow-y:auto;}
+.project-settings-dialog .research-type-options[popover] {position:fixed;inset:auto;right:auto;margin:0;z-index:2147483647;box-sizing:border-box;overflow-y:auto;}

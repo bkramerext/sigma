@@ -84,17 +84,25 @@ with sync_playwright() as playwright:
         "window.__projectTypeConfirmations = []; window.confirm = message => { window.__projectTypeConfirmations.push(String(message)); return true; }"
     )
 
-    # Home account pills occupy About / Google over Admin / ChatGPT at right.
+    # Model is first at the right edge; About sits directly beneath it.
+    # Identity pills run alongside, read right-to-left and top-to-bottom.
     grid = page.locator(".home-account-grid")
     expect(grid).to_be_visible()
     expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
+    model_pill = grid.locator(".model-cycle-pill")
+    expect(model_pill).to_be_visible()
+    assert "relative published API token cost" in model_pill.get_attribute("data-tooltip").lower()
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
-        '"about google" "admin chatgpt"'
+        '"google model" "chatgpt about" "admin admin"'
     )
+    model_rect = model_pill.bounding_box()
     about_rect = grid.locator(".home-about-button").bounding_box()
     google_rect = grid.locator(".project-google-signin").first.bounding_box()
-    assert about_rect and google_rect
-    assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
+    assert model_rect and about_rect and google_rect
+    assert model_rect["x"] > google_rect["x"]
+    assert abs(model_rect["y"] - google_rect["y"]) <= 5
+    assert about_rect["y"] > model_rect["y"]
+    assert abs(about_rect["x"] + about_rect["width"] - model_rect["x"] - model_rect["width"]) <= 6
 
     # A visible test host avoids the default Samples tab hiding Saved's
     # animations. Compare the CSSAnimation timeline anchors directly.
