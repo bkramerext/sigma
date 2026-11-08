@@ -131,7 +131,12 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
     <button ref={trigger} type="button" className="global-model-pill"
       aria-label={'Model ' + label} title={tooltip} data-tooltip={tooltip}
       disabled={!enabled || !ready || busy || !!pending || !settings || !next || !nextEffort}
-      onClick={cycle}>Model · {label}</button>
+      onClick={cycle}>
+      <span className="global-model-pill-current">Model · {label}</span>
+      {choices.map(choice => <span key={choice.id} className="global-model-pill-measure" aria-hidden="true">
+        Model · {modelName(choice, choice.id)}{choice.relative_cost ? ' ' + choice.relative_cost : ''}
+      </span>)}
+    </button>
     {settings && error && <span className="global-model-error" role="alert">{error}</span>}
     {pending && createPortal(<div className="project-model-confirm-popover global-model-confirm-popover"
       role="group" aria-label={'Confirm switch to ' + modelName(pending, pending.id)} style={popup}>
