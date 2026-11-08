@@ -3860,6 +3860,13 @@ def _clear_work(path: str) -> None:
     if file.is_symlink():
         raise ProjectError("Long-paper checkpoint is unsafe")
     file.unlink(missing_ok=True)
+    # PDF checkpoints are immutable per pass; remove all of them on completed,
+    # discarded or explicitly restarted work to avoid accumulating old PDFs.
+    for number in range(1, 5):
+        artifact = file.with_name(f"pdf-pass-{number}.pdf")
+        if artifact.is_symlink():
+            raise ProjectError("PDF pass checkpoint is unsafe")
+        artifact.unlink(missing_ok=True)
     _clear_progress_status(path)
 
 
@@ -10808,7 +10815,17 @@ async def _generate_impl(
         )
         record["generation"]["sigma_issues"] = sigma_issues
         record["generation"]["sigma_issues_included"] = False
-        if include_sigma_issues:
+        appendix_ready = bool(
+            isinstance(work.get("pdf_checkpoint"), dict)
+            and work["pdf_checkpoint"].get("appendix_included") is True
+        )
+        if appendix_ready and not include_sigma_issues:
+            raise ProjectError(
+                "The saved PDF includes the diagnostic appendix; explicitly restart to change this option."
+            )
+        if appendix_ready:
+            record["generation"]["sigma_issues_included"] = True
+        if include_sigma_issues and not appendix_ready:
             # This optional appendix is generated from observed SIGMA diagnostics,
             # never from research limitations or defects in the input project.
             appendix_diagnostics: list[str] = []
@@ -10854,6 +10871,19 @@ async def _generate_impl(
                     )
                 tex, pdf = candidate_tex, candidate_pdf
                 record["generation"]["sigma_issues_included"] = True
+                # A verified optional appendix is another durable PDF boundary.
+                _save_pdf_pass(
+                    path, work, 4, pdf,
+                    next_pass=4, ready=True,
+                    proofread_sha256=proofread_source_sha256,
+                    tex=tex, draft=draft, warnings=warnings,
+                    compile_diagnostics=compile_diagnostics,
+                    layout_warnings=list(record["generation"]["layout_warnings"]),
+                    layout_repairs=layout_repairs,
+                    pdf_check_passes=record["generation"]["pdf_check_passes"],
+                    diagram_fallback=diagram_fallback,
+                    appendix_included=True,
+                )
             except Exception as exc:  # noqa: BLE001 - optional appendix must not discard a compiled paper
                 # Keep the already compiled paper rather than discard the
                 # research because its optional diagnostic appendix failed.
