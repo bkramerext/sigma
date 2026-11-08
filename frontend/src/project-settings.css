@@ -661,3 +661,37 @@
   margin-left: 0;
   min-width: 0;
 }
+
+/* Q/A title actions share the same compact, visible targets as saved papers.
+   Paper-pane rules are scoped to .workspace-page, so reproduce them here. */
+.project-settings-dialog.research-qa-dialog .settings-body .saved-paper-title-tools
+  :is(button.paper-view-pdf-icon, button.paper-remove-button) {
+  display: inline-flex;
+  box-sizing: border-box;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  text-decoration: none;
+}
+.project-settings-dialog.research-qa-dialog .saved-paper-title-tools
+  :is(.paper-view-pdf-icon, .paper-remove-button) svg {
+  display: block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+}
+.project-settings-dialog.research-qa-dialog .settings-body .saved-paper-title-tools
+  :is(button.paper-view-pdf-icon, button.paper-remove-button):is(:hover, :focus-visible) {
+  border-color: #ac7054;
+  background: #3b3029;
+}
