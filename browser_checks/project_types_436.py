@@ -893,7 +893,9 @@ with sync_playwright() as playwright:
     popup_box = paper_options.bounding_box()
     close_box = paper_close.bounding_box()
     assert popup_box and close_box
-    assert abs((popup_box["x"] + popup_box["width"]) - (close_box["x"] + close_box["width"]) - 11) <= 2, (popup_box, close_box)
+    assert (
+        abs((popup_box["x"] + popup_box["width"]) - (close_box["x"] + close_box["width"]) - 11) <= 2
+    ), (popup_box, close_box)
     assert abs(close_box["y"] - popup_box["y"] - 9) <= 2, (popup_box, close_box)
     paper_close.click()
     expect(paper_options).to_have_count(0)
