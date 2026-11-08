@@ -11310,6 +11310,14 @@ def preflight(
         maximum_restart_author_calls + MAX_PROOFREAD_CALLS + int(has_publication_refs)
     )
     saved_proofreading = work_state.get("proofreading") if resume_available else None
+    completed_authoring = bool(
+        resume_available
+        and (work_state.get("validated_draft") or work_state.get("published_paper_id"))
+    )
+    completed_proofreading = bool(
+        resume_available
+        and (work_state.get("proofread_ready") or work_state.get("published_paper_id"))
+    )
     saved_proofreading_status = (
         saved_proofreading.get("status") if isinstance(saved_proofreading, dict) else None
     )
@@ -11322,7 +11330,9 @@ def preflight(
         if saved_proofreading_status == "complete"
         else "not_proofread"
     )
-    if isinstance(saved_proofreading, dict):
+    if completed_proofreading:
+        proofread_remaining = 0
+    elif isinstance(saved_proofreading, dict):
         attempts = saved_proofreading.get("attempts", [])
         proofread_remaining = (
             sum(attempt == "pending" for attempt in attempts)
@@ -11336,7 +11346,7 @@ def preflight(
         )
     author_remaining = (
         0
-        if one_shot_draft_available
+        if one_shot_draft_available or completed_authoring
         else max(
             0,
             (maximum_author_calls if long_form else 1) - work_state.get("provider_calls", 0),
