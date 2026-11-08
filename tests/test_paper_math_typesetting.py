@@ -6,7 +6,6 @@ import unittest
 
 from sigma import papers, project_reports
 
-
 # Exact math shapes previously rendered as visible dollar signs and
 # printable backslash commands in an RH paper (not a special-case repair).
 RH_MATH_EXPRESSIONS = (
