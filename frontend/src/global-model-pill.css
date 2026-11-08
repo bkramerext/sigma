@@ -41,7 +41,23 @@
   width: 100%;
   max-width: 100%;
   color: var(--sigma-copper-foreground);
+  background: #07111ef2;
+  border: 1px solid #a9654875;
+  border-radius: 999px;
+  box-shadow: none;
   font-weight: 500;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill:hover:not(:disabled),
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill:focus-visible {
+  color: #fff2e9;
+  background: #172536fa;
+  border-color: #cd9270;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill:disabled {
+  color: var(--sigma-copper-foreground);
+  background: #07111ef2;
+  opacity: 1;
+  cursor: default;
 }
 :is(.home-page, .workspace-page) .sigma-header-secondary-row {
   display: flex;
