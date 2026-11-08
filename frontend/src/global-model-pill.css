@@ -135,6 +135,14 @@
   max-width: none;
   justify-content: center;
 }
+/* Sponsored content must not contribute its long text to the intrinsic
+   width of the Home or Project identity column. The regular Google label
+   continues to establish the column width; the sponsor pill may overflow it. */
+.home-page .home-account-grid > .api-connection:has(> summary.has-sponsored-allowance),
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection:has(> summary.has-sponsored-allowance) {
+  contain: inline-size;
+  overflow: visible;
+}
 /* Sponsorship may extend outside the normal pill, but cannot widen the
    identity grid track; its parent remains the ordinary column width. */
 :is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
