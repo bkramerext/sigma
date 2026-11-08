@@ -55,13 +55,13 @@ def main() -> None:
                 assert expected.path and not expected.exists
                 created = create_project(title, "A bounded question", mode)
                 assert created.path == expected.path
-                assert created.project.schema_version == 11
+                assert created.project.schema_version == 12
                 assert created.project.difficulty is not None
                 assert created.project.difficulty.value == "medium"
                 assert created.project.research_mode == mode
                 raw = json.loads(read_file(Path(created.path), STATE))
                 assert raw["investigation_type"] == mode.value
-                assert raw["show_advanced_outcome_details"] is False
+                assert "show_advanced_outcome_details" not in raw
                 assert open_project(created.path) == created
                 assert project_destination(title).exists
                 # Strategy mutations retain mode and v4 without a downgrade.
@@ -70,7 +70,7 @@ def main() -> None:
                 edit_strategy(created.path, strategy_id, "Edited idea", "Updated approach")
                 removed = remove_strategy(created.path, strategy_id)
                 assert removed.project.research_mode == mode
-                assert removed.project.schema_version == 11
+                assert removed.project.schema_version == 12
                 snapshot = Path(created.path).read_bytes()
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
@@ -172,8 +172,8 @@ def main() -> None:
                 assert response.status_code == 201, response.text
                 assert response.json()["project"]["investigation_type"] == "mathematical"
                 assert response.json()["project"]["difficulty"] == "hard"
-                assert response.json()["project"]["show_advanced_outcome_details"] is True
-                assert inspect_project(
+                assert response.json()["project"]["show_advanced_outcome_details"] is False
+                assert not inspect_project(
                     response.json()["path"]
                 ).project.show_advanced_outcome_details
                 chemistry = client.post(

@@ -1,0 +1,333 @@
+/* SIGMA action icons. Icon-only controls use SIGMA's data-tooltip hovertext. */
+.sigma-action-glyph {
+  display: block;
+  flex: none;
+  width: 25px;
+  height: 25px;
+}
+.workspace-page .strategy-heading-actions,
+.workspace-page .sessions-pane-heading .sessions-heading-actions,
+.workspace-page .papers-pane-heading .papers-heading-actions,
+.workspace-page .paper-includes-anchor {
+  align-items: center;
+}
+.workspace-page .strategy-heading-actions button.sigma-heading-icon-action,
+.workspace-page .sessions-pane-heading button.sigma-heading-icon-action,
+.workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  text-decoration: none;
+  cursor: pointer;
+}
+.workspace-page .strategy-heading-actions button.sigma-heading-icon-action:hover:not(:disabled),
+.workspace-page .sessions-pane-heading button.sigma-heading-icon-action:hover:not(:disabled),
+.workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action:hover:not(:disabled) {
+  color: var(--sigma-copper-foreground);
+  background: #3b3029;
+  text-decoration: none;
+}
+.workspace-page .strategy-heading-actions button.sigma-heading-icon-action:focus-visible,
+.workspace-page .sessions-pane-heading button.sigma-heading-icon-action:focus-visible,
+.workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}
+.workspace-page .strategy-heading-actions button.sigma-heading-icon-action:disabled,
+.workspace-page .sessions-pane-heading button.sigma-heading-icon-action:disabled,
+.workspace-page .papers-pane .papers-heading-actions button.sigma-heading-icon-action:disabled {
+  opacity: .5;
+  cursor: default;
+}
+.workspace-page .project-pane-actions .sigma-action-glyph {
+  width: 25px;
+  height: 25px;
+}
+/* Home page New and Upload have matching icon-only controls. */
+.home-page .home-projects-heading button.home-icon-action {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+  margin: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.home-page .home-projects-heading button.home-icon-action:hover:not(:disabled) {
+  color: var(--sigma-copper-foreground);
+  background: #302418;
+}
+.home-page .home-projects-heading button.home-icon-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}
+
+
+/*
+ * Tighten the visible glyph rhythm. Keep accessible hover/focus hit areas,
+ * but use compact inter-control spacing instead of the old text-link gaps.
+ */
+.workspace-page .workspace-pane-heading {
+  column-gap: 9px;
+}
+.workspace-page .strategies-heading-right {
+  gap: 8px;
+}
+.workspace-page .strategy-heading-actions,
+.workspace-page .sessions-pane-heading .sessions-heading-actions,
+.workspace-page .papers-pane-heading .papers-heading-actions {
+  gap: 2px;
+}
+.workspace-page .project-pane-heading .project-primary-actions {
+  margin: 0;
+}
+.workspace-page .project-primary-actions .project-pane-actions {
+  gap: 2px;
+}
+.workspace-page .project-pane-actions .text-view-icon.project-qa-button {
+  width: 42px;
+  min-width: 42px;
+}
+.workspace-page .project-pane-actions .project-download-button svg,
+.workspace-page .project-pane-actions .project-email-button svg {
+  display: block;
+  width: 27px;
+  height: 27px;
+}
+.workspace-page .project-pane-actions .project-download-button {
+  padding: 1px;
+}
+.workspace-page .project-pane-actions .sigma-action-glyph {
+  width: 24.3px;
+  height: 24.3px;
+}
+.home-page .home-projects-heading {
+  column-gap: 7px;
+}
+@media (max-width: 700px) {
+  .workspace-page .workspace-pane-heading {
+    column-gap: 9px;
+  }
+  .workspace-page .strategies-heading-right {
+    column-gap: 8px;
+  }
+}
+
+
+/* Center icon glyphs against the visible header text rather than its baseline. */
+.workspace-page .workspace-pane-heading,
+.workspace-page .project-pane-heading .project-primary-actions,
+.workspace-page .project-pane-actions,
+.workspace-page .strategies-heading-right,
+.workspace-page .strategy-heading-actions,
+.workspace-page .sessions-pane-heading .sessions-heading-actions,
+.workspace-page .papers-pane-heading .papers-heading-actions {
+  align-items: center;
+}
+.workspace-page .workspace-pane-heading > h2 {
+  display: inline-flex;
+  align-items: center;
+}
+.workspace-page .workspace-pane-heading .workspace-section-disclosure {
+  align-items: center;
+}
+.workspace-page .paper-includes-anchor {
+  align-items: center;
+}
+.home-page .home-projects-heading {
+  align-items: center;
+}
+.home-page .home-projects-heading h1 {
+  display: flex;
+  align-items: center;
+}
+
+
+/* Consistent home-style visual spacing for project-page action glyphs. */
+.workspace-page .project-primary-actions .project-pane-actions,
+.workspace-page .strategy-heading-actions,
+.workspace-page .sessions-pane-heading .sessions-heading-actions,
+.workspace-page .papers-pane-heading .papers-heading-actions {
+  gap: 7px;
+}
+
+/* Projects replaces the removed upper-left Project Types pill.
+ * Align its heading to the same 12px/26px corner inset.
+ */
+@media (min-width: 701px) {
+  .home-page .home-projects {
+    --home-project-edge: var(--home-side-gap);
+    top: var(--home-corner-gap);
+  }
+}
+
+/* Ten-percent reduction for top-level Home and Project glyphs only.
+   Keep their 34px hit targets and approved inter-icon spacing unchanged. */
+.home-page .home-projects-heading .sigma-action-glyph {
+  width: 22.5px;
+  height: 22.5px;
+}
+.workspace-page .project-pane-actions .text-view-icon.project-qa-button {
+  font-size: 15.3px;
+}
+
+
+/*
+ * Dismissal for dialogs and confirmation popovers.
+ * Same 24px-viewBox X shape, 28px clickable target and copper hover as Session remove.
+ * The button keeps the old callback; only its location and affordance change.
+ */
+.sigma-dialog-dismiss.sigma-dialog-dismiss {
+  position: absolute !important;
+  z-index: 5;
+  inset: 10px 10px auto auto;
+  display: inline-flex !important;
+  flex: 0 0 28px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  margin: 0 !important;
+  padding: 4px !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--sigma-copper-foreground) !important;
+  font-size: 0 !important;
+  line-height: 1 !important;
+  text-decoration: none !important;
+  cursor: pointer;
+}
+.sigma-dialog-dismiss.sigma-dialog-dismiss svg {
+  display: block !important;
+  flex: 0 0 20px;
+  width: 20px !important;
+  height: 20px !important;
+}
+.sigma-dialog-dismiss.sigma-dialog-dismiss:hover:not(:disabled) {
+  background: #3b3029 !important;
+  border-color: #ac7054 !important;
+  color: var(--sigma-copper-foreground) !important;
+  text-decoration: none !important;
+}
+.sigma-dialog-dismiss.sigma-dialog-dismiss:focus-visible {
+  outline: 2px solid #edbc77 !important;
+  outline-offset: 2px;
+}
+.sigma-dialog-dismiss.sigma-dialog-dismiss:disabled {
+  opacity: .5 !important;
+  cursor: default !important;
+}
+
+/* Anchor X at the upper-right of each modal's header, not the action row. */
+:is(.project-settings-dialog .settings-header,
+    .project-entry-dialog .entry-dialog-header,
+    .paper-includes-dialog-heading,
+    .project-types-dialog > header,
+    .admin-dialog-heading,
+    .privacy-notice-heading,
+    .sigma-dialog-heading) {
+  position: relative;
+  padding-right: 51px;
+}
+.project-settings-dialog .settings-header .settings-actions,
+.project-entry-dialog .entry-dialog-header .entry-import,
+.project-types-dialog > header .project-types-header-actions {
+  position: static;
+}
+.project-types-dialog > header .sigma-dialog-dismiss,
+.project-settings-dialog .settings-header .sigma-dialog-dismiss,
+.project-entry-dialog .entry-dialog-header .sigma-dialog-dismiss,
+.admin-dialog-heading .sigma-dialog-dismiss,
+.privacy-notice-heading .sigma-dialog-dismiss,
+.sigma-dialog-heading .sigma-dialog-dismiss,
+.paper-includes-dialog-heading .sigma-dialog-dismiss {
+  top: 9px;
+  right: 11px;
+}
+
+/* These confirmation prompts are not full modals. Anchor to the popup itself. */
+:is(.research-stop-confirm,
+    .saved-paper-confirm,
+    .recent-remove-confirm):has(.sigma-dialog-dismiss) {
+  position: relative;
+}
+:is(.research-stop-confirm,
+    .saved-paper-confirm,
+    .recent-remove-confirm,
+    .project-model-confirm-popover,
+    .admin-remove-confirm,
+    .resume-authorization-popover):has(.sigma-dialog-dismiss) {
+  padding-right: 44px;
+}
+:is(.research-stop-confirm,
+    .saved-paper-confirm,
+    .recent-remove-confirm,
+    .project-model-confirm-popover,
+    .admin-remove-confirm,
+    .resume-authorization-popover) .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 6px;
+  right: 6px;
+}
+
+/* Position X inside title-row confirmation, preserving normal title controls. */
+.workspace-page .papers-heading-actions:has(> .sigma-dialog-dismiss) {
+  position: relative;
+  padding-right: 34px;
+}
+.workspace-page .papers-heading-actions > .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 3px;
+  right: 0;
+}
+.workspace-page .research-qa-dialog p.error:has(> .sigma-dialog-dismiss) {
+  position: relative;
+  padding-right: 46px;
+}
+.workspace-page .research-qa-dialog p.error > .sigma-dialog-dismiss {
+  top: 5px;
+  right: 5px;
+}
+
+/* Nested add/edit subflows in administrator and Project Types dialogs.
+   Their X cancels only the nested draft, not the parent dialog. */
+:is(.admin-new-entry-heading, .project-types-section-heading):has(.sigma-dialog-dismiss) {
+  position: relative;
+  padding-right: 42px;
+}
+:is(.admin-new-entry-heading, .project-types-section-heading) .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 0;
+  right: 0;
+}
+
+.admin-new-entry-heading .admin-new-entry-actions { position: static; }

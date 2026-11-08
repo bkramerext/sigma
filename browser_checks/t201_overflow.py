@@ -40,7 +40,7 @@ with sync_playwright() as playwright:
     page.goto(base_url + "/project?path=" + quote(str(path), safe=""))
     expect(page.get_by_role("heading", name="T201 overflow fixture")).to_be_visible()
 
-    page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True).click()
+    page.get_by_role("button", name="New session").click()
     expect(
         page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 2")
     ).to_be_visible()
@@ -89,7 +89,7 @@ with sync_playwright() as playwright:
     assert info["omitted_text"] not in str(manifest)
 
     # The same eligible strategy remains usable, with its durable history intact.
-    page.locator(".sessions-pane-heading").get_by_role("button", name="New", exact=True).click()
+    page.get_by_role("button", name="New session").click()
     page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 3").click()
     second_row = page.locator(".session-row").filter(has_text="Session 3")
     expect(second_row).to_be_visible(timeout=15000)

@@ -41,7 +41,7 @@
 }
 .request-toast[data-phase="exiting"] { opacity: 0; transform: translateY(calc(100% + 10px)); }
 .request-toast-content { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.request-toast-content strong { color: #e1c39e; font-size: 13px; font-weight: 650; }
+.request-toast-content strong { color: var(--sigma-copper-foreground); font-size: 13px; font-weight: 650; }
 .request-toast-content p { margin: 4px 0 0; line-height: 1.45; white-space: pre-wrap; }
 .request-toast button {
   flex: 0 0 auto;
@@ -49,15 +49,31 @@
   border-radius: 0;
   padding: 2px 0;
   background: transparent;
-  color: #f1c58d;
+  color: var(--sigma-copper-foreground);
   font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
 }
-.request-toast button:hover { color: #ffe0ab; }
+.request-toast button:hover { color: var(--sigma-copper-foreground); }
 .request-toast button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   .request-toast-item,
   .request-toast { transition-duration: 0.01ms; }
+}
+
+/* Same dismiss X as session removal; preserve toast exit animation and scroll. */
+.request-toast { position: relative; padding-right: 48px; }
+.request-toast button.request-toast-dismiss {
+  position: absolute; top: 9px; right: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px;
+  margin: 0; padding: 4px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; box-shadow: none; color: var(--sigma-copper-foreground);
+  text-decoration: none; cursor: pointer;
+}
+.request-toast button.request-toast-dismiss svg { display: block; width: 20px; height: 20px; }
+.request-toast button.request-toast-dismiss:hover {
+  background: #3b3029; border-color: #ac7054; color: var(--sigma-copper-foreground);
+  text-decoration: none;
 }

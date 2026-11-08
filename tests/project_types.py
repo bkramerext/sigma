@@ -28,8 +28,8 @@ def main() -> None:
     assert literature.icon["key"] == "literature"
     assert [item.id for item in builtins if (item.behavior or {}).get("lean")] == ["mathematical"]
 
-    # Curated catalog entries stay immutable; shared guides are disabled by
-    # default per user while subject-specific references remain enabled.
+    # Curated catalog entries stay immutable; all built-in reference guides are
+    # enabled for new users and can be independently disabled.
     common = project_types.common_references()
     assert len(common["research_standards_references"]) == 2
     assert len(common["publication_standards_references"]) == 2
@@ -81,8 +81,8 @@ def main() -> None:
             own = getattr(item, field)
             assert all(ref["name"].strip() and ref["url"].startswith("https://") for ref in own)
             inherited = getattr(effective, field)
-            assert len(inherited) == 1, (identifier, field)
-            assert {ref["url"] for ref in own} == {ref["url"] for ref in inherited}
+            assert len(inherited) == 1 + len(common[field]), (identifier, field)
+            assert {ref["url"] for ref in own} <= {ref["url"] for ref in inherited}
 
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
@@ -91,10 +91,11 @@ def main() -> None:
             assert before["common_references"] == common
             assert "builtin_references" not in before
             default_disabled = before["reference_preferences"]
-            assert default_disabled == {
+            assert default_disabled == {}
+            legacy_disabled = {
                 "common": {field: [ref["url"] for ref in refs] for field, refs in common.items()}
             }
-            assert project_types.common_research_references() == ()
+            assert len(project_types.common_research_references()) == 2
             # Invalid preferences may not change curated catalog definitions.
             rejected = client.put(
                 "/api/project-types",
@@ -178,7 +179,7 @@ def main() -> None:
             assert restored.status_code == 200, restored.text
             restored_type = project_types.get_type("mathematical")
             assert restored_type is not None
-            assert len(restored_type.research_standards_references) == 1
+            assert len(restored_type.research_standards_references) == 3
 
             # Per-user shared additions do not replace or remove curated guides.
             catalog = client.get("/api/project-types").json()
@@ -205,7 +206,8 @@ def main() -> None:
             assert current["common_custom_references"] == additions
             assert project_types.common_custom_references() == additions
             assert {ref["url"] for ref in project_types.common_research_references()} == {
-                research_ref["url"]
+                research_ref["url"],
+                *(ref["url"] for ref in common["research_standards_references"]),
             }
             # Legacy updates and independent toggle changes preserve additions.
             older = client.put(
@@ -215,11 +217,11 @@ def main() -> None:
             assert older.status_code == 200, older.text
             assert project_types.common_custom_references() == additions
             hidden = {
-                **default_disabled,
+                **legacy_disabled,
                 "common": {
-                    **default_disabled["common"],
+                    **legacy_disabled["common"],
                     "research_standards_references": [
-                        *default_disabled["common"]["research_standards_references"],
+                        *legacy_disabled["common"]["research_standards_references"],
                         research_ref["url"],
                     ],
                 },
@@ -248,7 +250,7 @@ def main() -> None:
                 },
             )
             assert removed.status_code == 200, removed.text
-            assert project_types.common_research_references() == ()
+            assert len(project_types.common_research_references()) == 2
             # An attempt to replace a curated default is rejected atomically.
             bad = client.put(
                 "/api/project-types",
@@ -375,10 +377,13 @@ def main() -> None:
             assert project_types.builtin_custom_references() == {}
             restored_math = project_types.get_type("mathematical")
             assert restored_math is not None
-            assert (
-                restored_math.research_standards_references
-                == builtins_by_id["mathematical"].research_standards_references
-            )
+            restored_research_urls = {
+                ref["url"] for ref in restored_math.research_standards_references
+            }
+            expected_research_urls = {
+                ref["url"] for ref in builtins_by_id["mathematical"].research_standards_references
+            } | {ref["url"] for ref in common["research_standards_references"]}
+            assert restored_research_urls == expected_research_urls
 
     from sigma.reference_titles import _TitleParser, resolve_title
 
@@ -426,7 +431,7 @@ def main() -> None:
             assert normalized_snapshot["name"] == "Field Notes"
             assert "description" not in normalized_snapshot
             # Preferences are isolated to the currently selected user workspace.
-            assert project_types.common_research_references() == ()
+            assert len(project_types.common_research_references()) == 2
             project_types.replace_custom_types(
                 [created.record()],
                 expected_revision=project_types.catalog_revision(),
@@ -466,7 +471,7 @@ def main() -> None:
                     raise AssertionError("invalid custom project type was accepted")
         with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(second)}):
             assert project_types.custom_types() == []
-            assert project_types.common_research_references() == ()
+            assert len(project_types.common_research_references()) == 2
             assert (
                 project_types.reference_preferences()
                 == project_types._default_reference_preferences()

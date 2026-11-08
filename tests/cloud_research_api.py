@@ -357,7 +357,7 @@ def main() -> None:
                 # credential and durable ledger as research sessions.
                 response_body = {
                     "status": "completed",
-                    "model": "gpt-6-luna",
+                    "model": config["model"],
                     "usage": {
                         "input_tokens": 120,
                         "output_tokens": 40,
@@ -494,9 +494,11 @@ def main() -> None:
                             }
                         elif schema_name == "sigma_long_paper_section":
                             output = {
+                                "tables": [],
+                                "examples": [],
                                 "paragraphs": [
                                     "The saved project record identifies a recurrence question. This statement is limited to the source record and does not establish a recurrence formula."
-                                ]
+                                ],
                             }
                         else:
                             raise AssertionError(f"Unexpected cloud paper stage: {schema_name}")
@@ -504,7 +506,7 @@ def main() -> None:
                             200,
                             json={
                                 "status": "completed",
-                                "model": "gpt-6-luna",
+                                "model": payload["model"],
                                 "usage": {
                                     "input_tokens": 180,
                                     "output_tokens": 120,
@@ -545,7 +547,7 @@ def main() -> None:
                                 ],
                             },
                         )
-                    return httpx.Response(200, json=response_body)
+                    return httpx.Response(200, json={**response_body, "model": payload["model"]})
 
                 with (
                     patch.object(
@@ -684,12 +686,13 @@ def main() -> None:
                     nonlocal provider_calls
                     provider_calls += 1
                     assert request.headers["authorization"] == "Bearer fake-server-credential"
+                    selected_model = json.loads(request.content)["model"]
                     output = agentic_outputs.pop(0)
                     return httpx.Response(
                         200,
                         json={
                             "status": "completed",
-                            "model": "gpt-6-luna",
+                            "model": selected_model,
                             "usage": {
                                 "input_tokens": 180,
                                 "output_tokens": 120,

@@ -1917,6 +1917,8 @@ async def test_resume_persists_paused_time_before_guarded_reread(path: Path):
 
 async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
     view, first, credential, config = await setup(path)
+    # Isolate this portfolio fixture from earlier tests' user-global limits.
+    research_sessions.save_limits(str(path), research_sessions.NEW_DEFAULT_LIMITS)
     second = create_strategy(
         path, "Independent approach", "Use a different derivation."
     ).project.strategies[-1]

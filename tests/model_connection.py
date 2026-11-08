@@ -173,28 +173,35 @@ async def checks():
             path, "Snapshot", "A mathematical question", "mathematical", "gpt-6-luna", "xhigh"
         )
         initial = inspect_project(path)
-        # A saved UI pair cannot become incompatible even if provider
-        # capabilities are narrowed after the project was created.
-        with patch.dict(
-            CATALOG,
-            {"gpt-6-luna": {**CATALOG["gpt-6-luna"], "efforts": ("low", "medium")}},
+        # The model/Thinking pair now belongs to the user, not the project.
+        from sigma import global_research_settings
+
+        with (
+            patch.dict(
+                CATALOG,
+                {"gpt-6-luna": {**CATALOG["gpt-6-luna"], "efforts": ("low", "medium")}},
+            ),
+            patch(
+                "sigma.global_research_settings._path",
+                return_value=Path(directory) / ".research-settings.json",
+            ),
         ):
-            prior = asdict(project_settings(initial.project))
+            original = global_research_settings.load_config()
             try:
-                update_project(
-                    path,
-                    prior["title"],
-                    prior["problem"],
-                    prior["investigation_type"],
-                    "gpt-6-luna",
-                    "high",
-                    prior,
+                global_research_settings.save_config(
+                    {"ai_model": "gpt-6-luna", "reasoning_effort": "high"}
                 )
-            except ProjectError as exc:
-                assert "not in the reviewed compatible catalog" in str(exc)
+            except ProjectError:
+                pass
             else:
                 raise AssertionError("Unsupported model/thinking pair was persisted")
+            assert global_research_settings.load_config() == original
             assert inspect_project(path) == initial
+        # Configure the user-selected pair explicitly; project edits no longer
+        # carry model preferences into new provider requests.
+        global_research_settings.save_config(
+            {"ai_model": "gpt-6-luna", "reasoning_effort": "xhigh"}
+        )
         request_started = asyncio.Event()
         release = asyncio.Event()
 
@@ -228,26 +235,16 @@ async def checks():
                 generate_proposal(str(path), "A starting constraint", True)
             )
             await asyncio.wait_for(request_started.wait(), 2)
-            prior = asdict(project_settings(initial.project))
-            settings_update = {
-                key: value for key, value in prior.items() if key != "investigation_type"
-            }
-            settings_update["research_mode"] = prior["investigation_type"]
-            update_project(
-                path,
-                **{**settings_update, "ai_model": "gpt-6-astra", "reasoning_effort": "low"},
-                expected=prior,
+            global_research_settings.save_config(
+                {"ai_model": "gpt-6-astra", "reasoning_effort": "low"}
             )
             release.set()
-            try:
-                await pending
-            except ProjectError as exc:
-                assert "selected model changed during generation" in str(exc)
-            else:
-                raise AssertionError("A draft for a changed selected model was returned")
+            # User preference changes apply to future calls; this in-flight
+            # proposal retains the originally selected model.
+            await pending
             before = inspect_project(path)
             assert not before.project.strategies
-            assert before.project.ai_model == "gpt-6-astra"
+            assert before.project.ai_model == initial.project.ai_model
             assert inspect_project(path) == before
         reset()
         with patch(
@@ -276,7 +273,7 @@ async def checks():
             edited = update_project(
                 path, **{**settings_update, "title": "Still editable"}, expected=prior
             )
-            assert edited.project.ai_model == "gpt-6-astra"
+            assert edited.project.ai_model == initial.project.ai_model
     print(
         "PASS per-project model/actual effort request, changed-model draft rejection, signed acceptance, unavailable choice/no fallback and offline metadata edits"
     )

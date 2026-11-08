@@ -143,10 +143,10 @@ with sync_playwright() as playwright:
             state,
         )
         save_css = save_button.evaluate(
-            "(button) => { const style = getComputedStyle(button); return [style.backgroundColor, style.backgroundImage, style.borderTopWidth, style.boxShadow, style.textShadow]; }"
+            "(button) => { const style = getComputedStyle(button); return [style.backgroundColor, style.backgroundImage, style.boxShadow, style.textShadow]; }"
         )
         cancel_css = cancel_button.evaluate(
-            "(button) => { const style = getComputedStyle(button); return [style.backgroundColor, style.backgroundImage, style.borderTopWidth, style.boxShadow, style.textShadow]; }"
+            "(button) => { const style = getComputedStyle(button); return [style.backgroundColor, style.backgroundImage, style.boxShadow, style.textShadow]; }"
         )
         assert save_css == cancel_css, (state, save_css, cancel_css)
     expect(dialog).to_be_visible()

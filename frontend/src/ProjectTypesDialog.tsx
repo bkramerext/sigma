@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import './project-types.css';
+import DialogDismissButton from './DialogDismissButton';
 
 export type ProjectTypeRecord = {
   id: string;
@@ -14,7 +15,15 @@ export type ProjectTypeRecord = {
   behavior?: Record<string, boolean>;
 };
 
-type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode; initialOpenTypeId?: string | null };
+export type ProjectTypesSaveState = { dirty: boolean; valid: boolean; busy: boolean };
+type Props = {
+  onClose: () => void;
+  renderIcon: (item: ProjectTypeRecord) => ReactNode;
+  initialOpenTypeId?: string | null;
+  embedded?: boolean;
+  onSaveStateChange?: (state: ProjectTypesSaveState) => void;
+  saveHandleRef?: MutableRefObject<(() => Promise<boolean>) | null>;
+};
 type Reference = { name: string; url: string };
 type ReferenceField = 'research_standards_references' | 'publication_standards_references';
 type ReferenceFields = Pick<ProjectTypeRecord, ReferenceField>;
@@ -155,8 +164,9 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   </div>;
 }
 
-export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null }: Props) {
+export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTypeId = null, embedded = false, onSaveStateChange, saveHandleRef }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const embeddedRoot = useRef<HTMLDivElement>(null);
   const explicitlyClosing = useRef(false);
   const first = useRef<HTMLButtonElement>(null);
   const initialCustomIds = useRef<string[]>([]);
@@ -194,7 +204,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
   }
   useEffect(() => {
     const element = dialog.current;
-    if (!element) return;
+    if (!element || embedded) return;
     if (!element.open) element.showModal();
     first.current?.focus();
     // Capture Escape before the browser's native dialog close behavior,
@@ -247,6 +257,23 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       ?.scrollIntoView({ block: 'center', behavior: 'auto' }));
     return () => cancelAnimationFrame(frame);
   }, [initialOpenTypeId, revision]);
+  // Opening a late row must bring its newly expanded contents into the scroll viewport.
+  useEffect(() => {
+    if (!embedded || !open) return;
+    const frame = requestAnimationFrame(() => {
+      const container = embeddedRoot.current?.querySelector<HTMLElement>('.project-types-body');
+      const card = Array.from(container?.querySelectorAll<HTMLElement>('[data-project-type-id]') ?? [])
+        .find(node => node.dataset.projectTypeId === open);
+      if (container && card) {
+        const viewport = container.getBoundingClientRect();
+        const bounds = card.getBoundingClientRect();
+        if (bounds.bottom > viewport.bottom || bounds.top < viewport.top) {
+          container.scrollTop += bounds.top - viewport.top - 8;
+        }
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [embedded, open]);
   const sortedBuiltins = useMemo(() => [...builtins].sort((a, b) => a.name.localeCompare(b.name)), [builtins]);
   const sortedDrafts = useMemo(() => [...drafts].sort((a, b) => a.name.localeCompare(b.name)), [drafts]);
   function edit(id: string, patch: Partial<ProjectTypeRecord>) {
@@ -406,8 +433,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     setAddingId(previous => previous === id ? null : previous);
     setOpen(previous => previous === id ? null : previous);
   }
-  async function save() {
-    if (!hasChanges || invalidDraft) return;
+  async function save(): Promise<boolean> {
+    if (!hasChanges || invalidDraft || busy) return false;
     setBusy(true); setError('');
     try {
       // Validate changed domains, even when Save is clicked before the title
@@ -454,7 +481,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         const usage = await usageResponse.json() as { project_count: number };
         if (!usageResponse.ok) throw new Error('Could not check which projects use a removed type.');
         confirmedRemovals[id] = usage.project_count;
-        if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return;
+        if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return false;
       }
       const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, common_custom_references: commonCustomReferences, builtin_custom_references: builtinCustomReferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
@@ -477,8 +504,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       await load();
       window.dispatchEvent(new Event('sigma-project-types-updated'));
       setAddingId(null);
-      close();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+      if (!embedded) close();
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false; }
     finally { setBusy(false); }
   }
   const listEditor = (owner: string, field: ReferenceField, references: Reference[], readonly: boolean, immutableCount = 0) => {
@@ -588,9 +616,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
           </>}
         </div></td></tr>;
       })}
-      {!readonly && <tr className="pt-reference-new-row"><td>
-        <button type="button" disabled={busy || references.length - immutableCount >= 100 ||
-          references.some((reference, index) => index >= immutableCount && !reference.url.trim())}
+      {!readonly && references.length - immutableCount < 100 &&
+        !references.some((reference, index) => index >= immutableCount &&
+          (!reference.url.trim() || (editingReferences.has(`${owner}:${field}:${index}`) &&
+            referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null))) &&
+        <tr className="pt-reference-new-row"><td>
+        <button type="button" disabled={busy}
           onClick={() => {
             const newKey = `${owner}:${field}:${references.length}`;
             referenceEditOrigins.current.set(newKey, null);
@@ -622,6 +653,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     || JSON.stringify(referencePreferences) !== JSON.stringify(savedReferencePreferences)
     || JSON.stringify(commonCustomReferences) !== JSON.stringify(savedCommonCustomReferences)
     || JSON.stringify(builtinCustomReferences) !== JSON.stringify(savedBuiltinCustomReferences));
+  const pendingNewReference = Array.from(editingReferences)
+    .some(key => referenceEditOrigins.current.get(key) === null);
   const invalidBuiltinReferences = Object.entries(builtinCustomReferences).some(([owner, fields]) => {
     const base = builtins.find(item => item.id === owner);
     if (!base) return true;
@@ -632,7 +665,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
     });
   });
-  const invalidDraft = invalidBuiltinReferences || Object.entries(commonCustomReferences).some(([field, references]) => {
+  const invalidDraft = pendingNewReference || invalidBuiltinReferences || Object.entries(commonCustomReferences).some(([field, references]) => {
     const urls = [...(commonReferences?.[field as ReferenceField] ?? []), ...references].map(ref => preferenceUrl(ref.url));
     return references.length > 100 || new Set(urls.filter(Boolean)).size !== urls.filter(Boolean).length ||
       references.some(reference => !!referenceUrlError(reference.url) || urlValidation[reference.url] === 'invalid');
@@ -643,6 +676,37 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     [...item.research_standards_references, ...item.publication_standards_references].some(ref =>
       !!referenceUrlError(ref.url) || urlValidation[ref.url] === 'invalid')
   );
+  // Expose the existing validation and save operation to the unified Settings header.
+  useEffect(() => {
+    if (!saveHandleRef) return;
+    saveHandleRef.current = save;
+    return () => { saveHandleRef.current = null; };
+  });
+  useEffect(() => {
+    onSaveStateChange?.({ dirty: hasChanges, valid: !invalidDraft && !!revision, busy });
+  }, [hasChanges, invalidDraft, revision, busy, onSaveStateChange]);
+  const content = <>
+    {!embedded && <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton ref={first} label="Close Project Types" disabled={busy} onClick={close}/></div></header>}
+    {error && <p role="alert" className="pt-dialog-error">{error}</p>}
+    <div className="project-types-body">
+      <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
+      <section className="pt-common-references">
+        <h4>Research standards references for all project types</h4>
+        {listEditor('common', 'research_standards_references', [
+          ...(commonReferences?.research_standards_references ?? []),
+          ...commonCustomReferences.research_standards_references,
+        ], false, commonReferences?.research_standards_references.length ?? 0)}
+        <h4>Publication standards references for all project types</h4>
+        {listEditor('common', 'publication_standards_references', [
+          ...(commonReferences?.publication_standards_references ?? []),
+          ...commonCustomReferences.publication_standards_references,
+        ], false, commonReferences?.publication_standards_references.length ?? 0)}
+      </section>
+    </div>
+  </>;
+  if (embedded) return <div ref={embeddedRoot} className="project-types-dialog project-types-embedded" aria-label="Project Types settings">{content}</div>;
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title"
     onCancel={event => { event.preventDefault(); }}
     onClose={() => {
@@ -669,24 +733,6 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     event.preventDefault();
     focusable[nextIndex].focus();
   }}>
-    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy} onClick={close}>Close</button></div></header>
-    {error && <p role="alert" className="pt-dialog-error">{error}</p>}
-    <div className="project-types-body">
-      <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
-      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
-      <section className="pt-common-references">
-        <h4>Research standards references for all project types</h4>
-        {listEditor('common', 'research_standards_references', [
-          ...(commonReferences?.research_standards_references ?? []),
-          ...commonCustomReferences.research_standards_references,
-        ], false, commonReferences?.research_standards_references.length ?? 0)}
-        <h4>Publication standards references for all project types</h4>
-        {listEditor('common', 'publication_standards_references', [
-          ...(commonReferences?.publication_standards_references ?? []),
-          ...commonCustomReferences.publication_standards_references,
-        ], false, commonReferences?.publication_standards_references.length ?? 0)}
-      </section>
-    </div>
+    {content}
   </dialog>;
 }

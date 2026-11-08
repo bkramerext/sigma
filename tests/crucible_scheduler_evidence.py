@@ -20,7 +20,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import research_sessions as fixture
 
-from sigma import api, research_sessions, session_log
+from sigma import api, global_research_settings, research_sessions, session_log
 from sigma.projects import ProjectError, create_strategy
 from sigma.research_context_budget import restrict_obligation_citations_to_supplied_context
 
@@ -33,7 +33,7 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
         "model_calls": 18,
     }
     research_sessions.save_limits(str(path), legacy)
-    before = (path / "research-sessions" / "limits.json").read_bytes()
+    before = global_research_settings._path().read_bytes()
     assert research_sessions.get_limits(str(path)) == legacy
     assert research_sessions._session_start_limits(legacy, None) == legacy
     projected = api.research_limits_view(str(path))
@@ -43,7 +43,7 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
         projected["turns_per_round"],
     ) == (2, 3, 3)
     assert projected["model_calls"] == 18
-    assert (path / "research-sessions" / "limits.json").read_bytes() == before
+    assert global_research_settings._path().read_bytes() == before
     started_limits = research_sessions._session_start_limits(legacy, projected)
     assert started_limits["scheduler_version"] == 2
     assert research_sessions._paired_call_limit(started_limits, 3) == 54
@@ -68,7 +68,7 @@ async def verify_versioned_settings_and_peer_evidence(path: Path) -> None:
     )
     response = api.research_limits_update(request)
     assert response["scheduler_version"] == 2
-    stored = json.loads((path / "research-sessions" / "limits.json").read_text())
+    stored = json.loads(global_research_settings._path().read_text())["limits"]
     assert (stored["scheduler_version"], stored["turns_per_round"], stored["model_calls"]) == (
         2,
         3,

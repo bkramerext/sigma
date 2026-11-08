@@ -2,6 +2,7 @@ import { Component, createContext, createElement, lazy, Suspense, useCallback, u
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
+import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
 import { friendlyProviderError, providerInterruptionCopy, providerUsageLimitCopy, setSponsoredUsageConnection } from './provider-usage-guidance';
 import { openReusableTab } from './reusable-tabs';
@@ -18,11 +19,13 @@ import './recents.css';
 import './copper-controls.css';
 import './text-views.css';
 import './papers-pane.css';
+import './action-icons.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRequest, watchResearchProviderActivity, useAI } from './ai-connection';
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
+import GlobalSettingsDialog from './GlobalSettingsDialog';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // A failure while presenting historical research must never unmount the app.
@@ -799,7 +802,7 @@ function sessionNoticeKey(session: ResearchSession): string {
 
 function SessionNoticeDismiss({ number, onDismiss, label }: { number: number; onDismiss: () => void; label?: string }) {
   return <button type="button" className="session-notice-dismiss" aria-label={label ?? `Dismiss notices for Session ${number}`}
-    title={label ?? `Dismiss Session ${number} notices`} onClick={onDismiss}>Dismiss</button>;
+    data-tooltip={label ?? `Dismiss Session ${number} notices`} onClick={onDismiss}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>;
 }
 
 // An in-flow exit slot: the notice slides through its own bottom edge
@@ -1668,7 +1671,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       const validation = validateLimitDraft(draftLimits(currentLimits));
       if (!validation.value) {
         throw new Error(validation.errors.maximum_estimated_cost_usd
-          ?? 'Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
+          ?? 'Saved research limits need attention. Update them in Home Settings → Limits before starting a session.');
       }
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
       if (chosenIds.length > 12) {
@@ -1948,15 +1951,14 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
-      <h2 id="missing-type-heading">Project type unavailable</h2>
+      <div className="sigma-dialog-heading"><h2 id="missing-type-heading">Project type unavailable</h2><DialogDismissButton label="Cancel project type selection" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}/></div>
       {safeSavedTypeSettings
         ? <p>This project refers to “{savedTypeName}”, which is no longer available. You can continue with its complete saved settings or choose a replacement.</p>
         : <p>This project refers to “{savedTypeName}”, which is no longer available, and it does not have a complete saved type snapshot. Choose a replacement before starting a new research session.</p>}
       <div className="project-type-warning-actions">
         {safeSavedTypeSettings && <button type="button" autoFocus disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); setConfirmStart(false); void begin(undefined, true); }}>Continue with saved settings</button>}
         <button type="button" autoFocus={!safeSavedTypeSettings} disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); onChooseReplacement(); }}>Choose a replacement</button>
-        <button type="button" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}>Cancel</button>
-      </div>
+        </div>
     </dialog>
     <header className="workspace-pane-heading sessions-pane-heading">
       <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
@@ -1964,7 +1966,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
         {sessionControls.confirming ? <>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.start}>Start Session {sessionControls.nextSessionNumber}</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
-        </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action" disabled={controlsDisabled || sessionControls.playDisabled} onClick={guest ? onGuestPlay : sessionControls.play}>New</button>}
+        </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || sessionControls.playDisabled} aria-label="New session" data-tooltip="New session" onClick={guest ? onGuestPlay : sessionControls.play}><CirclePlusIcon/></button>}
       </div>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>
@@ -1987,7 +1989,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
                   {!['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
-                  {!['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+                  {!['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><DialogDismissButton label={`Cancel removing Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}/></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {sessionControlFailures[item.id]
@@ -2172,7 +2174,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
         <h2 id="export-project-heading">{demo ? 'Export Demo Project' : 'Export Project'}</h2>
         <div className="settings-actions">
           <button type="submit" className="settings-submit" disabled={busy || !filename.trim()}>{busy ? 'Downloading…' : 'Download'}</button>
-          <button type="button" className="settings-cancel" title="Close without downloading" disabled={busy} onClick={() => cancel()}>Cancel</button>
+          <DialogDismissButton label="Cancel export" disabled={busy} onClick={() => cancel()}/>
         </div>
       </header>
       <div className="settings-body">
@@ -2309,7 +2311,7 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
     <form onSubmit={send}>
       <header className="settings-header">
         <h2 id="email-project-heading">Email Project</h2>
-        <div className="settings-actions"><button type="submit" className="settings-submit" disabled={busy || (!loaded && effectiveMode !== 'project') || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
+        <div className="settings-actions"><button type="submit" className="settings-submit" disabled={busy || (!loaded && effectiveMode !== 'project') || !recipients.trim()}>{busy ? 'Sending…' : 'Send'}</button><DialogDismissButton label="Cancel email" disabled={busy} onClick={cancel}/></div>
       </header>
       <div className="settings-body">
         <p className="settings-hint">The current project, <strong>{title}</strong>, will be sent as an importable attachment to the email addresses you provide.</p>
@@ -2363,7 +2365,7 @@ function PaperScoreDialog({ score, onRescore, canRescore, rescoring, error, onCl
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header paper-score-header">
       <h2 id="paper-score-title">Paper Score</h2>
-      <div className="settings-actions"><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" data-tooltip={canRescore ? "Evaluate again using an AI call" : "Connect an AI provider to rescore"} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button><button type="button" className="settings-cancel" onClick={onClose}>Close</button></div>
+      <div className="settings-actions"><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" data-tooltip={canRescore ? "Evaluate again using an AI call" : "Connect an AI provider to rescore"} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button><DialogDismissButton label="Close paper score" onClick={onClose}/></div>
     </header>
     <div className="settings-body paper-score-body">
       {error && <p className="error" role="alert">{error}</p>}
@@ -3206,13 +3208,13 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       {!guest && !showDraftPaper && <div className="papers-heading-actions strategy-heading-actions">
         {confirmNewPaper ? <>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); void generatePaper(); }}>Start Paper {draftVersion}</button>
-          <button type="button" className="text-view-link session-start-link" onClick={() => setConfirmNewPaper(false)}>Cancel</button>
+          <DialogDismissButton label="Cancel starting paper" onClick={() => setConfirmNewPaper(false)}/>
         </> : <>
-        <button type="button" className="text-view-link papers-header-action papers-new-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}>New</button>
+        <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
         <span className="paper-includes-anchor">
-          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}>Include</button>
+          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
           {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className="paper-includes-dialog" role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset }}>
-      <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><button type="button" className="text-view-link paper-includes-close" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}>Close</button></div>
+      <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
 
         <legend className="sr-only">Include</legend>
@@ -3244,7 +3246,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       <div className="ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
 
-      {scoreError && <p role="alert" className="error">{scoreError} <button type="button" className="text-view-link" onClick={() => setScoreError('')}>Dismiss</button></p>}
+      {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <button type="button" className="paper-score-error-dismiss" aria-label="Dismiss paper score error" data-tooltip="Dismiss paper score error" onClick={() => setScoreError('')}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button></p>}
       {loading && <p>Loading saved versions…</p>}
 
       {(showDraftPaper || (!loading && papers.length > 0)) && <section className="saved-paper-library" aria-label="Papers">
@@ -3266,7 +3268,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <p>The previous attempt cannot resume. Start a new attempt? This may use additional AI calls. Saved research and papers remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => { setConfirmPlayRestartDraft(false); void generatePaper(true); }}>Confirm and play</button>
-                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmPlayRestartDraft(false)}>Cancel</button>
+                      <DialogDismissButton label="Cancel restarting paper" disabled={busy} onClick={() => setConfirmPlayRestartDraft(false)}/>
                     </div>
                   </div></div>}
                 </span>}
@@ -3277,7 +3279,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <p>Start over Paper {draftVersion}? Unfinished generation progress will be discarded. Saved papers and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void restartCheckpoint()}>Confirm</button>
-                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRestartDraft(false)}>Cancel</button>
+                      <DialogDismissButton label="Cancel restarting draft" disabled={busy} onClick={() => setConfirmRestartDraft(false)}/>
                     </div>
                   </div></div>}
                 </span>}
@@ -3287,7 +3289,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <p>Remove this unfinished paper and its checkpoint? Saved papers and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void discardDraft()}>Confirm</button>
-                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDiscardDraft(false)}>Cancel</button>
+                      <DialogDismissButton label="Cancel discarding draft" disabled={busy} onClick={() => setConfirmDiscardDraft(false)}/>
                     </div>
                   </div></div>}
                 </span>}
@@ -3324,11 +3326,10 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
                   : <button type="button" className={`ai-paper-eli5-balloon${explainingId === paper.paper_id ? ' is-explaining' : ''}`} disabled={!!explainingId} data-tooltip={explainingId === paper.paper_id ? undefined : "Explain it to me like I'm 5"} aria-label="Explain it to me like I'm 5" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
                 <span className="paper-action-menu">
-                  <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-download-button" aria-label={`Download ${paper.title}`} data-tooltip="Download paper" aria-haspopup="menu" aria-expanded={paperMenu?.paperId === paper.paper_id && paperMenu.kind === 'download'} onClick={event => { positionPaperPopup(event.currentTarget, 205, 145); setPaperMenu(current => current?.paperId === paper.paper_id && current.kind === 'download' ? null : { paperId: paper.paper_id, kind: 'download' }); }}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                  <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-download-button" aria-label={`Download ${paper.title}`} data-tooltip="Download paper" aria-haspopup="menu" aria-expanded={paperMenu?.paperId === paper.paper_id && paperMenu.kind === 'download'} onClick={event => { positionPaperPopup(event.currentTarget, 145, 100); setPaperMenu(current => current?.paperId === paper.paper_id && current.kind === 'download' ? null : { paperId: paper.paper_id, kind: 'download' }); }}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                   {paperMenu?.paperId === paper.paper_id && paperMenu.kind === 'download' && <span className="paper-action-popover" style={paperPopupStyle} role="menu" aria-label={`Download ${paper.title}`} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setPaperMenu(null); } }}>
-                    <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/txt?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.txt`} onClick={() => setPaperMenu(null)}>Download text</a>
-                    <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.tex`} onClick={() => setPaperMenu(null)}>Download TeX</a>
-                    {paper.pdf_available && <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.pdf`} onClick={() => setPaperMenu(null)}>Download PDF</a>}
+                    {paper.pdf_available && <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.pdf`} onClick={() => setPaperMenu(null)}>Download PDF paper</a>}
+                    <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.tex`} onClick={() => setPaperMenu(null)}>Download LaTeX source</a>
                   </span>}
                 </span>
                 {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label="View paper in a new browser tab" data-tooltip="View paper in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
@@ -3338,12 +3339,12 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link destructive-action" title={`Confirm removal of Paper ${paper.paper_version}`} disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
-                      <button type="button" className="text-view-link" title={`Keep Paper ${paper.paper_version}`} disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
+                      <DialogDismissButton label={`Cancel removing Paper ${paper.paper_version}`} disabled={busy} onClick={() => setConfirmDeleteId('')}/>
                     </div>
                   </div></div>}
                 </span>
               </>}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score paper'}</button></div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
@@ -3565,23 +3566,20 @@ function FloatingTooltip() {
   return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, dialogTarget ?? document.body);
 }
 
-function SettingsGearIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 1.72l-.08.54a2 2 0 0 1-1 1.44l-.47.27a2 2 0 0 1-1.74 0l-.44-.22a2 2 0 0 0-2.72.73l-.22.38a2 2 0 0 0 .73 2.73l.44.25a2 2 0 0 1 1 1.73v.54a2 2 0 0 1-1 1.73l-.44.25a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.72.73l.44-.22a2 2 0 0 1 1.74 0l.47.27a2 2 0 0 1 1 1.44l.08.54a2 2 0 0 0 2 1.72h.44a2 2 0 0 0 2-1.72l.08-.54a2 2 0 0 1 1-1.44l.47-.27a2 2 0 0 1 1.74 0l.44.22a2 2 0 0 0 2.72-.73l.22-.38a2 2 0 0 0-.73-2.73l-.44-.25a2 2 0 0 1-1-1.73v-.54a2 2 0 0 1 1-1.73l.44-.25a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.72-.73l-.44.22a2 2 0 0 1-1.74 0l-.47-.27a2 2 0 0 1-1-1.44l-.08-.54A2 2 0 0 0 12.22 2z"/><circle cx="12" cy="12" r="3"/></svg>;
+function CirclePlusIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M7.5 12h9"/></svg>;
 }
 
-const NEW_PROJECT_VALUES_KEY = 'sigma.newProjectValues';
-function savedNewProjectValues(): Settings | null {
-  try {
-    const raw = window.localStorage.getItem(NEW_PROJECT_VALUES_KEY);
-    if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<Settings>;
-    if (typeof value.title !== 'string' || typeof value.problem !== 'string' ||
-        typeof value.investigation_type !== 'string' || typeof value.ai_model !== 'string' ||
-        typeof value.reasoning_effort !== 'string' ||
-        !(value.difficulty === null || value.difficulty === 'easy' || value.difficulty === 'medium' || value.difficulty === 'hard') ||
-        typeof value.show_advanced_outcome_details !== 'boolean') return null;
-    return { ...value, investigation_type: value.investigation_type === 'default' ? '' : value.investigation_type } as Settings;
-  } catch { return null; }
+function SparklesActionIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m10 3 1.9 5.9L18 11l-6.1 2.1L10 19l-1.9-5.9L2 11l6.1-2.1L10 3Z M19 2v6 M16 5h6 M19 18v4 M17 20h4"/></svg>;
+}
+
+function SlidersSettingsIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5.5h4m4 0h10M3 12h11m4 0h3M3 18.5h6m4 0h8"/><circle cx="9" cy="5.5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="11" cy="18.5" r="2"/></svg>;
+}
+
+function UploadProjectIcon() {
+  return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V3m-4.5 4.5L12 3l4.5 4.5M3 16v4.5h18V16"/></svg>;
 }
 
 function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
@@ -3724,7 +3722,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
 
     {!hideProjectActions && scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-export-trigger workspace-icon-button" aria-label="Export project" title="Export project" data-tooltip="Export project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
-    {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" title="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><SettingsGearIcon /></button>}
+    {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project Settings" data-tooltip="Project Settings" disabled={settingsDisabled} onClick={onSettings}><SlidersSettingsIcon/></button>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     {markdownPortalTarget && createPortal(markdownControl, markdownPortalTarget)}
@@ -4123,7 +4121,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
     closeButton.current?.focus();
   }, []);
   return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
+    <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><DialogDismissButton ref={closeButton} label="Close About SIGMA" onClick={onClose}/></div>
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
       <details className="about-disclosure about-workflow-disclosure" data-about-section="workflow" open={aboutDisclosureState('workflow')} onToggle={event => rememberAboutDisclosure(event, 'workflow')}>
@@ -4174,7 +4172,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
-      <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
+
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
     <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
@@ -4380,16 +4378,16 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
   }
 
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog research-qa-dialog" aria-labelledby="research-qa-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }} onKeyDownCapture={event => { if (event.key === 'Escape' && busy) { event.preventDefault(); event.stopPropagation(); } }}>
-    <header className="settings-header"><h2 id="research-qa-heading">Research Q/A</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+    <header className="settings-header"><h2 id="research-qa-heading">Research Q/A</h2><div className="settings-actions"><DialogDismissButton label="Close research Q/A" disabled={busy} onClick={onCancel}/></div></header>
     <div className="settings-body ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
         <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
         <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
-        {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={() => setError('')}>Dismiss</button></p>}
+        {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <DialogDismissButton label="Dismiss error" onClick={() => setError('')}/></p>}
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
           <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} title={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : 'Convert to Markdown'} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p><button type="button" className="text-view-link" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}>Open in browser</button><button type="button" className="text-view-link" onClick={() => setRemoveId(record.qa_id)}>Remove</button></div></div></div>
-          {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this saved answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><button type="button" className="text-view-link" onClick={() => setRemoveId('')}>Cancel</button></div>}
+          {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this saved answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><DialogDismissButton label="Cancel answer removal" onClick={() => setRemoveId('')}/></div>}
           <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><div className="research-qa-answer-heading"><h3>Answer</h3></div>{renderedAnswerIds.has(record.qa_id) && record.markdown_answer ? <div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.markdown_answer}/></Suspense></div> : <div className="research-qa-answer-plain">{record.answer}</div>}<h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => <li key={`${source.source_id}-${index}`}>{source.navigation_available && source.navigation_url ? <a href={source.navigation_url}>{source.label || source.kind}</a> : <>{source.label || source.kind} · navigation unavailable{source.navigation_unavailable_reason ? `: ${source.navigation_unavailable_reason}` : ''}</>}</li>) : <li>No verified source links available.</li>}</ul></article></div>
         </article>)}</section>}
       </>}
@@ -4415,14 +4413,14 @@ function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView)
         body: JSON.stringify({ bundle }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Project import failed');
+      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Project upload failed');
       onOpen(result as ProjectView);
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setBusy(false); }
   }
   return <dialog ref={dialog} className="project-entry-dialog import-project-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Importing…' : 'Import'}</button><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
-    <p className="entry-help">Import a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
+    <header className="entry-dialog-header"><h2 id="import-project-heading">Upload Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Uploading…' : 'Upload'}</button><DialogDismissButton label="Cancel upload" disabled={busy} onClick={onCancel}/></header>
+    <p className="entry-help">Upload a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
     <form id="import-project-form" onSubmit={submit}><fieldset disabled={busy}><div className="import-project-label-row"><label htmlFor="import-project-file">Project file</label><button className="choose-project-file" type="button" onClick={() => fileInput.current?.click()}>Choose</button></div>
       <input ref={fileInput} className="sr-only" id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
       <div className="import-project-file-row"><div className="import-project-selected-file" aria-live="polite">{file?.name ?? 'No file chosen'}</div></div>
@@ -4448,7 +4446,7 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
     finally { submitting.current = false; setBusy(false); }
   }
   return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="project-entry-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="entry-dialog-header"><h2 id="project-entry-heading">Open Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header><p className="entry-help">Choose an existing local project by its directory path.</p>
+    <header className="entry-dialog-header"><h2 id="project-entry-heading">Open Project</h2><DialogDismissButton label="Cancel opening project" disabled={busy} onClick={onCancel}/></header><p className="entry-help">Choose an existing local project by its directory path.</p>
     <form onSubmit={save}><fieldset disabled={busy}><label htmlFor="open-project-path">Project directory</label><div className="open-project-path-row"><input ref={first} id="open-project-path" required value={path} onChange={event => setPath(event.target.value)} aria-describedby="project-path-help"/><button className="open-project-submit" type="submit">{busy ? 'Opening…' : 'Open'}</button></div><p id="project-path-help" className="entry-hint">Try <code>projects/rh.sigma</code>, or an absolute path such as <code>/Users/you/projects/question.sigma</code>. Paths refer to this local server.</p>
     {error && <p className="error" role="alert">{error}</p>}</fieldset></form>
   </dialog>;
@@ -4457,176 +4455,8 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
 type Settings = { title: string; problem: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null; show_advanced_outcome_details: boolean };
 type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; relative_cost: '$' | '$$' | '$$$'; availability: 'available' | 'unavailable' | 'unverified' };
 // Keep preference controls usable when account access cannot be checked.
-const reviewedModelPreferences: CatalogChoice[] = [
-  { id: 'gpt-6.1-sol', label: 'Sol · Balanced ($$)', description: 'Balance research capability and cost.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$$', availability: 'unverified' },
-  { id: 'gpt-6-luna', label: 'Luna · Economy ($)', description: 'Lower-cost exploration of focused questions.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$', availability: 'unverified' },
-  { id: 'gpt-6-astra', label: 'Astra · Advanced ($$$)', description: 'For the most demanding research reasoning; higher cost.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$$$', availability: 'unverified' },
-];
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
 const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty, show_advanced_outcome_details: view.project.show_advanced_outcome_details });
-
-function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean }) {
-  const ai = useAI();
-  const cloud = useCloudIdentity();
-  const [models, setModels] = useState<CatalogChoice[]>([]);
-  const [catalogReady, setCatalogReady] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const [pendingModel, setPendingModel] = useState<CatalogChoice | null>(null);
-  const [confirmationPosition, setConfirmationPosition] = useState<{ left: number; top: number } | null>(null);
-  const saving = useRef(false);
-  const modelButton = useRef<HTMLButtonElement>(null);
-  const confirmButton = useRef<HTMLButtonElement>(null);
-  const confirmationPopover = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (pendingModel) {
-      const place = () => {
-        const anchor = modelButton.current?.getBoundingClientRect();
-        const popover = confirmationPopover.current?.getBoundingClientRect();
-        if (!anchor) return;
-        const width = popover?.width ?? Math.min(320, window.innerWidth - 16);
-        const height = popover?.height ?? 110;
-        const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
-        const below = anchor.bottom + height + 8 <= window.innerHeight - 8;
-        setConfirmationPosition({ left, top: below ? anchor.bottom + 8 : Math.max(8, anchor.top - height - 8) });
-      };
-      const frame = requestAnimationFrame(() => {
-        place();
-        confirmButton.current?.focus();
-      });
-      const escape = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          setPendingModel(null);
-        }
-      };
-      window.addEventListener('resize', place);
-      window.addEventListener('scroll', place, true);
-      document.addEventListener('keydown', escape, true);
-      return () => {
-        cancelAnimationFrame(frame);
-        window.removeEventListener('resize', place);
-        window.removeEventListener('scroll', place, true);
-        document.removeEventListener('keydown', escape, true);
-      };
-    } else {
-      setConfirmationPosition(null);
-      modelButton.current?.focus();
-    }
-  }, [pendingModel]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setCatalogReady(false);
-    if (cloud?.enabled && !cloud.authenticated) {
-      setModels(reviewedModelPreferences); setMessage('Model access is checked when connected.'); setCatalogReady(true);
-      return () => controller.abort();
-    }
-    fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          if (!controller.signal.aborted) { setModels([]); setMessage('Model availability requires an authorized session. Saved settings are unchanged.'); }
-          return null;
-        }
-        throw new Error(`Model availability check failed (HTTP ${response.status}). Retry after connectivity is restored. Saved settings are unchanged.`);
-      }
-      return response.json();
-    }).then(data => {
-      if (!controller.signal.aborted && data) setModels(Array.isArray(data.models) ? data.models : []);
-    }).catch((error: unknown) => {
-      if (!controller.signal.aborted) {
-        setModels(reviewedModelPreferences);
-        setMessage(error instanceof Error ? `${error.message} Preferences remain configurable; access is checked when connected.` : 'Model availability could not be verified. Preferences remain configurable; access is checked when connected.');
-      }
-    }).finally(() => { if (!controller.signal.aborted) setCatalogReady(true); });
-    return () => controller.abort();
-  }, [ai.info?.mode, ai.info?.active_account, ai.info?.status, cloud?.enabled, cloud?.authenticated]);
-
-  const current = models.find(model => model.id === view.project.ai_model);
-  const costOrder: Record<CatalogChoice['relative_cost'], number> = { '$': 1, '$$': 2, '$$$': 3 };
-  const selectableModels = models.filter(model => model.availability !== 'unavailable').sort((a, b) => costOrder[b.relative_cost] - costOrder[a.relative_cost] || a.label.localeCompare(b.label));
-  const currentSelectableIndex = selectableModels.findIndex(model => model.id === view.project.ai_model);
-  const nextModel = selectableModels.length > 1
-    ? selectableModels[(currentSelectableIndex + 1 + selectableModels.length) % selectableModels.length]
-    : selectableModels.length === 1 && currentSelectableIndex < 0 ? selectableModels[0] : undefined;
-  const efforts = current && current.availability !== 'unavailable' ? current.efforts : [];
-  const currentEffortIndex = efforts.indexOf(view.project.reasoning_effort);
-  const nextEffort = efforts.length > 1
-    ? efforts[(currentEffortIndex + 1 + efforts.length) % efforts.length]
-    : undefined;
-  const effortOrder = ['low', 'medium', 'high', 'xhigh'];
-  const reconciledEffort = (model: CatalogChoice | undefined) => {
-    if (!model?.efforts.length) return undefined;
-    if (model.efforts.includes(view.project.reasoning_effort)) return view.project.reasoning_effort;
-    const oldIndex = effortOrder.indexOf(view.project.reasoning_effort);
-    return [...model.efforts].sort((a, b) => {
-      const distance = Math.abs(effortOrder.indexOf(a) - oldIndex) - Math.abs(effortOrder.indexOf(b) - oldIndex);
-      return distance || effortOrder.indexOf(a) - effortOrder.indexOf(b);
-    })[0];
-  };
-  const nextModelEffort = reconciledEffort(nextModel);
-  const effortWillChange = Boolean(nextModel && nextModelEffort !== view.project.reasoning_effort);
-  const nextModelCostsMore = Boolean(current && nextModel && costOrder[nextModel.relative_cost] > costOrder[current.relative_cost]);
-  const difficultyOrder: ProjectDifficulty[] = ['easy', 'medium', 'hard'];
-  const currentDifficultyIndex = view.project.difficulty ? difficultyOrder.indexOf(view.project.difficulty) : -1;
-  const nextDifficulty = difficultyOrder[(currentDifficultyIndex + 1) % difficultyOrder.length];
-  const difficultyText = view.project.difficulty ? difficultyLabels[view.project.difficulty].toLowerCase() : 'not set';
-  const costHelpId = `project-model-cost-help-${view.project.id}`;
-
-  async function update(changes: Partial<Settings>) {
-    if (saving.current || disabled || busy) return;
-    saving.current = true; setBusy(true); setMessage('');
-    const expected = settingsOf(view);
-    try {
-      const saved = await post<ProjectView>('update', {
-        path: view.path, ...expected, ...changes, expected,
-      });
-      onSaved(saved);
-    } catch (error) {
-      setMessage(errorMessage(error));
-    } finally {
-      saving.current = false; setBusy(false);
-    }
-  }
-
-  const modelLabel = current ? `${current.label.split(' · ')[0]} ${current.relative_cost}` : view.project.ai_model;
-  const modelDisabled = !catalogReady || busy || disabled || !nextModel || !nextModelEffort;
-  const thinkingDisabled = !catalogReady || busy || disabled || !nextEffort;
-  const statusMessage = message || !catalogReady ? message || 'Checking model availability…' : '';
-  const nextEffortNotice = effortWillChange
-    ? ` Switching to ${nextModel?.label.split(' · ')[0]} will also change Thinking from ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort} to ${thinkingLabels[nextModelEffort!]}.`
-    : '';
-  const visibleEffortNotice = effortWillChange ? `Next model uses ${thinkingLabels[nextModelEffort!]}.` : '';
-  const pendingModelName = pendingModel?.label.split(' · ')[0] ?? 'this model';
-  function requestModelChange() {
-    if (!nextModel || !nextModelEffort) return;
-    if (nextModelCostsMore) setPendingModel(nextModel);
-    else void update({ ai_model: nextModel.id, reasoning_effort: nextModelEffort });
-  }
-  function confirmModelChange() {
-    if (!pendingModel) return;
-    const confirmed = pendingModel;
-    setPendingModel(null);
-    const effort = reconciledEffort(confirmed);
-    if (effort) void update({ ai_model: confirmed.id, reasoning_effort: effort });
-  }
-  function cycleDifficulty() {
-    void update({ difficulty: nextDifficulty });
-  }
-  return <div className="project-header-controls" aria-label="Project model, thinking, and difficulty controls">
-    <button type="button" className={`project-control-pill project-difficulty-badge difficulty-${view.project.difficulty ?? 'unset'}`} aria-label={`Project difficulty ${view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'not set'}`} title={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} data-tooltip={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} disabled={disabled || busy || !!pendingModel} onClick={cycleDifficulty}>Difficulty · {view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'Not set'}</button>
-    <button ref={modelButton} type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} data-tooltip={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} disabled={modelDisabled || !!pendingModel} onClick={requestModelChange}>Model · {modelLabel}</button>
-    <button type="button" className="project-control-pill project-thinking-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} data-tooltip={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} disabled={thinkingDisabled || !!pendingModel} onClick={() => nextEffort && void update({ ai_model: view.project.ai_model, reasoning_effort: nextEffort })}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
-    <span id={costHelpId} className="sr-only">Dollar signs show relative published API token price tiers. They are not actual research session charges.</span>
-    {visibleEffortNotice && <span className="project-controls-message" role="status">{visibleEffortNotice}</span>}
-    {statusMessage && <span className="project-controls-message" role="status">{statusMessage}</span>}
-    {pendingModel && createPortal(<div ref={confirmationPopover} className="project-model-confirm-popover" role="group" aria-label={`Confirm switch to ${pendingModelName}`} style={confirmationPosition ? { left: confirmationPosition.left, top: confirmationPosition.top } : { left: -10000, top: -10000 }}>
-      <p><strong>Switch to {pendingModelName}?</strong> {pendingModelName} has a higher relative published API token cost tier ({pendingModel.relative_cost} versus {current?.relative_cost}). Continue to save this model?</p>
-      <div className="project-model-confirm-actions"><button ref={confirmButton} type="button" className="text-view-link" onClick={confirmModelChange}>Confirm</button><button type="button" className="text-view-link" onClick={() => setPendingModel(null)}>Cancel</button></div>
-    </div>, document.body)}
-  </div>;
-}
 
 function ResearchTypeIcon({ type, snapshot }: { type: ResearchMode; snapshot?: ProjectTypeRecord | null }) {
   const definition = snapshot?.id === type ? snapshot : projectTypeCache.find(item => item.id === type);
@@ -4710,7 +4540,62 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
   </div>;
 }
 
-function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void; onAdjustReferences?: () => void }) {
+function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
+  initial: ProjectView; onSaved: (next: ProjectView) => void; onCancel: () => void;
+}) {
+  useDocumentScrollLock();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
+  const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (busy || (projectType === initial.project.investigation_type && difficulty === initial.project.difficulty)) return;
+    setBusy(true); setError('');
+    try {
+      const previous = settingsOf(initial);
+      const next = await post<ProjectView>('update', {
+        path: initial.path, ...previous,
+        investigation_type: projectType, difficulty,
+        expected: previous,
+      });
+      onSaved(next);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-settings-dialog sigma-project-classification-dialog"
+    aria-labelledby="sigma-project-classification-title"
+    onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <form onSubmit={save}>
+      <header className="settings-header">
+        <h2 id="sigma-project-classification-title">Project Settings</h2>
+        <div className="settings-actions">
+          <button type="submit" disabled={busy || (projectType === initial.project.investigation_type && difficulty === initial.project.difficulty)}>{busy ? 'Saving…' : 'Save'}</button>
+          <DialogDismissButton label="Close Project Settings" disabled={busy} onClick={onCancel}/>
+        </div>
+      </header>
+      <div className="settings-body">
+        <fieldset disabled={busy}>
+          <label id="sigma-project-type-label">Project Type</label>
+          <ResearchTypePicker fieldLabel="Project Type" value={projectType} onChange={setProjectType}/>
+          <label htmlFor="sigma-project-difficulty">Difficulty</label>
+          <select id="sigma-project-difficulty" value={difficulty ?? ''}
+            onChange={event => setDifficulty((event.target.value || null) as ProjectDifficulty | null)}>
+            {difficulty === null && <option value="">Not set</option>}
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </fieldset>
+        {error && <p role="alert" className="error">{error}</p>}
+      </div>
+    </form>
+  </dialog>;
+}
+
+function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
   useDocumentScrollLock();
   const ai = useAI();
   const cloud = useCloudIdentity();
@@ -4728,7 +4613,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   const [savedExclusiveSections, setSavedExclusiveSections] = useState(false);
   const [exclusiveSectionsLoaded, setExclusiveSectionsLoaded] = useState(false);
   const [sectionLayoutWarning, setSectionLayoutWarning] = useState('');
-  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : savedNewProjectValues() ?? { title: '', problem: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -4851,7 +4736,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   const compatible = selected?.efforts.includes(values.reasoning_effort) || samePair;
   const pairError = selected && !selected.efforts.includes(values.reasoning_effort) && !samePair ? 'This model does not support the selected Thinking level. Choose a supported level explicitly.' : '';
   async function save(event: FormEvent) {
-    event.preventDefault(); if (submitting.current || !compatible || (initial && !limitValidation.value) || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
+    event.preventDefault(); if (submitting.current || (initial && (!compatible || !limitValidation.value)) || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
     submitting.current = true; setBusy(true); setError('');
     try {
       const createValues = {
@@ -4864,9 +4749,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         show_advanced_outcome_details: values.show_advanced_outcome_details,
       };
       const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : createValues);
-      if (!initial) {
-        try { window.localStorage.setItem(NEW_PROJECT_VALUES_KEY, JSON.stringify(values)); } catch { /* Project creation must not depend on browser storage availability. */ }
-      }
       // Unrelated settings changes must not rewrite historical v1 research limits.
       if (initial && loadedLimitDraft && JSON.stringify(limitDraft) !== JSON.stringify(loadedLimitDraft)) {
         const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
@@ -4911,7 +4793,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></>}</div></header>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
       {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their saved research configuration; some limits can be adjusted when resuming.</p>}
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
@@ -4924,7 +4806,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/>{!initial && <p className="settings-hint">Need another project type? Use Project Types to create one.</p>}</div>
       <div><label htmlFor="project-difficulty">Difficulty</label><select id="project-difficulty" value={values.difficulty ?? ''} onChange={event => change('difficulty', (event.target.value || null) as ProjectDifficulty | null)}>{values.difficulty === null && <option value="">Not set</option>}<option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>
-      <div className="settings-model-row">
+      {initial && <div className="settings-model-row">
       <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
@@ -4936,8 +4818,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
       </select>
       <p className="settings-hint">Used for future AI proposals. Higher levels use more time and usage.</p></div>
-      </div>
-      {pairError && <p className="error" role="alert">{pairError}</p>}
+      </div>}
+      {initial && pairError && <p className="error" role="alert">{pairError}</p>}
       <p className="project-destination"><span>Project location</span><code>{initial ? initial.path : previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code><small>{initial ? 'Editing the display name never renames or moves this directory.' : 'The project name determines its directory; existing files are never overwritten.'}</small></p>
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
@@ -4982,9 +4864,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel, onAdjustReferences 
         <label className="project-preference-checkbox" htmlFor="allow-unattended-background-execution"><input id="allow-unattended-background-execution" type="checkbox" checked={userUnattended} disabled={!userPreferenceLoaded} onChange={event => setUserUnattended(event.target.checked)}/>Allow unattended background execution</label>
         <p id="allow-unattended-background-execution-help" className="settings-hint">This user-wide setting applies across all your projects. When enabled, the backend can keep research and paper generation running after you close the browser page, potentially incurring AI-provider costs. When disabled, SIGMA stops new AI stages after the last viewer disconnects and preserves completed research or paper checkpoints for explicit continuation.</p>
       </fieldset>
-      <div className="project-references-usage">
-        <p className="settings-hint">Reference guides for research and authoring papers can be found in <button type="button" className="project-reference-adjust-link" disabled={busy || !onAdjustReferences} onClick={onAdjustReferences}>Project Types</button>.</p>
-      </div>
       {error && <p role="alert" className="error">{error}</p>}
     </section>}
     </form>
@@ -5052,7 +4931,7 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
         <h2 id="save-as-project-heading">Save Copy</h2>
         <div className="settings-actions">
           <button type="submit" className="settings-cancel" disabled={busy || !title.trim()}>{busy ? 'Saving…' : 'Save'}</button>
-          <button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button>
+          <DialogDismissButton label="Cancel save copy" disabled={busy} onClick={onCancel}/>
         </div>
       </header>
       <div className="settings-body">
@@ -5188,7 +5067,7 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
     return groups;
   }, []).sort((a, b) => flat ? 0 : researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents" data-opening={!!opening || !!removing}>
-    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading saved projects...'}</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
+    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading saved projects...'}</p> : !projects.length && <p>No recent projects yet. Upload a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
@@ -5218,7 +5097,7 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}{!entry.pinned && confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
+          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}{!entry.pinned && confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><DialogDismissButton label="Cancel project removal" disabled={!!opening} onClick={() => setConfirmRemoveId('')}/></div></div></div>}</div>
           <span title={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -5356,6 +5235,7 @@ function Home({ initialPath, onOpen }: {
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
+  const settingsButton = useRef<HTMLButtonElement>(null);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
   useEffect(() => {
     const openTypes = () => setProjectTypesOpen(true);
@@ -5445,7 +5325,7 @@ function Home({ initialPath, onOpen }: {
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
       <div className="home-topline">
-        <div className="home-left-actions">{(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="home-about-button" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}>Project Types</button>}</div>
+        <div className="home-left-actions"/>
         <div className="home-right-actions"><div className="home-auth-pills"><MockAuthSelector/>
           <div className="home-account-grid">
             <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
@@ -5461,8 +5341,9 @@ function Home({ initialPath, onOpen }: {
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
-            <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
-          <button type="button" className="home-project-action" data-tooltip="Import a portable JSON project" onClick={() => setEntry('import')}>Import</button>
+            <button type="button" ref={newButton} className="home-project-action home-icon-action" aria-label="New project" data-tooltip="New project" onClick={() => setEntry('new')}><CirclePlusIcon/></button>
+          <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>
+          <button type="button" ref={settingsButton} className="home-project-action home-icon-action" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
           </>}
         </div>
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
@@ -5473,7 +5354,7 @@ function Home({ initialPath, onOpen }: {
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
+      {projectTypesOpen && <GlobalSettingsDialog key={cloud?.user?.email ?? 'local'} onClose={() => { setProjectTypesOpen(false); requestAnimationFrame(() => settingsButton.current?.focus()); }}/>}
     </div>
   </div>;
 }
@@ -5543,7 +5424,7 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
         <p>Remove “{strategy.title}” from Strategies? Its research and history will be kept in the project.</p>
         <div className="session-remove-confirm-actions">
           <button type="button" className="text-view-link destructive-action" disabled={disabled} onClick={() => { setConfirmingRemove(false); onCommand('remove', strategy); }}>Confirm</button>
-          <button type="button" className="text-view-link" disabled={disabled} onClick={() => setConfirmingRemove(false)}>Cancel</button>
+          <DialogDismissButton label="Cancel strategy removal" disabled={disabled} onClick={() => setConfirmingRemove(false)}/>
         </div>
       </div></div>}
     </span>
@@ -5586,8 +5467,8 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
   buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; hideNew?: boolean; onManual: () => void; onAI: () => void;
 }) {
   return <div className="strategy-heading-actions">
-    {!hideNew && <button type="button" className="text-view-link" ref={buttonRef} title="Create a new strategy" disabled={disabled} onClick={onManual}>New</button>}
-    <button type="button" className="text-view-link" data-tooltip="Uses AI exploration and critique to develop a strategy proposal. You review or edit it before saving. It also considers existing research." disabled={disabled} onClick={onAI}>Generate</button>
+    {!hideNew && <button type="button" className="text-view-link sigma-heading-icon-action" ref={buttonRef} aria-label="New strategy" data-tooltip="New strategy" disabled={disabled} onClick={onManual}><CirclePlusIcon/></button>}
+    <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Generate strategy" data-tooltip="Generate strategy with AI. Review before saving." disabled={disabled} onClick={onAI}><SparklesActionIcon/></button>
   </div>;
 }
 
@@ -5626,12 +5507,11 @@ function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => 
     onSignIn();
   }
   return <dialog ref={dialog} className="project-settings-dialog guest-research-dialog" aria-labelledby="guest-research-heading" aria-describedby="guest-research-message" onCancel={event => { event.preventDefault(); dismiss(); }}>
-    <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2></header>
+    <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2><DialogDismissButton label="Close sign-in prompt" onClick={dismiss}/></header>
     <div className="settings-body">
       <p id="guest-research-message">Sign in to run a research session.</p>
       <div className="settings-actions session-remove-confirm-actions">
         <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in with Google</button>
-        <button type="button" className="text-view-link" onClick={dismiss}>Cancel</button>
       </div>
     </div>
   </dialog>;
@@ -5847,6 +5727,15 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const cloud = useCloudIdentity();
   const guest = !!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest');
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
+  const [advancedOutcomeGlobal, setAdvancedOutcomeGlobal] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/api/user-preferences/research-settings', { signal: controller.signal })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('User research settings unavailable')))
+      .then(data => { if (!controller.signal.aborted) setAdvancedOutcomeGlobal(data.show_advanced_outcome_details === true); })
+      .catch(() => { /* Keep the compact default when disconnected. */ });
+    return () => controller.abort();
+  }, []);
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
   const [researchRunning, setResearchRunning] = useState(false);
@@ -5876,19 +5765,15 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [emailOpen, setEmailOpen] = useState(false);
   const [qaOpen, setQaOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [projectTypesOpen, setProjectTypesOpen] = useState(false);
-  const [projectTypesFocusTypeId, setProjectTypesFocusTypeId] = useState<string | null>(null);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
   useEffect(() => {
-    const openTypes = () => setProjectTypesOpen(true);
     const refreshTypes = () => {
       void fetch('/api/project-types', { cache: 'no-store' }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => { projectTypeCache = data.project_types; setTypeCatalogRevision(value => value + 1); }).catch(() => undefined);
     };
-    window.addEventListener('sigma-open-project-types', openTypes);
     window.addEventListener('sigma-project-types-updated', refreshTypes);
     const controller = new AbortController();
     void fetch('/api/project-types', { signal: controller.signal }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => { projectTypeCache = data.project_types; setTypeCatalogRevision(value => value + 1); }).catch(() => undefined);
-    return () => { controller.abort(); window.removeEventListener('sigma-open-project-types', openTypes); window.removeEventListener('sigma-project-types-updated', refreshTypes); };
+    return () => { controller.abort(); window.removeEventListener('sigma-project-types-updated', refreshTypes); };
   }, []);
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
@@ -6206,8 +6091,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
         </svg>
       </button>
-      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
-        <SettingsGearIcon />
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" data-tooltip="Project settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+        <SlidersSettingsIcon/>
       </button>
     </div>
   </div>;
@@ -6308,23 +6193,25 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
-      const current = settingsOf(view);
-      if (current.show_advanced_outcome_details) return;
-      const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
-      setView(next);
-      setAnnouncement('Advanced Outcome enabled.');
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
+      if (advancedOutcomeGlobal) return;
+      const response = await fetch('/api/user-preferences/research-settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({ show_advanced_outcome_details: true }),
+      });
+      if (!response.ok) throw new Error('Unable to enable the user-wide Outcome preference');
+      setAdvancedOutcomeGlobal(true);
+      setAnnouncement('Advanced Outcome enabled for your account.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
     <PapersPane path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
-    {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onAdjustReferences={() => { setProjectTypesFocusTypeId(view.project.investigation_type); /* Keep Settings mounted behind Project Types so draft edits survive. */ setProjectTypesOpen(true); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
+    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
       onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
       onSent={count => { setEmailOpen(false); setAnnouncement('Project emailed to ' + count + (count === 1 ? ' recipient.' : ' recipients.')); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}/>}
 
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
-      {projectTypesOpen && <ProjectTypesDialog initialOpenTypeId={projectTypesFocusTypeId} onClose={() => { setProjectTypesOpen(false); setProjectTypesFocusTypeId(null); /* ProjectTypesDialog restores focus to the Settings link. */ }} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
-    {qaOpen && <ResearchQADialog path={view.path} projectId={project.id} guest={guest} onCancel={() => { setQaOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-qa-button')?.focus()); }}/ >}
+    {qaOpen && <ResearchQADialog path={view.path} projectId={project.id} guest={guest} onCancel={() => { setQaOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-qa-button')?.focus()); }}/>}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
       <summary>Project details &amp; history</summary>
       <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research type</dt><dd>{researchTypeLabel(project.investigation_type)}</dd>{project.difficulty && <><dt>Difficulty</dt><dd>{difficultyLabels[project.difficulty]}</dd></>}<dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
@@ -6762,7 +6649,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
       </>}
     {(!cloud?.authenticated || authenticatedGuest) && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
-      <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
+      <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><DialogDismissButton label="Close invitation request" onClick={() => dialog.current?.close()}/></div>
       {(deniedIdentityAvailable || authenticatedGuest)
         ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
         : <p>Sign in with Google so SIGMA can verify your account before recording an invitation request.</p>}
@@ -7078,7 +6965,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     });
   });
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
-    <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2>{hasDrafts && <button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save</button>}<button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
+    <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2>{hasDrafts && <button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save</button>}<DialogDismissButton label="Close administrator settings" onClick={requestClose}/></div>
     <section className="admin-access-panel">
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
@@ -7115,14 +7002,14 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       </details>
     </section>
     {addOpen && createPortal(<div ref={newEntryPanel} className="admin-new-entry-panel" role="group" aria-label="Add authorized user" style={newEntryPosition ? { left: newEntryPosition.left, top: newEntryPosition.top, maxHeight: newEntryPosition.maxHeight } : { left: -10000, top: -10000 }}>
-      <div className="admin-new-entry-heading"><h3>New Email or Domain</h3><div className="admin-new-entry-actions"><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || (newRole !== 'admin' && !validation(newAllowance)) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button><button type="button" className="admin-text-action" disabled={busy} onClick={cancelAdd}>Cancel</button></div></div>
+      <div className="admin-new-entry-heading"><h3>New Email or Domain</h3><div className="admin-new-entry-actions"><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || (newRole !== 'admin' && !validation(newAllowance)) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button><DialogDismissButton label="Cancel adding access rule" disabled={busy} onClick={cancelAdd}/></div></div>
       <div className="admin-new-entry-classification"><label>Entry type<select value={newKind} onChange={event => setNewKind(event.target.value as 'email' | 'domain')}><option value="email">Email</option><option value="domain">Domain</option></select></label>{newKind === 'email' && <label>Role<select aria-label="New authorization role" value={newRole} onChange={event => setNewRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select></label>}</div>
       <label>{newKind === 'email' ? 'Email address' : 'Domain'}<input aria-label={newKind === 'email' ? 'New email address' : 'New domain'} value={newValue} placeholder={newKind === 'email' ? 'person@example.org' : 'example.org'} onChange={event => setNewValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addEntry(); } }}/></label>
       {newKind === 'email' && newRole === 'admin' ? <p>Administrator sponsorship: Unlimited</p> : <label>ChatGPT allowance<span className="admin-allowance-input"><span aria-hidden="true">$</span><input aria-label="New ChatGPT allowance" type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></span><small>Blank uses the configured default</small></label>}
     </div>, dialog.current ?? document.body)}
     {confirmRemoveKey && createPortal(<div ref={removeConfirmation} className="admin-remove-confirm" role="group" aria-label={`Confirm remove access for ${confirmRemoveKey.slice(confirmRemoveKey.indexOf(':') + 1)}`} style={removeConfirmationPosition ? { left: removeConfirmationPosition.left, top: removeConfirmationPosition.top } : { left: -10000, top: -10000 }}>
       <p>Remove access for {confirmRemoveKey.slice(confirmRemoveKey.indexOf(':') + 1)}? Recorded usage will be retained.</p>
-      <div className="admin-remove-confirm-actions"><button ref={removeConfirmButton} type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => { const grant = grants.find(item => `${item.kind}:${item.value}` === confirmRemoveKey); if (grant) void revoke(grant); }}>Confirm</button><button type="button" className="admin-text-action" disabled={busy} onClick={() => setConfirmRemoveKey('')}>Cancel</button></div>
+      <div className="admin-remove-confirm-actions"><button ref={removeConfirmButton} type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => { const grant = grants.find(item => `${item.kind}:${item.value}` === confirmRemoveKey); if (grant) void revoke(grant); }}>Confirm</button><DialogDismissButton label="Cancel access removal" disabled={busy} onClick={() => setConfirmRemoveKey('')}/></div>
     </div>, dialog.current ?? document.body)}
   </dialog>;
 }
@@ -7510,7 +7397,7 @@ function PrivacyNoticePage() {
     window.location.assign('/');
   }
   return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
-    <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><button type="button" className="privacy-close-button" onClick={closeNotice}>Close</button></div>
+    <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><DialogDismissButton label="Close privacy notice" onClick={closeNotice}/></div>
     <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
     <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
     <h2>Information SIGMA stores</h2>
@@ -7533,7 +7420,7 @@ function TermsOfServicePage() {
   const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
   useEffect(() => { document.title = 'Terms of Service · SIGMA'; }, []);
   return <main className="cloud-auth-shell terms-of-service-shell" onClick={event => { if (event.target === event.currentTarget) window.location.assign('/'); }}><article className="cloud-auth-card privacy-notice-card terms-of-service-card">
-    <div className="privacy-notice-heading"><h1>Terms of Service</h1><button type="button" className="privacy-close-button" onClick={() => { window.location.assign('/'); }}>Close</button></div>
+    <div className="privacy-notice-heading"><h1>Terms of Service</h1><DialogDismissButton label="Close terms of service" onClick={() => { window.location.assign('/'); }}/></div>
     <div className="terms-of-service-copy">
       <p>No terms except to discover something interesting, wonderous, or pioneering.</p>
       <p className="terms-welcome-phrase">{phrase}</p>

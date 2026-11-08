@@ -368,7 +368,8 @@ async def main_async(root: Path):
     narrow_path = open_sample_project("operation-narrow-passage").path
     narrow_view = inspect_project(narrow_path)
     assert len(narrow_view.project.strategies) == 2
-    assert research_sessions.get_limits(narrow_path)["model_calls"] == 18
+    # Sample projects no longer own research limits.
+    assert research_sessions.get_limits(narrow_path) == research_sessions.get_limits(path)
     narrow_before = (Path(narrow_path) / "project.json").read_bytes()
     events, calls = await exercise(
         narrow_path,
