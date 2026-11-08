@@ -3229,7 +3229,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       {!guest && !showDraftPaper && <div className="papers-heading-actions strategy-heading-actions">
         {confirmNewPaper ? <>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); void generatePaper(); }}>Start Paper {draftVersion}</button>
-          <DialogDismissButton label="Cancel starting paper" onClick={() => setConfirmNewPaper(false)}/>
+          <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => setConfirmNewPaper(false)}>Cancel</button>
         </> : <>
         <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
         <span className="paper-includes-anchor">
@@ -3289,7 +3289,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <p>The previous attempt cannot resume. Start a new attempt? This may use additional AI calls. Saved research and papers remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => { setConfirmPlayRestartDraft(false); void generatePaper(true); }}>Confirm and play</button>
-                      <DialogDismissButton label="Cancel restarting paper" disabled={busy} onClick={() => setConfirmPlayRestartDraft(false)}/>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmPlayRestartDraft(false)}>Cancel</button>
                     </div>
                   </div></div>}
                 </span>}
@@ -3300,7 +3300,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <p>Start over Paper {draftVersion}? Unfinished generation progress will be discarded. Saved papers and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void restartCheckpoint()}>Confirm</button>
-                      <DialogDismissButton label="Cancel restarting draft" disabled={busy} onClick={() => setConfirmRestartDraft(false)}/>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRestartDraft(false)}>Cancel</button>
                     </div>
                   </div></div>}
                 </span>}
@@ -3310,7 +3310,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <p>Remove this unfinished paper and its checkpoint? Saved papers and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void discardDraft()}>Confirm</button>
-                      <DialogDismissButton label="Cancel discarding draft" disabled={busy} onClick={() => setConfirmDiscardDraft(false)}/>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDiscardDraft(false)}>Cancel</button>
                     </div>
                   </div></div>}
                 </span>}
@@ -3360,7 +3360,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                     <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link destructive-action" title={`Confirm removal of Paper ${paper.paper_version}`} disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
-                      <DialogDismissButton label={`Cancel removing Paper ${paper.paper_version}`} disabled={busy} onClick={() => setConfirmDeleteId('')}/>
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
                     </div>
                   </div></div>}
                 </span>

@@ -1332,3 +1332,31 @@
 .workspace-page .paper-score-error-dismiss:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .workspace-page .paper-score-error-card { position: relative; padding-right: 48px; }
 .workspace-page .paper-score-error-dismiss { position: absolute; top: 12px; right: 12px; margin: 0; }
+
+/* Keep section-level strategy controls centered beside the title, including when it wraps.
+   The older baseline overrides aligned text and icon boxes inconsistently. */
+.workspace-page .strategy-title-line {
+  align-items: center;
+}
+.workspace-page .strategy-title-line > .strategy-row-disclosure,
+.workspace-page .strategy-title-line > .strategy-title-pencil,
+.workspace-page .strategy-title-line > .strategy-inline-commands,
+.workspace-page .strategy-title-line > .strategy-markdown-slot {
+  align-self: center;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands {
+  align-items: center;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .text-view-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0;
+}
+.workspace-page .strategy-title-line .strategy-row-disclosure {
+  align-items: center;
+}
+.workspace-page .strategy-title-line .strategy-row-disclosure .disclosure-chevron {
+  margin-top: 0;
+}
