@@ -2362,17 +2362,18 @@ const paperScoreCategories: { key: keyof PaperScore['categories']; title: string
   { key: 'visuals', title: 'Useful visuals', standard: 'Accurate figures or tables clarify difficult relationships, with clear captions and provenance.' },
 ];
 
-function PaperScoreDialog({ score, onRescore, canRescore, rescoring, error, onClose }: { score: PaperScore; onRescore: () => void; canRescore: boolean; rescoring: boolean; error: string; onClose: () => void }) {
+function PaperScoreDialog({ score, onRescore, canRescore, rescoreUnavailableReason, rescoring, error, onClose }: { score: PaperScore; onRescore: () => void; canRescore: boolean; rescoreUnavailableReason: string; rescoring: boolean; error: string; onClose: () => void }) {
   const element = useRef<HTMLDialogElement>(null);
   useEffect(() => { element.current?.showModal(); }, []);
   return <dialog ref={element} className="project-settings-dialog paper-score-dialog" aria-labelledby="paper-score-title"
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header paper-score-header">
       <h2 id="paper-score-title">Paper Score</h2>
-      <div className="settings-actions"><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" data-tooltip={canRescore ? "Evaluate again using an AI call" : "Connect an AI provider to rescore"} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button><DialogDismissButton label="Close paper score" onClick={onClose}/></div>
+      <div className="settings-actions"><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" data-tooltip={canRescore ? "Evaluate again using an AI call" : rescoreUnavailableReason} aria-busy={rescoring} disabled={!canRescore || rescoring} onClick={onRescore}>{rescoring ? "⌛ Scoring..." : "Rescore"}</button><DialogDismissButton label="Close paper score" onClick={onClose}/></div>
     </header>
     <div className="settings-body paper-score-body">
       {error && <p className="error" role="alert">{error}</p>}
+      {!canRescore && rescoreUnavailableReason && <p className="settings-hint" role="status">{rescoreUnavailableReason}</p>}
       <div className="paper-score-overall" aria-label={`Weighted paper score ${score.total} out of 100`}>
         <strong>Weighted score</strong><strong className="paper-score-points">{score.total}/100</strong>
       </div>
@@ -2614,6 +2615,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   const [scoringId, setScoringId] = useState('');
   const [scoreDialog, setScoreDialog] = useState<{ paperId: string; score: PaperScore } | null>(null);
   const [scoreError, setScoreError] = useState('');
+  const [scoreConfig, setScoreConfig] = useState<{ available: boolean; binding: string; message: string } | null>(null);
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
   const [copiedPaperId, setCopiedPaperId] = useState('');
@@ -2895,19 +2897,46 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
     } catch (cause) { setEli5ErrorId(paper.paper_id); setEli5Error(errorMessage(cause)); }
     finally { explainingRef.current = false; setExplainingId(''); }
   }
+  // Paper score access must be checked independently of the initial pane load:
+  // reconnecting the AI account does not remount this pane.
+  useEffect(() => {
+    if (!scoreDialog) { setScoreConfig(null); return; }
+    let active = true;
+    const check = async () => {
+      try {
+        const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+        const config = await response.json();
+        if (active) setScoreConfig({
+          available: response.ok && config.available === true && !!config.binding,
+          binding: response.ok && config.available === true ? (config.binding ?? '') : '',
+          message: config.message ?? (response.ok ? 'Selected AI model is unavailable for scoring.' : 'Could not check scoring availability.'),
+        });
+      } catch (cause) {
+        if (active) setScoreConfig({ available: false, binding: '', message: errorMessage(cause) });
+      }
+    };
+    void check();
+    window.addEventListener('focus', check);
+    return () => { active = false; window.removeEventListener('focus', check); };
+  }, [scoreDialog?.paperId, path, ai.info?.status, ai.info?.mode, ai.info?.active_account]);
   async function scorePaper(paper: PaperSummary, force = false) {
     setScoreError('');
     // Reading an existing score never depends on ongoing generation/scoring.
     if (paper.score && !force) { setScoreDialog({ paperId: paper.paper_id, score: paper.score }); return; }
     if (scoringRef.current) return;
     if (!paper.pdf_available) { setScoreError('A saved PDF is required before this paper can be scored.'); return; }
-    if (!binding) { setScoreError('Connect an eligible AI provider before scoring.'); return; }
     scoringRef.current = true;
     setScoringId(paper.paper_id);
     try {
+      const configResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+      const config = await configResponse.json();
+      if (!configResponse.ok || !config.available || !config.binding)
+        throw new Error(config.message ?? 'Current AI model or connection is unavailable for scoring.');
+      setBinding(config.binding);
+      setScoreConfig({ available: true, binding: config.binding, message: config.message ?? '' });
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/score`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, force }),
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: config.binding, force }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not score the paper.');
@@ -3442,7 +3471,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       {success && <p className="ai-paper-status" role="status">{success}</p>}
 
       </>}
-      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={!!binding && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
+      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={!!scoreConfig?.available && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoreUnavailableReason={!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available ? 'A compiled PDF is required to rescore this paper.' : !scoreConfig ? 'Checking current AI model and connection…' : scoreConfig.available ? '' : scoreConfig.message} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
       </div>
     </div>
   </section>;
