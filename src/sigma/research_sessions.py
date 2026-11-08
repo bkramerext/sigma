@@ -2388,6 +2388,15 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         )
         and isinstance(step.get("token_usage"), dict)
     ]
+    usage_models = [
+        str(step.get("model", record.get("model", "")))
+        for step in unique_steps
+        if (
+            step.get("status") in {"completed", "incomplete"}
+            or step.get("attempt_status") == "usage_estimated"
+        )
+        and isinstance(step.get("token_usage"), dict)
+    ]
     all_calls_have_usage = dispatched == 0 or (
         len(usage_steps) == dispatched and not unrecorded_calls
     )
@@ -2601,15 +2610,14 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         totals_known
         and all(
             isinstance(usage, dict)
-            and _estimate_cost(record.get("model", ""), cast(dict[str, int | None], usage))
-            is not None
-            for usage in usage_steps
+            and _estimate_cost(model, cast(dict[str, int | None], usage)) is not None
+            for model, usage in zip(usage_models, usage_steps, strict=True)
         )
         and len(usage_steps) == dispatched
     ):
         estimate = sum(
-            cast(float, _estimate_cost(record.get("model", ""), cast(dict[str, int | None], usage)))
-            for usage in usage_steps
+            cast(float, _estimate_cost(model, cast(dict[str, int | None], usage)))
+            for model, usage in zip(usage_models, usage_steps, strict=True)
             if isinstance(usage, dict)
         )
         cost_value = f"${estimate:.6f} estimated (rates checked 2026-10-23)"
@@ -3591,7 +3599,7 @@ def _retain_unknown_cost_reservation(record: dict[str, Any], step: dict[str, Any
     for saved_step in record.get("steps", []):
         usage = saved_step.get("token_usage")
         if isinstance(usage, dict):
-            estimate = _estimate_cost(record["model"], usage)
+            estimate = _estimate_cost(saved_step.get("model", record["model"]), usage)
             if estimate is not None:
                 known_cost += estimate
     record["cost_status"] = "available"
@@ -4098,11 +4106,16 @@ def _settle_request_budget(
     )
     if type(input_tokens) is int and type(output_tokens) is int:
         try:
+            prices = TOKEN_PRICES_PER_MILLION.get(str(step.get("model", record["model"])))
             settle_after_response(
                 ledger,
                 call_id=call_id,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                input_price_per_million=(
+                    max(prices["input"], prices["cache_write"]) if prices else None
+                ),
+                output_price_per_million=prices["output"] if prices else None,
             )
         except BudgetExceeded as exc:
             step["hard_budget_status"] = "usage_exceeded_reservation"
@@ -5734,12 +5747,59 @@ def _same_session_project(record: dict[str, Any], view: Any) -> bool:
 async def _frozen_session_configuration(
     view: Any, credential: Mapping[str, Any], record: dict[str, Any]
 ) -> dict[str, Any]:
-    """Check provider access for the model selected when the session began."""
+    """Check historical provider choice where an explicit transport switch requires it."""
     return await configuration(
         view=view,
         context=credential,
         frozen_model=record["model"],
         frozen_effort=record["reasoning_effort"],
+    )
+
+
+def _apply_live_model_selection(record: dict[str, Any], config: Mapping[str, Any]) -> None:
+    """Select the model for future calls, retaining immutable in-flight requests.
+
+    Must hold the session state lock; a per-step model/Thinking snapshot protects
+    the cost and provenance of calls dispatched under an earlier selection.
+    """
+    model = str(config["model"])
+    effort = str(config["reasoning_effort"])
+    previous = (str(record["model"]), str(record["reasoning_effort"]))
+    if previous == (model, effort):
+        return
+    paid = record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
+    prices = TOKEN_PRICES_PER_MILLION.get(model)
+    if (paid or isinstance(record.get("hard_budget_ledger"), dict)) and prices is None:
+        raise ProjectError("The selected model has no reviewed price; no call was dispatched.")
+    # Migrate older step records before changing the session-wide default.
+    # This includes already-dispatched parallel strategy calls.
+    for step in record.get("steps", []):
+        if isinstance(step, dict) and step.get("role") in {"investigator", "skeptic"}:
+            step.setdefault("model", previous[0])
+            step.setdefault("reasoning_effort", previous[1])
+    history = record.setdefault("model_change_history", [])
+    history.append(
+        {
+            "at": _now(),
+            "from_model": previous[0],
+            "to_model": model,
+            "from_effort": previous[1],
+            "to_effort": effort,
+            "calls_used": int(record.get("calls_used", 0)),
+        }
+    )
+    del history[:-100]
+    record["model"] = model
+    record["reasoning_effort"] = effort
+    if isinstance(record.get("hard_budget_ledger"), dict) and prices is not None:
+        ledger = record["hard_budget_ledger"]
+        ledger["input_price_per_million"] = max(prices["input"], prices["cache_write"])
+        ledger["output_price_per_million"] = prices["output"]
+    _event(
+        record,
+        "session.model_changed",
+        f"Model/Thinking changed for future calls: {previous[0]} / {previous[1]} → "
+        f"{model} / {effort}. Already dispatched calls are unchanged.",
     )
 
 
@@ -7278,20 +7338,12 @@ async def control_session(
     switch_transport = (
         credential["mode"] != record["mode"] or record.get("imported_via_bundle") is True
     )
-    config = await _frozen_session_configuration(view, credential, record)
+    config = await configuration(view=view, context=credential)
     if switch_transport:
         # Native and imported stopped sessions may use the selected provider.
         # No historical call is replayed or re-funded.
-        if not config["available"] or config["model"] != record["model"]:
-            config = await configuration(view=view, context=credential)
         _validate_provider_transport_change(record, next_model=str(config.get("model", "")))
-    if not config["available"] or (
-        not switch_transport
-        and (
-            config["model"] != record["model"]
-            or config["reasoning_effort"] != record["reasoning_effort"]
-        )
-    ):
+    if not config["available"]:
         record["message"] = config.get(
             "message", "Selected model is no longer available; session remains paused."
         )
@@ -7327,6 +7379,8 @@ async def control_session(
                 # Stage the transfer only in memory. Never commit a new owner
                 # before capacity, billing and worker admission succeed.
                 _rebind_provider_transport(record, credential, config)
+            else:
+                _apply_live_model_selection(record, config)
             if record.get("stopped_at"):
                 stopped_for = datetime.now(UTC) - datetime.fromisoformat(record["stopped_at"])
                 record["stopped_duration_seconds"] = (
@@ -11017,7 +11071,7 @@ async def _portfolio_role_call(
         ) from exc
     try:
         config = await asyncio.wait_for(
-            _frozen_session_configuration(view, credential, record_for_preflight),
+            configuration(view=view, context=credential),
             timeout=PREFLIGHT_TIMEOUT,
         )
     except Exception as exc:
@@ -11153,15 +11207,16 @@ async def _portfolio_role_call(
                 raise ProjectError("Project identity changed; session paused before a new call.")
             if credential["mode"] != record["mode"]:
                 raise ProjectError("AI provider transport mode changed before dispatch.")
-            if (
-                not config["available"]
-                or config["model"] != record["model"]
-                or config["reasoning_effort"] != record["reasoning_effort"]
-            ):
+            # The live selection was resolved during this call's fresh
+            # preflight. Test/host configurations may deliberately override
+            # the stored preference, so never spin on a second raw-settings
+            # comparison at admission.
+            if not config["available"]:
                 raise ProjectError(
-                    "Selected model is no longer available; session paused before a new call: "
-                    + config.get("message", "the saved model configuration is unavailable")
+                    "Selected model is unavailable; session paused before a new call: "
+                    + config.get("message", "model access is unavailable")
                 )
+            _apply_live_model_selection(record, config)
             if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
                 record["deadline_at"]
             ) <= datetime.now(UTC):
@@ -11369,6 +11424,8 @@ async def _portfolio_role_call(
                 "role": role,
                 "strategy_id": strategy_id,
                 "strategy_title": branch["strategy_title"],
+                "model": record["model"],
+                "reasoning_effort": record["reasoning_effort"],
                 "status": "running",
                 "started_at": _now(),
                 "call_number": record["calls_used"],
@@ -11594,7 +11651,7 @@ async def _portfolio_role_call(
                     if isinstance(step.get("provider_input_audit"), dict):
                         step["provider_input_audit"]["status"] = "provider_response_incomplete"
                     estimate = (
-                        _estimate_cost(record["model"], exc.usage)
+                        _estimate_cost(step.get("model", record["model"]), exc.usage)
                         if isinstance(exc.usage, dict)
                         else None
                     )
@@ -11731,7 +11788,7 @@ async def _portfolio_role_call(
                     response_received and type(input_tokens) is int and type(output_tokens) is int
                 )
                 response_cost = (
-                    _estimate_cost(record["model"], response_usage)
+                    _estimate_cost(step.get("model", record["model"]), response_usage)
                     if response_received and isinstance(response_usage, dict)
                     else None
                 )
@@ -11980,7 +12037,11 @@ async def _portfolio_role_call(
             step.update({"status": "completed", "finished_at": _now(), "output": output})
             branch.pop("termination_reason_code", None)
             if cloud_research.billing_enabled():
-                estimate = _estimate_cost(record["model"], usage) if usage is not None else None
+                estimate = (
+                    _estimate_cost(step.get("model", record["model"]), usage)
+                    if usage is not None
+                    else None
+                )
                 input_tokens = usage.get("input_tokens") if usage else None
                 output_tokens = usage.get("output_tokens") if usage else None
                 if type(input_tokens) is int and type(output_tokens) is int:
@@ -12017,7 +12078,11 @@ async def _portfolio_role_call(
                 record["message"] = budget_error
             _refresh_token_accounting(record)
             if record.get("mode") == "api_key" or record.get("cloud_sponsored") is True:
-                estimate = _estimate_cost(record["model"], usage) if usage is not None else None
+                estimate = (
+                    _estimate_cost(step.get("model", record["model"]), usage)
+                    if usage is not None
+                    else None
+                )
                 if step.get("cost_reserve") is not None and estimate is not None:
                     record["estimated_cost_reserved_usd"] = max(
                         0.0,
@@ -15531,12 +15596,8 @@ async def _worker(session_id: str, path: str) -> None:
                     record["message"] = "AI provider transport mode changed before a new call."
                     _save(path, record)
                     return
-                config = await _frozen_session_configuration(view, credential, record)
-                if (
-                    not config["available"]
-                    or config["model"] != record["model"]
-                    or config["reasoning_effort"] != record["reasoning_effort"]
-                ):
+                config = await configuration(view=view, context=credential)
+                if not config["available"]:
                     record["status"] = "paused"
                     record["message"] = config.get(
                         "message",
@@ -15551,6 +15612,10 @@ async def _worker(session_id: str, path: str) -> None:
                     if _pause_for_stop_advisory(record, path):
                         _save(path, record)
                         return
+                    # Resolve the selected model in the preflight immediately
+                    # before this request. Do not loop on raw settings when
+                    # a hosted or test configuration intentionally overrides it.
+                    _apply_live_model_selection(record, config)
                     request_audit = _role_input_audit(
                         record, role, context, credential.get("token")
                     )
@@ -15596,6 +15661,8 @@ async def _worker(session_id: str, path: str) -> None:
                         "id": record["current_step"],
                         "cycle": cycle_num,
                         "role": role,
+                        "model": record["model"],
+                        "reasoning_effort": record["reasoning_effort"],
                         "status": "running",
                         "started_at": _now(),
                         "call_number": record["calls_used"],
@@ -15649,7 +15716,11 @@ async def _worker(session_id: str, path: str) -> None:
                 record["message"] = budget_error
             _refresh_token_accounting(record)
             if record.get("mode") == "api_key" or record.get("cloud_sponsored") is True:
-                estimate = _estimate_cost(record["model"], usage) if usage is not None else None
+                estimate = (
+                    _estimate_cost(step.get("model", record["model"]), usage)
+                    if usage is not None
+                    else None
+                )
                 if estimate is None:
                     record["cost_status"] = "unavailable"
                     record["estimated_cost_usd"] = None

@@ -144,7 +144,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
     ? ' Switching to ' + modelName(next, '') + ' also changes Thinking to ' + nextEffort + '.' : '';
   const tooltip = !enabled ? 'Sign in to view your default research model.' : settings
     ? 'The selected default model is ' + selectedName + '. Relative published API token cost: ' +
-      (selected?.relative_cost ?? 'unknown') + '. Applies to future research and proposals across projects. ' +
+      (selected?.relative_cost ?? 'unknown') + '. Applies to the next AI call in running research and paper generation, and to new work. In-flight calls are unchanged. ' +
       (thinkingLabel ? ' ' + thinkingLabel + '.' : '') +
       ' Click the upper half to cycle models; click the lower half to cycle thinking levels.' + notice
     : error || 'Checking your model selection.';

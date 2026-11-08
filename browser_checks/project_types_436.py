@@ -883,6 +883,32 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
+    # New Paper offers two side-by-side underline actions (not an X), with
+    # both controls vertically centered against the Paper heading.
+    paper_header = page.locator(".papers-pane-heading")
+    new_paper = paper_header.get_by_role("button", name="New paper")
+    expect(new_paper).to_be_visible()
+    new_paper.click()
+    start_paper = paper_header.get_by_role("button", name="Start Paper", exact=False)
+    cancel_paper = paper_header.get_by_role("button", name="Cancel", exact=True)
+    expect(start_paper).to_be_visible()
+    expect(cancel_paper).to_be_visible()
+    assert paper_header.locator(".sigma-dialog-dismiss").count() == 0
+    first_box = start_paper.bounding_box()
+    second_box = cancel_paper.bounding_box()
+    assert first_box and second_box
+    assert abs(first_box["y"] - second_box["y"]) <= 2
+    assert (
+        abs(first_box["y"] + first_box["height"] / 2 - (second_box["y"] + second_box["height"] / 2))
+        <= 2
+    )
+    for action in (start_paper, cancel_paper):
+        assert (
+            action.evaluate("(button) => getComputedStyle(button).textDecorationLine")
+            == "underline"
+        )
+    cancel_paper.click()
+    expect(new_paper).to_be_visible()
 
     # Include popup's dismiss X aligns to the actual outer popup corner,
     # not to the padded title row (which used to move it down and inward).
@@ -991,6 +1017,15 @@ with sync_playwright() as playwright:
         ).json()["project"]["desired_outcomes"]
         == updated_outcomes
     )
+    # The toolbar must really relinquish edit mode after Save, not merely
+    # hide the fields during the update response. A second edit must work.
+    expect(project_edit).to_be_enabled()
+    project_edit.click()
+    toolbar = page.locator(".project-pane-actions")
+    expect(toolbar.get_by_role("button", name="Save", exact=True)).to_be_disabled()
+    expect(page.get_by_role("textbox", name="Desired Outcomes")).to_have_value(updated_outcomes)
+    toolbar.get_by_role("button", name="Cancel", exact=True).click()
+    expect(project_edit).to_be_visible()
 
     # Project Settings contains only project type and difficulty.
     page.get_by_role("button", name="Project settings", exact=True).click()
@@ -1459,7 +1494,19 @@ with sync_playwright() as playwright:
     original_confirm.get_by_role("button", name="Cancel").click()
     assert reset_calls == ["POST"], reset_calls
     fresh_play.click()
-    play_confirm.get_by_role("button", name="Confirm and play").click()
+    actions = play_confirm.locator(".session-remove-confirm-actions button")
+    assert actions.count() == 2
+    first_box, second_box = actions.nth(0).bounding_box(), actions.nth(1).bounding_box()
+    assert first_box and second_box and abs(first_box["y"] - second_box["y"]) < 3
+    assert (
+        actions.nth(0).evaluate("(button) => getComputedStyle(button).textDecorationLine")
+        == "underline"
+    )
+    assert (
+        actions.nth(1).evaluate("(button) => getComputedStyle(button).textDecorationLine")
+        == "underline"
+    )
+    play_confirm.get_by_role("button", name="Confirm", exact=True).click()
     for _ in range(80):
         if len(dispatched) == 3:
             break

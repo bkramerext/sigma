@@ -288,7 +288,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
             {(model?.efforts ?? [config.reasoning_effort]).map(effort =>
               <option key={effort} value={effort}>{effort.charAt(0).toUpperCase() + effort.slice(1)}</option>)}
           </select>
-          <p className="settings-hint">Applies to future research and AI proposals in every project. Active sessions retain their saved configuration.</p>
+          <p className="settings-hint">Applies to the next AI call in active research and paper generation, and to new work. Calls already in flight keep their model and Thinking level.</p>
         </fieldset>}
         {config && tab === 'limits' && <fieldset disabled={busy} className="sigma-global-limits">
           <label htmlFor="sigma-global-concurrent">Maximum concurrent sessions per project</label>

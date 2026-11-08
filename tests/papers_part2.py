@@ -4798,6 +4798,66 @@ def test_paper_sse_bounds_generated_text_not_redundant_transport() -> None:
         raise AssertionError("Oversized generated text was accepted")
 
 
+def test_paper_live_model_selection_changes_future_calls_only() -> None:
+    """A changed user default is applied per call, not to an earlier snapshot."""
+    original = {"model": "gpt-6.1-sol", "reasoning_effort": "high"}
+    state = {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+        "provider_calls_total": 3,
+    }
+    saved: list[dict[str, Any]] = []
+    save = lambda: saved.append(copy.deepcopy(state))
+    first = papers._select_paper_call_config(
+        original,
+        state,
+        {"ai_model": "gpt-6.1-sol", "reasoning_effort": "high"},
+        save,
+    )
+    assert first == original and not saved
+    second = papers._select_paper_call_config(
+        original,
+        state,
+        {"ai_model": "gpt-6-luna", "reasoning_effort": "low"},
+        save,
+    )
+    assert (second["model"], second["reasoning_effort"]) == ("gpt-6-luna", "low")
+    assert first == original
+    assert original["model"] == "gpt-6.1-sol"
+    assert saved[-1]["model"] == "gpt-6-luna"
+    assert state["model_change_history"][-1]["call_index"] == 3
+    assert len(state["model_change_history"]) == 1
+    third = papers._select_paper_call_config(
+        original,
+        state,
+        {"ai_model": "gpt-6-luna", "reasoning_effort": "medium"},
+        save,
+    )
+    assert third["model"] == second["model"]
+    assert third["reasoning_effort"] == "medium"
+    assert second["reasoning_effort"] == "low"
+    assert len(state["model_change_history"]) == 2
+    assert len(saved) == 2
+
+    # A matching AI identity may resume already-paid work with the user's
+    # current choice; changing the identity still requires explicit approval.
+    checkpoint = {
+        "binding_fingerprint": "same-identity",
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+    }
+    assert papers._resume_provider_choice(checkpoint, "same-identity", "gpt-6-luna", "low") == (
+        "gpt-6-luna",
+        "low",
+    )
+    try:
+        papers._resume_provider_choice(checkpoint, "different-identity", "gpt-6-luna", "low")
+    except ProjectError as exc:
+        assert "explicit approval" in str(exc)
+    else:
+        raise AssertionError("Paper checkpoint changed AI identity without consent")
+
+
 if __name__ == "__main__":
     from papers_split_runner import run
 

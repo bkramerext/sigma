@@ -153,7 +153,7 @@ def main() -> None:
                 {"abstract": "A concise summary.", "conclusions": ["A concise summary."]}
             )
 
-            # Resume keeps the saved model and thinking level by default and
+            # Resume adopts the user's current Model/Thinking selection, but
             # refuses an unapproved change to the billing account.
             fake_fingerprint = "a" * 64
             checkpoint = {
@@ -163,7 +163,7 @@ def main() -> None:
             }
             assert papers._resume_provider_choice(
                 checkpoint, fake_fingerprint, "other-model", "low"
-            ) == ("gpt-6.1-sol", "high")
+            ) == ("other-model", "low")
             try:
                 papers._resume_provider_choice(checkpoint, "b" * 64, "other-model", "low")
             except ProjectError as exc:
