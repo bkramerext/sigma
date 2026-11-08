@@ -70,7 +70,8 @@
   padding-top: 1rem;
   border-top: 1px solid #344353;
 }
-.sigma-description-field h4 {
+.sigma-description-field h4,
+.workspace-page .project-description-columns > span {
   margin: 0 0 .5rem;
   color: #edc38d;
   font: 700 .82rem/1.35 Inter, ui-sans-serif, system-ui, sans-serif;
