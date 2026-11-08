@@ -183,7 +183,10 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
         <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="forward"/>
         {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward"/>}
       </span>
-
+      <span className="global-model-pill-max-labels" aria-hidden="true">
+        <span>Model · Astra $$</span>
+        <span>Thinking · Extra High</span>
+      </span>
     </button>
     {settings && error && <span className="global-model-error" role="alert">{error}</span>}
     {pending && createPortal(<div className="project-model-confirm-popover global-model-confirm-popover"
