@@ -318,3 +318,43 @@
 :is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
   padding-block: 9px;
 }
+
+/* Two-line Model pill mirrors sponsored ChatGPT: primary on the first line,
+   thinking level below. Each half has a distinct click action. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  min-height: 53px;
+  padding-block: 8px;
+  cursor: pointer;
+}
+:is(.home-page, .workspace-page) .global-model-pill > .global-model-pill-current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+:is(.home-page, .workspace-page) .global-model-pill .global-model-pill-primary,
+:is(.home-page, .workspace-page) .global-model-pill .global-model-pill-secondary {
+  display: block;
+  margin: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+:is(.home-page, .workspace-page) .global-model-pill .global-model-pill-secondary {
+  color: #bdc7ce;
+  font: inherit;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: calc(53px + var(--identity-pill-gap));
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    min-height: 42px;
+    padding-block: 5px;
+  }
+  :is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+    padding-bottom: calc(42px + var(--identity-pill-gap));
+  }
+}
