@@ -1,0 +1,79 @@
+{
+  "schema_version": 13,
+  "id": "7c12b4a1-6e10-4f89-9a20-000000000001",
+  "title": "The Autonomous Agent Contract Dispute",
+  "problem": "Fictional Washington dispute, 2027. Cedar Vale Components LLC and Harborline Manufacturing Inc. authorize AI purchasing systems for routine orders up to $250,000 per quarter, with human approval required for multi-year commitments or risk sharing. Their systems negotiate and electronically sign a two-year agreement, including a reciprocal loss-sharing clause with potential exposure above $2 million. Dashboards label the agreement routine and link to the full text, but do not prominently show the unusual clause. Both companies perform and retain benefits for three months. When materials prices rise, Harborline repudiates. No human expressly approved the agreement, though several managers received summaries and finance teams processed its invoices. Cedar Vale sues to enforce the agreement or obtain reliance relief. All people, events, companies and transactions are invented.\n\nRESEARCH QUESTION AND METHOD\nUnder actual Washington contract and agency law and applicable electronic transactions law, under what conditions does deployment and use of an autonomous negotiating system bind its principal? Distinguish actual authority, apparent authority, electronic attribution, formation, ratification, knowledge, estoppel, reliance, and remedies. Do not assume the AI is legally a person. Evaluate both sides and the strongest contrary authority. Stress-test changed facts: explicit notification of the clause, hard-coded spending controls, immediate repudiation, counterparty knowledge of limited authority, and knowingly accepting the benefits. Develop a narrow rule if a genuine doctrinal gap exists, without pretending it is settled law.\n\nTreat this as an original, simulated case study, not an actual lawsuit or legislation. Verify real authorities and jurisdictions before relying on them. Seek novel but defensible conclusions. Each investigator/skeptic exchange should record established authority, unresolved law or fact, strongest objection, dead ends, and a precise next strategy inference. Do not repeat arguments known to fail absent a specific new distinction. Preserve useful independent doctrinal discoveries, even without a definitive result.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-11-08T19:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:00:00+00:00",
+      "strategy_id": "7c12b4a1-6e10-4f89-9a20-000000000001"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:00:00+00:00",
+      "strategy_id": "7c12b4a1-6e10-4f89-9a20-000000000002"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:00:00+00:00",
+      "strategy_id": "7c12b4a1-6e10-4f89-9a20-000000000003"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "7c12b4a1-6e10-4f89-9a20-000000000001",
+      "title": "Authority and Electronic Attribution",
+      "approach": "Identify legal sources for formation, electronic signatures, attribution, and actual/apparent authority; compare enforceability and invalidity arguments.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Identify whose legally meaningful actions created the disputed commitment.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "7c12b4a1-6e10-4f89-9a20-000000000002",
+      "title": "Ratification, Reliance and Remedies",
+      "approach": "Analyze three months of performance, actual or constructive knowledge, acceptance of benefit, waiver or ratification, and possible reliance remedies.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Separate initial contract validity from later adoption and recovery.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "7c12b4a1-6e10-4f89-9a20-000000000003",
+      "title": "Principled Boundary and Counterexamples",
+      "approach": "Develop and stress-test a bounded automated authority standard using factual variations, incentives, and adverse authorities.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Find an administrable rule that avoids opportunistic enforcement and repudiation.",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "law",
+  "active_order": [
+    "7c12b4a1-6e10-4f89-9a20-000000000001",
+    "7c12b4a1-6e10-4f89-9a20-000000000002",
+    "7c12b4a1-6e10-4f89-9a20-000000000003"
+  ],
+  "difficulty": "medium",
+  "desired_outcomes": "Develop a legal analysis of the autonomous agent contract dispute that resolves the stated legal question as far as verified existing authorities permit. State alternatives where law or factual assumptions remain uncertain. Compare competing interpretations and adversarial counterexamples. If a novel legal test or independent doctrinal insight survives criticism, present it as a positive research outcome suitable for further validation or separate publication, not as established law. Every cycle must preserve source-linked progress, failed paths, strongest objections, and specific successor-strategy questions. Never fabricate authorities, findings, quotations, citations, or claims of novelty.",
+  "paper_requirements": "Produce a publishable-style legal research article about this explicitly fictional fact pattern, not legal advice or a claim of litigation. Include facts and assumptions, precise issues, jurisdiction, verifiable primary legal authority, rival doctrinal analyses, strongest opposing arguments, application to the base case and stated counterfactuals, remedial or governance implications, limitations, and future verification needs. Distinguish binding law from persuasive analogy, proposed reform and policy preference. Cite authentic sources, and disclose when a relevant authority cannot be verified. Any original legal framework must be labeled proposed and stress-tested. End with concrete research handoff questions and preserve independently valuable insights for possible standalone publication.",
+  "project_type_snapshot": null
+}
