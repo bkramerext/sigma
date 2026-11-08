@@ -28,10 +28,10 @@ MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
 
 
-def provider_output(body: str):
+def provider_output(body: str, model: str = MODEL):
     return {
         "status": "completed",
-        "model": MODEL,
+        "model": model,
         "output": [
             {
                 "type": "message",
@@ -438,7 +438,7 @@ async def main_async(root: Path):
             if "e_n" in source_text
             else "Count $f_n$ for $n \\ge 0$"
         )
-        return httpx.Response(200, json=provider_output(output))
+        return httpx.Response(200, json=provider_output(output, model=payload["model"]))
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
