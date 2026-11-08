@@ -552,7 +552,7 @@
  */
 :is(.home-page, .workspace-page) {
   --sigma-header-account-width: 165px;
-  --sigma-header-model-width: 170px;
+  --sigma-header-model-width: 139.4px;
   --sigma-header-row-one: 34px;
   --sigma-header-row-two: 53px;
 }
@@ -644,7 +644,7 @@
 @media (max-width: 700px) {
   :is(.home-page, .workspace-page) {
     --sigma-header-account-width: 155px;
-    --sigma-header-model-width: 165px;
+    --sigma-header-model-width: 135.3px;
     --sigma-header-row-one: 28px;
     --sigma-header-row-two: 42px;
   }
