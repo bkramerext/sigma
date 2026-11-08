@@ -104,6 +104,27 @@ with sync_playwright() as playwright:
     assert about_rect["y"] > model_rect["y"]
     assert abs(about_rect["x"] + about_rect["width"] - model_rect["x"] - model_rect["width"]) <= 6
 
+    # Settings retains identical dimensions across all four tabs. Hover
+    # communicates through underline only, not a painted background.
+    page.get_by_role("button", name="Settings", exact=True).click()
+    global_settings = page.get_by_role("dialog", name="Settings")
+    expect(global_settings).to_be_visible()
+    initial_box = global_settings.bounding_box()
+    assert initial_box
+    model_tab = global_settings.get_by_role("tab", name="Model", exact=True)
+    model_tab.hover()
+    assert model_tab.evaluate("el => getComputedStyle(el).textDecorationLine") == "underline"
+    assert model_tab.evaluate("el => getComputedStyle(el).backgroundColor") == (
+        "rgba(0, 0, 0, 0)"
+    )
+    for tab_name in ("Model", "Limits", "Preferences", "Project Types"):
+        global_settings.get_by_role("tab", name=tab_name, exact=True).click()
+        current_box = global_settings.bounding_box()
+        assert current_box
+        assert abs(current_box["width"] - initial_box["width"]) <= 2
+        assert abs(current_box["height"] - initial_box["height"]) <= 2
+    global_settings.get_by_role("button", name="Close Settings").click()
+
     # A visible test host avoids the default Samples tab hiding Saved's
     # animations. Compare the CSSAnimation timeline anchors directly.
     page.emulate_media(reduced_motion="no-preference")
