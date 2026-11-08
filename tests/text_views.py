@@ -406,6 +406,71 @@ async def main_async(root: Path):
             raise AssertionError("Stale conversion was persisted")
         assert inspect_text(race, "project")["markdown"] is None
 
+    # Global Model/Thinking preferences are live. A completed request keeps
+    # the settings used at dispatch, even if the user switches them mid-call.
+    live_path = root / "live-model-thinking.sigma"
+    initialize_project(live_path, "Live model selection", "Count e_n for n >= 0")
+    live_strategy = create_strategy(
+        live_path, "Next selection", "Count f_n for n >= 0"
+    ).project.strategies[0]
+    live_source_before = (live_path / "project.json").read_bytes()
+    active_selection = {"model": "gpt-6-luna", "effort": "low"}
+    request_started = asyncio.Event()
+    allow_response = asyncio.Event()
+    dispatched: list[tuple[str, str]] = []
+
+    async def live_configuration(*, view, context):
+        return {
+            **config,
+            "model": active_selection["model"],
+            "reasoning_effort": active_selection["effort"],
+        }
+
+    async def live_handler(request):
+        payload = json.loads(request.content)
+        dispatched.append((payload["model"], payload["reasoning"]["effort"]))
+        source_text = json.loads(payload["input"])["text"]
+        if len(dispatched) == 1:
+            request_started.set()
+            await allow_response.wait()
+        output = (
+            "Count $e_n$ for $n \\ge 0$"
+            if "e_n" in source_text
+            else "Count $f_n$ for $n \\ge 0$"
+        )
+        return httpx.Response(200, json=provider_output(output))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch("sigma.text_conversion.configuration", side_effect=live_configuration),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(live_handler), **kwargs
+            ),
+        ),
+    ):
+        pending = asyncio.create_task(convert_text(str(live_path), "project", "markdown"))
+        await asyncio.wait_for(request_started.wait(), 2)
+        active_selection.update(model=MODEL, effort="high")
+        allow_response.set()
+        first = await pending
+        assert first["markdown"]["current"]
+        assert first["markdown"]["provenance"] == {
+            "provider": "openai",
+            "model": "gpt-6-luna",
+            "reasoning_effort": "low",
+        }
+        second = await convert_text(
+            str(live_path), "strategy", "markdown", live_strategy.id
+        )
+        assert second["markdown"]["current"]
+        assert second["markdown"]["provenance"]["model"] == MODEL
+        assert second["markdown"]["provenance"]["reasoning_effort"] == "high"
+    assert dispatched == [("gpt-6-luna", "low"), (MODEL, "high")]
+    assert (live_path / "project.json").read_bytes() == live_source_before
+    print("PASS live Model/Thinking changes preserve in-flight Markdown and request provenance")
+
     # A cancelled transport releases the run gate, with no companion publication.
     cancellation = root / "cancel.sigma"
     initialize_project(cancellation, "Cancel", "Count c_n for n >= 0")
