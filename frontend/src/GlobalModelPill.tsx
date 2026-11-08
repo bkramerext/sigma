@@ -183,9 +183,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
         <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="forward"/>
         {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward"/>}
       </span>
-      {choices.map(choice => <span key={choice.id} className="global-model-pill-measure" aria-hidden="true">
-        Model · {modelName(choice, choice.id)}{choice.relative_cost ? ' ' + choice.relative_cost : ''}
-      </span>)}
+
     </button>
     {settings && error && <span className="global-model-error" role="alert">{error}</span>}
     {pending && createPortal(<div className="project-model-confirm-popover global-model-confirm-popover"
