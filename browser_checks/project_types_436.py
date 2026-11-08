@@ -961,17 +961,20 @@ with sync_playwright() as playwright:
     expect(save_project_fields).to_be_disabled()
     outcomes = page.get_by_role("textbox", name="Desired Outcomes")
     original_outcomes = outcomes.input_value()
-    updated_outcomes = original_outcomes + " Browser save check."
+    updated_outcomes = (original_outcomes + "\nBrowser save check.").strip()
     outcomes.fill(updated_outcomes)
     expect(save_project_fields).to_be_enabled()
     save_project_fields.click()
     expect(project_edit).to_be_visible()
-    expect(page.locator(".project-pane-actions").get_by_role(
-        "button", name="Save", exact=True
-    )).to_have_count(0)
-    assert page.request.get(
-        f"{FIXTURE_URL}/api/projects/inspect?path={quote(legacy['path'], safe='')}"
-    ).json()["project"]["desired_outcomes"] == updated_outcomes
+    expect(
+        page.locator(".project-pane-actions").get_by_role("button", name="Save", exact=True)
+    ).to_have_count(0)
+    assert (
+        page.request.get(
+            f"{FIXTURE_URL}/api/projects/inspect?path={quote(legacy['path'], safe='')}"
+        ).json()["project"]["desired_outcomes"]
+        == updated_outcomes
+    )
 
     # Project Settings contains only project type and difficulty.
     page.get_by_role("button", name="Project settings", exact=True).click()
