@@ -639,3 +639,25 @@
 
 /* Keep Project Settings type selector outside dialog clipping. */
 .project-settings-dialog .research-type-options[popover] { position: fixed; inset: auto; right: auto; margin: 0; z-index: 2147483647; box-sizing: border-box; overflow-y: auto; }
+
+/* New Project: both classification controls start on the same baseline;
+   helper text underneath Research category must not push Difficulty down. */
+.project-settings-dialog.new-project-dialog .settings-classification-row {
+  align-items: start;
+}
+.project-settings-dialog.new-project-dialog .settings-classification-row > div {
+  align-self: start;
+}
+.project-settings-dialog.new-project-dialog .settings-classification-row > div > label {
+  margin-top: 8px;
+}
+.project-settings-dialog.new-project-dialog .research-type-picker [role="combobox"] {
+  justify-content: flex-start;
+  text-align: left;
+  padding-left: 12px;
+}
+.project-settings-dialog.new-project-dialog .research-type-picker #project-mode-value {
+  text-align: left;
+  margin-left: 0;
+  min-width: 0;
+}
