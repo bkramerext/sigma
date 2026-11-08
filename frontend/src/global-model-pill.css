@@ -778,29 +778,48 @@
   min-width: 0;
 }
 
-/* Keep the Model anchored to About, but reserve its full Astra $$$ width in
-   the left grid track so the ChatGPT column cannot crowd the Model pill. */
+/* Align the header using normal layout, not oversized minimum widths.
+   About and Model form a two-row stack; the Model's measured Astra $$$
+   width contributes to the first grid track. This gives ChatGPT a true
+   minimum column gap without shifting Model away from About. */
+:is(.home-page, .workspace-page) {
+  --sigma-header-horizontal-gap: calc(var(--identity-pill-gap) * 1.2);
+}
 .home-page .home-account-grid,
 .workspace-page .project-art-header .header-controls {
-  column-gap: 28px;
+  column-gap: var(--sigma-header-horizontal-gap);
 }
 :is(.home-page, .workspace-page) .sigma-header-model-column {
-  min-width: 330px;
+  display: block;
+  min-width: 0;
 }
-:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .global-model-pill-position {
-  left: 0;
+:is(.home-page, .workspace-page) .sigma-header-secondary-row {
+  align-items: flex-start;
+  gap: var(--sigma-header-horizontal-gap);
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--identity-pill-gap);
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .sigma-header-about-model-anchor > .global-model-pill-position {
+  position: static;
+  top: auto;
+  left: auto;
   right: auto;
+  width: max-content;
+  max-width: none;
+  margin: 0;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(.sigma-header-about-model-anchor > .global-model-pill-position) {
+  padding-bottom: 0;
 }
 :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
-  padding-left: 12px;
-  padding-right: 20px; /* room for the third $ at the right edge of the slide viewport */
+  padding-inline: 12px 16px;
 }
 @media (max-width: 700px) {
-  :is(.home-page, .workspace-page) .sigma-header-model-column {
-    min-width: 0;
-  }
   :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
-    padding-left: 9px;
-    padding-right: 17px;
+    padding-inline: 9px 13px;
   }
 }
