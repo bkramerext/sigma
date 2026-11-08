@@ -15,7 +15,7 @@ type ResearchSettings = {
   reasoning_effort: string;
   show_advanced_outcome_details: boolean;
 };
-const costTier = (s: string) => (s.match(/\$/g) ?? []).length;
+const costTier = (s: string) => /^\${1,3}$/.test(s) ? s.length : Number.POSITIVE_INFINITY;
 const effortOrder = ['low', 'medium', 'high', 'xhigh'];
 const modelName = (m: ModelChoice | undefined, fallback: string) => m?.label.split(' · ')[0] ?? fallback;
 function suitableEffort(model: ModelChoice, current: string): string | null {

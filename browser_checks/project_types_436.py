@@ -109,8 +109,10 @@ with sync_playwright() as playwright:
     ).json()
     expect(model_pill).to_be_enabled(timeout=15000)
     with page.expect_response(
-        lambda response: response.url.endswith("/api/user-preferences/research-settings")
-        and response.request.method == "PUT"
+        lambda response: (
+            response.url.endswith("/api/user-preferences/research-settings")
+            and response.request.method == "PUT"
+        )
     ):
         model_pill.click()
         cost_confirmation = page.locator(".global-model-confirm-popover")
@@ -827,6 +829,10 @@ with sync_playwright() as playwright:
     settings = page.get_by_role("dialog", name="Project Settings")
     expect(settings).to_be_visible()
     settings.locator("#project-mode").click()
+    project_type_menu = settings.locator("#project-mode-options")
+    expect(project_type_menu).to_be_visible()
+    assert project_type_menu.evaluate("node => node.matches(\":popover-open\")")
+    assert project_type_menu.evaluate("node => getComputedStyle(node).position") == "fixed"
     settings.get_by_role("option", name="Mathematics").click()
     settings.get_by_role("button", name="Save", exact=True).click()
     expect(settings).not_to_be_visible()

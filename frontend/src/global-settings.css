@@ -2,8 +2,8 @@
 .sigma-global-settings {
   box-sizing: border-box;
   width: min(820px, calc(100vw - 32px));
-  height: min(90dvh, 860px);
-  max-height: min(90dvh, 860px);
+  height: min(690px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
   overflow: hidden;
   padding: 0;
 }

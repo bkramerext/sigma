@@ -25,7 +25,7 @@ type ResearchConfig = {
 };
 type CatalogModel = { id: string; label: string; efforts: string[]; relative_cost: string };
 type Preference = { allow_unattended_background_execution: boolean; expand_one_project_section_at_a_time: boolean; progress_email: boolean };
-const modelCost = (value: string) => (value.match(/\$/g) ?? []).length;
+const modelCost = (value: string) => /^\${1,3}$/.test(value) ? value.length : Number.POSITIVE_INFINITY;
 const tabs: { id: Tab; title: string }[] = [
   { id: 'types', title: 'Project Types' },
   { id: 'research', title: 'Model' },
