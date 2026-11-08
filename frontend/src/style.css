@@ -532,15 +532,11 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
   }
 }
 
-/* Same two-row header as Project; Home adds Admin as a third column. */
+/* Home and Project share a two-column header; Admin sits between About and Settings on Home. */
 .home-page .home-account-grid {
   grid-template-columns: max-content max-content;
   grid-template-areas: "model-column google" "model-column chatgpt";
   align-items: start;
-}
-.home-page .home-account-grid:has(> .administrator-settings-link) {
-  grid-template-columns: max-content max-content max-content;
-  grid-template-areas: "admin model-column google" ". model-column chatgpt";
 }
 .home-page .home-account-grid > .sigma-header-model-column {
   grid-area: model-column;
@@ -549,16 +545,6 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .home-page .home-account-grid > .sigma-header-model-column .home-about-button {
   width: max-content;
   justify-self: start;
-}
-.home-page .home-account-grid > .administrator-settings-link {
-  grid-area: admin;
-  width: max-content;
-  justify-self: end;
-  align-self: center;
-}
-.home-page .home-account-grid:has(> .administrator-settings-link) > .administrator-settings-link {
-  width: max-content;
-  justify-self: end;
 }
 .home-page .sigma-header-secondary-row > .home-settings-pill {
   box-sizing: border-box;
@@ -587,4 +573,14 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .home-page .sigma-header-secondary-row > .home-settings-pill:focus-visible {
   outline: 2px solid #e5a785;
   outline-offset: 3px;
+}
+
+/* Admin shares About/Settings flow rather than owning a third grid column. */
+.home-page .home-account-grid .sigma-header-model-column:has(.administrator-settings-link) {
+  max-width: none;
+}
+.home-page .sigma-header-secondary-row > .administrator-settings-link {
+  flex: 0 0 auto;
+  align-self: center;
+  white-space: nowrap;
 }
