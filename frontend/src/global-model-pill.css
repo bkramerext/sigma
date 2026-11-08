@@ -239,3 +239,34 @@
     top: calc(28px + var(--identity-pill-gap));
   }
 }
+
+/* Keep the current Model label truly centered. Global button span margins
+   otherwise shift the text despite the pill's centered grid alignment. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  text-align: center;
+  place-items: center;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > :is(.global-model-pill-current, .global-model-pill-measure) {
+  margin: 0;
+  justify-self: center;
+  text-align: center;
+}
+/* The Google and About/Settings rows share one fixed control height, and
+   ChatGPT and Model start at the same second-row vertical offset. */
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  --sigma-header-first-row-height: 34px;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .sigma-header-secondary-row {
+  min-height: var(--sigma-header-first-row-height);
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: calc(var(--sigma-header-first-row-height) + var(--identity-pill-gap));
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  top: calc(var(--sigma-header-first-row-height) + var(--identity-pill-gap));
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column {
+    --sigma-header-first-row-height: 28px;
+  }
+}
