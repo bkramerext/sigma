@@ -706,3 +706,22 @@
 .project-settings-dialog .research-type-options [role="option"]:hover:not([aria-selected="true"]) {
   background: transparent !important; border-color: #a87950;
 }
+
+/* Shared project settings: transactional collaborator editor and model pair. */
+.sigma-project-classification-dialog { width: min(660px, calc(100vw - 24px)); }
+.sigma-project-classification-dialog .settings-model-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.sigma-project-classification-dialog .settings-model-row select { width: 100%; min-width: 0; }
+.project-collaborators { margin-top: 20px; }
+.project-collaborators-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.project-collaborators-heading h3 { margin: 0; font-size: 1rem; }
+.project-collaborators-heading button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; }
+.project-collaborators-heading .sigma-action-glyph { width: 20px; height: 20px; }
+.project-collaborator-row { display: flex; align-items: center; justify-content: space-between; min-height: 36px; gap: 12px; border-bottom: 1px solid var(--border-color, #6664); overflow-wrap: anywhere; }
+.project-collaborator-owner { font-size: .8rem; opacity: .75; flex-shrink: 0; }
+.project-collaborator-remove { border: 0; background: transparent; color: inherit; padding: 4px 8px; font-size: 1.25rem; cursor: pointer; }
+.project-collaborator-remove:hover { text-decoration: underline; }
+.project-collaborator-add { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.project-collaborator-add input { flex: 1 1 230px; min-width: 0; }
+.project-collaborator-add button { text-decoration: underline; }
+.project-collaboration-activity { margin: 18px 0 8px; text-align: center; opacity: .8; font-size: .9rem; }
+@media (max-width: 500px) { .sigma-project-classification-dialog .settings-model-row { grid-template-columns: 1fr; } }
