@@ -1119,13 +1119,13 @@ _STANDARD_MATH_OPERATORS = set("""
     sin cos tan cot sec csc arcsin arccos arctan
     sinh cosh tanh coth
     log ln lg exp lim liminf limsup inf sup min max
-    det dim deg gcd hom ker Pr arg
+    det dim deg gcd ker Pr arg
 """.split())
 _STANDARD_MATH_ARROWS = set("""
     leftarrow rightarrow leftrightarrow longleftarrow longrightarrow
     longleftrightarrow Leftarrow Rightarrow Leftrightarrow
     Longleftarrow Longrightarrow Longleftrightarrow
-    mapsto longmapsto hookleftarrow hookrightarrow
+    mapsto longmapsto hookleftarrow hookrightarrow xrightarrow xleftarrow
     to gets uparrow downarrow Uparrow Downarrow updownarrow Updownarrow
     nearrow searrow swarrow nwarrow
     rightharpoonup leftharpoonup rightharpoondown leftharpoondown
@@ -1137,14 +1137,14 @@ _STANDARD_MATH_SYMBOLS = set("""
     top bot forall exists nexists
     subset subseteq supset supseteq subsetneq supsetneq
     in notin ni owns
-    leq geq le ge neq ne equiv approx congruent sim simeq
+    leq geq le ge neq ne equiv approx cong sim simeq
     propto perp parallel mid nmid
     cup cap bigcup bigcap setminus sqcup sqcap
     land lor neg wedge vee bigwedge bigvee
     oplus otimes odot ominous oslash circ bullet
     cdot times div pm mp ast star
     sum prod coprod int iint iiint oint
-    intop sumop prodop
+    intop
     ldots cdots vdots ddots dots
     lfloor rfloor lceil rceil langle rangle lvert rvert lVert rVert
     triangleleft triangleright
@@ -1251,6 +1251,19 @@ def _safe_math(source: str) -> bool:
         flags=re.DOTALL,
     )
     if invalid_environment:
+        return False
+    # In addition to checking command names, reject malformed math-group
+    # syntax before admitting untrusted research text into compiled TeX.
+    brace_source = re.sub(r"\\[{}]", "", source)
+    depth = 0
+    for character in brace_source:
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth < 0:
+                return False
+    if depth:
         return False
     if r"\begin" in source or r"\end" in source or "&" in source or r"\\" in source:
         return False
