@@ -1123,7 +1123,10 @@ def _update_project(
     text_edit: tuple[str, str] | None = None,
     *,
     _after_commit: Callable[[ProjectView], None] | None = None,
+    _expected_revision: int | None = None,
 ) -> ProjectView:
+    from sigma import project_collaboration
+
     view = inspect_project(value)
     path = Path(view.path)
     if path.suffix == ".json":
@@ -1132,7 +1135,12 @@ def _update_project(
         from sigma.project_bundle import transform_file
 
         try:
-            with project_write_lock(path):
+            with (
+                project_write_lock(path),
+                project_collaboration.write_guard(
+                    str(path), expected_revision=_expected_revision
+                ),
+            ):
 
                 def transform(previous: bytes) -> bytes:
                     project = _decode(json.loads(previous))
@@ -1151,7 +1159,10 @@ def _update_project(
     temporary: Path | None = None
     backup_temporary: Path | None = None
     try:
-        with project_write_lock(path):
+        with (
+            project_write_lock(path),
+            project_collaboration.write_guard(str(path), expected_revision=_expected_revision),
+        ):
             before = (path / STATE).read_bytes()
             project = inspect_project(path).project
             updated = update(project)
@@ -1594,8 +1605,20 @@ def update_project(
 
         assert_project_unpinned(inspect_project(value).project.id)
         with _title_registry_lock(projects_root()):
-            return _update_project(value, update, edit, _after_commit=after_commit)
-    return _update_project(value, update, edit, _after_commit=after_commit)
+            return _update_project(
+                value,
+                update,
+                edit,
+                _after_commit=after_commit,
+                _expected_revision=expected_revision if shared_edit else None,
+            )
+    return _update_project(
+        value,
+        update,
+        edit,
+        _after_commit=after_commit,
+        _expected_revision=expected_revision if shared_edit else None,
+    )
 
 
 def export_complete_project(value: str | Path) -> bytes:
