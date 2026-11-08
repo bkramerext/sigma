@@ -584,3 +584,21 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
   align-self: flex-start;
   white-space: nowrap;
 }
+
+/* Center log toolbar icons against the filter control's full-height row. */
+.session-log-page header > div > .session-log-toolbar-icon {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 0;
+  margin-block: auto;
+}
+.session-log-page header > div > .session-log-toolbar-icon > svg {
+  display: block;
+  flex: 0 0 19px;
+  width: 19px;
+  height: 19px;
+  margin: 0;
+}
