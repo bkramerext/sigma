@@ -101,6 +101,15 @@ with sync_playwright() as playwright:
     expect(model_pill).to_be_visible()
     expect(model_pill).to_be_enabled(timeout=15000)
     assert "cycle" in (model_pill.get_attribute("data-tooltip") or "").lower()
+    # Wait for fonts and layout to settle before checking subpixel alignment.
+    # This still enforces the same 3px requirement; it does not relax it.
+    page.evaluate("() => document.fonts.ready")
+    page.wait_for_function("""() => {
+        const about = document.querySelector(".home-account-grid .home-about-button");
+        const model = document.querySelector(".home-account-grid .global-model-pill");
+        return !!about && !!model &&
+            Math.abs(about.getBoundingClientRect().left - model.getBoundingClientRect().left) < 3;
+    }""", timeout=7000)
     model_rect = model_pill.bounding_box()
     assert model_rect
     assert abs(model_rect["x"] - about_rect["x"]) < 3

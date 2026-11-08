@@ -37,7 +37,7 @@ export default function ProjectDescriptionEditor({
   const [error, setError] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (!editing) setDraft(original());
+    if (!editing) { setDraft(original()); setError(''); }
   }, [editing, view.project.title, view.project.problem,
       view.project.desired_outcomes, view.project.paper_requirements]);
   useEffect(() => {
