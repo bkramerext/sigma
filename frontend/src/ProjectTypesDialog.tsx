@@ -543,6 +543,22 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false; }
     finally { setBusy(false); }
   }
+  const referenceAddButton = (owner: string, field: ReferenceField, references: Reference[], readonly = false, immutableCount = 0) => {
+    const pending = references.some((reference, index) => index >= immutableCount &&
+      (!reference.url.trim() || (editingReferences.has(`${owner}:${field}:${index}`) &&
+        referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null));
+    if (readonly || references.length - immutableCount >= 100 || pending) return null;
+    return <button type="button" className="pt-new-action pt-reference-add" aria-label="New reference"
+      title="New reference" disabled={busy} onClick={() => {
+        const newKey = `${owner}:${field}:${references.length}`;
+        referenceEditOrigins.current.set(newKey, null);
+        setEditingReferences(previous => new Set(previous).add(newKey));
+        const next = [...references, { name: '', url: '' }];
+        if (owner === 'common') editCommonReferences(field, next.slice(immutableCount));
+        else if (builtins.some(item => item.id === owner)) editBuiltinReferences(owner, field, next.slice(immutableCount));
+        else edit(owner, { [field]: next });
+      }}><span className="pt-circled-plus" aria-hidden="true">+</span></button>;
+  };
   const listEditor = (owner: string, field: ReferenceField, references: Reference[], readonly: boolean, immutableCount = 0) => {
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
     const update = (next: Reference[]) => {
@@ -650,19 +666,6 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
           </>}
         </div></td></tr>;
       })}
-      {!readonly && references.length - immutableCount < 100 &&
-        !references.some((reference, index) => index >= immutableCount &&
-          (!reference.url.trim() || (editingReferences.has(`${owner}:${field}:${index}`) &&
-            referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null))) &&
-        <tr className="pt-reference-new-row"><td>
-        <button type="button" disabled={busy}
-          onClick={() => {
-            const newKey = `${owner}:${field}:${references.length}`;
-            referenceEditOrigins.current.set(newKey, null);
-            setEditingReferences(previous => new Set(previous).add(newKey));
-            update([...references, { name: '', url: '' }]);
-          }} className="pt-new-action">New</button>
-      </td></tr>}
     </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" data-project-type-id={item.id} key={item.id} open={open === item.id}>
@@ -675,10 +678,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderEffectiveIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      <section><h3>Research standards references</h3>{listEditor(item.id, 'research_standards_references', [
+      <section><div className="pt-reference-heading"><h3>Research standards references</h3>{referenceAddButton(item.id, 'research_standards_references', [...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : [])], false, readonly ? item.research_standards_references.length : 0)}</div>{listEditor(item.id, 'research_standards_references', [
         ...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : []),
       ], false, readonly ? item.research_standards_references.length : 0)}</section>
-      <section><h3>Publication standards references</h3>{listEditor(item.id, 'publication_standards_references', [
+      <section><div className="pt-reference-heading"><h3>Publication standards references</h3>{referenceAddButton(item.id, 'publication_standards_references', [...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : [])], false, readonly ? item.publication_standards_references.length : 0)}</div>{listEditor(item.id, 'publication_standards_references', [
         ...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : []),
       ], false, readonly ? item.publication_standards_references.length : 0)}</section>
     </div>
@@ -727,12 +730,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" title="New project type"><span className="pt-circled-plus" aria-hidden="true">+</span></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
-        <h4>Research standards references for all project types</h4>
+        <div className="pt-reference-heading"><h4>Research standards references for all project types</h4>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>
         {listEditor('common', 'research_standards_references', [
           ...(commonReferences?.research_standards_references ?? []),
           ...commonCustomReferences.research_standards_references,
         ], false, commonReferences?.research_standards_references.length ?? 0)}
-        <h4>Publication standards references for all project types</h4>
+        <div className="pt-reference-heading"><h4>Publication standards references for all project types</h4>{referenceAddButton('common', 'publication_standards_references', [...(commonReferences?.publication_standards_references ?? []), ...commonCustomReferences.publication_standards_references], false, commonReferences?.publication_standards_references.length ?? 0)}</div>
         {listEditor('common', 'publication_standards_references', [
           ...(commonReferences?.publication_standards_references ?? []),
           ...commonCustomReferences.publication_standards_references,
