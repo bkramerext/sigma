@@ -104,14 +104,22 @@ with sync_playwright() as playwright:
     # Wait for fonts and layout to settle before checking subpixel alignment.
     # This still enforces the same 3px requirement; it does not relax it.
     page.evaluate("() => document.fonts.ready")
-    page.wait_for_function("""() => {
+    page.wait_for_function(
+        """() => {
         const about = document.querySelector(".home-account-grid .home-about-button");
         const model = document.querySelector(".home-account-grid .global-model-pill");
         return !!about && !!model &&
             Math.abs(about.getBoundingClientRect().left - model.getBoundingClientRect().left) < 3;
-    }""", timeout=7000)
+    }""",
+        timeout=7000,
+    )
+    # Compare positions from the same layout frame, not before/after font loading.
+    about_rect = grid.locator(".home-about-button").bounding_box()
+    settings_rect = grid.locator(".home-settings-pill").bounding_box()
+    google_rect = grid.locator(".project-google-signin").first.bounding_box()
+    chatgpt_rect = grid.locator(".api-connection > summary").first.bounding_box()
     model_rect = model_pill.bounding_box()
-    assert model_rect
+    assert about_rect and settings_rect and google_rect and chatgpt_rect and model_rect
     assert abs(model_rect["x"] - about_rect["x"]) < 3
     assert model_rect["y"] >= about_rect["y"] + about_rect["height"]
     assert settings_rect["x"] >= about_rect["x"] + about_rect["width"]
