@@ -881,3 +881,28 @@
     padding-block: 4px;
   }
 }
+
+/* Project header: ChatGPT matches the Model pill's 46px height while its
+   two sponsored-status lines have a slightly more open line rhythm. */
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary {
+  box-sizing: border-box;
+  height: 46px;
+  min-height: 46px;
+  padding-block: 5px;
+  align-items: center;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary .connection-label-stack {
+  line-height: 1.45;
+  gap: 1px;
+}
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary .connection-label-stack > [role="status"],
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary .sponsored-allowance-trigger {
+  line-height: 1.45;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary {
+    height: 38px;
+    min-height: 38px;
+    padding-block: 4px;
+  }
+}
