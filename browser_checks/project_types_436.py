@@ -89,7 +89,7 @@ with sync_playwright() as playwright:
     expect(grid).to_be_visible()
     expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
-        '"google model" "chatgpt about" "admin ."'
+        '"google model" "chatgpt about" ". admin"'
     )
     about_rect = grid.locator(".home-about-button").bounding_box()
     google_rect = grid.locator(".project-google-signin").first.bounding_box()

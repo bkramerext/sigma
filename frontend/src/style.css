@@ -317,7 +317,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-account-grid {
   display: grid;
   grid-template-columns: max-content max-content;
-  grid-template-areas: "google model" "chatgpt about" "admin .";
+  grid-template-areas: "google model" "chatgpt about" ". admin";
   align-items: start;
   justify-content: end;
   column-gap: calc(var(--identity-pill-gap) * 1.2);
@@ -524,3 +524,10 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .session-log-page header > div { min-height: 36px; align-items: center; column-gap: 12px; row-gap: 8px; }
 .session-log-page header .session-log-toolbar-icon { align-self: center; vertical-align: middle; line-height: 0; }
 .session-log-page header .session-log-toolbar-icon svg { align-self: center; margin: auto; }
+
+/* With a third account-pill row, leave adequate space above Projects on phones. */
+@media (max-width: 700px) {
+  .home-page:has(.home-account-grid > .administrator-settings-link) {
+    --home-projects-top: max(152px, calc(var(--home-corner-gap) + 3 * var(--home-corner-pill-height) + 2 * var(--identity-pill-gap) + 24px));
+  }
+}

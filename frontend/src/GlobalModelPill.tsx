@@ -28,7 +28,7 @@ function suitableEffort(model: ModelChoice, current: string): string | null {
 }
 
 /** Restores the historic model cycle pill, now persisted as a per-user default. */
-export default function GlobalModelPill() {
+export default function GlobalModelPill({ enabled = true }: { enabled?: boolean }) {
   const [settings, setSettings] = useState<ResearchSettings | null>(null);
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [ready, setReady] = useState(false);
@@ -39,6 +39,7 @@ export default function GlobalModelPill() {
   const trigger = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
   useEffect(() => {
+    if (!enabled) { setReady(true); return; }
     let alive = true;
     const refresh = () => {
       void Promise.all([
@@ -56,7 +57,7 @@ export default function GlobalModelPill() {
     refresh();
     window.addEventListener('sigma-global-settings-saved', refresh);
     return () => { alive = false; window.removeEventListener('sigma-global-settings-saved', refresh); };
-  }, []);
+  }, [enabled]);
   useEffect(() => {
     if (!pending) return;
     const position = () => {
@@ -91,10 +92,10 @@ export default function GlobalModelPill() {
     : choices.length === 1 && selectedIndex < 0 ? choices[0] : undefined;
   const nextEffort = next && settings ? suitableEffort(next, settings.reasoning_effort) : null;
   const selectedName = modelName(selected, settings?.ai_model ?? 'Unavailable');
-  const label = settings ? selectedName + (selected?.relative_cost ? ' ' + selected.relative_cost : '') : 'Unavailable';
+  const label = !enabled ? 'Sign in' : settings ? selectedName + (selected?.relative_cost ? ' ' + selected.relative_cost : '') : 'Unavailable';
   const notice = nextEffort && settings && nextEffort !== settings.reasoning_effort
     ? ' Switching to ' + modelName(next, '') + ' also changes Thinking to ' + nextEffort + '.' : '';
-  const tooltip = settings
+  const tooltip = !enabled ? 'Sign in to view your default research model.' : settings
     ? 'The selected default model is ' + selectedName + '. Relative published API token cost: ' +
       (selected?.relative_cost ?? 'unknown') + '. Applies to future research and proposals across projects. ' +
       'Click to cycle through reviewed models.' + notice
@@ -129,7 +130,7 @@ export default function GlobalModelPill() {
   return <span className="global-model-pill-position">
     <button ref={trigger} type="button" className="global-model-pill"
       aria-label={'Model ' + label} title={tooltip} data-tooltip={tooltip}
-      disabled={!ready || busy || !!pending || !settings || !next || !nextEffort}
+      disabled={!enabled || !ready || busy || !!pending || !settings || !next || !nextEffort}
       onClick={cycle}>Model · {label}</button>
     {settings && error && <span className="global-model-error" role="alert">{error}</span>}
     {pending && createPortal(<div className="project-model-confirm-popover global-model-confirm-popover"
