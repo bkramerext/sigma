@@ -5609,7 +5609,7 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
     <span className="strategy-remove-anchor">
       <button type="button" id={`commands-${strategy.id}`} className="text-view-link strategy-icon-action" disabled={disabled}
         aria-label="Remove strategy" data-tooltip="Remove strategy" onClick={() => setConfirmingRemove(true)}>
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round"><path d="M5 5 19 19M19 5 5 19"/></svg>
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round"><path d="M8 8 16 16M16 8 8 16"/></svg>
       </button>
       {confirmingRemove && <div className="strategy-remove-popover"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove strategy ${strategy.title}`}>
         <p>Remove “{strategy.title}” from Strategies? Its research and history will be kept in the project.</p>
