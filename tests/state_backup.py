@@ -123,6 +123,117 @@ class StateBackupTests(unittest.TestCase):
                 )
             )
 
+    def add_publication_cache(self, root: Path) -> Path:
+        """Write a real schema-2 publication cache next to the paper fixture."""
+        paper_dir = next((root / "auth/workspaces").glob("*/project/papers"))
+        cache = {
+            "schema": 2,
+            "fingerprint": "f" * 64,
+            "status": "fallback",
+            "checklist": [],
+            "retained_urls": [],
+            "omitted_urls": [],
+            "checklist_sha256": hashlib.sha256(b"[]").hexdigest(),
+            "provider_usage": None,
+            "provider_calls_attempted": 1,
+            "usage_status": "unknown",
+            "rationale": "Existing uncertain provider call; do not replay.",
+            "started_at": "2026-11-07T00:00:00+00:00",
+            "finished_at": "2026-11-07T00:01:00+00:00",
+        }
+        cache["record_sha256"] = hashlib.sha256(
+            json.dumps(cache, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+        ).hexdigest()
+        path = paper_dir / ".publication-reference-compilation.json"
+        path.write_text(json.dumps(cache))
+        return path
+
+    def test_restore_verifier_accepts_sealed_publication_cache_and_real_paper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_state(root)
+            cache = self.add_publication_cache(root)
+            before = hashlib.sha256(cache.read_bytes()).hexdigest()
+            result = restore.verify(root, 2, 2, 2, 1)
+            self.assertTrue(any("paper artifacts: 1 saved" in line for line in result))
+            self.assertEqual(before, hashlib.sha256(cache.read_bytes()).hexdigest())
+
+    def test_restore_verifier_rejects_corrupt_publication_cache_seal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_state(root)
+            cache = self.add_publication_cache(root)
+            data = json.loads(cache.read_text())
+            data["status"] = "completed"
+            cache.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, "integrity seal"):
+                restore.verify(root, 2, 2, 2, 1)
+
+    def test_restore_verifier_rejects_resealed_malformed_publication_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_state(root)
+            cache = self.add_publication_cache(root)
+            data = json.loads(cache.read_text())
+            data["provider_calls_attempted"] = 3
+            data["record_sha256"] = hashlib.sha256(
+                json.dumps(
+                    {key: value for key, value in data.items() if key != "record_sha256"},
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            cache.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, "metadata format"):
+                restore.verify(root, 2, 2, 2, 1)
+
+    def test_restore_verifier_rejects_symlinked_publication_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_state(root)
+            cache = self.add_publication_cache(root)
+            cache.unlink()
+            cache.symlink_to("missing-cache.json")
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                restore.verify(root, 2, 2, 2, 1)
+
+    def test_restore_verifier_rejects_malformed_actual_paper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_state(root)
+            self.add_publication_cache(root)
+            record_path = next(
+                (root / "auth/workspaces").glob("*/project/papers/" + "c" * 32 + ".json")
+            )
+            record = json.loads(record_path.read_text())
+            record["tex_source"] = ""
+            record_path.write_text(json.dumps(record))
+            with self.assertRaisesRegex(ValueError, "TeX source"):
+                restore.verify(root, 2, 2, 2, 1)
+
+    def test_restore_verifier_rejects_missing_paper_pdf(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_state(root)
+            pdf_path = next((root / "auth/workspaces").glob("*/project/papers/*.pdf"))
+            pdf_path.unlink()
+            with self.assertRaisesRegex(ValueError, "PDF is missing"):
+                restore.verify(root, 2, 2, 2, 1)
+
+    def test_restore_verifier_rejects_paper_size_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_state(root)
+            record_path = next(
+                (root / "auth/workspaces").glob("*/project/papers/" + "c" * 32 + ".json")
+            )
+            record = json.loads(record_path.read_text())
+            record["pdf_size_bytes"] += 1
+            record_path.write_text(json.dumps(record))
+            with self.assertRaisesRegex(ValueError, "PDF hash/size"):
+                restore.verify(root, 2, 2, 2, 1)
+
     def test_restore_verifier_rejects_unmapped_workspace_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

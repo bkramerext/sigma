@@ -4,8 +4,10 @@
 
 The detailed configuration and exact provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This runbook is the short operational entry point. Record the deployed commit, tested command, outcome, operator, date and any deviation after performing each operation. No secrets, access tokens or user data in logs, PRs or chat.
 
-The current release authorization and exact-SHA release controls are in
-[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md).
+For **routine production deployments**, follow the single ordered
+[canonical keyless release path](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667).
+The generic host, restore, and rollback sections below document operational
+primitives and incident procedures, not additional routine checklists.
 
 ## Deployment inventory and operator evidence (T127)
 
@@ -288,6 +290,11 @@ restore the 14-point retention invariant.
 
 ## 4. Application release / update
 
+**For routine deployments, use the canonical guarded-release sequence in
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667).**
+The following manual steps are historical/incident reference, not a shortcut
+around the exact-SHA recovery and helper gates.
+
 1. Confirm candidate full Git SHA, reviewed PR, verified tests/browser evidence, and known migrations. Ensure backup/restore point is current.
 2. From a repository checkout with the candidate commit available, build release images using `python3 /path/to/checkout/deploy/release_image.py build /path/to/checkout FULL_40_CHAR_SHA`. This exports the requested commit from Git, so dirty files and the checkout's current HEAD are not build inputs. The command fails if the exact commit cannot be resolved. Inspect the generated `sigma-backend:SHA` and `sigma-frontend:SHA` image labels before proceeding. If the sandbox image source changed, rebuild the rootless Python/Sage images.
 3. Before a disruptive release, use the host-Caddy maintenance switch in
@@ -517,6 +524,12 @@ RPO guarantee. No RTO is claimed. A successful snapshot is not restore evidence.
 
 ## 6. Restore drill (non-production) / disaster recovery
 
+A routine release must follow the single [keyless sequence](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667):
+fresh application-consistent snapshot, deterministic no-address/no-service-account
+OS Login recovery VM, read-only disk attachment and mount, strict verifier,
+and temporary-resource cleanup. The examples below cover generic/incident
+recovery and are not a second routine-release checklist.
+
 1. Choose a named snapshot whose status is `READY`; record its creation time,
    source disk, project, snapshot name and release SHA. Confirm the test host is
    isolated and has no public ingress or provider credentials. **Never restore
@@ -531,7 +544,8 @@ RPO guarantee. No RTO is claimed. A successful snapshot is not restore evidence.
      --source-snapshot=READY_SNAPSHOT --type=pd-balanced
    gcloud compute instances attach-disk sigma-recovery-01 \
      --project=APPROVED_PROJECT --zone=APPROVED_ZONE \
-     --disk=sigma-state-restore-YYYYMMDD --device-name=sigma-state-restore
+     --disk=sigma-state-restore-YYYYMMDD --device-name=sigma-state-restore \
+     --mode=ro
    ```
 
    Do not attach the test disk to the production VM. On the recovery host,
@@ -540,7 +554,7 @@ RPO guarantee. No RTO is claimed. A successful snapshot is not restore evidence.
 
    ```sh
    sudo mkdir -p /mnt/sigma-restore
-   sudo mount -o ro,noload,nosuid,nodev,noexec \
+   sudo mount -o ro,noload,nosuid,nodev,noexec,norecovery \
      /dev/disk/by-id/google-sigma-state-restore-YYYYMMDD /mnt/sigma-restore
    findmnt /mnt/sigma-restore
    ```
@@ -731,8 +745,23 @@ identity on production; and IAP permission granted for the host. An SSH key
 with a five-minute OS Login TTL was removed locally after an actual IAP + OS
 Login SSH session succeeded, including `sudo -n true`.
 
-This setup resolves the IAM blocker; it is not evidence of a release snapshot
-or recovery drill. In keeping with the operator's instruction to hold after
+The November 6 setup verified role boundaries and one ephemeral host SSH
+session, but the subsequent v0.2.1 release exposed an **unresolved effective
+access failure**: `gcloud compute ssh` required `compute.instances.get`,
+which was denied for the release identities. Direct SSH also timed out; the
+project Owner ultimately used IAP for cutover. Therefore the #590 acceptance
+for a fully keyless release is **not met**. Under #667, add only the narrowly
+conditioned `compute.instances.get` permission for each actual target
+instance (production `sigma-gce-01` for `sigma-release-ssh` and the
+release-prefixed temporary recovery instance for `sigma-release-operator`),
+plus any other demonstrated minimal discovery permission. Test effective
+`gcloud compute instances describe` and IAP/OS Login SSH under the exact
+impersonated identities, including `sudo -n true`; do not infer success
+from policy text or broaden to project-wide Owner/Editor. No such IAM change
+or new effective-access test is claimed by this documentation update.
+
+The original setup resolved its initial scoped IAM checks; it is not evidence
+of a completed keyless release snapshot or recovery drill. In keeping with the operator's instruction to hold after
 fixing IAM, no production preflight, snapshot, clone disk, recovery VM, cutover,
 or deployment was performed. Positive authorization for creating future
 recovery-prefixed resources is defined by IAM Conditions but remains to be

@@ -6,6 +6,166 @@ checks required before the guarded GCE cutover. It supplements
 backup, restore, deployment, and rollback commands. A recorded authorization is
 not evidence that a release gate passed or that an operation was executed.
 
+## Routine keyless GCE release — canonical ordered path (issue #667)
+
+This is the **one routine production-release sequence**. Historical release
+records and the generic recovery/incident procedures below are not additional
+deployment checklists. The [operations runbook](OPERATION_RUNBOOK.md) is the
+source for host inventory and incident recovery. This procedure is **not**
+authorization to deploy a particular SHA: select a separate approved release
+ticket. The v0.2.1 SHA `5435e14eeea159ab207ad50016577b9a9542ae59`
+has already shipped; **do not redeploy it** as part of #667.
+
+1. **Freeze and establish source provenance.** Choose an approved, merged,
+   full 40-character SHA. Record exact-SHA successful Ruff, SIGMA verification,
+   and browser workflow run URLs and the resolved commit. Reuse those green
+   results even if `main` has advanced. Do **not** rerun workflows on moving
+   `main` or require a second full `./sigma test` on `main`. If an exact-SHA
+   required check is absent, failed, or superseded by a change to the **selected
+   source**, run the missing source CI against the newly frozen SHA. Run
+   release-artifact and operational checks independently; a passing commit
+   check is not a backup, access, or deployment proof.
+2. **Preflight the effective keyless identities and budget, not just IAM
+   configuration.** Use short-lived impersonation of
+   `sigma-release-ssh@sigma-research-prod.iam.gserviceaccount.com` for the
+   production host and
+   `sigma-release-operator@sigma-research-prod.iam.gserviceaccount.com`
+   for snapshots and isolated recovery. Verify billing, quota, expected
+   recovery footprint/duration (at most **$25 incremental**), current
+   state-disk mount and UUID, systemd/container health, protected release pin,
+   schema compatibility, and maintenance-off state. Test **actual**
+   `gcloud compute instances describe` and
+   `gcloud compute ssh --tunnel-through-iap` with each relevant impersonated
+   identity, including noninteractive `sudo -n true` on the intended VM.
+   For `gcloud compute ssh`, `compute.instances.get` must be effective on
+   the production host for the host identity and on the temporary recovery
+   VM for the recovery identity; the November 2026 attempt showed this
+   permission was denied despite prior OS Login/IAP tests. Adjust only
+   narrowly conditioned instance-read permissions under #590, then retest
+   using the **same identity and command**. Never fall back silently to the
+   project Owner, broaden to Owner/Editor, or create a service-account key.
+   **A denied connection is a release blocker, not a passed preflight.**
+3. **Create a fresh application-consistent snapshot.** Declare the approved
+   maintenance window and verify baseline identity, project, paper, job and
+   accounting counts. Stop SIGMA writers cleanly on `sigma-gce-01`, sync the
+   persistent state disk, and create a fresh snapshot of **`sigma-state`**
+   using the recovery identity. Use the existing permitted prefix
+   `sigma-state-v021-pre-` until conditional IAM is deliberately updated.
+   **Do not pass `--labels`**: this path does not grant
+   `compute.snapshots.setLabels`, and snapshot name, source, creation time,
+   immutable ID and verification evidence are sufficient. With `PROJECT`,
+   `ZONE`, `SNAPSHOT`, and `RECOVERY_ID` set to reviewed exact values
+   (for example, project `sigma-research-prod`, zone `us-west1-b`),
+   the label-free snapshot command is:
+   ```sh
+   gcloud compute snapshots create "$SNAPSHOT" --project="$PROJECT" \
+     --source-disk=sigma-state --source-disk-zone="$ZONE" \
+     --storage-location=us-west1 \
+     --impersonate-service-account="$RECOVERY_ID"
+   ```
+   Wait for READY
+   and confirm source disk, snapshot ID, and creation timestamp. Restart
+   SIGMA and recheck health as soon as consistency is captured. If a
+   snapshot cannot be verified, stop the release; do not claim
+   `--backup-verified`.
+4. **Isolate the recovery clone in one creation pass.** Under the recovery
+   identity, create a clone disk `sigma-state-restore-*` from that exact
+   READY snapshot and a `sigma-v021-recovery-*` VM in `us-west1-b`.
+   Use an approved Ubuntu image, bounded machine/disk size, the existing
+   `sigma-us-west1` subnet, `--no-address`,
+   `--no-service-account`, `--no-scopes`, and
+   `--metadata=enable-oslogin=TRUE,block-project-ssh-keys=TRUE`
+   **at initial VM creation**. Do not attach any production credentials
+   or the production disk. Attach the clone **READ_ONLY** (`--mode=ro`);
+   inspect the device/UUID, mount ext4 only with
+   `ro,noload,nosuid,nodev,noexec,norecovery`, and verify flags via
+   `findmnt`. Never format, fsck-repair, or mount the clone read/write.
+   Connect through IAP/OS Login with the recovery identity, not Owner.
+   The IAM conditions presently permit only the documented v0.2.1-style
+   resource prefixes; any new prefix needs an explicit narrow IAM review
+   before a subsequent release. With `CLONE_DISK=sigma-state-restore-*`
+   and `RECOVERY_VM=sigma-v021-recovery-*` set to unique, verified actual
+   names (no literal asterisks), create and attach once:
+   ```sh
+   gcloud compute disks create "$CLONE_DISK" --project="$PROJECT" --zone="$ZONE" \
+     --source-snapshot="$SNAPSHOT" --type=pd-balanced \
+     --impersonate-service-account="$RECOVERY_ID"
+   gcloud compute instances create "$RECOVERY_VM" --project="$PROJECT" --zone="$ZONE" \
+     --machine-type=e2-standard-2 --image-project=ubuntu-os-cloud \
+     --image-family=ubuntu-2404-lts-amd64 --subnet=sigma-us-west1 \
+     --no-address --no-service-account --no-scopes \
+     --metadata=enable-oslogin=TRUE,block-project-ssh-keys=TRUE \
+     --impersonate-service-account="$RECOVERY_ID"
+   gcloud compute instances attach-disk "$RECOVERY_VM" \
+     --project="$PROJECT" --zone="$ZONE" --disk="$CLONE_DISK" \
+     --device-name=sigma-state-restore --mode=ro \
+     --impersonate-service-account="$RECOVERY_ID"
+   ```
+   Confirm actual disk attachment is read-only before mounting. Abort
+   safely on any create/attach failure; do not recreate with weaker flags.
+5. **Verify the isolated restore, read-only.** Transfer the verifier from
+   the **selected exact SHA** to the isolated recovery VM and run
+   `deploy/verify-state-restore.py` against the mounted filesystem with
+   thresholds established from pre-snapshot observations. Require all
+   database/integrity, workspace isolation, saved project/artifact,
+   TeX/PDF hash/size, and accounting checks to pass. The verifier accepts
+   only the known sealed `.publication-reference-compilation.json` cache
+   as non-paper metadata; actual paper JSON/PDF records remain strict.
+   An unexpected workspace or empty scheduler slot-lock marker is **not**
+   permission to delete anything: inspect the workspace, referenced project,
+   jobs, calls, file sizes, and retained history read-only. Quarantine or
+   remove only independently proven disposable markers under separately
+   documented authorization and preserve a pre-cleanup recovery snapshot.
+   Never delete user, project, session, paper, identity, or accounting data
+   just to satisfy verifier counts. Any unresolved mismatch blocks cutover.
+6. **Clean up bounded recovery resources and retain evidence.** Record
+   verifier results, clone UUID/mount flags, timings, and source snapshot.
+   Unmount, detach, delete the temporary `sigma-v021-recovery-*` VM and
+   `sigma-state-restore-*` clone (including its temporary boot disk),
+   and verify both are absent. **Retain the validated pre-release snapshot**.
+   Clean up failed partial creations too, within the same authorized
+   prefixes and $25 limit, without erasing evidence. If cleanup fails,
+   report the resource/cost blocker before any new cutover.
+7. **Guarded exact-SHA build and cutover.** Reconfirm the approved SHA,
+   state/mount, green source checks, fresh verified recovery, and actual
+   schema-compatibility evidence. Using the keyless production-host IAP
+   connection, run only:
+   ```sh
+   sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py FULL_40_CHAR_SHA \
+     --backup-verified --schema-compatible
+   ```
+   These flags are truthful attestations, **not** checks; never infer them
+   from the existence of a snapshot or from green CI. The helper builds
+   both images from the exact commit; do not pass `--no-build`. Do not
+   modify `SIGMA_RELEASE` or restart containers outside the guarded helper
+   to work around a failure.
+8. **Verify, record, and exit.** Confirm host checkout, release record,
+   immutable image IDs and SHA labels, About build prefix, active systemd,
+   healthy backend/frontend/edge, retained state disk UUID/mount options,
+   production data and accounting counts, HTTPS, auth readiness, expected
+   anonymous API behavior, and **maintenance off**. Do not run paid
+   inference. Record observed start/end/downtime, source CI run URLs,
+   snapshot/restore proof, identity used, security gate results, cleanup
+   confirmation, and remaining authenticated-test limitations. Keep the
+   previous release/image and recovery point for forward-fix or separately
+   authorized rollback decisions; a code rollback is never a data restore.
+
+**Compact evidence checklist** (record observed values, not assumptions):
+`release ticket + SHA + exact-SHA CI URLs`;
+`effective release-SSH and recovery-operator connections + IAM denials/limits`;
+`preflight + quota/billing + <=$25 estimate`;
+`snapshot name/ID/source/READY/UTC`;
+`clone/VM flags + read-only mount + verifier results/counts`;
+`VM/disk deletion and snapshot retention`;
+`helper command + image IDs/labels + cutover times`;
+`HTTPS/auth/About + maintenance off + data/accounting preservation`;
+`no paid inference + limitations`.
+
+A documented dry-run is **not** a live-credential acceptance test. Issue
+#667 stays open until both keyless identities have been verified with effective
+GCP access during a bounded rehearsal or the next separately authorized
+release, without Owner fallback or permission-retry recreation.
+
 ## Authorization record — SIGMA v0.1.5 / issue #337
 
 | Authorization | Record | Scope |
