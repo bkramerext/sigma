@@ -2,10 +2,10 @@
 
 **Status:** Operator procedures for the GCE deployment at `sigma-research.duckdns.org`. Keep this document current as deployment is exercised. **Do not treat proposed commands as executed evidence.**
 
-Detailed configuration and provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This is the **long-form host inventory, incident-recovery reference, and deployment evidence archive**, not another routine deployment checklist. Use the [routine release runbook](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667) only after explicit release authorization. Record actual commands, outcomes, IDs and dates; never publish secrets, access tokens or user data.
+Detailed configuration and provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This is the **long-form host inventory, incident-recovery reference, and deployment evidence archive**, not another routine deployment checklist. Use the [routine release runbook](DEPLOYMENT_RUNBOOK.md#sigma-routine-production-release) only after explicit release authorization. Record actual commands, outcomes, IDs and dates; never publish secrets, access tokens or user data.
 
 For **routine production deployments**, follow the single ordered
-[canonical keyless release path](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667).
+[canonical keyless release path](DEPLOYMENT_RUNBOOK.md#sigma-routine-production-release).
 The generic host, restore, and rollback sections below document operational
 primitives and incident procedures, not additional routine checklists.
 
@@ -292,8 +292,8 @@ restore the 14-point retention invariant.
 
 ## 4. Application release / update
 
-**For routine deployments, use the canonical guarded-release sequence in
-[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667).**
+**For routine deployments, use the five-step checklist in
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#release-checklist).**
 The following manual steps are historical/incident reference, not a shortcut
 around the exact-SHA recovery and helper gates.
 
@@ -526,11 +526,10 @@ RPO guarantee. No RTO is claimed. A successful snapshot is not restore evidence.
 
 ## 6. Restore drill (non-production) / disaster recovery
 
-A routine release must follow the single [keyless sequence](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667):
-fresh application-consistent snapshot, deterministic no-address/no-service-account
-OS Login recovery VM, read-only disk attachment and mount, strict verifier,
-and temporary-resource cleanup. The examples below cover generic/incident
-recovery and are not a second routine-release checklist.
+The standard SIGMA release follows the short [release checklist](DEPLOYMENT_RUNBOOK.md#release-checklist).
+The snapshot/recovery-VM examples below are for nonroutine disaster
+recovery and are **not** requirements for the current hobby-project
+backend/frontend upgrade.
 
 1. Choose a named snapshot whose status is `READY`; record its creation time,
    source disk, project, snapshot name and release SHA. Confirm the test host is
