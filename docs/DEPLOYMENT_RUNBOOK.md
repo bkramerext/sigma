@@ -230,8 +230,8 @@ deploy helper, enable maintenance, or claim v0.3.0 was deployed.
    IAM or use the personal Owner account for billing under the separate
    IAM-only authorization. This is a visibility follow-up for the current
    **zero-new-resource** path, not a hard release blocker unless the
-   existing billing link or actual service status is known to be broken. The previous October budget/credit evidence
-   is historical. Budget alerts are **not** hard spend caps. The latest
+   existing billing link or actual service status is known to be broken.
+   The previous October budget/credit evidence is historical. Budget alerts are **not** hard spend caps. The latest
    modeled recovery cost is **$16.11**, or **$21.11 including $5
    contingency**, versus a mandatory $25 incremental ceiling. This is
    modeled, not billed. Do not create recovery resources before current
@@ -378,6 +378,14 @@ preflight issues are resolved, the operator approves the new frozen SHA,
 and appropriate exact-SHA CI is green. Preserve all existing recovery,
 least-privilege, cost, state, and rollback safeguards.
 ## Routine keyless GCE release — canonical ordered path (issue #667)
+
+**Version 0.3.0 cost-policy override:** The resource-creating snapshot,
+clone and recovery-VM path below is *not authorized* for this release.
+It remains the canonical paid-infrastructure path for future releases
+only when separately approved. For v0.3.0 use the conditional existing
+boot-disk procedure above **only after specific operator acceptance**;
+never silently execute the default cloud recovery steps or count an
+unverified same-host copy as sufficient proof.
 
 Follow these eight gates in order only after a separate release authorization
 selects the target. Check the selected commit and effective live permissions;
