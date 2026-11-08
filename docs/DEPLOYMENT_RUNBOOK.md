@@ -33,6 +33,61 @@ Coordinator, who determines the next step. No extra approval is necessary
 for read-only checks, but a successful handoff is **not** permission to
 proceed to the next stage.
 
+**Stage A execution-environment preflight (do this first).** Before calling
+any host or cloud check, confirm Red is in a checkout of this repository
+whose \`origin/main\` contains this Coordinator-led v0.3.0 section. Local
+working directories and older branches can contain historical v0.1.x
+runbooks; a stale local file is **not** current operational guidance.
+Read the current maintained runbook from \`origin/main\` (fetch first) or
+from the repository's live default branch, without overwriting untracked
+work. If the checkout cannot be updated/read, report an
+\`ENVIRONMENT_UNAVAILABLE\` failure instead of diagnosing GCP.
+
+Confirm the **Google Cloud SDK exists in the execution environment**.
+The v0.2.2 operator log used
+\`/Users/admin/google-cloud-sdk/bin/gcloud\`; check \`command -v gcloud\`
+and that path, but do not assume every Codex shell is the same host.
+Use only the established keyless impersonation configuration. An
+unavailable SDK or credential/impersonation facility is
+\`ENVIRONMENT_UNAVAILABLE\`, **not** evidence that a GCP permission was
+denied. Do not install SDKs, create credentials, SSH keys, aliases, or
+IAM grants to conceal an unavailable runtime. Return the blocker and
+ask the Coordinator for the existing GCP-enabled operator environment.
+
+**Identity versus destination:** \`sigma-release-ssh\` and
+\`sigma-release-operator\` are **service-account names**, not SSH host
+aliases. The destination is the actual Compute VM \`sigma-gce-01\`,
+accessed with \`gcloud compute ssh ... --tunnel-through-iap
+--impersonate-service-account=...\`. Never run
+\`ssh sigma-release-ssh\` or direct public SSH as a substitute.
+For example, with \`GCLOUD\` set to the verified SDK executable:
+
+```sh
+"$GCLOUD" compute instances describe sigma-gce-01 \
+  --project=sigma-research-prod --zone=us-west1-b \
+  --impersonate-service-account=sigma-release-ssh@sigma-research-prod.iam.gserviceaccount.com \
+  --format='value(name,status)'
+"$GCLOUD" compute ssh sigma-gce-01 \
+  --project=sigma-research-prod --zone=us-west1-b --tunnel-through-iap \
+  --impersonate-service-account=sigma-release-ssh@sigma-research-prod.iam.gserviceaccount.com \
+  --command='sudo -n true'
+```
+
+The second command is a **read-only access/sudo capability test**, not
+permission to change the VM. Inspect global/zonal operation reads under
+\`sigma-release-operator\` using **existing** operation IDs as required
+below. Do not create a recovery VM in Stage A; its IAP connection is
+a Stage C test. Public HTTPS/JavaScript or hosted-auth readiness
+checks are only supplementary: they cannot prove the full production
+SHA, host health, state mount, IAM, or quotas.
+
+In Stage A's mandatory \`FAILED\` response distinguish
+\`ENVIRONMENT_UNAVAILABLE\` (wrong checkout, SDK absent, no authorized
+impersonation runtime) from \`GCP_PERMISSION_DENIED\` (a real API 403
+through the actual impersonated account), and from \`UNVERIFIED\`
+(no suitable read-only evidence). Never prescribe an IAM grant without
+a real impersonated-denial response.
+
 | Stage | Owner | Scope / advancement gate |
 | --- | --- | --- |
 | **A — Access readiness** | Red, then Coordinator review | Read-only, impersonated GCP access and host health checks: actual production-host IAP/OS Login and noninteractive sudo, effective global/zonal operation-status polling, disk/snapshot reads, quota, and a bounded cost estimate with truthful billing limitations. No recovery VM exists in this stage, so its live IAP test belongs to Stage C. Do not stop writers, create recovery resources, change IAM, build images, or deploy. A missing required permission is **FAILED** with the exact denial and narrow proposed remedy; prior v0.2.2 success alone is not proof. |
