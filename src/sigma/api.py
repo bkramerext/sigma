@@ -1178,6 +1178,17 @@ def update_research_ethos_preference(body: ResearchEthosPreference):
     return research_ethos.save_override(body.markdown)
 
 
+@app.post("/api/user-preferences/research-ethos/recover")
+def recover_invalid_research_ethos():
+    """Requires explicit UI confirmation; preserve malformed data in a backup."""
+    from sigma import research_ethos
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(403, "Sign in to recover Research Ethos.")
+    return research_ethos.quarantine_invalid_override()
+
+
 @app.get("/api/projects/research-limits")
 def research_limits_view(path: str):
     inspect_project(path)

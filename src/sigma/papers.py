@@ -9289,12 +9289,13 @@ async def _generate_impl(
                         view=view, context=initial_auth,
                         frozen_model=frozen_model, frozen_effort=frozen_effort,
                     )
-            if compatible and _rebind_paper_checkpoint_provider(
+        if not config["available"]:
+            raise ProjectError(config["message"])
+        if checkpoint is not None and compatible:
+            if _rebind_paper_checkpoint_provider(
                 checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
             ):
                 _save_work(path, checkpoint)
-        if not config["available"]:
-            raise ProjectError(config["message"])
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
