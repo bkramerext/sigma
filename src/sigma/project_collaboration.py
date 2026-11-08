@@ -527,8 +527,9 @@ def require_not_leased(path: str) -> None:
     from sigma.projects import ProjectError
 
     with _db() as db:
+        _row, actor = _membership(db, path)
         active = _lease(db, path)
-        if active is not None:
+        if active is not None and active["email"] != actor:
             raise ProjectError(
                 f"Project is being used by {active['email']} ({active['activity']}). "
                 "Wait for that activity to finish."

@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from sigma import project_collaboration
 from sigma.zstd_codec import (
     MAX_BUNDLE_BYTES,
     MAX_COMPRESSED_MEMBER_BYTES,
@@ -633,6 +634,7 @@ def update_files(
     transform_members(bundle_path, lambda members: changes)
 
 
+@project_collaboration.fenced_checkpoint
 def transform_file(
     bundle_path: str | Path,
     relative_path: str,
@@ -828,6 +830,7 @@ def import_bundle(
     return path
 
 
+@project_collaboration.fenced_checkpoint
 def transform_members(
     bundle_path: str | Path,
     update: Callable[[dict[str, bytes]], dict[str, bytes | None]],

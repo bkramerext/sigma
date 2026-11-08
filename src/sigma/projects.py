@@ -280,14 +280,14 @@ def project_write_lock(value: str | Path):
         with os.fdopen(fd, "rb") as lock:
             if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
                 raise ProjectError("Project write lock must be a regular file")
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            try:
-                from sigma import project_collaboration
+            from sigma import project_collaboration
 
-                with project_collaboration.write_guard(str(path)):
+            with project_collaboration.write_guard(str(path)):
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                try:
                     yield path
-            finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+                finally:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
     except OSError as exc:
         raise ProjectError(f"Cannot lock project state: {exc}") from exc
 

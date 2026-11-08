@@ -39,6 +39,7 @@ from pydantic import (
 from sigma import (
     cloud_research,
     cloud_workspaces,
+    project_collaboration,
     paper_writing_sources,
     publication_reference_compiler,
     reference_efficiency,
@@ -3072,6 +3073,7 @@ def _stored_paper_record_json(record: dict[str, Any]) -> bytes:
     return _json(stored)
 
 
+@project_collaboration.fenced_checkpoint
 def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
     target = project_path(path)
     identifier = _paper_id(record["paper_id"])
@@ -3872,6 +3874,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
     return value
 
 
+@project_collaboration.fenced_checkpoint
 def _save_work(path: str, state: dict[str, Any]) -> None:
     file = _work_file(path, create=True)
     stored = dict(state)
@@ -3901,6 +3904,7 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
         _write_progress_status(path, state["progress"])
 
 
+@project_collaboration.fenced_checkpoint
 def _save_pdf_pass(
     path: str,
     work: dict[str, Any],
@@ -3982,6 +3986,7 @@ def _progress_status_file(path: str, *, create: bool = False) -> Path:
     return _work_file(path, create=create).with_name("progress-status.json")
 
 
+@project_collaboration.fenced_checkpoint
 def _write_progress_status(path: str, state: dict[str, Any]) -> None:
     """Keep a bounded progress sidecar; never deserialize 100 MB for polling."""
     fields = (
@@ -4077,6 +4082,7 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
         raise ProjectError("Paper progress metadata is unreadable") from exc
 
 
+@project_collaboration.fenced_checkpoint
 def _clear_progress_status(path: str) -> None:
     file = _progress_status_file(path)
     if file.is_symlink():
@@ -4117,6 +4123,7 @@ def _clear_published_paper_progress(path: str, paper_id: str) -> None:
         logging.getLogger("sigma.lifecycle").warning("paper.score_progress_cleanup_failed")
 
 
+@project_collaboration.fenced_checkpoint
 def _clear_work(path: str) -> None:
     file = _work_file(path, create=False)
     if file.is_symlink():
@@ -4173,6 +4180,7 @@ def _read_reset_ledger(path: str) -> dict[str, Any] | None:
         raise ProjectError("Paper reset accounting is unreadable") from exc
 
 
+@project_collaboration.fenced_checkpoint
 def _write_reset_ledger(path: str, value: dict[str, Any]) -> None:
     file = _work_file(path, create=True).with_name("reset-ledger.json")
     encoded = _json(value)
@@ -4190,6 +4198,7 @@ def _write_reset_ledger(path: str, value: dict[str, Any]) -> None:
         staged.unlink(missing_ok=True)
 
 
+@project_collaboration.fenced_checkpoint
 def _clear_reset_ledger(path: str) -> None:
     file = _reset_ledger_file(path)
     if file.is_symlink():
@@ -4208,6 +4217,7 @@ def _queue_status_file(path: str, *, create: bool = False) -> Path:
     return _work_file(path, create=create).with_name("queue-status.json")
 
 
+@project_collaboration.fenced_checkpoint
 def _write_queue_status(
     path: str,
     status: Literal["queued", "cancelled", "failed"],
@@ -4235,6 +4245,7 @@ def _write_queue_status(
         staged.unlink(missing_ok=True)
 
 
+@project_collaboration.fenced_checkpoint
 def _clear_queue_status(path: str) -> None:
     file = _queue_status_file(path)
     if file.is_symlink():
