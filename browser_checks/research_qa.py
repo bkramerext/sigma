@@ -352,7 +352,7 @@ with sync_playwright() as playwright:
     assert len(conversion_requests) == 1, conversion_requests
 
     with page.expect_popup() as popup:
-        card.get_by_role("button", name="Open in browser").click()
+        card.get_by_role("button", name="View answer in a new browser tab").click()
     browser_page = popup.value
     expect(browser_page.get_by_role("heading", name="Research Q/A")).to_be_visible()
     expect(browser_page.get_by_role("heading", name="Evidence-based answer")).to_be_visible()
@@ -492,7 +492,7 @@ with sync_playwright() as playwright:
     assert mobile_copied.startswith("# Research Q/A") and question in mobile_copied
     mobile_title.screenshot(path=str(OUT / "research-qa-title-mobile-copied.png"))
     remove = mobile_dialog.locator(".saved-paper-card").first.get_by_role(
-        "button", name="Remove", exact=True
+        "button", name="Remove saved answer", exact=True
     )
     remove.click()
     mobile_dialog.get_by_role("button", name="Confirm", exact=True).click()
