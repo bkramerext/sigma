@@ -1385,6 +1385,10 @@
   width: 18px;
   height: 18px;
 }
+.workspace-page .strategy-title-line .strategy-inline-commands .strategy-remove-anchor .strategy-icon-action svg {
+  width: 20px;
+  height: 20px;
+}
 .workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action:hover:not(:disabled) {
   background: #3b3029;
   border-color: #ac7054;
