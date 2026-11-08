@@ -1582,7 +1582,9 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
                         str(path), credential["identity"], view.project.id, progress=collect
                     )
                 )
-                await asyncio.wait_for(provider_started.wait(), timeout=2)
+                # This is a mocked, bounded provider-start wait, not an inference timeout.
+                # Shared CI runners can take more than two seconds to schedule the task.
+                await asyncio.wait_for(provider_started.wait(), timeout=15)
                 live = papers.progress_status(str(path))
                 assert live is not None and live["status"] == "active", live
                 assert live["stage"] == "writing", live
