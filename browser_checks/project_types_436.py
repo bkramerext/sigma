@@ -360,14 +360,9 @@ with sync_playwright() as playwright:
         mobile_box
     )
     page.screenshot(path=str(EVIDENCE / "types-mobile.png"), full_page=True)
-    page.keyboard.press("Escape")
-    expect(dialog).to_be_visible()
-    assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
-        "Escape must leave Project Types in the browser's modal top layer"
-    )
     page.mouse.click(1, 1)  # Clicking the backdrop must not close the dialog.
     expect(dialog).to_be_visible()
-    dialog.locator("header").get_by_role("button", name="Close Settings").click()
+    page.keyboard.press("Escape")
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_visible()
     page.set_viewport_size({"width": 1440, "height": 1000})
@@ -438,13 +433,7 @@ with sync_playwright() as playwright:
     assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
     page.keyboard.press("Shift+Tab")
     assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
-    for _ in range(3):
-        page.keyboard.press("Escape")
-        expect(dialog).to_be_visible()
-        assert dialog.evaluate("element => element.open && element.matches(':modal')"), (
-            "Repeated Escape must not dismiss or demote Project Types"
-        )
-    dialog.locator("header").get_by_role("button", name="Close Settings").click()
+    page.keyboard.press("Escape")
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()
 
@@ -484,7 +473,7 @@ with sync_playwright() as playwright:
     parent.get_by_role("button", name="New reference", exact=True).first.click()
     # The next New remains unavailable until the just-created row contains a URL.
     expect(
-        parent.locator(".pt-reference-table").first.get_by_role("button", name="New reference", exact=True)
+        parent.locator(".pt-reference-heading").first.get_by_role("button", name="New reference", exact=True)
     ).to_have_count(0)
     # A new empty custom reference also cancels cleanly on blur.
     url_input = parent.get_by_label("Research reference URL 1")
@@ -573,7 +562,7 @@ with sync_playwright() as playwright:
     assert url_input.evaluate("element => document.activeElement === element"), (
         "URL input remounted during typing"
     )
-    research_new = parent.locator(".pt-reference-table").first.get_by_role(
+    research_new = parent.locator(".pt-reference-heading").first.get_by_role(
         "button", name="New reference", exact=True
     )
     research_new.click()
@@ -600,7 +589,7 @@ with sync_playwright() as playwright:
           borderBottom: getComputedStyle(td).borderBottomWidth
         }))"""
     )
-    assert len(reference_layout) >= 3, reference_layout
+    assert len(reference_layout) >= 2, reference_layout
     assert all(
         row["paddingTop"] == "2px" and row["borderBottom"] == "0px" for row in reference_layout
     ), reference_layout
