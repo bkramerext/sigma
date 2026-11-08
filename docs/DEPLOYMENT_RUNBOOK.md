@@ -24,13 +24,15 @@ an alternate routine-release checklist.
 
 ## SIGMA v0.3.0 — Red-owned deployment and current IAM blocker
 
-**Status (2026-11-08): HELD before recovery or cutover.** The prior
-v0.3.0 attempt stopped at read-only GCP preflight. The documented production
-version remains v0.2.2 at
-`469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. Red verified host
-IAP/OS Login and `sudo -n true`, systemd, containers, state disk/UUID, and
-read access to the existing disk/snapshots. No writer stop, snapshot,
-temporary recovery VM/disk, IAM change, or deployment was performed.
+**Status (2026-11-08): HELD for current billing evidence and a new release
+source SHA.** Production remains v0.2.2 at
+`469c955dfadb5a7bd17b72fc069a3365b4f20ba7`. The original recovery
+identity operation-status IAM denial has been repaired and retested
+successfully (details below). No writers have been stopped, no snapshot or
+recovery VM/clone created, and no deployment has occurred. A one-time
+explicitly approved **IAM-only** use of the existing Owner account
+completed; this authorization does **not** extend to billing inspection
+or release execution.
 
 **Owner and authority.** Red owns the complete routine deployment after
 preflight is repaired and a new release SHA is approved: evidence, recovery
@@ -60,22 +62,27 @@ a new `main` SHA is selected, provided it does not modify production.
 Do not start recovery snapshots/VMs, stop writers, invoke the guarded
 deploy helper, enable maintenance, or claim v0.3.0 was deployed.
 
-1. **Access and IAM:** Inspect the existing release identities and repair
-   operation-status read permissions through one separately authorized
-   IAM administrator (see below). Once granted, demonstrate effective
-   list/get access on *existing* global/zonal operations using the
-   impersonated recovery account; no Owner account for deployment.
+1. **Access and IAM — PASSED:** The authorized one-time IAM repair was
+   completed and the recovery identity described one real global and one
+   real zonal `DONE` operation. Preserve the existing binding; retest
+   it after any future IAM change. No Owner account for deployment.
 2. **Host and topology:** Reconfirm IAP/OS Login, noninteractive
    `sudo -n true`, systemd/Compose and all three containers, release
    pin, disk UUID/mount flags, quotas, and available recovery instance
    and disk types. Do not alter anything to produce a green check.
-3. **Budget:** Verify the billing link and spending controls through
-   an authorized billing-administration path if the API is disabled.
-   Independently document a conservative itemized estimate including
-   snapshot retention, clone, boot disk, e2 VM, worst-case duration,
-   and cleanup; `<= $25` incremental is mandatory. If exact spend
-   cannot be accessed, report it as a limitation; never assert observed
-   billed spend from a pricing estimate.
+3. **Billing — BLOCKED:** An authorized **billing-account viewer** must
+   confirm via Cloud Console (or a pre-existing legitimate read-only
+   API path) that project `sigma-research-prod` is still linked to an
+   active billing account, its relevant budget and alert thresholds are
+   present, and current costs/spend are visible or honestly unavailable.
+   The Cloud Billing API is disabled; **do not enable it**, widen billing
+   IAM or use the personal Owner account for billing under the separate
+   IAM-only authorization. The previous October budget/credit evidence
+   is historical. Budget alerts are **not** hard spend caps. The latest
+   modeled recovery cost is **$16.11**, or **$21.11 including $5
+   contingency**, versus a mandatory $25 incremental ceiling. This is
+   modeled, not billed. Do not create recovery resources before current
+   billing association and budget evidence is supplied.
 4. **Maintenance and baseline:** Inspect the existing maintenance
    switch state and confirm the public site is serving normally.
    Prepare the read-only identity, project, paper, job and accounting
@@ -107,87 +114,102 @@ the verified grant, absence of operations, and the remaining actual-get
 test as a gate to resolve before writer downtime; do not invent a
 success or repeat the same blocked request.
 
-### Remediate operation-status reads, without Owner fallback
+### IAM readiness — completed after explicit one-time authorization
 
-Red's latest effective-identity test using the established GCP SDK
-reported `compute.globalOperations.get` **DENIED** and
-`compute.zoneOperations.list` **DENIED** for
+The operator **explicitly authorized** a one-time use of the existing
+personal Owner account for **only** the minimum operation-read IAM
+bootstrap. Red created custom project role `sigmaOperationMetadataReaderV1`
+containing exactly:
+
+- `compute.globalOperations.get`
+- `compute.zoneOperations.list`
+- `compute.zoneOperations.get`
+
+The role was bound **without a resource-name condition** to **only**
 `sigma-release-operator@sigma-research-prod.iam.gserviceaccount.com`.
-`compute.zoneOperations.get` is **UNVERIFIED** (no operation ID could
-be discovered). A denied `getIamPolicy` only prevents Red from viewing
-the binding; it is **not** required for polling operations and must not
-be added to the runtime identity just for discovery.
+Other IAM bindings, the original Owner grant, and the existing
+recovery-discovery role were preserved. Owner use ended after the IAM
+repair; no broader IAM or service-account keys were created.
 
-Under issues #590 and #667, a **separately authorized IAM
-administrator** should inspect the effective existing custom role and
-bindings and propose the smallest correction. The working target is a
-dedicated project-level **read-only** custom role containing only:
+**Effective permission test: PASS.** With the existing short-lived
+impersonated recovery account (not Owner), Red listed existing zonal
+operations and successfully described:
 
-- `compute.globalOperations.get` — inspect a known global operation;
-- `compute.zoneOperations.list` — discover existing zonal operations;
-- `compute.zoneOperations.get` — inspect a known zonal operation.
+- Zonal `operation-1794153415633-65fc5e502e935-d1ec7554-4d9d3a8e`
+  — `DONE`.
+- Global `operation-1794152778212-65fc5bf04a54f-24773804-b221c4f8`
+  — `DONE`.
 
-Do not add create, delete, update, `*IamPolicy`, or project Owner/Editor
-permissions. These are operation **metadata** reads for this project,
-not grants to operate on production resources. Compute operation
-resources are not listed among the resource types supporting
-`resource.name` IAM Conditions: do **not** attach an untested
-resource-name-prefix condition that silently makes the new grant
-ineffective. Prefer the minimal permission-only project binding, after
-reviewing project-wide operation-metadata visibility and any eligible
-time limit. Existing resource-scoped write grants remain unchanged.
+Those existing operation names are historical evidence, not guaranteed
+to remain available; retest after IAM changes. The denied
+`getIamPolicy` permission is unnecessary for routine release polling.
+**No further Owner access is authorized**, including for billing or
+cutover.
 
-**One-time bootstrap exception (explicit approval required):** The existing
-personal Owner account may be used **only** to inspect the policy and make
-the minimal IAM role/binding repair, *if the operator explicitly authorizes
-that exact administrative action*. This is not permission to use Owner for
-the snapshot, recovery VM, SSH, deploy helper, billing, or any other release
-operation. Do not create or distribute Owner tokens, service-account keys,
-or additional users, and do not alter the Owner grant or other IAM bindings.
-Prefer a separate non-Owner IAM administrator if one is actually available.
-Where the only available administrator is the Owner, escalate **once** with
-the bounded repair proposal rather than repeatedly seeking a fictional
-non-Owner administrator. Preserve the original policy/role configuration
-and use conditional/etag-protected updates so unrelated concurrent edits
-are not overwritten. Do not perform this one-time exception until the
-operator's explicit authorization is received. Afterwards, stop using
-Owner credentials and retest everything under the two existing keyless
-release identities.
+### Host, storage, network, and recovery readiness
 
-After an authorized admin applies the correction, Red must repeat
-effective checks with the **same impersonated recovery identity**:
+**Source-independent checks completed by Red (2026-11-08):**
 
-```sh
-GCLOUD=${GCLOUD:-gcloud}
-PROJECT=sigma-research-prod
-RECOVERY_ID=sigma-release-operator@sigma-research-prod.iam.gserviceaccount.com
-"$GCLOUD" compute operations list --zones=us-west1-b --limit=10 \
-  --project="$PROJECT" --impersonate-service-account="$RECOVERY_ID"
-# Pick a real existing zonal operation NAME from the list, then:
-"$GCLOUD" compute operations describe ZONAL_OPERATION_NAME \
-  --zone=us-west1-b --project="$PROJECT" \
-  --impersonate-service-account="$RECOVERY_ID"
-# With the already-known existing GLOBAL_OPERATION_NAME, then:
-"$GCLOUD" compute operations describe GLOBAL_OPERATION_NAME \
-  --global --project="$PROJECT" \
-  --impersonate-service-account="$RECOVERY_ID"
-```
+- Production is v0.2.2, full SHA
+  `469c955dfadb5a7bd17b72fc069a3365b4f20ba7`,
+  checkout and release pin agree; systemd is active and backend,
+  frontend, and edge containers are healthy.
+- IAP/OS Login and `sudo -n true` passed via the host-only
+  `sigma-release-ssh` identity.
+- `/srv/sigma-state` is mounted ext4 from `/dev/sdb`, UUID
+  `28ef67cb-4da8-46e7-9a8b-dce0470153a5`;
+  `auth` is owned by 10001:10001 and mode 0700.
+- Maintenance is **OFF** (`/etc/caddy/sigma-maintenance/active.caddy`
+  absent); Caddy configuration validates. Public DNS/TLS,
+  redirect, root, SPA deep-link, private-port exposure, and
+  hosted API probes passed. The anonymous health endpoint
+  appropriately returned HTTP 401.
+- Quotas: CPUs 4/100, instances 1/24, persistent disk 100/2458 GiB,
+  SSD disk 30/300 GiB, snapshots 12/1000. The recovery subnet is
+  readable; `e2-standard-2` is available in `us-west1-b`.
+- Read-only **live baseline** from the installed v0.2.2 restore
+  verifier: 3 identities/workspaces, 17 projects, 42 artifacts,
+  one saved TeX/PDF pair verified by SHA-256 and size, 10 terminal
+  jobs in two unmapped historical workspaces, 46 accounting calls
+  recording $5.938237, including 15 reserved/unknown outcomes;
+  all three SQLite integrity checks passed. This is **not** an
+  isolated snapshot restore and does **not** prove new-release schema
+  compatibility. Re-run the frozen release verifier against the
+  eventual restored clone, with fresh live baselines and careful
+  preservation of all unmapped historical data.
+- Both keyless identities were denied `compute.firewalls.list`.
+  Production IAP SSH succeeds using the existing `sigma-iap-ssh`
+  tag; the read-only inventory of firewall rules remains unavailable.
+  A *future* recovery VM IAP connection cannot be demonstrated until
+  that VM exists. Test the recovery identity and IAP after the
+  carefully bounded VM is created in the **authorized restore drill**;
+  do not broaden firewall visibility or create a VM merely for this
+  early check. If actual recovery IAP fails, stop and remediate
+  before accepting the restore.
 
-Use actual operation names, not literal placeholders. If operations
-have expired, a check is **UNVERIFIED**, not passed; do not create
-resources merely to obtain an operation. Record exact response codes
-and permission evidence, including the authorized administrator's
-limited role/binding details. A successful resource-specific
-`describe` does not prove successful operation-status reads.
+**Remaining billing gate (no authorization to change billing):**
+The Cloud Billing API is disabled, and the recovery identity cannot
+view the account's budgets. Historical documentation of a $300 budget
+and 50/75/90/100% alerts does not prove those controls are current.
+A person **already authorized on the billing account** can provide
+read-only Cloud Console evidence without granting Red any billing
+permissions: project-to-account link, linked account active status,
+current budget/thresholds and alert notification settings, and
+available current spend/cost report. Google Cloud Billing Account
+Viewer on the **billing account** is a documented read-only option
+when an authorized billing administrator chooses to delegate;
+this is not a request to grant it now. Record the date and redacted
+evidence. If no authorized billing viewer can furnish it,
+report **READINESS BLOCKED — BILLING_EVIDENCE**, not READY FOR SHA.
 
-**Other preflight gates remain.** Quota was reported sufficient and a
-bounded ~$16 estimate was below the $25 incremental recovery ceiling,
-but the Cloud Billing API was disabled and billing association/actual
-spend were not verified. Maintenance-off evidence, schema compatibility,
-and production data/accounting baseline were also missing. Complete
-these independently before creating a recovery point or asserting
-`--backup-verified` / `--schema-compatible`. No paid inference or
-production modification during IAM remediation.
+**Cost bound:** The incremental recovery scenario is modeled as
+$16.11, or $21.11 with contingency, including an e2-standard-2 VM
+for at most 24h, up to 100-GiB boot and 30-GiB clone disks,
+and a 30-GiB standard snapshot retained up to 30 days. No
+external IP or cross-region traffic; no paid inference.
+Costs are estimates, not actual spend. Observe and clean up
+temporary resources promptly, retain only the verified snapshot,
+and stop when the $25 incremental ceiling cannot be supported.
 
 **Stage A execution environment:** use the current maintained runbook
 from `origin/main` and the approved keyless GCP operator runtime.
@@ -260,11 +282,11 @@ maintained in [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md).
    **unverified**, not passed, and resolve it before downtime. Do not
    repeatedly stop production to discover missing permissions.
 
-   **Confirmed v0.3.0 preflight blocker:** the recovery identity was denied
-   `compute.globalOperations.get` and `compute.zoneOperations.list`;
-   `compute.zoneOperations.get` remains unverified. Follow the specific
-   read-only IAM remediation above; do not accept historical resource reads
-   or v0.2.2's workaround as proof of current operation-polling access.
+   **Confirmed v0.3.0 IAM repair:** all three operation-read permissions
+   have now been proven through the impersonated recovery identity on
+   existing global/zonal operations (details above). Keep the
+   effective-access test as a future regression gate. The remaining
+   source-independent blocker is current billing evidence.
 3. **Create a fresh application-consistent snapshot.** Declare the approved
    maintenance window and verify baseline identity, project, paper, job and
    accounting counts. Stop SIGMA writers cleanly on `sigma-gce-01`, sync the
