@@ -158,6 +158,25 @@ def fast_package(section_count: int = 2) -> tuple[dict[str, Any], papers.FastLon
     return package, plan
 
 
+def test_paper_section_count_tracks_scientific_complexity() -> None:
+    """A short theorem need not acquire filler; complex studies keep sections."""
+    _, simple = fast_package(section_count=1)
+    assert len(simple.sections) == 1
+    assert len(papers.LongPaperPlan.model_validate(simple.model_dump()).sections) == 1
+    assert (
+        papers._paper_response_schema(papers.FastLongPaperPlan)["properties"]["sections"][
+            "minItems"
+        ]
+        == 1
+    )
+    assert (
+        papers._paper_response_schema(papers.PaperDraft)["properties"]["sections"]["minItems"] == 1
+    )
+    _, deep = fast_package(section_count=4)
+    assert len(deep.sections) == 4
+    assert len(papers.FastLongPaperPlan.model_validate(deep.model_dump()).sections) == 4
+
+
 def test_structured_evidence_short_tail_does_not_crash() -> None:
     """Two fragments with a short tail must merge without IndexError.
 

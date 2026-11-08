@@ -1542,7 +1542,8 @@ def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> N
                 lambda _value: None,
                 structured_fast_path=True,
             )
-        assert len(generated.sections) >= 2
+        # A saved single-result fallback needs only one substantive section.
+        assert len(generated.sections) == 1
         assert calls == 1 + len(generated.sections)
         assert state["plan"] is not None
         assert "planning_fallback_pending" not in state
@@ -2565,7 +2566,9 @@ def test_maximum_regions_archived_one_session_stays_fast() -> None:
     with patch("sigma.api.export_project_view", return_value=export):
         package, _ = papers._snapshot("fixture")
     assert len(package["sources"]) == 5  # project + strategy + session + two artifacts
-    assert len(papers._json(package)) <= papers.MAX_ONE_SHOT_CONTEXT_BYTES
+    # The frozen ethos and three-field description are audit metadata, not
+    # additional experimental evidence; they may cross the former 100 KB line.
+    assert len(papers._json(package)) < papers.MAX_EASY_ONE_SHOT_CONTEXT_BYTES
     assert papers._paper_long_form(package) is False
 
     # The old size-only mode switch made one additional research note cause

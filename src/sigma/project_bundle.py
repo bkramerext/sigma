@@ -76,7 +76,7 @@ def _files(directory: Path) -> dict[str, bytes]:
         raise BundleError("Invalid source project document") from exc
     if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
         raise BundleError("Invalid source project schema")
-    if not 1 <= document["schema_version"] <= 12:
+    if not 1 <= document["schema_version"] <= 13:
         raise BundleError("Unsupported source project schema")
     return entries
 
@@ -188,6 +188,9 @@ def rename_bundle_project(bundle: dict[str, Any], title: str) -> dict[str, Any]:
                     "show_advanced_outcome_details", False
                 ),
             }
+            if document["schema_version"] >= 13:
+                previous["desired_outcomes"] = document["desired_outcomes"]
+                previous["paper_requirements"] = document["paper_requirements"]
             latest = datetime.fromisoformat(document["events"][-1]["timestamp"])
             stamp = max(datetime.now(UTC), latest).isoformat()
             document["events"].append(
@@ -416,7 +419,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
         raise BundleError("Invalid project document") from exc
     if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
         raise BundleError("Invalid project document")
-    if not 1 <= document["schema_version"] <= 12:
+    if not 1 <= document["schema_version"] <= 13:
         raise BundleError("Unsupported project schema version")
     return result
 

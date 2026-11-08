@@ -167,7 +167,10 @@ async def main_async(root: Path):
         assert after["plain"] and not after["plain"]["current"]
         assert after["plain"]["body"] == plain["plain"]["body"]
         assert inspect_project(path).project.problem == edited
-        assert (path / "project.v5.json").read_bytes() == project_before
+        assert inspect_project(path).project.schema_version == 13
+        assert not (path / "project.v5.json").exists()
+        assert inspect_project(path).project.desired_outcomes
+        assert inspect_project(path).project.paper_requirements
         assert inspect_text(path, "project")["source_format"] == "markdown"
         try:
             save_source(path, "project", "stale", "plain", plain["source_digest"])
@@ -323,6 +326,8 @@ async def main_async(root: Path):
         initialize_project(legacy, "Legacy", "Count a_n for n >= 0")
         raw = json.loads((legacy / "project.json").read_bytes())
         raw["schema_version"] = version
+        raw.pop("desired_outcomes", None)
+        raw.pop("paper_requirements", None)
         raw.pop("show_advanced_outcome_details", None)
         raw.pop("difficulty", None)
         if version < 6:

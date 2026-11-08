@@ -27,6 +27,7 @@ import AboutProvenanceVision from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import GlobalModelPill from './GlobalModelPill';
+import ProjectDescriptionEditor, { type ProjectDescriptionDraft } from './ProjectDescriptionEditor';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // A failure while presenting historical research must never unmount the app.
@@ -118,6 +119,8 @@ type ProjectView = {
     id: string;
     title: string;
     problem: string;
+    desired_outcomes: string;
+    paper_requirements: string;
     schema_version: number;
     backend_build_commit?: string | null;
     ai_model: string;
@@ -4162,6 +4165,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
+  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
@@ -4172,6 +4176,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
+    {close && projectView && onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/> Settings</button>}
     {close && projectView && onProjectUpdated ? <>
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
@@ -4179,6 +4184,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {close && projectView && <GlobalModelPill enabled={showConnectionStatus}/> }
     <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
     </div>
+    {globalSettingsOpen && <GlobalSettingsDialog onClose={() => setGlobalSettingsOpen(false)}/>}
   </header>;
 }
 
@@ -4454,11 +4460,11 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
   </dialog>;
 }
 
-type Settings = { title: string; problem: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null; show_advanced_outcome_details: boolean };
+type Settings = { title: string; problem: string; desired_outcomes: string; paper_requirements: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null; show_advanced_outcome_details: boolean };
 type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; relative_cost: '$' | '$$' | '$$$'; availability: 'available' | 'unavailable' | 'unverified' };
 // Keep preference controls usable when account access cannot be checked.
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
-const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty, show_advanced_outcome_details: view.project.show_advanced_outcome_details });
+const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, desired_outcomes: view.project.desired_outcomes ?? '', paper_requirements: view.project.paper_requirements ?? '', investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty, show_advanced_outcome_details: view.project.show_advanced_outcome_details });
 
 function ResearchTypeIcon({ type, snapshot }: { type: ResearchMode; snapshot?: ProjectTypeRecord | null }) {
   const definition = snapshot?.id === type ? snapshot : projectTypeCache.find(item => item.id === type);
@@ -4638,7 +4644,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [savedExclusiveSections, setSavedExclusiveSections] = useState(false);
   const [exclusiveSectionsLoaded, setExclusiveSectionsLoaded] = useState(false);
   const [sectionLayoutWarning, setSectionLayoutWarning] = useState('');
-  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', desired_outcomes: '', paper_requirements: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -4767,6 +4773,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       const createValues = {
         title: values.title,
         problem: values.problem,
+        desired_outcomes: values.desired_outcomes,
+        paper_requirements: values.paper_requirements,
         investigation_type: values.investigation_type,
         ai_model: values.ai_model,
         reasoning_effort: values.reasoning_effort,
@@ -4828,7 +4836,9 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Set this project’s research type and AI options.' : 'Name a project and choose its research category.'}</p>
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
-      <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
+      <label htmlFor="project-problem">Research Subject</label><p className="settings-hint">What are we investigating?</p><textarea id="project-problem" required maxLength={20000} rows={3} value={values.problem} onChange={event => change('problem', event.target.value)}/>
+      <label htmlFor="project-desired-outcomes">Desired Outcomes</label><p className="settings-hint">What insights or advances are we hoping for?</p><textarea id="project-desired-outcomes" maxLength={20000} rows={4} value={values.desired_outcomes} onChange={event => change('desired_outcomes', event.target.value)}/>
+      <label htmlFor="project-paper-requirements">Paper Requirements</label><p className="settings-hint">What should the finished publication contain?</p><textarea id="project-paper-requirements" maxLength={20000} rows={4} value={values.paper_requirements} onChange={event => change('paper_requirements', event.target.value)}/></>}
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/>{!initial && <p className="settings-hint">Need another project type? Use Project Types to create one.</p>}</div>
       <div><label htmlFor="project-difficulty">Difficulty</label><select id="project-difficulty" value={values.difficulty ?? ''} onChange={event => change('difficulty', (event.target.value || null) as ProjectDifficulty | null)}>{values.difficulty === null && <option value="">Not set</option>}<option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>
       {initial && <div className="settings-model-row">
@@ -6117,8 +6127,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
         </svg>
       </button>
-      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" data-tooltip="Project settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
-        <SlidersSettingsIcon/>
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project type and difficulty" data-tooltip="Project type and difficulty" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h9l9 9-8 8-10-10z"/><circle cx="8" cy="9" r="1.1"/></svg>
       </button>
     </div>
   </div>;
@@ -6135,13 +6145,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <div id="project-pane-content" hidden={!projectExpanded}>
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
       <div className="project-overview-card">
-      <div className="project-description-columns"><span>DESCRIPTION AND ACCEPTANCE CRITERIA</span></div>
-      <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
-      <div className="project-pane-content">
-        <div className="project-intro">
-          <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} hideProjectActions hideProjectHeading hideEditAction markdownSlotId="project-markdown-slot" editSignal={textEditSignals.project ?? 0} combinedEditMode={activeMode === 'project-title'} onCombinedDraftChange={draft => updateCombinedTextDraft('project', draft)} modeDisabled={activeMode !== null && activeMode !== 'text-project' && activeMode !== 'project-title'} onEnterMode={() => enterMode('text-project')} onExitMode={() => exitMode('text-project')}/>
-        </div>
-      </div>
+      <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
+      <ProjectDescriptionEditor view={view} disabled={closing || ordering || !!dragId || (activeMode !== null && activeMode !== 'project-title')}
+        onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')}
+        onSave={async (draft: ProjectDescriptionDraft) => {
+          const current = settingsOf(view);
+          const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current });
+          setView(next);
+        }}/>
       </div>
       </div>
     </section>
@@ -6245,7 +6256,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <ol className="event-list">{project.events.map(event => <li key={event.sequence}>
         <span className="sequence">{String(event.sequence).padStart(2, '0')}</span>
         <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time>
-          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', investigation_type: 'Research type', ai_model: 'AI model', reasoning_effort: 'Thinking level', difficulty: 'Difficulty', show_advanced_outcome_details: 'Advanced Outcome details' })[key]}</dt><dd>Before: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.previous[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.previous[key] as ProjectDifficulty | null) : event.project_change!.previous[key]}<br/>After: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.current[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.current[key] as ProjectDifficulty | null) : event.project_change!.current[key]}</dd></div>)}</dl></details>}
+          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research Subject', desired_outcomes: 'Desired Outcomes', paper_requirements: 'Paper Requirements', investigation_type: 'Research type', ai_model: 'AI model', reasoning_effort: 'Thinking level', difficulty: 'Difficulty', show_advanced_outcome_details: 'Advanced Outcome details' })[key]}</dt><dd>Before: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.previous[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.previous[key] as ProjectDifficulty | null) : event.project_change!.previous[key]}<br/>After: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.current[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.current[key] as ProjectDifficulty | null) : event.project_change!.current[key]}</dd></div>)}</dl></details>}
           {event.stage_change && <p>Manually tracked: {stageLabels[event.stage_change.previous]} → {stageLabels[event.stage_change.stage]}</p>}
           {event.order && <details><summary>Saved order</summary><ol>{event.order.map(id => <li key={id}>{byId.get(id)?.title ?? id}</li>)}</ol></details>}
           {event.change && <details className="edit-history"><summary>View changes</summary>

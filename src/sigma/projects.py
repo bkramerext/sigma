@@ -118,6 +118,8 @@ class ProjectSettings:
     reasoning_effort: str
     difficulty: Difficulty | None = None
     show_advanced_outcome_details: bool = False
+    desired_outcomes: str = ""
+    paper_requirements: str = ""
 
     @property
     def research_mode(self) -> str:
@@ -145,7 +147,9 @@ def _settings(raw: Any) -> ProjectSettings:
     if (
         not isinstance(raw, dict)
         or not required <= set(raw)
-        or set(raw) - required - {"difficulty", "show_advanced_outcome_details"}
+        or set(raw)
+        - required
+        - {"difficulty", "show_advanced_outcome_details", "desired_outcomes", "paper_requirements"}
     ):
         raise ProjectError("Invalid project settings fields")
     advanced_outcome = raw.get("show_advanced_outcome_details", False)
@@ -163,6 +167,8 @@ def _settings(raw: Any) -> ProjectSettings:
         raw["reasoning_effort"],
         _difficulty(raw.get("difficulty")),
         advanced_outcome,
+        _optional_project_text(raw.get("desired_outcomes", ""), "Desired outcomes"),
+        _optional_project_text(raw.get("paper_requirements", ""), "Paper requirements"),
     )
 
 
@@ -209,6 +215,8 @@ class Project:
     show_advanced_outcome_details: bool = False
     backend_build_commit: str | None = None
     project_type_snapshot: dict[str, Any] | None = None
+    desired_outcomes: str = ""
+    paper_requirements: str = ""
 
     @property
     def research_mode(self) -> str:
@@ -296,6 +304,13 @@ def _text(value: Any, name: str, limit: int) -> str:
     return value.strip()
 
 
+def _optional_project_text(value: Any, name: str) -> str:
+    """Empty is valid for legacy projects; never fabricate requirements."""
+    if not isinstance(value, str) or len(value.strip()) > 20000:
+        raise ProjectError(f"{name} must be Markdown of at most 20000 characters")
+    return value.strip()
+
+
 def _type_snapshot(identifier: str) -> dict[str, Any] | None:
     if isinstance(identifier, ResearchMode):
         identifier = identifier.value
@@ -313,9 +328,9 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 12)")
+        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 13)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
@@ -328,6 +343,8 @@ def _decode(raw: Any) -> Project:
         fields.update({"ai_model", "reasoning_effort"})
     if version >= 8:
         fields.add("difficulty")
+    if version >= 13:
+        fields.update({"desired_outcomes", "paper_requirements"})
     if 9 <= version < 12:
         fields.add("show_advanced_outcome_details")
     if "project_type_snapshot" in raw:
@@ -373,6 +390,8 @@ def _decode(raw: Any) -> Project:
             {
                 "title": raw["title"],
                 "problem": raw["problem"],
+                "desired_outcomes": raw.get("desired_outcomes", ""),
+                "paper_requirements": raw.get("paper_requirements", ""),
                 "investigation_type": mode,
                 "ai_model": raw.get("ai_model", legacy_model()),
                 "reasoning_effort": raw.get("reasoning_effort", "high"),
@@ -597,6 +616,8 @@ def _decode(raw: Any) -> Project:
                     for field, val in value.items()
                 }
                 normalized.setdefault("difficulty", None)
+                normalized.setdefault("desired_outcomes", "")
+                normalized.setdefault("paper_requirements", "")
                 normalized_change[key] = normalized
             if asdict(next_change) != normalized_change:
                 raise ProjectError("Project change text must be canonical")
@@ -656,6 +677,8 @@ def _decode(raw: Any) -> Project:
         settings.show_advanced_outcome_details,
         raw.get("backend_build_commit"),
         snapshot,
+        settings.desired_outcomes,
+        settings.paper_requirements,
     )
 
 
@@ -663,6 +686,9 @@ def _document(project: Project) -> bytes:
     raw = asdict(project)
     if raw["backend_build_commit"] is None:
         del raw["backend_build_commit"]
+    if project.schema_version < 13:
+        del raw["desired_outcomes"]
+        del raw["paper_requirements"]
     if project.schema_version < 8:
         del raw["difficulty"]
     if project.schema_version < 9 or project.schema_version >= 12:
@@ -694,6 +720,10 @@ def _document(project: Project) -> bytes:
         for strategy in raw["strategies"]:
             del strategy["removed_at"]
     for event in raw["events"]:
+        if project.schema_version < 13 and event.get("project_change") is not None:
+            for settings in event["project_change"].values():
+                settings.pop("desired_outcomes", None)
+                settings.pop("paper_requirements", None)
         if project.schema_version < 8 and event.get("project_change") is not None:
             for settings in event["project_change"].values():
                 settings.pop("difficulty", None)
@@ -747,6 +777,8 @@ def initialize_project(
     reasoning_effort: str = "high",
     difficulty: str = "medium",
     show_advanced_outcome_details: bool = False,
+    desired_outcomes: str = "",
+    paper_requirements: str = "",
 ) -> ProjectView:
     mode = _research_mode(research_mode)
     selected_difficulty = _difficulty(difficulty)
@@ -768,7 +800,7 @@ def initialize_project(
         if not path.parent.is_dir() or path.parent.is_symlink():
             raise ProjectError("Project destination parent is unavailable")
         project = Project(
-            12,
+            13,
             str(uuid4()),
             title.strip(),
             problem.strip(),
@@ -780,6 +812,8 @@ def initialize_project(
             show_advanced_outcome_details=False,
             backend_build_commit=_current_build_commit(),
             project_type_snapshot=_type_snapshot(mode),
+            desired_outcomes=_optional_project_text(desired_outcomes, "Desired outcomes"),
+            paper_requirements=_optional_project_text(paper_requirements, "Paper requirements"),
         )
         bundle = stored_bundle({STATE: _document(project)})
         fd, staged_name = tempfile.mkstemp(prefix=".sigma-init-", dir=path.parent)
@@ -811,7 +845,7 @@ def initialize_project(
         if any(p.name != ".gitkeep" for p in path.iterdir()):
             raise ProjectError("Initialization requires an empty directory (or .gitkeep only)")
         project = Project(
-            12,
+            13,
             str(uuid4()),
             title.strip(),
             problem.strip(),
@@ -823,6 +857,8 @@ def initialize_project(
             show_advanced_outcome_details=False,
             backend_build_commit=_current_build_commit(),
             project_type_snapshot=_type_snapshot(mode),
+            desired_outcomes=_optional_project_text(desired_outcomes, "Desired outcomes"),
+            paper_requirements=_optional_project_text(paper_requirements, "Paper requirements"),
         )
         # Stage and fsync before atomic, no-replace publication. Concurrent initializers
         # cannot overwrite one another; the final link fails if project.json exists.
@@ -1275,6 +1311,8 @@ def create_project(
     reasoning_effort: str = "high",
     difficulty: str = "medium",
     show_advanced_outcome_details: bool = False,
+    desired_outcomes: str = "",
+    paper_requirements: str = "",
 ) -> ProjectView:
     """Create a single-file JSON project by default.
 
@@ -1289,6 +1327,8 @@ def create_project(
         reasoning_effort,
         difficulty,
         show_advanced_outcome_details,
+        desired_outcomes,
+        paper_requirements,
     )
 
 
@@ -1371,6 +1411,8 @@ def project_settings(project: Project) -> ProjectSettings:
         project.reasoning_effort,
         project.difficulty,
         project.show_advanced_outcome_details,
+        project.desired_outcomes,
+        project.paper_requirements,
     )
 
 
@@ -1385,11 +1427,23 @@ def update_project(
     text_format: str | None = None,
     difficulty: str | None = None,
     show_advanced_outcome_details: bool | None = None,
+    desired_outcomes: str | None = None,
+    paper_requirements: str | None = None,
 ) -> ProjectView:
     wanted = _settings(
         {
             "title": title,
             "problem": problem,
+            "desired_outcomes": (
+                desired_outcomes
+                if desired_outcomes is not None
+                else expected.get("desired_outcomes", "")
+            ),
+            "paper_requirements": (
+                paper_requirements
+                if paper_requirements is not None
+                else expected.get("paper_requirements", "")
+            ),
             "investigation_type": research_mode,
             "ai_model": ai_model,
             "reasoning_effort": reasoning_effort,
@@ -1407,22 +1461,57 @@ def update_project(
         current = project_settings(project)
         # These values were moved to user settings in schema 12. Ignore them
         # in project optimistic-lock checks and edits, including older callers.
-        # Only title, subject, type, and difficulty are project-local.
+        # Title, three description fields, type and difficulty are project-local.
         project_only = lambda setting: (
             setting.title,
             setting.problem,
+            setting.desired_outcomes,
+            setting.paper_requirements,
             setting.investigation_type,
             setting.difficulty,
         )
-        if project_only(current) != project_only(prior):
+        # Older API/CLI clients did not know the new fields. They may edit
+        # title/type/subject without clobbering or racing an unknown field.
+        # Modern clients supply both explicitly and get full stale-edit checks.
+        effective_prior = replace(
+            prior,
+            desired_outcomes=(
+                prior.desired_outcomes
+                if "desired_outcomes" in expected
+                else current.desired_outcomes
+            ),
+            paper_requirements=(
+                prior.paper_requirements
+                if "paper_requirements" in expected
+                else current.paper_requirements
+            ),
+        )
+        effective_wanted = replace(
+            wanted,
+            desired_outcomes=(
+                wanted.desired_outcomes
+                if desired_outcomes is not None or "desired_outcomes" in expected
+                else current.desired_outcomes
+            ),
+            paper_requirements=(
+                wanted.paper_requirements
+                if paper_requirements is not None or "paper_requirements" in expected
+                else current.paper_requirements
+            ),
+        )
+        if project_only(current) != project_only(effective_prior):
             raise ProjectError(
                 "Project settings changed elsewhere. Refresh/reopen before editing again; your changes have not been saved"
             )
-        if project_only(current) == project_only(wanted):
+        if project_only(current) == project_only(effective_wanted):
             return project
-        if wanted.title != current.title:
-            _require_available_title(wanted.title, projects_root(), exclude_id=project.id)
-        wanted_type_id = str(getattr(wanted.investigation_type, "value", wanted.investigation_type))
+        if effective_wanted.title != current.title:
+            _require_available_title(effective_wanted.title, projects_root(), exclude_id=project.id)
+        wanted_type_id = str(
+            getattr(
+                effective_wanted.investigation_type, "value", effective_wanted.investigation_type
+            )
+        )
         current_type_id = str(
             getattr(current.investigation_type, "value", current.investigation_type)
         )
@@ -1432,22 +1521,24 @@ def update_project(
             else project.project_type_snapshot
         )
         persisted = replace(
-            wanted,
+            effective_wanted,
             ai_model=legacy_model(),
             reasoning_effort="high",
             show_advanced_outcome_details=False,
         )
         return replace(
             project,
-            schema_version=max(12, project.schema_version),
-            title=wanted.title,
-            problem=wanted.problem,
+            schema_version=max(13, project.schema_version),
+            title=effective_wanted.title,
+            problem=effective_wanted.problem,
+            desired_outcomes=effective_wanted.desired_outcomes,
+            paper_requirements=effective_wanted.paper_requirements,
             investigation_type=wanted_type_id,
             project_type_snapshot=snapshot,
             # Version 12 never persists user-wide model/Thinking/Outcome choices.
             ai_model=legacy_model(),
             reasoning_effort="high",
-            difficulty=wanted.difficulty,
+            difficulty=effective_wanted.difficulty,
             show_advanced_outcome_details=False,
             events=(
                 *project.events,
@@ -1682,6 +1773,8 @@ def create_json_project(
     reasoning_effort: str = "high",
     difficulty: str = "medium",
     show_advanced_outcome_details: bool = False,
+    desired_outcomes: str = "",
+    paper_requirements: str = "",
 ) -> ProjectView:
     """Create a durable, single-file JSON project in the current owner root."""
     title, name = _project_name(title)
@@ -1702,6 +1795,8 @@ def create_json_project(
             reasoning_effort,
             difficulty,
             show_advanced_outcome_details,
+            desired_outcomes,
+            paper_requirements,
         )
         from sigma.recents import record_access
 

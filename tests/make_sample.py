@@ -601,7 +601,23 @@ async def main() -> None:
             # Subset Sums now carries explicit difficulty metadata in v8.
             legacy_template = Path("samples/jesus-cannabis/project.json")
             legacy_before = legacy_template.read_bytes()
-            shutil.copyfile(legacy_template, legacy_source / "project.json")
+            # The installed Jesus sample now uses the three-field v13 schema.
+            # Derive a genuine historical v5 fixture rather than weakening
+            # the old import/export compatibility assertion.
+            legacy_raw = json.loads(legacy_before)
+            legacy_raw = {
+                "schema_version": 5,
+                "id": legacy_raw["id"],
+                "title": legacy_raw["title"],
+                "problem": legacy_raw["problem"],
+                "research_mode": legacy_raw["investigation_type"],
+                "events": legacy_raw["events"][:-1],
+                "strategies": legacy_raw["strategies"],
+                "active_order": legacy_raw["active_order"],
+            }
+            for strategy in legacy_raw["strategies"]:
+                strategy.pop("enabled", None)
+            (legacy_source / "project.json").write_text(json.dumps(legacy_raw, indent=2) + "\n")
             legacy_export = export_project_view(str(legacy_source))
             assert legacy_export["project"]["schema_version"] == 5
             assert "ai_model" not in legacy_export["project"]

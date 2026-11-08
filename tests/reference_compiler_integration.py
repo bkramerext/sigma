@@ -73,7 +73,7 @@ async def verify_compilation(
     limits.update(
         research_rounds=rounds,
         turns_per_round=1,
-        model_calls=2 * rounds,
+        model_calls=2 * rounds * (2 if multiple_strategies else 1),
     )
     research_sessions.save_limits(str(path), limits)
     strategy_ids = [strategy.id]

@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "e03f7c91-5f0c-4c13-bce0-6e3d825ff5d2",
   "title": "Design and Verify an Incremental Dependency Scheduler",
   "problem": "Build systems change as their dependencies change. How can a scheduler keep those updates safe while still finding a valid build order? Design an algorithm that handles edge additions and removals, detects cycles, and returns a valid order when possible. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.",
@@ -20,6 +20,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-25T16:45:33.121093+00:00",
       "strategy_id": "f1ad76f1-9153-4bd3-b264-7d34b68e97a9"
+    },
+    {
+      "sequence": 4,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Design and Verify an Incremental Dependency Scheduler",
+          "problem": "Build systems change as their dependencies change. How can a scheduler keep those updates safe while still finding a valid build order? Design an algorithm that handles edge additions and removals, detects cycles, and returns a valid order when possible. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.",
+          "investigation_type": "computer_science",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "medium",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Design and Verify an Incremental Dependency Scheduler",
+          "problem": "Build systems change as their dependencies change. How can a scheduler keep those updates safe while still finding a valid build order? Design an algorithm that handles edge additions and removals, detects cycles, and returns a valid order when possible. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.",
+          "investigation_type": "computer_science",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "medium",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Derive a correct implementable approach with explicit update semantics. Compare an incremental strategy with a full-recomputation baseline and identify when performance improvement is supported rather than assumed.",
+          "paper_requirements": "Provide data structures, precise pseudocode, invariants and correctness proofs, worst-case time/space analysis, and adversarial update/query tests. Distinguish demonstrated complexity bounds from unproved optimizations; include a discriminating benchmark plan."
+        }
+      }
     }
   ],
   "strategies": [
@@ -53,7 +82,8 @@
     "aad63206-f2b8-4998-896e-e6ec664241a7",
     "f1ad76f1-9153-4bd3-b264-7d34b68e97a9"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "medium"
+  "difficulty": "medium",
+  "desired_outcomes": "Derive a correct implementable approach with explicit update semantics. Compare an incremental strategy with a full-recomputation baseline and identify when performance improvement is supported rather than assumed.",
+  "paper_requirements": "Provide data structures, precise pseudocode, invariants and correctness proofs, worst-case time/space analysis, and adversarial update/query tests. Distinguish demonstrated complexity bounds from unproved optimizations; include a discriminating benchmark plan.",
+  "project_type_snapshot": null
 }

@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "0d1eb24c-3c81-47ca-992b-70b4f9fabf8f",
   "title": "The Alternating Zeta Series and Analytic Continuation",
   "problem": "How far can an alternating series extend what we know about the Riemann zeta function? Start with η(s) = Σ(n≥1) (-1)^(n-1)n^(-s) and investigate its complex convergence alongside ζ(s) = Σ(n≥1) n^(-s), initially defined for Re(s) > 1. Determine its convergence domain and prove the claim, not just pointwise convergence on the real axis. Where both series converge, derive their exact relationship. Then determine what can rigorously be concluded about continuing ζ(s) into 0 < Re(s) ≤ 1, including any exceptional points introduced by dividing by a factor that may vanish. Justify holomorphic claims with locally uniform convergence or an equivalent argument. State clearly what this method does not establish about the critical strip. No external sources or numerical computation are available; label recalled facts as such.",
@@ -20,6 +20,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-23T06:16:05.806629+00:00",
       "strategy_id": "42fa8387-ce52-49c9-a75e-7392899371ec"
+    },
+    {
+      "sequence": 4,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "The Alternating Zeta Series and Analytic Continuation",
+          "problem": "How far can an alternating series extend what we know about the Riemann zeta function? Start with η(s) = Σ(n≥1) (-1)^(n-1)n^(-s) and investigate its complex convergence alongside ζ(s) = Σ(n≥1) n^(-s), initially defined for Re(s) > 1. Determine its convergence domain and prove the claim, not just pointwise convergence on the real axis. Where both series converge, derive their exact relationship. Then determine what can rigorously be concluded about continuing ζ(s) into 0 < Re(s) ≤ 1, including any exceptional points introduced by dividing by a factor that may vanish. Justify holomorphic claims with locally uniform convergence or an equivalent argument. State clearly what this method does not establish about the critical strip. No external sources or numerical computation are available; label recalled facts as such.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "The Alternating Zeta Series and Analytic Continuation",
+          "problem": "How far can an alternating series extend what we know about the Riemann zeta function? Start with η(s) = Σ(n≥1) (-1)^(n-1)n^(-s) and investigate its complex convergence alongside ζ(s) = Σ(n≥1) n^(-s), initially defined for Re(s) > 1. Determine its convergence domain and prove the claim, not just pointwise convergence on the real axis. Where both series converge, derive their exact relationship. Then determine what can rigorously be concluded about continuing ζ(s) into 0 < Re(s) ≤ 1, including any exceptional points introduced by dividing by a factor that may vanish. Justify holomorphic claims with locally uniform convergence or an equivalent argument. State clearly what this method does not establish about the critical strip. No external sources or numerical computation are available; label recalled facts as such.",
+          "investigation_type": "mathematical",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Prove the complex convergence domain of the eta series, derive its exact relation to zeta, and establish the legitimate continuation consequences and exceptional-factor boundaries.",
+          "paper_requirements": "State all convergence assumptions, prove locally uniform convergence or an equivalent analytic result, handle zeros of the multiplying factor precisely, and explain what the method does not prove about zeros in the critical strip. Never represent recalled facts as newly established proofs."
+        }
+      }
     }
   ],
   "strategies": [
@@ -53,7 +82,8 @@
     "cb33cee9-7a72-423a-9b08-d7243ade1a7e",
     "42fa8387-ce52-49c9-a75e-7392899371ec"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "hard"
+  "difficulty": "hard",
+  "desired_outcomes": "Prove the complex convergence domain of the eta series, derive its exact relation to zeta, and establish the legitimate continuation consequences and exceptional-factor boundaries.",
+  "paper_requirements": "State all convergence assumptions, prove locally uniform convergence or an equivalent analytic result, handle zeros of the multiplying factor precisely, and explain what the method does not prove about zeros in the critical strip. Never represent recalled facts as newly established proofs.",
+  "project_type_snapshot": null
 }

@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 13,
   "id": "b446f53b-22bb-4931-87e6-8a9038625e01",
   "title": "Warp Drive Feasibility",
   "problem": "Could a spacetime geometry that resembles a warp drive ever become an engineering system? Assess proposed concepts against physical realizability and testable engineering requirements. Distinguish mathematical spacetime metrics from physically realizable propulsion systems. Review the assumptions about stress-energy, energy density, stability, causality, control, materials, and navigation; trace claims to primary sources; and test quantitative estimates for dimensional and physical consistency. Identify which obstacles are established by current theory or evidence, which depend on unresolved physics, and what experiment or calculation could reduce the uncertainty. Set aside the assumption that a warp drive must violate the speed-of-light limit: assess how proposed spacetime geometries distinguish local motion from effective travel over distance. Do not treat a proposed metric by itself as a complete engineering design.",
@@ -20,6 +20,35 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-25T16:45:41.428122+00:00",
       "strategy_id": "278cf10e-aa6b-4b30-9c69-a78a2a283e7d"
+    },
+    {
+      "sequence": 4,
+      "kind": "project.updated",
+      "timestamp": "2026-11-08T01:15:00+00:00",
+      "project_change": {
+        "previous": {
+          "title": "Warp Drive Feasibility",
+          "problem": "Could a spacetime geometry that resembles a warp drive ever become an engineering system? Assess proposed concepts against physical realizability and testable engineering requirements. Distinguish mathematical spacetime metrics from physically realizable propulsion systems. Review the assumptions about stress-energy, energy density, stability, causality, control, materials, and navigation; trace claims to primary sources; and test quantitative estimates for dimensional and physical consistency. Identify which obstacles are established by current theory or evidence, which depend on unresolved physics, and what experiment or calculation could reduce the uncertainty. Set aside the assumption that a warp drive must violate the speed-of-light limit: assess how proposed spacetime geometries distinguish local motion from effective travel over distance. Do not treat a proposed metric by itself as a complete engineering design.",
+          "investigation_type": "engineering",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "",
+          "paper_requirements": ""
+        },
+        "current": {
+          "title": "Warp Drive Feasibility",
+          "problem": "Could a spacetime geometry that resembles a warp drive ever become an engineering system? Assess proposed concepts against physical realizability and testable engineering requirements. Distinguish mathematical spacetime metrics from physically realizable propulsion systems. Review the assumptions about stress-energy, energy density, stability, causality, control, materials, and navigation; trace claims to primary sources; and test quantitative estimates for dimensional and physical consistency. Identify which obstacles are established by current theory or evidence, which depend on unresolved physics, and what experiment or calculation could reduce the uncertainty. Set aside the assumption that a warp drive must violate the speed-of-light limit: assess how proposed spacetime geometries distinguish local motion from effective travel over distance. Do not treat a proposed metric by itself as a complete engineering design.",
+          "investigation_type": "engineering",
+          "ai_model": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "difficulty": "hard",
+          "show_advanced_outcome_details": false,
+          "desired_outcomes": "Map the gap between mathematical spacetime metric proposals and realizable propulsion systems; identify obstacles susceptible to a discriminating calculation or experiment.",
+          "paper_requirements": "Analyze energy conditions, stress-energy requirements, causality, stability, control, materials and navigation with quantitative dimension checks. Use primary-source distinctions and state what depends on unresolved physics, not on existing engineering."
+        }
+      }
     }
   ],
   "strategies": [
@@ -53,7 +82,8 @@
     "62c6b978-ce90-4a45-8c07-43c1a4523d74",
     "278cf10e-aa6b-4b30-9c69-a78a2a283e7d"
   ],
-  "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "hard"
+  "difficulty": "hard",
+  "desired_outcomes": "Map the gap between mathematical spacetime metric proposals and realizable propulsion systems; identify obstacles susceptible to a discriminating calculation or experiment.",
+  "paper_requirements": "Analyze energy conditions, stress-energy requirements, causality, stability, control, materials and navigation with quantitative dimension checks. Use primary-source distinctions and state what depends on unresolved physics, not on existing engineering.",
+  "project_type_snapshot": null
 }

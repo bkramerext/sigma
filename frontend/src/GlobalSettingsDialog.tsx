@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import DialogDismissButton from './DialogDismissButton';
 import ProjectTypesDialog, { type ProjectTypeRecord, type ProjectTypesSaveState } from './ProjectTypesDialog';
+import RenderedMarkdown from './RenderedMarkdown';
 import './global-settings.css';
 
-type Tab = 'types' | 'research' | 'limits' | 'preferences';
+type Tab = 'types' | 'research' | 'limits' | 'preferences' | 'ethos';
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
 const unitMinutes: Record<Exclude<DurationUnit, 'unlimited'>, number> = { minutes: 1, hours: 60, days: 1440 };
 type LimitSettings = {
@@ -24,6 +25,7 @@ type ResearchConfig = {
   show_advanced_outcome_details: boolean;
 };
 type CatalogModel = { id: string; label: string; efforts: string[]; relative_cost: string };
+type EthosConfig = { markdown: string; is_override: boolean; version: string; sha256: string };
 type Preference = { allow_unattended_background_execution: boolean; expand_one_project_section_at_a_time: boolean; progress_email: boolean };
 const modelCost = (value: string) => /^\${1,3}$/.test(value) ? value.length : Number.POSITIVE_INFINITY;
 const tabs: { id: Tab; title: string }[] = [
@@ -31,6 +33,7 @@ const tabs: { id: Tab; title: string }[] = [
   { id: 'research', title: 'Model' },
   { id: 'limits', title: 'Limits' },
   { id: 'preferences', title: 'Preferences' },
+  { id: 'ethos', title: 'Research Ethos' },
 ];
 const headers = { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' };
 
@@ -61,6 +64,11 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   });
   const [progressAvailable, setProgressAvailable] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [ethos, setEthos] = useState<EthosConfig | null>(null);
+  const [ethosDraft, setEthosDraft] = useState('');
+  const [ethosEditing, setEthosEditing] = useState(false);
+  const [ethosBusy, setEthosBusy] = useState(false);
+  const [ethosError, setEthosError] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -84,9 +92,12 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       readJson('/api/user-preferences/section-layout'),
       readJson('/api/user-preferences/progress-email').catch(() => ({ enabled: false, available: false })),
       readJson('/api/ai/models').catch(() => ({ models: [] })),
-    ]).then(([research, unattended, layout, progress, catalog]) => {
+      readJson('/api/user-preferences/research-ethos'),
+    ]).then(([research, unattended, layout, progress, catalog, ethosData]) => {
       if (controller.signal.aborted) return;
       setConfig(research as ResearchConfig);
+      setEthos(ethosData as EthosConfig);
+      setEthosDraft((ethosData as EthosConfig).markdown);
       const minutes = (research as ResearchConfig).limits.session_duration_minutes;
       setDurationUnit(minutes === null ? 'unlimited'
         : minutes % 1440 === 0 ? 'days' : minutes % 60 === 0 ? 'hours' : 'minutes');
@@ -124,10 +135,13 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     && (config.limits.maximum_estimated_cost_usd == null ||
       (Number.isFinite(Number(config.limits.maximum_estimated_cost_usd)) && Number(config.limits.maximum_estimated_cost_usd) > 0 &&
       String(config.limits.maximum_estimated_cost_usd).trim() !== ''));
-  const canSave = loaded && hasChanges && !busy && !typesSaveState.busy && validLimits &&
-    (!typesSaveState.dirty || typesSaveState.valid);
+  // Project Types can be saved independently if another preferences endpoint
+  // is unavailable: never strand changes behind an unrelated Settings fetch.
+  const canSave = hasChanges && !busy && !typesSaveState.busy &&
+    (!typesSaveState.dirty || typesSaveState.valid) &&
+    (!hasOtherChanges || (loaded && validLimits));
   async function save() {
-    if (!config || !canSave) return;
+    if (!canSave) return;
     setBusy(true); setError(''); setSaved(false);
     try {
       if (typesSaveState.dirty) {
@@ -138,6 +152,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         setSaved(true);
         return;
       }
+      if (!config) return;
     const limits = { ...config.limits };
     const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
     for (const field of whole) {
@@ -175,6 +190,18 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
+  }
+  async function saveEthos(markdown: string | null) {
+    if (ethosBusy) return;
+    setEthosBusy(true); setEthosError('');
+    try {
+      const next = await putJson('/api/user-preferences/research-ethos', { markdown }) as EthosConfig;
+      setEthos(next);
+      setEthosDraft(next.markdown);
+      setEthosEditing(false);
+    } catch (cause) {
+      setEthosError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setEthosBusy(false); }
   }
   const model = models.find(item => item.id === config?.ai_model);
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
@@ -277,6 +304,30 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
             onChange={e => setPref({ allow_unattended_background_execution: e.target.checked })}/>Allow unattended background execution</label>
           <p className="settings-hint">Unattended execution may incur provider usage.</p>
         </fieldset>}
+        {tab === 'ethos' && ethos && <section className="sigma-research-ethos" aria-label="Research Ethos">
+          <p className="settings-hint">Research Ethos means general principles governing how agents investigate, reason, challenge assumptions, and report findings. It is not a project topic or a publication requirement. Each new run freezes the current Ethos.</p>
+          {ethosEditing ? <>
+            <label htmlFor="sigma-ethos-edit">Research Ethos Markdown</label>
+            <textarea id="sigma-ethos-edit" rows={16} maxLength={16000} disabled={ethosBusy}
+              value={ethosDraft} onChange={event => setEthosDraft(event.target.value)}/>
+            <div className="sigma-ethos-actions">
+              <button type="button" className="text-view-link" disabled={ethosBusy || !ethosDraft.trim() || ethosDraft === ethos.markdown}
+                onClick={() => void saveEthos(ethosDraft)}>{ethosBusy ? 'Saving…' : 'Save'}</button>
+              <button type="button" className="text-view-link" disabled={ethosBusy} onClick={() => {
+                setEthosDraft(ethos.markdown); setEthosEditing(false); setEthosError('');
+              }}>Cancel</button>
+            </div>
+          </> : <>
+            <div className="sigma-ethos-rendered"><RenderedMarkdown body={ethos.markdown}/></div>
+            <div className="sigma-ethos-actions">
+              <button type="button" className="text-view-link" disabled={ethosBusy}
+                onClick={() => { setEthosDraft(ethos.markdown); setEthosEditing(true); setEthosError(''); }}>Edit</button>
+              {ethos.is_override && <button type="button" className="text-view-link" disabled={ethosBusy}
+                onClick={() => { if (window.confirm('Restore the built-in Research Ethos for future research and paper runs?')) void saveEthos(null); }}>Restore Default</button>}
+            </div>
+          </>}
+          {ethosError && <p role="alert" className="error">{ethosError}</p>}
+        </section>}
         {error && <p role="alert" className="error">{error}</p>}
         {saved && <p role="status" className="settings-hint">Settings saved.</p>}
       </div>}

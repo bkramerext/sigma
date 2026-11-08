@@ -132,3 +132,10 @@
 .sigma-project-classification-dialog .settings-header .settings-actions > button:first-child {
   margin-right: auto;
 }
+
+.sigma-research-ethos { width: 100%; min-width: 0; }
+.sigma-research-ethos textarea { display: block; width: 100%; box-sizing: border-box; min-height: 15rem; resize: vertical; font: inherit; line-height: 1.5; }
+.sigma-ethos-rendered { overflow-wrap: anywhere; max-width: 76ch; }
+.sigma-ethos-rendered p { line-height: 1.5; }
+.sigma-ethos-rendered li { margin-bottom: .5rem; }
+.sigma-ethos-actions { display: flex; gap: 1rem; margin-top: 1rem; }

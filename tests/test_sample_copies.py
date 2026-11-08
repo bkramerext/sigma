@@ -91,7 +91,12 @@ class SampleCopyTests(unittest.TestCase):
         self.assertIn("published literary criticism", project.problem)
         self.assertIn("bibliography", project.problem)
         self.assertIn("NON-OVERLAPPING", project.problem.upper())
-        self.assertEqual(project.events[-1].sequence, 4)
+        self.assertEqual(
+            project.events[-1].sequence,
+            len(json.loads((catalog_root / "the-crucible" / "project.json").read_text())["events"])
+            + 1,
+        )
+        self.assertEqual(project.events[-1].kind, "project.updated")
 
     def test_opening_twice_creates_two_independent_recent_copies(self):
         first = samples.open_sample_project("sample")

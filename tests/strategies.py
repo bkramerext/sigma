@@ -39,6 +39,8 @@ def legacy(path: Path) -> bytes:
     raw.pop("investigation_type", None)
     for key in ("ai_model", "reasoning_effort", "active_order"):
         raw.pop(key, None)
+    raw.pop("desired_outcomes", None)
+    raw.pop("paper_requirements", None)
     raw.pop("difficulty", None)
     raw.pop("show_advanced_outcome_details", None)
     contents = (json.dumps(raw, indent=2) + "\n").encode()
