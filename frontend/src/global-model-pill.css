@@ -34,11 +34,12 @@
   max-width: min(280px, calc(100vw - 32px));
 }
 :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-position {
-  justify-self: stretch;
-  width: auto;
+  justify-self: start;
+  width: max-content;
+  max-width: 100%;
 }
 :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
-  width: 100%;
+  width: max-content;
   max-width: 100%;
   color: var(--sigma-copper-foreground);
   background: #07111ef2;
