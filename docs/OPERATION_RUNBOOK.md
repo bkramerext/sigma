@@ -764,8 +764,8 @@ preflight established a real denial of `compute.globalOperations.get`
 and `compute.zoneOperations.list` under the impersonated
 `sigma-release-operator`; `compute.zoneOperations.get` remains unverified.
 The previous v0.2.2 workaround confirmed named resources after ambiguous
-operation polling, but is **not** a repeatable preflight substitute. An
-authorized non-Owner IAM administrator must inspect the existing custom
+operation polling, but is **not** a repeatable preflight substitute. A
+separately authorized IAM administrator must inspect the existing custom
 roles and consider a **permission-only**, project-scoped operation metadata
 reader granting the minimum `globalOperations.get`,
 `zoneOperations.list`, and `zoneOperations.get` permissions. Compute
@@ -775,7 +775,12 @@ makes the read grant ineffective. Never add Owner/Editor, broad write
 permissions, service-account keys, or `getIamPolicy` to the runtime identity
 just to perform operation polling.
 
-No such IAM grant has been made or verified. The next v0.3.0 source SHA is
+No such IAM grant has been made or verified. If no non-Owner administrator
+exists, a one-time, **explicitly approved** use of the existing Owner account
+is permitted solely for the bounded IAM role/binding repair, never for release
+execution. This exception is not preapproved by this documentation; see the
+pre-freeze readiness and bootstrap safeguards in the deployment runbook.
+The next v0.3.0 source SHA is
 **not frozen** because additional features are being merged; production
 remains v0.2.2. The current one-operator hold, proposed minimal binding,
 read-only retest commands, separate admin approval, and remaining billing,
