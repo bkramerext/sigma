@@ -40,7 +40,7 @@
 :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
   width: 100%;
   max-width: 100%;
-  color: #e0d0c8;
+  color: var(--sigma-copper-foreground);
   font-weight: 500;
 }
 :is(.home-page, .workspace-page) .sigma-header-secondary-row {
@@ -56,4 +56,22 @@
     min-width: 0;
     width: min(240px, calc(100vw - 32px));
   }
+}
+
+/* Header pill labels share SIGMA's standard light copper; do not mute
+   Google/ChatGPT/About/Admin while making Model the reference color. */
+:is(.home-page, .workspace-page) :is(
+  .sigma-header-model-column .global-model-pill,
+  .sigma-header-secondary-row .home-about-button,
+  .sigma-header-secondary-row .about-action,
+  .sigma-header-secondary-row .home-settings-pill,
+  .sigma-header-secondary-row .project-global-settings-pill,
+  .project-google-signin,
+  .project-chatgpt-signin > summary,
+  .administrator-settings-link
+) {
+  color: var(--sigma-copper-foreground);
+}
+:is(.home-page, .workspace-page) .project-chatgpt-signin > summary [role="status"] {
+  color: inherit;
 }
