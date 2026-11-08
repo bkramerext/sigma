@@ -10426,97 +10426,119 @@ async def _generate_impl(
                 "reference_comparison": reference_comparison,
             }
             tex = _tex(draft, warnings, snapshot_hash, **tex_options)
-            saved_proofreading = work.get("proofreading")
-            if isinstance(saved_proofreading, dict):
-                if saved_proofreading.get("initial_tex") == tex:
-                    # Continue resumes the exact source frozen before proofreading.
-                    tex = saved_proofreading["initial_tex"]
-                else:
-                    # A user changed an authoring preference or TeX render option.
-                    # Keep the old paid result in the attempt ledger and proofread
-                    # only this new rendering; never regenerate the paper draft.
-                    # Older checkpoints included the prior-render total in
-                    # provider_calls_attempted. New checkpoints keep that
-                    # total separately and count only calls for this TeX.
-                    prior_calls = int(work.get("proofreading_calls_prior", 0))
-                    checkpoint_calls = int(saved_proofreading.get("provider_calls_attempted", 0))
-                    if saved_proofreading.get("provider_calls_accounting_version", 1) == 2:
-                        render_calls = checkpoint_calls
+            raw_tex_sha256 = hashlib.sha256(tex.encode()).hexdigest()
+            ready_proofreading = work.get("proofread_ready")
+            if (
+                isinstance(ready_proofreading, dict)
+                and ready_proofreading["input_sha256"] == raw_tex_sha256
+            ):
+                # A completed TeX artifact is authoritative. In particular,
+                # do not repeat proofreading after an interrupted PDF pass.
+                tex = ready_proofreading["tex"]
+                proofreading = dict(ready_proofreading["result"])
+                warnings = list(ready_proofreading["warnings"])
+                invalid_control_codes = list(ready_proofreading["invalid_control_codes"])
+            else:
+                saved_proofreading = work.get("proofreading")
+                if isinstance(saved_proofreading, dict):
+                    if saved_proofreading.get("initial_tex") == tex:
+                        # Continue resumes the exact source frozen before proofreading.
+                        tex = saved_proofreading["initial_tex"]
                     else:
-                        # Version 1 included the prior-render total in this
-                        # checkpoint's count; subtract its value at creation.
-                        calls_at_render_start = int(
-                            saved_proofreading.get("provider_calls_prior_at_start", prior_calls)
-                        )
-                        render_calls = max(0, checkpoint_calls - calls_at_render_start)
-                    work["proofreading_calls_prior"] = prior_calls + render_calls
-                    work.pop("proofreading", None)
+                        # A user changed an authoring preference or TeX render option.
+                        # Keep the old paid result in the attempt ledger and proofread
+                        # only this new rendering; never regenerate the paper draft.
+                        # Older checkpoints included the prior-render total in
+                        # provider_calls_attempted. New checkpoints keep that
+                        # total separately and count only calls for this TeX.
+                        prior_calls = int(work.get("proofreading_calls_prior", 0))
+                        checkpoint_calls = int(saved_proofreading.get("provider_calls_attempted", 0))
+                        if saved_proofreading.get("provider_calls_accounting_version", 1) == 2:
+                            render_calls = checkpoint_calls
+                        else:
+                            # Version 1 included the prior-render total in this
+                            # checkpoint's count; subtract its value at creation.
+                            calls_at_render_start = int(
+                                saved_proofreading.get("provider_calls_prior_at_start", prior_calls)
+                            )
+                            render_calls = max(0, checkpoint_calls - calls_at_render_start)
+                        work["proofreading_calls_prior"] = prior_calls + render_calls
+                        work.pop("proofreading", None)
+                        _save_work(path, work)
+                await report(
+                    "proofreading", None, None, detail="Checking and correcting typesetting issues."
+                )
+                tex, proofreading = await _proofread_tex(
+                    tex,
+                    work,
+                    binding=initial_auth,
+                    config=config,
+                    project_id=view.project.id,
+                    project_path_value=path,
+                    report=report,
+                )
+                # A proofreader pass may introduce a newly escaped math span.
+                # Re-run the bounded, semantic-preserving repair before compilation.
+                tex, postproof_math_restorations = _restore_escaped_math_in_tex(tex)
+                if postproof_math_restorations:
+                    work["static_math_restorations"] = (
+                        int(work.get("static_math_restorations", 0)) + postproof_math_restorations
+                    )
                     _save_work(path, work)
-            await report(
-                "proofreading", None, None, detail="Checking and correcting typesetting issues."
-            )
-            tex, proofreading = await _proofread_tex(
-                tex,
-                work,
-                binding=initial_auth,
-                config=config,
-                project_id=view.project.id,
-                project_path_value=path,
-                report=report,
-            )
-            # A proofreader pass may introduce a newly escaped math span.
-            # Re-run the bounded, semantic-preserving repair before compilation.
-            tex, postproof_math_restorations = _restore_escaped_math_in_tex(tex)
-            if postproof_math_restorations:
-                work["static_math_restorations"] = (
-                    int(work.get("static_math_restorations", 0)) + postproof_math_restorations
-                )
+                tex, invalid_control_codes = _visible_invalid_tex_controls(tex)
+                if invalid_control_codes:
+                    warning = (
+                        "Needs review: The authored source contained unreadable control characters "
+                        f"({', '.join(invalid_control_codes)}). The PDF marks each position; "
+                        "the exact saved draft remains available for correction."
+                    )
+                    warnings.append(warning)
+                    _record_paper_generation_issue(work, warning)
+                    _save_work(path, work)
                 _save_work(path, work)
-            tex, invalid_control_codes = _visible_invalid_tex_controls(tex)
-            if invalid_control_codes:
-                warning = (
-                    "Needs review: The authored source contained unreadable control characters "
-                    f"({', '.join(invalid_control_codes)}). The PDF marks each position; "
-                    "the exact saved draft remains available for correction."
-                )
-                warnings.append(warning)
-                _record_paper_generation_issue(work, warning)
+                if proofreading.get("status") == "fallback":
+                    fallback_note = (
+                        "Needs review: TeX verification is incomplete. The authored research content "
+                        "and safe accepted typesetting corrections were retained. Review the saved "
+                        "proofreading diagnostics before relying on the layout."
+                    )
+                    warnings.append(fallback_note)
+                    marker = r"\end{document}"
+                    title_marker = r"\maketitle"
+                    if tex.count(marker) == 1 and tex.count(title_marker) == 1:
+                        notice = (
+                            r"\begin{center}\fbox{\parbox{.92\linewidth}{\textbf{Needs review: "
+                            r"TeX verification is incomplete.} Review the archived proofreading "
+                            r"diagnostics before relying on the typesetting.}}\end{center}"
+                        )
+                        tex = tex.replace(title_marker, title_marker + "\n" + notice, 1)
+                        tex = tex.replace(
+                            marker,
+                            r"\section*{Typesetting verification note}"
+                            + "\n"
+                            + _latex(fallback_note)
+                            + "\n"
+                            + marker,
+                            1,
+                        )
+                        proofreading["publication_note_added"] = True
+                    else:
+                        # The optional in-paper notice must never block compiling the
+                        # existing authored TeX. The archived review status remains.
+                        _record_paper_generation_issue(
+                            work,
+                            "A typesetting-review notice could not be inserted in the paper; "
+                            "the review status remains in paper diagnostics.",
+                        )
+                work["proofread_ready"] = {
+                    "input_sha256": raw_tex_sha256,
+                    "tex": tex,
+                    "result": proofreading,
+                    "warnings": list(warnings),
+                    "invalid_control_codes": list(invalid_control_codes),
+                }
+                work.pop("pdf_checkpoint", None)
                 _save_work(path, work)
-            _save_work(path, work)
-            if proofreading.get("status") == "fallback":
-                fallback_note = (
-                    "Needs review: TeX verification is incomplete. The authored research content "
-                    "and safe accepted typesetting corrections were retained. Review the saved "
-                    "proofreading diagnostics before relying on the layout."
-                )
-                warnings.append(fallback_note)
-                marker = r"\end{document}"
-                title_marker = r"\maketitle"
-                if tex.count(marker) == 1 and tex.count(title_marker) == 1:
-                    notice = (
-                        r"\begin{center}\fbox{\parbox{.92\linewidth}{\textbf{Needs review: "
-                        r"TeX verification is incomplete.} Review the archived proofreading "
-                        r"diagnostics before relying on the typesetting.}}\end{center}"
-                    )
-                    tex = tex.replace(title_marker, title_marker + "\n" + notice, 1)
-                    tex = tex.replace(
-                        marker,
-                        r"\section*{Typesetting verification note}"
-                        + "\n"
-                        + _latex(fallback_note)
-                        + "\n"
-                        + marker,
-                        1,
-                    )
-                    proofreading["publication_note_added"] = True
-                else:
-                    # The optional in-paper notice must never block compiling the
-                    # existing authored TeX. The archived review status remains.
-                    _record_paper_generation_issue(
-                        work,
-                        "A typesetting-review notice could not be inserted in the paper; "
-                        "the review status remains in paper diagnostics.",
-                    )
             record["generation"]["proofreading"] = {
                 "attempted": True,
                 "ai_performed": proofreading.get("ai_performed", False),
