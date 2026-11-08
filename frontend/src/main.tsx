@@ -6127,7 +6127,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
         </svg>
       </button>
-      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project Settings" data-tooltip="Project Settings: type and difficulty" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
         <SlidersSettingsIcon/>
       </button>
     </div>
