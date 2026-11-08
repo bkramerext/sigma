@@ -3081,6 +3081,22 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         setCheckpointMismatch(preflight);
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
+      // A different account/billing connection must never silently take over
+      // already-started paper work. The default Resume keeps the saved model.
+      let authorizedProviderChange = false;
+      if (preflight.provider_change_requires_confirmation) {
+        const savedModel = preflight.saved_provider_model ?? 'saved model';
+        authorizedProviderChange = window.confirm(
+          'This paper started using ' + savedModel + '. Your AI account or billing connection changed. ' +
+          'Continuing will explicitly switch future paper calls to ' + model +
+          ' using the current connection. Previously completed writing will stay unchanged. Continue?'
+        );
+        if (!authorizedProviderChange) throw new Error('Paper Resume cancelled. Saved work remains unchanged.');
+      }
+      if (preflight.resume_uses_saved_model && !authorizedProviderChange) {
+        setPhase('Resuming using the saved model ' + (preflight.saved_provider_model ?? '') +
+          ' and thinking level ' + (preflight.saved_provider_thinking ?? '') + '.');
+      }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
       if (recoverSection !== null) {
         if (pendingRecovery.length !== 1 || pendingRecovery[0] !== recoverSection)
@@ -3095,7 +3111,8 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
-          ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}) }) });
+          ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}),
+          authorized_provider_change: authorizedProviderChange }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
