@@ -333,4 +333,5 @@
 .admin-new-entry-heading .admin-new-entry-actions { position: static; }
 
 /* Compact Project Settings close-X inset. */
-.sigma-project-classification-dialog .settings-header .sigma-dialog-dismiss.sigma-dialog-dismiss { top: -7px !important; right: -9px !important; }
+/* Keep the 28px hit target inside the compact dialog's border, near its top-right corner. */
+.sigma-project-classification-dialog .settings-header .sigma-dialog-dismiss.sigma-dialog-dismiss { top: 2px !important; right: 2px !important; }
