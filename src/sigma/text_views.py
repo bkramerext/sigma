@@ -388,13 +388,10 @@ def store_conversion(
                 "Source changed during conversion. Previous text was kept; retry from the current source"
             )
         latest_project = inspect_project(path).project
-        if latest_project.id != view.project.id or (
-            latest_project.ai_model,
-            latest_project.reasoning_effort,
-        ) != (provenance["model"], provenance["reasoning_effort"]):
-            raise ProjectError(
-                "Project model/Thinking changed during conversion; nothing was saved"
-            )
+        if latest_project.id != view.project.id:
+            raise ProjectError("Project identity changed during conversion; nothing was saved")
+        # Model/Thinking are user-scoped live preferences, not a write condition.
+        # Provenance records the settings actually used for the conversion.
         if current[target] and current[target]["current"]:
             return current
         raw = _load(path, latest_project)

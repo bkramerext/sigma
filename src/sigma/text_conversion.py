@@ -456,17 +456,8 @@ async def _convert_text(
                 raise ProjectError(
                     "AI account/billing mode changed during conversion; nothing was saved"
                 )
-            latest = inspect_project(path).project
-            if scope not in {"research-conclusion", "research-block", "research-qa"} and (
-                latest.ai_model,
-                latest.reasoning_effort,
-            ) != (
-                config["model"],
-                config["reasoning_effort"],
-            ):
-                raise ProjectError(
-                    "Project model/Thinking changed during conversion; nothing was saved"
-                )
+            # The user may change Model/Thinking while this request runs. The
+            # conversion retains the model and effort used in its provenance.
             if scope in {"research-conclusion", "research-block", "research-qa"}:
                 if scope == "research-qa":
                     from sigma.research_qa import saved_answer_text, store_markdown_answer
