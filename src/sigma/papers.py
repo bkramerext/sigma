@@ -10017,7 +10017,14 @@ async def _generate_impl(
         ]
 
         one_shot_validation_started = False
-        if not long_form:
+        if work.get("validated_draft") is not None:
+            # A completed validation is a real authoring boundary. Rehydrate
+            # the exact accepted draft without replaying AI authoring or edits.
+            draft = PaperDraft.model_validate(work["validated_draft"])
+            provider_calls = int(work.get("provider_calls", 0))
+            evidence_batch_count = int(work.get("next_batch", 0))
+            one_shot_validation_started = True
+        elif not long_form:
             # A one-shot request can consume allowance even when its response
             # is malformed, timed out or interrupted. Do not silently replay
             # an uncertain paid attempt after a restart or lost connection.
@@ -10180,22 +10187,30 @@ async def _generate_impl(
             )
             model = config["model"]
             long_form = True
-        if not one_shot_validation_started:
-            await report("validation", None, None)
-        material_omissions = (
-            _material_evidence_omissions(work.get("omitted_evidence", [])) if long_form else []
-        )
-        if material_omissions:
-            draft = _apply_omission_limits(draft, material_omissions)
-        if not include_diagrams:
-            draft = _without_optional_visuals(draft)
-        draft = PaperDraft.model_validate(
-            _repair_paper_references(draft, {item["id"] for item in package["sources"]})
-        )
-        draft = _annotate_research_completion(draft, package)
-        draft, validation_warnings = _validate_with_local_recovery(draft, package, work)
-        obligation_reconciliation = _reconcile_obligations(draft, package)
-        await report("validation", None, None, "milestone")
+        if work.get("validated_draft") is not None:
+            draft = PaperDraft.model_validate(work["validated_draft"])
+            validation_warnings = list(work["validated_warnings"])
+            obligation_reconciliation = _reconcile_obligations(draft, package)
+        else:
+            if not one_shot_validation_started:
+                await report("validation", None, None)
+            material_omissions = (
+                _material_evidence_omissions(work.get("omitted_evidence", [])) if long_form else []
+            )
+            if material_omissions:
+                draft = _apply_omission_limits(draft, material_omissions)
+            if not include_diagrams:
+                draft = _without_optional_visuals(draft)
+            draft = PaperDraft.model_validate(
+                _repair_paper_references(draft, {item["id"] for item in package["sources"]})
+            )
+            draft = _annotate_research_completion(draft, package)
+            draft, validation_warnings = _validate_with_local_recovery(draft, package, work)
+            obligation_reconciliation = _reconcile_obligations(draft, package)
+            await report("validation", None, None, "milestone")
+            work["validated_draft"] = draft.model_dump()
+            work["validated_warnings"] = list(validation_warnings)
+            _save_work(path, work)
         # The accepted model, account and frozen evidence belong to this
         # generation. Rechecking changing live inputs here could discard
         # expensive completed work. A later run may use newer research.
