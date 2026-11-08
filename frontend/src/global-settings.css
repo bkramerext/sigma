@@ -157,3 +157,14 @@
 }
 .sigma-global-settings .settings-tabs .sigma-ethos-pencil svg { width: 17px; height: 17px; }
 .sigma-global-settings .settings-tabs .sigma-ethos-pencil:hover { background: transparent; }
+
+/* Difficulty reuses the Project Type picker surface without icon slots. */
+.sigma-project-classification-dialog .sigma-difficulty-picker {
+  width: min(100%, 145px);
+}
+.sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] {
+  width: 100%;
+}
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"] {
+  gap: 0;
+}
