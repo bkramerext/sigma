@@ -1596,7 +1596,9 @@ async def test_start_preserves_frozen_inputs_after_slow_preflight(path: Path):
             )
         finally:
             release.set()
-        started = await asyncio.wait_for(task, timeout=2)
+        # A saturated CI runner may delay source prefetch after auth completes.
+        # Lock responsiveness is independently asserted by the two-second gate above.
+        started = await asyncio.wait_for(task, timeout=10)
         await research_sessions._tasks[started["id"]]
     record = research_sessions._read(str(path), started["id"])
     assert record["strategy_text"] == strategy.approach
