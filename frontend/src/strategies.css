@@ -1360,3 +1360,36 @@
 .workspace-page .strategy-title-line .strategy-row-disclosure .disclosure-chevron {
   margin-top: 0;
 }
+
+/* Icon-only strategy actions share the reference controls' copper palette
+   and SIGMA hovertext; keep all three aligned beside the title pencil. */
+.workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  text-decoration: none;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action:hover:not(:disabled) {
+  background: #3b3029;
+  border-color: #ac7054;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}
