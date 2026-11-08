@@ -11262,12 +11262,15 @@ def preflight(
     )
     work = existing
     work_state = work if work is not None else (reset_ledger or {})
-    same_project_and_snapshot = bool(
-        work_state
-        and work_state.get("project_id") == view.project.id
-        and (expected_project_id is None or expected_project_id == view.project.id)
-        and work_state.get("snapshot_sha256") == fingerprint
-    ) or legacy_scoring_available
+    same_project_and_snapshot = (
+        bool(
+            work_state
+            and work_state.get("project_id") == view.project.id
+            and (expected_project_id is None or expected_project_id == view.project.id)
+            and work_state.get("snapshot_sha256") == fingerprint
+        )
+        or legacy_scoring_available
+    )
     checkpoint_kind_matches = bool(
         work_state.get("kind") == ("long_form" if long_form else "one_shot")
     )
@@ -11367,11 +11370,19 @@ def preflight(
     saved_proofreading = work_state.get("proofreading") if resume_available else None
     completed_authoring = bool(
         resume_available
-        and (legacy_scoring_available or work_state.get("validated_draft") or work_state.get("published_paper_id"))
+        and (
+            legacy_scoring_available
+            or work_state.get("validated_draft")
+            or work_state.get("published_paper_id")
+        )
     )
     completed_proofreading = bool(
         resume_available
-        and (legacy_scoring_available or work_state.get("proofread_ready") or work_state.get("published_paper_id"))
+        and (
+            legacy_scoring_available
+            or work_state.get("proofread_ready")
+            or work_state.get("published_paper_id")
+        )
     )
     saved_proofreading_status = (
         saved_proofreading.get("status") if isinstance(saved_proofreading, dict) else None
