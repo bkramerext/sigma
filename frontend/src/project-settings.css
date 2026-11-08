@@ -725,3 +725,10 @@
 .project-collaborator-add button { text-decoration: underline; }
 .project-collaboration-activity { margin: 18px 0 8px; text-align: center; opacity: .8; font-size: .9rem; }
 @media (max-width: 500px) { .sigma-project-classification-dialog .settings-model-row { grid-template-columns: 1fr; } }
+
+/* Keep classification actions in the header's original single row on narrow screens. */
+@media (max-width: 560px) {
+  .sigma-project-classification-dialog .settings-header { flex-wrap: nowrap; align-items: center; }
+  .sigma-project-classification-dialog .settings-header h2 { width: auto; flex: 1 1 auto; }
+  .sigma-project-classification-dialog .settings-header .settings-actions { width: auto; flex: 0 0 auto; justify-content: flex-end; }
+}

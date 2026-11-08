@@ -95,8 +95,9 @@ class CollaborationTests(TestCase):
         self.assertEqual(self.revision(), 1)
         with self.assertRaisesRegex(ProjectError, "being used"):
             shared.acquire_lease(self.path, "Paper generation")
-        with shared.bind_lease(self.path, first), shared.write_guard(
-            self.path, expected_revision=1
+        with (
+            shared.bind_lease(self.path, first),
+            shared.write_guard(self.path, expected_revision=1),
         ):
             pass
         self.assertEqual(self.revision(), 2)
@@ -116,25 +117,29 @@ class CollaborationTests(TestCase):
         self.assertEqual(self.revision(), before + 1)
 
     def test_nested_write_commits_one_revision_and_rolls_back_metadata(self) -> None:
-        with shared.write_guard(self.path, expected_revision=0):
-            with shared.write_guard(self.path):
-                with shared._db() as check:
-                    # The outer SQLite transaction is still uncommitted.
-                    self.assertEqual(
-                        check.execute(
-                            "SELECT revision FROM shared_projects WHERE path=?", (self.path,)
-                        ).fetchone()["revision"],
-                        0,
-                    )
+        with (
+            shared.write_guard(self.path, expected_revision=0),
+            shared.write_guard(self.path),
+            shared._db() as check,
+        ):
+            # The outer SQLite transaction is still uncommitted.
+            self.assertEqual(
+                check.execute(
+                    "SELECT revision FROM shared_projects WHERE path=?", (self.path,)
+                ).fetchone()["revision"],
+                0,
+            )
         self.assertEqual(self.revision(), 1)
-        with self.assertRaisesRegex(RuntimeError, "deliberate failure"):
-            with shared.write_guard(self.path, expected_revision=1) as db:
-                assert db is not None
-                db.execute(
-                    "UPDATE shared_projects SET thinking=? WHERE path=?",
-                    ("medium", self.path),
-                )
-                raise RuntimeError("deliberate failure")
+        with (
+            self.assertRaisesRegex(RuntimeError, "deliberate failure"),
+            shared.write_guard(self.path, expected_revision=1) as db,
+        ):
+            assert db is not None
+            db.execute(
+                "UPDATE shared_projects SET thinking=? WHERE path=?",
+                ("medium", self.path),
+            )
+            raise RuntimeError("deliberate failure")
         with shared._db() as db:
             row = db.execute(
                 "SELECT thinking,revision FROM shared_projects WHERE path=?", (self.path,)
@@ -144,8 +149,9 @@ class CollaborationTests(TestCase):
     def test_compare_and_swap_rejects_stale_settings(self) -> None:
         with shared.write_guard(self.path, expected_revision=0):
             pass
-        with self.assertRaisesRegex(ProjectError, "saved by owner@example.org"), shared.write_guard(
-            self.path, expected_revision=0
+        with (
+            self.assertRaisesRegex(ProjectError, "saved by owner@example.org"),
+            shared.write_guard(self.path, expected_revision=0),
         ):
             self.fail("Stale editor was allowed to persist")
         self.assertEqual(self.revision(), 1)

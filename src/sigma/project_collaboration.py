@@ -168,7 +168,7 @@ def watch_lease(path: str, token: str | None, worker: asyncio.Task[Any]) -> None
                     if not renew_lease(path, token):
                         worker.cancel()
                         break
-                except (Exception, asyncio.CancelledError):
+                except (Exception, asyncio.CancelledError):  # noqa: BLE001 - worker errors end lease monitoring
                     break
             if not worker.done():
                 await asyncio.gather(worker, return_exceptions=True)
@@ -329,6 +329,7 @@ def authorized_shared_path(path: Path) -> bool:
         ).fetchone()
         return row is not None
 
+
 def _row(db: sqlite3.Connection, path: str) -> sqlite3.Row:
     row = db.execute("SELECT * FROM shared_projects WHERE path=?", (path,)).fetchone()
     if row is None:
@@ -395,7 +396,7 @@ def summary(path: str) -> dict[str, Any]:
 
 
 def model_settings(path: str) -> dict[str, str] | None:
-    if cloud_workspaces.current() is None:
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return None
     with _db() as db:
         row, _email = _membership(db, path)
@@ -553,9 +554,7 @@ def acquire_lease(path: str, activity: str) -> str | None:
 
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")
-        registered = db.execute(
-            "SELECT 1 FROM shared_projects WHERE path=?", (path,)
-        ).fetchone()
+        registered = db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone()
         if registered is None:
             db.commit()
             return None

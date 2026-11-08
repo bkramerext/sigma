@@ -1137,9 +1137,7 @@ def _update_project(
         try:
             with (
                 project_write_lock(path),
-                project_collaboration.write_guard(
-                    str(path), expected_revision=_expected_revision
-                ),
+                project_collaboration.write_guard(str(path), expected_revision=_expected_revision),
             ):
 
                 def transform(previous: bytes) -> bytes:
