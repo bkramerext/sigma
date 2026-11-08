@@ -542,3 +542,113 @@
   margin: 0;
   text-align: left;
 }
+
+/*
+ * Header pill layout contract. Keep these sizes independent of label changes:
+ * - Model: fixed Astra-sized width, one shared left text origin.
+ * - Identity: both rows are the same, slightly wider width.
+ * - Row 2: Model and ChatGPT use the exact same grid-row start.
+ * Avoid intrinsic-width measurement or centering the animated primary line.
+ */
+:is(.home-page, .workspace-page) {
+  --sigma-header-account-width: 190px;
+  --sigma-header-model-width: 240px;
+  --sigma-header-row-one: 34px;
+  --sigma-header-row-two: 53px;
+}
+.home-page .home-account-grid {
+  grid-template-rows: var(--sigma-header-row-one) minmax(var(--sigma-header-row-two), auto);
+  align-items: start;
+}
+.workspace-page .project-art-header .project-identity-pill-stack {
+  grid-template-rows: var(--sigma-header-row-one) minmax(var(--sigma-header-row-two), auto);
+  align-content: start;
+  align-items: start;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  --sigma-header-first-row-height: var(--sigma-header-row-one);
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  top: calc(var(--sigma-header-row-one) + var(--identity-pill-gap));
+  right: 0;
+  left: auto;
+  width: var(--sigma-header-model-width);
+  max-width: none;
+  align-items: stretch;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: calc(var(--sigma-header-row-two) + var(--identity-pill-gap));
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  min-height: var(--sigma-header-row-two);
+  padding: 8px 12px;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill > .global-model-pill-current {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current > .global-model-pill-slide-viewport {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 1.35em;
+  margin: 0;
+  text-align: left;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-static,
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill-current .global-model-pill-slide-pair > span {
+  width: 100%;
+  margin: 0;
+  text-align: left;
+}
+.home-page .home-account-grid > .project-google-signin,
+.home-page .home-account-grid > .api-connection,
+.workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  box-sizing: border-box;
+  width: var(--sigma-header-account-width);
+  min-width: var(--sigma-header-account-width);
+  max-width: var(--sigma-header-account-width);
+  justify-self: start;
+  margin: 0;
+}
+.home-page .home-account-grid > .api-connection,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
+  align-self: start;
+  justify-self: start;
+  contain: inline-size;
+}
+.home-page .home-account-grid > .api-connection > summary,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary,
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  justify-content: flex-start;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) {
+    --sigma-header-account-width: 165px;
+    --sigma-header-model-width: 200px;
+    --sigma-header-row-one: 28px;
+    --sigma-header-row-two: 42px;
+  }
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+    padding: 5px 9px;
+  }
+}
