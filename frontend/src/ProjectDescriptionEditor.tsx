@@ -46,15 +46,6 @@ export default function ProjectDescriptionEditor({
     if (editing) { titleInput.current?.focus(); titleInput.current?.select(); }
   }, [editing]);
 
-  function cancel() {
-    if (busy) return;
-    setDraft(original());
-    setEditing(false);
-    setError('');
-    onExitMode();
-    requestAnimationFrame(() => trigger.current?.focus());
-  }
-
   async function save(event?: FormEvent) {
     event?.preventDefault();
     if (busy) return;
@@ -106,10 +97,7 @@ export default function ProjectDescriptionEditor({
           onChange={event => setDraft(old => ({ ...old, title: event.target.value }))}/>
       </div>
       {fields}
-      <div className="sigma-description-actions">
-        <button type="submit" className="text-view-link" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-        <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
-      </div>
+
       {error && <p className="error" role="alert">{error}</p>}
     </form> : <>
       <div className="project-pane-title-line">
