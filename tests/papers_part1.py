@@ -3800,6 +3800,7 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
         compile_calls = 0
         score_calls = 0
         resumed_events: list[papers.PaperProgressEvent] = []
+        score_case = interrupt_at != "pdf"
 
         async def author(package, *_args):
             nonlocal author_calls
@@ -3825,7 +3826,7 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
         async def score(*_args, **_kwargs):
             nonlocal score_calls
             score_calls += 1
-            if interrupt_at == "score" and score_calls == 1:
+            if score_case and score_calls == 1:
                 raise asyncio.CancelledError()
             return {"total": 75}
 
@@ -3865,10 +3866,28 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             assert checkpoint is not None
             assert checkpoint.get("validated_draft") is not None
             assert checkpoint.get("proofread_ready") is not None
-            if interrupt_at == "score":
+            if score_case:
                 assert checkpoint.get("published_paper_id")
                 assert len(papers.list_papers(str(path))) == 1
                 assert checkpoint["progress"]["stage"] == "scoring"
+                if interrupt_at == "legacy_score":
+                    # Simulate the old behavior: PDF and scoring sidecar
+                    # survive, but checkpoint.json was discarded.
+                    status = papers._read_progress_status(str(path))
+                    assert status is not None
+                    papers._write_progress_status(
+                        str(path), {**status, "paper_id": checkpoint["published_paper_id"]}
+                    )
+                    papers._work_file(str(path), create=False).unlink()
+                    legacy = papers.preflight(
+                        str(path),
+                        expected_binding=credential["identity"],
+                        mode="api_key",
+                        model=config["model"],
+                        reasoning_effort=config["reasoning_effort"],
+                    )
+                    assert legacy["resume_available"]
+                    assert legacy["checkpoint_exists"]
             else:
                 pdf_pass = checkpoint.get("pdf_checkpoint")
                 assert pdf_pass is not None
@@ -3887,13 +3906,13 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
                 )
             )
         assert author_calls == 1, "Resume replayed a paid author request"
-        assert compile_calls - compiled_before_resume == (0 if interrupt_at == "score" else 1)
-        assert score_calls == (2 if interrupt_at == "score" else 1)
+        assert compile_calls - compiled_before_resume == (0 if score_case else 1)
+        assert score_calls == (2 if score_case else 1)
         assert len(papers.list_papers(str(path))) == 1, "Resume duplicated the paper version"
         assert papers._load_work(str(path)) is None
         assert papers.get_paper(str(path), result["paper_id"])["pdf_available"]
         stages = [event["stage"] for event in resumed_events]
-        if interrupt_at == "score":
+        if score_case:
             assert stages and stages[0] == "scoring", stages
         else:
             assert "compile" in stages or "pdf_check" in stages, stages
@@ -3908,6 +3927,10 @@ def test_score_interruption_resumes_published_pdf_without_reauthoring() -> None:
 
 def test_pdf_pass_interruption_resumes_next_pass_without_reauthoring() -> None:
     _run_publication_checkpoint_recovery_scenario("pdf")
+
+
+def test_legacy_score_receipt_resumes_without_generation_checkpoint() -> None:
+    _run_publication_checkpoint_recovery_scenario("legacy_score")
 
 
 if __name__ == "__main__":
