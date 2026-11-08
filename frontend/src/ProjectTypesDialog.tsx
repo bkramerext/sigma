@@ -410,7 +410,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     const label = field === 'research_standards_references' ? 'research' : 'publication';
     return <button type="button" className="pt-reference-toggle" aria-pressed={!disabled}
       aria-label={`${action} ${label} reference ${reference.name || reference.url} for ${owner === 'common' ? 'all project types' : owner}`}
-      disabled={busy} title={`${action} reference`} onClick={() => toggleReference(owner, field, reference.url)}><ReferenceActionIcon kind={disabled ? 'unchecked' : 'checked'}/></button>;
+      disabled={busy} data-tooltip={`${action} reference`} onClick={() => toggleReference(owner, field, reference.url)}><ReferenceActionIcon kind={disabled ? 'unchecked' : 'checked'}/></button>;
   }
   const isDuplicateName = (item: ProjectTypeRecord) => {
     const normalized = item.name.normalize("NFKC").trim().toLocaleLowerCase();
@@ -561,7 +561,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         referenceEditOrigins.current.get(`${owner}:${field}:${index}`) === null));
     if (readonly || references.length - immutableCount >= 100 || pending) return null;
     return <button type="button" className="pt-new-action pt-reference-add" aria-label="New reference"
-      title="New reference" disabled={busy} onClick={() => {
+      data-tooltip="New reference" disabled={busy} onClick={() => {
         const newKey = `${owner}:${field}:${references.length}`;
         referenceEditOrigins.current.set(newKey, null);
         setEditingReferences(previous => new Set(previous).add(newKey));
@@ -669,12 +669,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
             <button type="button" disabled={busy} onClick={() => {
               referenceEditOrigins.current.set(rowKey, reference);
               setEditingReferences(previous => new Set(previous).add(rowKey));
-            }} aria-label="Edit reference" title="Edit reference"><ReferenceActionIcon kind="edit"/></button>
+            }} aria-label="Edit reference" data-tooltip="Edit reference"><ReferenceActionIcon kind="edit"/></button>
             <button type="button" disabled={busy} onClick={() => {
               referenceEditOrigins.current.delete(rowKey);
               setEditingReferences(previous => { const next = new Set(previous); next.delete(rowKey); return next; });
               update(references.filter((_, i) => i !== index));
-            }} aria-label="Remove reference" title="Remove reference"><ReferenceActionIcon kind="remove"/></button>
+            }} aria-label="Remove reference" data-tooltip="Remove reference"><ReferenceActionIcon kind="remove"/></button>
           </>}
         </div></td></tr>;
       })}
@@ -739,7 +739,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
       <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" title="New project type"><span className="pt-circled-plus" aria-hidden="true">+</span></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" data-tooltip="New project type"><span className="pt-circled-plus" aria-hidden="true">+</span></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <div className="pt-reference-heading"><h4>Research standards references for all project types</h4>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>
