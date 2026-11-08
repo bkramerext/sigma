@@ -6538,15 +6538,15 @@ function ConnectedModelPill({ enabled }: { enabled: boolean }) {
   const ai = useAI();
   const cloud = useCloudIdentity();
   const funding = cloudFundingFor(cloud);
-  const hosted = funding?.target === 'hosted';
-  const sponsoredSelected = funding?.selectedConnection === 'sponsored';
   const googleRequired = !!funding?.authenticationEnabled && !funding.authorized;
-  const connected = hosted
-    ? sponsoredSelected && funding?.provider?.status === 'connected'
-    : funding?.simulatedSponsored
-      ? sponsoredSelected && funding?.provider?.status === 'connected'
-      : !ai.connecting && !ai.initialLoading && !ai.healthError && ai.info?.status === 'connected';
-  return enabled && connected && !googleRequired
+  // Personal and sponsored connections have separate status sources. In
+  // particular, local sponsorship is not necessarily reflected in ai.info.
+  const sponsoredConnected = funding?.selectedConnection === 'sponsored'
+    && funding.provider?.status === 'connected';
+  const personalConnected = funding?.selectedConnection !== 'sponsored'
+    && !ai.connecting && !ai.initialLoading && !ai.healthError
+    && ai.info?.status === 'connected';
+  return enabled && (sponsoredConnected || personalConnected) && !googleRequired
     ? <GlobalModelPill enabled/>
     : null;
 }
