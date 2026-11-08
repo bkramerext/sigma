@@ -389,9 +389,7 @@ def store_conversion(
             )
         latest_project = inspect_project(path).project
         if latest_project.id != view.project.id:
-            raise ProjectError(
-                "Project identity changed during conversion; nothing was saved"
-            )
+            raise ProjectError("Project identity changed during conversion; nothing was saved")
         # Model/Thinking are user-scoped live preferences, not a write condition.
         # Provenance records the settings actually used for the conversion.
         if current[target] and current[target]["current"]:
