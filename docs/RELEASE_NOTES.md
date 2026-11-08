@@ -111,15 +111,16 @@ This release strengthens recovery from interrupted streams, provider errors, cap
 
 Deployed v0.1.7 SHA: \`802e9b6b7da5829868070f760e17280cd8a927f2\`.
 Deployed v0.2.0 SHA: \`9d938907ffd02fb89c9d10545e8df61484310cbd\`.
-The compared range contains 885 commits. Features merged after the v0.2.0 SHA are excluded from this section.
+Deployed v0.2.1 SHA: \`5435e14eeea159ab207ad50016577b9a9542ae59\`.
+Each section describes the changes since the preceding deployed version.
 </details>
 
 ---
 
 ## Version 0.2.1 — Paper Workflow and Production Resilience
-*Release candidate — not yet deployed*
+*November 6, 2026 · Deployed from `5435e14eeea159ab207ad50016577b9a9542ae59`*
 
-**A focused follow-up to make paper generation more dependable, visible, and easier to control.** These notes describe work merged after v0.2.0, together with the final changes in this release-notes PR. The production release remains on hold.
+**A focused follow-up to make paper generation more dependable, visible, and easier to control.** This release describes the changes merged after v0.2.0 and was deployed to production on November 6, 2026.
 
 ### A simpler Papers workspace
 
@@ -140,4 +141,30 @@ The compared range contains 885 commits. Features merged after the v0.2.0 SHA ar
 
 Research Q&A browser pages scroll correctly; literature-specific research and paper guidance is improved; opening projects has a consistent status indicator; browser favicon activity settles back to idle; and session/paper controls, tooltips, spacing, and error notices are more consistent.
 
-**Status:** Source version 0.2.1 is prepared. This section is a release-candidate summary; it does not imply the new version has been deployed or that the pending release checks have run.
+**Status:** Deployed to production. The next section records the subsequent release.
+
+---
+
+## Version 0.2.2 — Research Controls and Reliable Papers
+*Release candidate*
+
+**A follow-up release focused on clearer research requirements, user-wide controls, and reliable paper work.**
+
+### Research settings and project descriptions
+
+- **Research Ethos and user-wide settings.** Model, reasoning effort, research limits, preferences, and Research Ethos are managed as user-scoped settings and apply consistently across projects.
+- **Separate project requirements.** Projects distinguish the research subject, desired outcomes, and paper requirements, preserving those fields through editing and portable project files.
+- **Provider choice and safeguards.** Provider-specific settings and status remain explicit; SIGMA does not silently switch billing modes or discard existing provider bindings.
+
+### More dependable papers and exports
+
+- **Resumable paper writing.** Saved checkpoints preserve completed writing when a later section or PDF build fails. Progress and completion messages describe the actual saved state, and interrupted paid work is not silently replayed.
+- **More useful paper activity.** Writing stages provide clearer, bounded status while preserving detailed diagnostics in operational evidence rather than presenting misleading success.
+- **Portable project bundles.** New exports compress large binary members while retaining import support for earlier bundle formats.
+- **Consistent research and paper presentation.** Project controls, paper actions, mathematical TeX, sample descriptions, and browser workflows receive focused usability and correctness fixes.
+
+### Reliability and limitations
+
+Production deployments use a keyless, guarded release path with a fresh isolated recovery drill, exact-SHA image provenance, and a maintenance window. Recovery checks and deployment status do not independently validate the scientific correctness of generated findings or papers.
+
+**Status:** Candidate notes. Final deployment date and exact merged SHA will be recorded after production verification.
