@@ -114,9 +114,7 @@ with sync_playwright() as playwright:
     model_tab = global_settings.get_by_role("tab", name="Model", exact=True)
     model_tab.hover()
     assert model_tab.evaluate("el => getComputedStyle(el).textDecorationLine") == "underline"
-    assert model_tab.evaluate("el => getComputedStyle(el).backgroundColor") == (
-        "rgba(0, 0, 0, 0)"
-    )
+    assert model_tab.evaluate("el => getComputedStyle(el).backgroundColor") == ("rgba(0, 0, 0, 0)")
     for tab_name in ("Model", "Limits", "Preferences", "Project Types"):
         global_settings.get_by_role("tab", name=tab_name, exact=True).click()
         current_box = global_settings.bounding_box()
