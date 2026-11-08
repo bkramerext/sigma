@@ -4031,6 +4031,34 @@ def _new_work(
     }
 
 
+def _resume_provider_choice(
+    checkpoint: dict[str, Any],
+    binding_fingerprint: str,
+    current_model: str,
+    current_effort: str,
+    authorized_provider_change: bool = False,
+) -> tuple[str, str]:
+    """Preserve the model/effort frozen at paper start unless explicitly changed.
+
+    Changing the connected provider identity is a paid-work boundary and
+    cannot happen merely because a user signed into another account. The
+    caller must record a separate affirmative approval before permitting it.
+    """
+    if authorized_provider_change:
+        return current_model, current_effort
+    if checkpoint.get("binding_fingerprint") != binding_fingerprint:
+        raise ProjectError(
+            "Paper Resume requires explicit approval to switch the AI account or "
+            "billing connection. Saved work is intact; confirm the provider change "
+            "before authorizing further paid calls."
+        )
+    model = checkpoint.get("model")
+    effort = checkpoint.get("reasoning_effort")
+    if not isinstance(model, str) or not isinstance(effort, str):
+        raise ProjectError("Saved paper model or thinking configuration is invalid")
+    return model, effort
+
+
 def _rebind_paper_checkpoint_provider(
     checkpoint: dict[str, Any], binding_fingerprint: str, model: str, reasoning_effort: str
 ) -> bool:
@@ -8992,6 +9020,7 @@ async def _generate_impl(
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
     authorized_recovery_section: int | None = None,
+    authorized_provider_change: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -9204,8 +9233,6 @@ async def _generate_impl(
         if expected_binding and initial_auth["identity"] != expected_binding:
             raise ProjectError("AI account or billing mode changed; review it and retry")
         config = await configuration(view=view, context=initial_auth)
-        if not config["available"]:
-            raise ProjectError(config["message"])
         checkpoint = _load_work(path)
         frozen = checkpoint.get("frozen_package") if checkpoint is not None else None
         if frozen_snapshot is not None:
@@ -9249,10 +9276,25 @@ async def _generate_impl(
                     ("project_id", view.project.id),
                 )
             )
+            if compatible and not _can_rebase_explicit_restart(checkpoint, view.project.id):
+                frozen_model, frozen_effort = _resume_provider_choice(
+                    checkpoint, binding_fingerprint,
+                    config["model"], config["reasoning_effort"],
+                    authorized_provider_change,
+                )
+                if (frozen_model, frozen_effort) != (
+                    config["model"], config["reasoning_effort"]
+                ):
+                    config = await configuration(
+                        view=view, context=initial_auth,
+                        frozen_model=frozen_model, frozen_effort=frozen_effort,
+                    )
             if compatible and _rebind_paper_checkpoint_provider(
                 checkpoint, binding_fingerprint, config["model"], config["reasoning_effort"]
             ):
                 _save_work(path, checkpoint)
+        if not config["available"]:
+            raise ProjectError(config["message"])
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
@@ -10418,6 +10460,7 @@ async def generate(
     include_sigma_issues: bool = False,
     browser_presence_required: bool = False,
     authorized_recovery_section: int | None = None,
+    authorized_provider_change: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     from sigma.memory_guard import require_capacity
@@ -10444,6 +10487,7 @@ async def generate(
             include_sigma_issues,
             browser_presence_required,
             authorized_recovery_section,
+            authorized_provider_change,
         )
     )
     _generation_tasks[key] = task
@@ -10765,6 +10809,18 @@ def preflight(
         "checkpoint_exists": work is not None,
         "checkpoint_matches_snapshot": same_project_and_snapshot,
         "resume_available": resume_available,
+        "saved_provider_model": work_state.get("model") if resume_available else None,
+        "saved_provider_thinking": work_state.get("reasoning_effort") if resume_available else None,
+        "resume_uses_saved_model": bool(
+            resume_available and (
+                work_state.get("model") != model
+                or work_state.get("reasoning_effort") != reasoning_effort
+            )
+        ),
+        "provider_change_requires_confirmation": bool(
+            resume_available and binding_fingerprint
+            and work_state.get("binding_fingerprint") != binding_fingerprint
+        ),
         "draft_recovery_available": resume_available and one_shot_draft_available,
         "proofreading_status": saved_proofreading_status or "not_started",
         "publication_status": preflight_publication_status,
