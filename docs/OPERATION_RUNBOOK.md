@@ -790,6 +790,21 @@ and 46 accounting calls ($5.938237 recorded; 15 reserved/unknown).
 It did **not** verify a fresh snapshot clone or future code/schema
 compatibility.
 
+**New operator funding restriction (2026-11-08):** no new temporary
+recovery VM, clone disk, snapshot, or other incremental cloud storage
+is approved for v0.3.0. The earlier $16.11/$21.11 modeled scenario is
+**not an authorized spend**, even though it was within the former
+$25 ceiling. The existing v0.2.2 point-in-time snapshot cannot
+replace fresh protection for later data. Red may investigate existing
+resources read-only and propose a secure, independent, zero-new-cloud-
+infrastructure recovery path, but **must not run the canonical
+snapshot/VM recovery path or production cutover** until the operator
+has separately accepted a viable recovery design and a future source
+SHA. Retain healthy v0.2.2 in the meantime. Never delete existing
+snapshots as a cost-saving shortcut without separate authorization.
+See the explicit funding override in
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md#operator-funding-constraint--no-additional-recovery-infrastructure).
+
 **Remaining source-independent gate: billing.** The Cloud Billing API
 is disabled and the recovery identity cannot inspect billing-account
 budgets. Current project/account linkage, active billing status, budget/
