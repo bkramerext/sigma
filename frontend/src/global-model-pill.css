@@ -213,3 +213,29 @@
     line-height: 1.2;
   }
 }
+
+/* The optional Model pill must not inflate the About/Settings track and
+   create a larger gap before Google. Reserve its second-row height while
+   allowing the longer Model label to extend to the left, away from ChatGPT. */
+:is(.home-page, .workspace-page) .sigma-header-model-column {
+  position: relative;
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: calc(34px + var(--identity-pill-gap));
+}
+:is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+  position: absolute;
+  top: calc(34px + var(--identity-pill-gap));
+  right: 0;
+  justify-self: auto;
+  width: max-content;
+  max-width: none;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column:has(> .global-model-pill-position) {
+    padding-bottom: calc(28px + var(--identity-pill-gap));
+  }
+  :is(.home-page, .workspace-page) .sigma-header-model-column > .global-model-pill-position {
+    top: calc(28px + var(--identity-pill-gap));
+  }
+}
