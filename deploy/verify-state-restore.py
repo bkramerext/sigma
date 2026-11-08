@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import sys
@@ -50,6 +51,68 @@ def check_database(
         return set(), "ok"
     finally:
         connection.close()
+
+
+
+def valid_publication_compilation(cache: dict) -> bool:
+    """Check the standalone schema-2 shape; the caller separately checks its seal.
+
+    Mirror the on-disk invariants in publication_reference_compiler.validate.
+    This restore verifier intentionally has no application import dependencies.
+    """
+    fingerprint = cache.get("fingerprint")
+    lines = cache.get("checklist")
+    kept = cache.get("retained_urls")
+    dropped = cache.get("omitted_urls")
+    usage = cache.get("provider_usage")
+    if (
+        not isinstance(fingerprint, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", fingerprint)
+        or cache.get("status") not in {"running", "completed", "skipped", "fallback"}
+        or type(cache.get("provider_calls_attempted")) is not int
+        or cache["provider_calls_attempted"] not in (0, 1)
+        or cache.get("usage_status") not in {"pending", "measured", "unknown", "not_applicable"}
+        or not isinstance(cache.get("rationale"), str)
+        or len(cache["rationale"]) > 600
+        or not isinstance(cache.get("started_at"), str)
+        or (cache.get("finished_at") is not None and not isinstance(cache["finished_at"], str))
+    ):
+        return False
+    if usage is not None and (
+        not isinstance(usage, dict)
+        or type(usage.get("input_tokens")) is not int
+        or type(usage.get("cached_input_tokens")) is not int
+        or type(usage.get("output_tokens")) is not int
+        or usage["input_tokens"] < 0
+        or not 0 <= usage["cached_input_tokens"] <= usage["input_tokens"]
+        or usage["output_tokens"] < 0
+        or (
+            usage.get("estimated_cost_usd") is not None
+            and (
+                type(usage["estimated_cost_usd"]) not in (int, float)
+                or not math.isfinite(usage["estimated_cost_usd"])
+                or not 0 <= usage["estimated_cost_usd"] <= 1000
+            )
+        )
+    ):
+        return False
+    return (
+        isinstance(lines, list)
+        and len(lines) <= 12
+        and all(isinstance(item, str) and 0 < len(item) <= 400 for item in lines)
+        and sum(map(len, lines)) <= 3000
+        and isinstance(kept, list)
+        and isinstance(dropped, list)
+        and len(kept) + len(dropped) <= 3
+        and all(isinstance(item, str) and len(item) <= 2048 for item in kept + dropped)
+        and len(set(kept + dropped)) == len(kept) + len(dropped)
+        and not (set(kept) & set(dropped))
+        and cache.get("checklist_sha256")
+        == hashlib.sha256(
+            json.dumps(lines, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+        ).hexdigest()
+        and (cache["status"] != "completed" or (bool(kept) and bool(lines)))
+    )
 
 
 def verify(
@@ -203,6 +266,8 @@ def verify(
             ).hexdigest()
             if not isinstance(cache_seal, str) or cache_seal != expected_seal:
                 raise ValueError("publication compilation cache integrity seal is invalid")
+            if not valid_publication_compilation(cache):
+                raise ValueError("publication compilation cache metadata format is invalid")
     paper_records = [
         path
         for path in workspace_root.glob("*/**/papers/*.json")
