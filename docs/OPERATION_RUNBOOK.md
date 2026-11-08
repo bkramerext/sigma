@@ -2,7 +2,7 @@
 
 **Status:** Operator procedures for the GCE deployment at `sigma-research.duckdns.org`. Keep this document current as deployment is exercised. **Do not treat proposed commands as executed evidence.**
 
-The detailed configuration and exact provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This runbook is the short operational entry point. Record the deployed commit, tested command, outcome, operator, date and any deviation after performing each operation. No secrets, access tokens or user data in logs, PRs or chat.
+Detailed configuration and provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This is the **long-form host inventory, incident-recovery reference, and deployment evidence archive**, not another routine deployment checklist. Use the [routine release runbook](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667) only after explicit release authorization. Record actual commands, outcomes, IDs and dates; never publish secrets, access tokens or user data.
 
 For **routine production deployments**, follow the single ordered
 [canonical keyless release path](DEPLOYMENT_RUNBOOK.md#routine-keyless-gce-release--canonical-ordered-path-issue-667).
