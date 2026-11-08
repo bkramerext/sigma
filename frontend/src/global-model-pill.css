@@ -63,8 +63,8 @@
 :is(.home-page, .workspace-page) .sigma-header-secondary-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 12px;
 }
 :is(.home-page, .workspace-page) .sigma-header-secondary-row > :first-child { justify-self: start; }
 :is(.home-page, .workspace-page) .sigma-header-secondary-row > :last-child { justify-self: end; }
@@ -94,58 +94,58 @@
   color: inherit;
 }
 
-/* Connected identity labels share one stable 240px column. Sponsorship
+/* Connected identity labels share one compact 180px column. Sponsorship
    details may visually extend beyond the ChatGPT pill without resizing it
    or pushing Google or the Model column sideways. */
 .home-page .home-account-grid {
-  grid-template-columns: max-content 240px;
+  grid-template-columns: max-content 180px;
 }
 .home-page .home-account-grid:has(> .administrator-settings-link) {
-  grid-template-columns: max-content max-content 240px;
+  grid-template-columns: max-content max-content 180px;
 }
 .home-page .home-account-grid > .project-google-signin,
 .home-page .home-account-grid > .api-connection {
   box-sizing: border-box;
-  width: 240px;
+  width: 180px;
   min-width: 0;
-  max-width: 240px;
+  max-width: 180px;
   justify-self: stretch;
 }
 .home-page .home-account-grid > .api-connection > summary {
   box-sizing: border-box;
-  width: 240px;
-  min-width: 240px;
+  width: 180px;
+  min-width: 180px;
   max-width: none;
   justify-content: center;
 }
 .workspace-page .project-art-header .project-identity-pill-stack {
-  width: 240px;
-  max-width: 240px;
+  width: 180px;
+  max-width: 180px;
   justify-items: stretch;
 }
 .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
   box-sizing: border-box;
-  width: 240px;
-  max-width: 240px;
+  width: 180px;
+  max-width: 180px;
 }
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary {
   box-sizing: border-box;
-  width: 240px;
-  min-width: 240px;
+  width: 180px;
+  min-width: 180px;
   max-width: none;
   justify-content: center;
 }
 :is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance {
   width: max-content;
-  min-width: 240px;
+  min-width: 180px;
   justify-content: flex-start;
 }
 /* Mobile headers may contract rather than overflow the viewport. */
 @media (max-width: 700px) {
-  .home-page .home-account-grid { grid-template-columns: max-content minmax(0, 240px); }
+  .home-page .home-account-grid { grid-template-columns: max-content minmax(0, 180px); }
   .home-page .home-account-grid:has(> .administrator-settings-link) {
-    grid-template-columns: max-content max-content minmax(0, 240px);
+    grid-template-columns: max-content max-content minmax(0, 180px);
   }
   .home-page .home-account-grid > .project-google-signin,
   .home-page .home-account-grid > .api-connection,
@@ -154,7 +154,7 @@
   .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
   .workspace-page .project-art-header .project-identity-pill-stack > .api-connection,
   .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary {
-    width: min(240px, 100%);
+    width: min(180px, 100%);
     min-width: 0;
   }
 }
