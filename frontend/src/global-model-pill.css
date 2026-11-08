@@ -66,7 +66,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
+  gap: calc(var(--identity-pill-gap) * 1.2);
 }
 :is(.home-page, .workspace-page) .sigma-header-secondary-row > :first-child { justify-self: start; }
 :is(.home-page, .workspace-page) .sigma-header-secondary-row > :last-child { justify-self: end; }
