@@ -1,0 +1,24 @@
+/* Historic model-pill behavior adapted for user-wide settings. */
+.global-model-pill-position { position: relative; display: inline-flex; align-items: center; justify-self: end; min-width: 0; }
+.global-model-pill {
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  min-height: 34px; max-width: min(250px, calc(100vw - 32px));
+  padding: 7px 12px; border: 1px solid #a9654875; border-radius: 999px;
+  background: #07111ef2; box-shadow: none; color: #e0d0c8;
+  font: 500 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap; cursor: pointer;
+}
+.global-model-pill:hover:not(:disabled), .global-model-pill:focus-visible {
+  border-color: #cd9270; background: #172536fa; color: #fff2e9;
+}
+.global-model-pill:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+.global-model-pill:disabled { cursor: default; opacity: 1; }
+.global-model-error { position: absolute; z-index: 5; top: calc(100% + 5px); right: 0; width: max-content; max-width: 280px; padding: 5px; color: #f1aaa0; background: #101820; font: 11px/1.4 Inter, sans-serif; }
+.global-model-confirm-popover { position: fixed; z-index: 1300; width: min(320px, calc(100vw - 16px)); }
+.global-model-confirm-popover .project-model-confirm-actions { display: flex; gap: 14px; }
+.global-model-confirm-popover .project-model-confirm-actions button { border: 0; padding: 2px 0; background: transparent; color: var(--sigma-copper-foreground); font: 12px/1.4 Inter, sans-serif; text-decoration: underline; cursor: pointer; }
+.home-page .home-account-grid > .global-model-pill-position { grid-area: model; justify-self: end; }
+.workspace-page .project-art-header .global-model-pill-position { grid-area: model; justify-self: end; }
+@media (max-width: 700px) {
+  .global-model-pill { min-height: 28px; padding: 4px 9px; font-size: 9px; line-height: 1.2; }
+}
