@@ -913,3 +913,27 @@
   position: relative;
   top: -2px;
 }
+
+/* Compact the two second-row pills together, without changing their widths,
+   label alignment, or the first-row Google/About/Settings geometry. */
+:is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
+  min-height: 40px;
+  height: 40px;
+  padding-block: 3px;
+}
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance,
+.workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary {
+  box-sizing: border-box;
+  min-height: 40px;
+  height: 40px;
+  padding-block: 3px;
+}
+@media (max-width: 700px) {
+  :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill,
+  :is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance,
+  .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary {
+    min-height: 36px;
+    height: 36px;
+    padding-block: 2px;
+  }
+}
