@@ -184,7 +184,7 @@
 }
 .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary,
-.workspace-page .project-art-header .sigma-header-secondary-row > .about-action {
+.workspace-page .project-art-header .sigma-header-first-row > .about-action {
   min-height: 34px;
   padding-block: 7px;
   padding-inline: 12px;
@@ -195,13 +195,13 @@
   width: max-content;
   justify-content: center;
 }
-.workspace-page .project-art-header .sigma-header-secondary-row > .project-global-settings-pill {
+.workspace-page .project-art-header .sigma-header-first-row > .project-global-settings-pill {
   margin-left: 0;
 }
 @media (max-width: 700px) {
   .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
   .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary,
-  .workspace-page .project-art-header .sigma-header-secondary-row > .about-action {
+  .workspace-page .project-art-header .sigma-header-first-row > .about-action {
     min-height: 28px;
     padding-block: 4px;
     padding-inline: 9px;
@@ -822,4 +822,19 @@
   :is(.home-page, .workspace-page) .sigma-header-model-column .global-model-pill {
     padding-inline: 9px 13px;
   }
+}
+
+/* Shared Home/Project header geometry: Settings sits beside About rather than
+   outside the Model-sized column. Both rows contribute to the same intrinsic
+   width; account pills follow at the normal minimum inter-column gap. */
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: var(--sigma-header-horizontal-gap);
+  width: max-content;
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row > :is(.home-about-button, .about-action, .home-settings-pill, .project-global-settings-pill) {
+  flex-shrink: 0;
 }
