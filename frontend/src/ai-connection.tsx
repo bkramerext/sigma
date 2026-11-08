@@ -326,7 +326,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     : cloudFunding?.error
       ? 'Allowance unavailable'
     : cloudFunding?.budget
-      ? cloudFunding.budget.remaining_usd === null ? 'Unlimited' : `${cloudFunding.budget.remaining_usd.toFixed(2)}`
+      ? cloudFunding.budget.remaining_usd === null ? 'Unlimited' : `Allocation: ${cloudFunding.budget.remaining_usd.toFixed(2)}`
     : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
   async function connect() {
     if (ai.connecting || ai.transitioning) return;
