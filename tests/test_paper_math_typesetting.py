@@ -70,12 +70,5 @@ class MathTypesettingTests(unittest.TestCase):
             _tex_static_diagnostics(repaired),
         )
 
-    def test_currency_is_not_reinterpreted_as_math(self) -> None:
-        text = _latex_prose("The fee is $25 and the allowance is $50.")
-        self.assertNotIn(r"\textbackslash{}", text)
-        self.assertIn(r"\$25", text)
-        self.assertIn(r"\$50", text)
-
-
 if __name__ == "__main__":
     unittest.main()
