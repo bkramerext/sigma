@@ -111,14 +111,14 @@
   width: max-content;
   min-width: 0;
   max-width: none;
-  justify-self: end;
+  justify-self: start;
 }
 .workspace-page .project-art-header .project-identity-pill-stack {
   display: grid;
   grid-template-columns: max-content;
   width: max-content;
   max-width: none;
-  justify-items: end;
+  justify-items: start;
 }
 .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
@@ -126,7 +126,7 @@
   width: max-content;
   min-width: 0;
   max-width: none;
-  justify-self: end;
+  justify-self: start;
 }
 :is(.home-page, .workspace-page) .project-google-signin,
 :is(.home-page, .workspace-page) .project-chatgpt-signin > summary {
@@ -181,7 +181,7 @@
 .workspace-page .project-art-header .project-identity-pill-stack > .project-google-signin,
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection {
   box-sizing: border-box;
-  justify-self: end;
+  justify-self: start;
   width: max-content;
   min-width: 0;
   max-width: none;
