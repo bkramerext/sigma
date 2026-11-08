@@ -7267,22 +7267,14 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       return (grant.kind === 'email' && value === email) || (grant.kind === 'domain' && value === domain);
     });
   });
-  // Development-only visual preview: never sourced from or submitted to the API.
-  const previewInvitation: CloudInvitationRequest = {
-    subject: 'dev-preview-only', email: 'preview@example.invalid',
-    requested_at: 0, status: 'preview', request_type: 'invitation',
-  };
-  const displayedInvitationRequests = visibleInvitationRequests.length
-    ? visibleInvitationRequests
-    : import.meta.env.DEV ? [previewInvitation] : [];
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
     <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2>{hasDrafts && <button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save</button>}<DialogDismissButton label="Close administrator settings" onClick={requestClose}/></div>
     <section className="admin-access-panel">
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
       <details className="admin-collapsible-section admin-invitation-section" open><summary><h3>Invitation/reload requests</h3></summary>
-      {displayedInvitationRequests.length ? <div className="admin-table-scroll admin-invitation-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{displayedInvitationRequests.map(item => {
-        return <tr key={item.subject}><th scope="row">{item.email}{item.subject === 'dev-preview-only' && <small>UI preview only — no real invitation</small>}{item.request_type === 'reload' && <small>Allowance reload request</small>}</th><td>{item.subject === 'dev-preview-only' ? 'Preview' : new Date(item.requested_at * 1000).toLocaleString()}</td><td><div className="admin-invitation-actions"><button type="button" className="admin-text-action admin-icon-action" aria-label={`Add user ${item.email}`} data-tooltip="Add user" disabled={busy} onClick={() => { if (item.subject !== 'dev-preview-only') void addInvitation(item); }}><AdminActionIcon kind="add"/></button><button type="button" className="admin-text-action admin-remove admin-icon-action" aria-label={`Remove invitation request for ${item.email}`} data-tooltip="Remove invitation request" disabled={busy} onClick={() => { if (item.subject !== 'dev-preview-only') void removeInvitation(item); }}><AdminActionIcon kind="remove"/></button></div></td></tr>;
+      {visibleInvitationRequests.length ? <div className="admin-table-scroll admin-invitation-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{visibleInvitationRequests.map(item => {
+        return <tr key={item.subject}><th scope="row">{item.email}{item.request_type === 'reload' && <small>Allowance reload request</small>}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td><div className="admin-invitation-actions"><button type="button" className="admin-text-action admin-icon-action" aria-label={`Add user ${item.email}`} data-tooltip="Add user" disabled={busy} onClick={() => void addInvitation(item)}><AdminActionIcon kind="add"/></button><button type="button" className="admin-text-action admin-remove admin-icon-action" aria-label={`Remove invitation request for ${item.email}`} data-tooltip="Remove invitation request" disabled={busy} onClick={() => void removeInvitation(item)}><AdminActionIcon kind="remove"/></button></div></td></tr>;
       })}</tbody></table></div> : <p className="cloud-access-bootstrap">No invitation requests.</p>}
       </details>
       <details className="admin-collapsible-section admin-feedback-section" open><summary><h3>Product feedback</h3></summary>
