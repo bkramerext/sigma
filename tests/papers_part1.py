@@ -3835,16 +3835,20 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
 
         with (
             patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
-            patch.object(papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
             patch.object(papers, "_provider", new=author),
             patch.object(papers, "_provider_structured", new=proofreader),
             patch.object(papers, "_compile_pdf", new=compile_pdf),
             patch.object(
-                papers, "_repair_tex_layout",
+                papers,
+                "_repair_tex_layout",
                 new=lambda tex, _warnings: (tex + "\\n% corrected layout", "bounded layout repair"),
             ),
             patch.object(
-                papers.paper_writing_sources, "select",
+                papers.paper_writing_sources,
+                "select",
                 new=lambda *_args, **_kwargs: asyncio.sleep(0, result=([], "unavailable")),
             ),
             patch("sigma.paper_scores.score_paper", new=score),
@@ -3855,7 +3859,9 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             except asyncio.CancelledError:
                 pass
             else:
-                raise AssertionError("The injected stop must interrupt the selected publication step")
+                raise AssertionError(
+                    "The injected stop must interrupt the selected publication step"
+                )
             checkpoint = papers._load_work(str(path))
             assert checkpoint is not None
             assert checkpoint.get("validated_draft") is not None
@@ -3875,7 +3881,9 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             compiled_before_resume = compile_calls
             result = asyncio.run(
                 papers.generate(
-                    str(path), credential["identity"], view.project.id,
+                    str(path),
+                    credential["identity"],
+                    view.project.id,
                     progress=collect,
                 )
             )
@@ -3890,7 +3898,9 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             assert stages and stages[0] == "scoring", stages
         else:
             assert "compile" in stages or "pdf_check" in stages, stages
-            assert not set(stages).intersection({"sections", "writing", "validation", "proofreading"})
+            assert not set(stages).intersection(
+                {"sections", "writing", "validation", "proofreading"}
+            )
 
 
 def test_score_interruption_resumes_published_pdf_without_reauthoring() -> None:
