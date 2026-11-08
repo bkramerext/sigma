@@ -3786,3 +3786,118 @@ if __name__ == "__main__":
     from papers_split_runner import run
 
     run(1)
+
+
+def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
+    """Stop/Play must never repeat paid authoring or completed PDF work."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / ("resume-" + interrupt_at + ".sigma")
+        view = initialize_project(
+            path, "Resumable publication", "Retain the exact published paper."
+        )
+        credential = {"identity": "fixture:resume", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+        }
+        author_calls = 0
+        compile_calls = 0
+        score_calls = 0
+        resumed_events: list[papers.PaperProgressEvent] = []
+
+        async def author(package, *_args):
+            nonlocal author_calls
+            author_calls += 1
+            source = next(item["id"] for item in package["sources"] if item["kind"] == "project")
+            return draft(source), config["model"]
+
+        async def proofreader(_input, _binding, _config, *, response_model, **_kwargs):
+            return response_model(corrections=[]), config["model"]
+
+        def compile_pdf(_tex: str, *, diagnostics: list[str], **_kwargs) -> bytes:
+            nonlocal compile_calls
+            compile_calls += 1
+            if interrupt_at == "pdf":
+                if compile_calls == 1:
+                    diagnostics.append("Overfull \\hbox (10.0pt too wide)")
+                if compile_calls == 2:
+                    raise asyncio.CancelledError()
+            return b"%PDF-fixture"
+
+        async def score(*_args, **_kwargs):
+            nonlocal score_calls
+            score_calls += 1
+            if interrupt_at == "score" and score_calls == 1:
+                raise asyncio.CancelledError()
+            return {"total": 75}
+
+        async def collect(event: papers.PaperProgressEvent) -> None:
+            resumed_events.append(event)
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)),
+            patch.object(papers, "_provider", new=author),
+            patch.object(papers, "_provider_structured", new=proofreader),
+            patch.object(papers, "_compile_pdf", new=compile_pdf),
+            patch.object(
+                papers, "_repair_tex_layout",
+                new=lambda tex, _warnings: (tex + "\\n% corrected layout", "bounded layout repair"),
+            ),
+            patch.object(
+                papers.paper_writing_sources, "select",
+                new=lambda *_args, **_kwargs: asyncio.sleep(0, result=([], "unavailable")),
+            ),
+            patch("sigma.paper_scores.score_paper", new=score),
+            mock_pdf_inspection(),
+        ):
+            try:
+                asyncio.run(papers.generate(str(path), credential["identity"], view.project.id))
+            except asyncio.CancelledError:
+                pass
+            else:
+                raise AssertionError("The injected stop must interrupt the selected publication step")
+            checkpoint = papers._load_work(str(path))
+            assert checkpoint is not None
+            assert checkpoint.get("validated_draft") is not None
+            assert checkpoint.get("proofread_ready") is not None
+            if interrupt_at == "score":
+                assert checkpoint.get("published_paper_id")
+                assert len(papers.list_papers(str(path))) == 1
+                assert checkpoint["progress"]["stage"] == "scoring"
+            else:
+                pdf_pass = checkpoint.get("pdf_checkpoint")
+                assert pdf_pass is not None
+                assert pdf_pass["pass"] == 1
+                assert pdf_pass["next_pass"] == 2
+                assert not pdf_pass["ready"]
+                assert len(papers.list_papers(str(path))) == 0
+                assert papers._load_pdf_pass(str(path), pdf_pass).startswith(b"%PDF-")
+            result = asyncio.run(
+                papers.generate(
+                    str(path), credential["identity"], view.project.id,
+                    progress=collect,
+                )
+            )
+        assert author_calls == 1, "Resume replayed a paid author request"
+        assert compile_calls == (1 if interrupt_at == "score" else 3)
+        assert score_calls == (2 if interrupt_at == "score" else 1)
+        assert len(papers.list_papers(str(path))) == 1, "Resume duplicated the paper version"
+        assert papers._load_work(str(path)) is None
+        assert papers.get_paper(str(path), result["paper_id"])["pdf_available"]
+        stages = [event["stage"] for event in resumed_events]
+        if interrupt_at == "score":
+            assert stages and stages[0] == "scoring", stages
+        else:
+            assert "compile" in stages or "pdf_check" in stages, stages
+            assert not set(stages).intersection({"sections", "writing", "validation", "proofreading"})
+
+
+def test_score_interruption_resumes_published_pdf_without_reauthoring() -> None:
+    _run_publication_checkpoint_recovery_scenario("score")
+
+
+def test_pdf_pass_interruption_resumes_next_pass_without_reauthoring() -> None:
+    _run_publication_checkpoint_recovery_scenario("pdf")
