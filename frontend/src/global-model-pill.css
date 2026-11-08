@@ -906,3 +906,10 @@
     padding-block: 4px;
   }
 }
+
+/* Shift the complete header pill groups together without changing any internal gaps. */
+.home-page .home-account-grid,
+.workspace-page .project-art-header .header-controls {
+  position: relative;
+  top: -2px;
+}
