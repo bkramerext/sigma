@@ -65,6 +65,18 @@ def check_recent_list_does_not_validate_sample_pdfs(root: Path) -> None:
             assert response.headers["Server-Timing"].startswith("saved-projects;dur=")
 
 
+def check_sample_index_metadata_does_not_decode_full_project() -> None:
+    """Saved/name checks must not load project history or the project-type catalog."""
+    from sigma import samples
+
+    with patch.object(
+        samples, "_decode", side_effect=AssertionError("Sample metadata used full decoder")
+    ):
+        identifiers = samples.sample_project_ids()
+        titles = samples.sample_project_titles()
+    assert len(identifiers) == len(titles) == len(samples._projects())
+
+
 def check_index_sample_read_outside_lock() -> None:
     """Sample identity decoding must never monopolize the Saved index lock."""
     from sigma import samples
@@ -1036,6 +1048,7 @@ def check(root: Path, base: Path) -> None:
         index_path.unlink(missing_ok=True)
         backup.rename(index_path)
     assert recent_projects()["projects"]
+    check_sample_index_metadata_does_not_decode_full_project()
     check_index_sample_read_outside_lock()
     check_one_time_owner_migration(base)
     check_migration_rewrites_frozen_snapshot_refs()
