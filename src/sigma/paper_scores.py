@@ -136,7 +136,7 @@ class ProjectPaperMetadata(TypedDict):
 def _project_metadata_cached(
     path: str, signature: tuple[tuple[str, int, int, int, int], ...]
 ) -> ProjectPaperMetadata:
-    """Hash the saved PDFs only when their metadata or paper records changed."""
+    """Cache the aggregate from paper JSON records, without touching PDFs."""
     from sigma import papers
 
     available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
@@ -144,12 +144,10 @@ def _project_metadata_cached(
 
 
 def project_metadata(path: str) -> ProjectPaperMetadata:
-    """One canonical aggregate for lists, invalidated by filesystem changes.
+    """Home summary from paper JSON records, never PDF contents.
 
-    Every unchanged list poll used to re-read every paper JSON and hash entire
-    PDFs. Stat signatures include ctime and inode, so edits, replacements,
-    score updates, and PDF deletion invalidate the cached verification.
-    Bundled projects retain their original verification path.
+    Existing stat-signature caching tracks saved records, including publishing,
+    scoring and deletion. PDFs are verified on demand by paper operations.
     """
     from sigma import papers
 
@@ -162,9 +160,7 @@ def project_metadata(path: str) -> ProjectPaperMetadata:
     try:
         candidates = [state]
         if directory.exists():
-            candidates.extend(
-                entry for entry in directory.iterdir() if entry.suffix in {".json", ".pdf"}
-            )
+            candidates.extend(entry for entry in directory.iterdir() if entry.suffix == ".json")
         signature = tuple(
             sorted(
                 (
