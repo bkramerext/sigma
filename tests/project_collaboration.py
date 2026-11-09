@@ -108,7 +108,9 @@ class CollaborationTests(TestCase):
         )
         with (
             patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
         ):
             invited, shared_paths = shared.shared_listing()
         self.assertEqual(invited, [{"path": self.path, "id": "saved-project"}])
