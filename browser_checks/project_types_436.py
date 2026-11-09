@@ -179,14 +179,14 @@ with sync_playwright() as playwright:
     model_choice.click()
     model_options = new_dialog.get_by_role("listbox", name="Model")
     expect(model_options).to_be_visible()
-    expect(model_options.get_by_role("option", name="GPT-6-Luna · $", exact=True)).to_be_visible()
-    expect(model_options.get_by_role("option", name="GPT-6.1-Sol · $", exact=True)).to_be_visible()
-    expect(model_options.get_by_role("option", name="GPT-6-Astra · $$", exact=True)).to_be_visible()
+    expect(model_options.get_by_role("option").filter(has_text="GPT-6-Luna · $")).to_be_visible()
+    expect(model_options.get_by_role("option").filter(has_text="GPT-6.1-Sol · $$")).to_be_visible()
+    expect(model_options.get_by_role("option").filter(has_text="GPT-6-Astra · $$$")).to_be_visible()
     page.keyboard.press("Escape")
     thinking_choice.click()
     expect(new_dialog.get_by_role("listbox", name="Thinking level")).to_be_visible()
     page.keyboard.press("Escape")
-    new_dialog.get_by_role("button", name="Close", exact=False).click()
+    new_dialog.get_by_role("button", name="Cancel project settings").click()
     expect(new_dialog).not_to_be_visible()
 
     # A visible test host avoids the default Samples tab hiding Saved's
