@@ -4854,8 +4854,9 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
     || difficulty !== initial.project.difficulty
     || (!!shared?.owner && (model !== shared.model || thinking !== shared.thinking
       || JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators)));
-  function addCollaborator() {
-    const email = plausibleCollaboratorEmail(newEmail);
+  function finishCollaboratorEntry(value: string) {
+    if (!value.trim()) { setAdding(false); setNewEmail(''); setError(''); return; }
+    const email = plausibleCollaboratorEmail(value);
     if (!email) { setError('Enter a Google account email address.'); return; }
     if (email === shared?.owner || collaborators.includes(email)) {
       setError('This account is already a collaborator.'); return;
@@ -4928,10 +4929,12 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
                 </button>
               </div>)}
               {adding && <div className="project-collaborator-add">
-                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => setNewEmail(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCollaborator(); } if (event.key === 'Escape') { event.stopPropagation(); setAdding(false); setNewEmail(''); } }}/>
-                <button type="button" onClick={addCollaborator}>Add</button>
-                <button type="button" onClick={() => { setAdding(false); setNewEmail(''); }}>Cancel</button>
+                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => { setNewEmail(event.target.value); if (error) setError(''); }}
+                  onBlur={event => finishCollaboratorEntry(event.currentTarget.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setAdding(false); setNewEmail(''); setError(''); }
+                  }}/>
               </div>}
               {shared.failed_notifications > 0 && <p className="project-collaborator-mail-failed" role="status">
                 {shared.failed_notifications} collaboration {shared.failed_notifications === 1 ? 'email could' : 'emails could'} not be delivered.
