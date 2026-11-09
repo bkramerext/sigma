@@ -116,6 +116,40 @@ class CollaborationTests(TestCase):
         self.assertEqual(invited, [{"path": self.path, "id": "saved-project"}])
         self.assertEqual(shared_paths, {self.path})
 
+    def test_artifact_attribution_tracks_authenticated_actor_without_replacing_creator(
+        self,
+    ) -> None:
+        shared.note_artifact_author(self.path, "strategy", "strategy-one")
+        shared.note_artifact_author(self.path, "paper", "paper-one", created_only=True)
+        self.assertEqual(
+            shared.summary(self.path)["artifact_authors"]["strategy"]["strategy-one"],
+            self.owner.email,
+        )
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            shared.note_artifact_author(self.path, "strategy", "strategy-one")
+            shared.note_artifact_author(self.path, "paper", "paper-one", created_only=True)
+            attribution = shared.summary(self.path)["artifact_authors"]
+            self.assertEqual(attribution["strategy"]["strategy-one"], self.other.email)
+            self.assertEqual(attribution["paper"]["paper-one"], self.owner.email)
+
+        with shared._db() as db:
+            db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
+        self.assertFalse(shared.summary(self.path)["shared"])
+        self.assertEqual(shared.summary(self.path)["artifact_authors"], {})
+
     def revision(self) -> int:
         with shared._db() as db:
             return int(

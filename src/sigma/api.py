@@ -29,6 +29,7 @@ from sigma import (
     memory_guard,
     paper_scores,
     papers,
+    project_collaboration,
     project_diagnostics,
     project_types,
     proposals,
@@ -901,6 +902,7 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
             force=body.force,
         )
         papers.mark_scored_progress(body.path, paper_id)
+        project_collaboration.note_artifact_author(body.path, "paper", paper_id)
         return {"score": score}
     except asyncio.CancelledError:
         if memory_guard.is_critical():
@@ -1041,6 +1043,17 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
         if completed.cancelled():
             return
         error = completed.exception()
+        if error is None:
+            paper_id = completed.result().get("paper_id")
+            if isinstance(paper_id, str):
+                try:
+                    project_collaboration.note_artifact_author(
+                        body.path, "paper", paper_id, created_only=True
+                    )
+                except (OSError, sqlite3.Error, ValueError):
+                    logging.getLogger(__name__).warning(
+                        "Paper author attribution unavailable for %s", paper_id
+                    )
         if error is not None and not isinstance(error, ProjectError):
             logging.getLogger(__name__).error(
                 "Detached paper generation failed: %s", type(error).__name__
@@ -1533,13 +1546,17 @@ def mock_research_start_view(
         scenario = "provider-error"
     if inspect_project(body.path).project.id != body.expected_project_id:
         raise HTTPException(409, "Project changed; reopen it before starting research")
-    return research_sessions.mock_session(
+    result = research_sessions.mock_session(
         body.path,
         body.strategy_id,
         body.idempotency_key,
         scenario,
         body.continue_using_saved_type_settings,
     )
+    project_collaboration.note_artifact_author(
+        body.path, "session", result["id"], created_only=True
+    )
+    return result
 
 
 @app.post("/api/projects/research-sessions/start")
@@ -1590,6 +1607,10 @@ async def research_start_view(body: ResearchStartRequest):
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
+        if isinstance(result.get("id"), str):
+            project_collaboration.note_artifact_author(
+                body.path, "session", result["id"], created_only=True
+            )
         return result
     finally:
         if not transferred:
@@ -1612,17 +1633,19 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         )
         if simulated is None:
             raise HTTPException(404, "Not found")
+        project_collaboration.note_artifact_author(body.path, "session", session_id)
         return simulated
-    from sigma import project_collaboration
 
     if body.action not in {"resume", "repair"}:
-        return await research_sessions.control_session(
+        result = await research_sessions.control_session(
             body.path,
             session_id,
             body.action,
             additional_calls=body.additional_calls,
             browser_presence_required=body.browser_presence_required,
         )
+        project_collaboration.note_artifact_author(body.path, "session", session_id)
+        return result
     lease = project_collaboration.acquire_lease(body.path, "Research session")
     transferred = False
     try:
@@ -1638,6 +1661,7 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
+        project_collaboration.note_artifact_author(body.path, "session", session_id)
         return result
     finally:
         if not transferred:
@@ -1985,7 +2009,11 @@ class CreateStrategyRequest(StrategyRequest):
 @app.post("/api/projects/strategies", status_code=201)
 def create_strategy_view(body: CreateStrategyRequest):
     provenance = accepted_provenance(body.receipt, body.path) if body.receipt else None
-    return asdict(create_strategy(body.path, body.title, body.approach, body.summary, provenance))
+    view = create_strategy(body.path, body.title, body.approach, body.summary, provenance)
+    project_collaboration.note_artifact_author(
+        body.path, "strategy", view.project.strategies[-1].id
+    )
+    return asdict(view)
 
 
 class RemoveStrategyRequest(OpenRequest):
@@ -1994,7 +2022,9 @@ class RemoveStrategyRequest(OpenRequest):
 
 @app.post("/api/projects/strategies/remove")
 def remove_strategy_view(body: RemoveStrategyRequest):
-    return asdict(remove_strategy(body.path, body.strategy_id))
+    view = remove_strategy(body.path, body.strategy_id)
+    project_collaboration.note_artifact_author(body.path, "strategy", body.strategy_id)
+    return asdict(view)
 
 
 class EditStrategyRequest(StrategyRequest):
@@ -2003,7 +2033,9 @@ class EditStrategyRequest(StrategyRequest):
 
 @app.post("/api/projects/strategies/edit")
 def edit_strategy_view(body: EditStrategyRequest):
-    return asdict(edit_strategy(body.path, body.strategy_id, body.title, body.approach))
+    view = edit_strategy(body.path, body.strategy_id, body.title, body.approach)
+    project_collaboration.note_artifact_author(body.path, "strategy", body.strategy_id)
+    return asdict(view)
 
 
 class StrategyEnabledRequest(OpenRequest):
@@ -2014,7 +2046,9 @@ class StrategyEnabledRequest(OpenRequest):
 
 @app.post("/api/projects/strategies/enabled")
 def strategy_enabled_view(body: StrategyEnabledRequest):
-    return asdict(set_strategy_enabled(body.path, body.strategy_id, body.enabled))
+    view = set_strategy_enabled(body.path, body.strategy_id, body.enabled)
+    project_collaboration.note_artifact_author(body.path, "strategy", body.strategy_id)
+    return asdict(view)
 
 
 class CreateProjectRequest(BaseModel):
@@ -2086,12 +2120,21 @@ class ReorderRequest(OpenRequest):
 
 @app.post("/api/projects/strategies/stage")
 def stage_view(body: StageRequest):
-    return asdict(change_stage(body.path, body.strategy_id, body.stage))
+    view = change_stage(body.path, body.strategy_id, body.stage)
+    project_collaboration.note_artifact_author(body.path, "strategy", body.strategy_id)
+    return asdict(view)
 
 
 @app.post("/api/projects/strategies/reorder")
 def reorder_view(body: ReorderRequest):
-    return asdict(reorder_strategies(body.path, body.order, body.expected_order))
+    view = reorder_strategies(body.path, body.order, body.expected_order)
+    previous_positions = {
+        strategy_id: index for index, strategy_id in enumerate(body.expected_order)
+    }
+    for index, strategy_id in enumerate(body.order):
+        if previous_positions.get(strategy_id) != index:
+            project_collaboration.note_artifact_author(body.path, "strategy", strategy_id)
+    return asdict(view)
 
 
 class ProposalRequest(OpenRequest):

@@ -344,6 +344,15 @@ def _db() -> Iterator[sqlite3.Connection]:
             retry_after REAL NOT NULL DEFAULT 0,
             failed_at REAL
         )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS shared_artifact_authors (
+            path TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            artifact_id TEXT NOT NULL,
+            email TEXT NOT NULL,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY(path, kind, artifact_id),
+            FOREIGN KEY(path) REFERENCES shared_projects(path)
+        )""")
         # Existing hosted databases have the earlier outbox schema.
         fields = {row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")}
         if "attempts" not in fields:
@@ -508,6 +517,19 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
             "thinking": row["thinking"],
             "lease": _lease(db, view.path),
             "shared": bool(members),
+            "artifact_authors": {
+                kind: {
+                    record["artifact_id"]: record["email"]
+                    for record in db.execute(
+                        "SELECT artifact_id, email FROM shared_artifact_authors "
+                        "WHERE path=? AND kind=?",
+                        (view.path, kind),
+                    )
+                }
+                for kind in ("strategy", "session", "paper")
+            }
+            if members
+            else {},
             "failed_notifications": db.execute(
                 """SELECT COUNT(*) FROM shared_email_outbox
                    WHERE project_path=? AND failed_at IS NOT NULL""",
@@ -515,6 +537,30 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
             ).fetchone()[0],
             "you": email,
         }
+
+
+def note_artifact_author(
+    path: str, kind: str, artifact_id: str, *, created_only: bool = False
+) -> None:
+    """Persist the verified human responsible for an artifact change.
+
+    Autonomous checkpoints must not overwrite the initiating human's identity.
+    """
+    if kind not in {"strategy", "session", "paper"} or not artifact_id:
+        raise ValueError("Invalid artifact attribution")
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    with _db() as db:
+        row, actor = _membership(db, path)
+        if row is None:
+            return
+        verb = "INSERT OR IGNORE" if created_only else "INSERT OR REPLACE"
+        db.execute(
+            f"{verb} INTO shared_artifact_authors "
+            "(path, kind, artifact_id, email, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (path, kind, artifact_id, actor, time.time()),
+        )
+        db.commit()
 
 
 def model_settings(path: str) -> dict[str, str] | None:
@@ -860,6 +906,7 @@ def _forget_project_locked(
     db.execute("DELETE FROM shared_email_outbox WHERE project_path=?", (path,))
     db.execute("DELETE FROM shared_leases WHERE path=?", (path,))
     db.execute("DELETE FROM shared_collaborators WHERE path=?", (path,))
+    db.execute("DELETE FROM shared_artifact_authors WHERE path=?", (path,))
     db.execute("DELETE FROM shared_projects WHERE path=?", (path,))
     now = time.time()
     db.executemany(
