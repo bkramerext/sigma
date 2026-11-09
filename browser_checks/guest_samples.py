@@ -300,7 +300,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(page.get_by_role("dialog", name="Request an invitation")).to_have_count(0)
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
-        expect(page.get_by_role("tab", name="Saved")).to_be_enabled()
+        expect(page.get_by_role("tab", name="My Work")).to_be_enabled()
         # Idle browser tabs have an explicit favicon, so the temporary
         # running/queued heartbeat cannot remain cached after work completes.
         expect(page.locator('link[rel="icon"]')).to_have_attribute("href", "/favicon.svg")
@@ -359,14 +359,14 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         # An unauthenticated HTTP client received the PDF without a guest
         # session cookie, working project, provider connection or research run.
         scored_group.evaluate("element => { element.open = false; }")
-        page.get_by_role("tab", name="Saved").click()
+        page.get_by_role("tab", name="My Work").click()
         message = page.locator("#recent-panel .guest-recent-message")
         expect(message.locator("span").nth(0)).to_have_text("Sign in to create and")
         expect(message.locator("span").nth(1)).to_have_text("save your own projects.")
         typography = message.evaluate("element => getComputedStyle(element)")
         assert typography["fontFamily"].startswith("Georgia"), typography
         assert typography["fontSize"] == "18px", typography
-        expect(page.get_by_role("tab", name="Saved")).to_have_attribute("aria-selected", "true")
+        expect(page.get_by_role("tab", name="My Work")).to_have_attribute("aria-selected", "true")
         assert recent_responses == [], recent_responses
         page.get_by_role("tab", name="Samples").click()
         sign_in = page.get_by_role("link", name="Sign in with Google")
