@@ -262,6 +262,13 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
         welcome.get_by_role("button", name="Let's get started").click()
         expect(welcome).to_have_count(0)
+        # Signed-out visitors see About SIGMA, not account-specific Settings.
+        # Removing the Settings pill leaves no unused placeholder beside About.
+        expect(page.get_by_role("button", name="Settings", exact=True)).to_have_count(0)
+        expect(page.get_by_role("button", name="About SIGMA", exact=True)).to_be_visible()
+        expect(page.locator(".sigma-header-first-row > button")).to_have_count(1)
+        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+        assert not failures, failures
         page.route(
             "**/api/test-long-error",
             lambda route: route.fulfill(
