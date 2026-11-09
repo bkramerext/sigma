@@ -121,10 +121,11 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(owner_dialog.get_by_text(OWNER)).to_be_visible()
         assert owner_dialog.get_by_role("button", name=f"Remove {OWNER}").count() == 0
         owner_dialog.get_by_role("button", name="Add collaborator").click()
-        owner_dialog.get_by_label("New collaborator email").fill(COLLABORATOR)
-        owner_dialog.get_by_role("button", name="Add", exact=True).click()
+        invite_input = owner_dialog.get_by_label("New collaborator email")
+        invite_input.fill(COLLABORATOR)
+        invite_input.press("Tab")
         expect(owner_dialog.get_by_text(COLLABORATOR)).to_be_visible()
-        owner_dialog.get_by_role("button", name="Save", exact=True).click()
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
 
         shared_response = owner_context.request.get(
@@ -220,7 +221,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         member_dialog = member.get_by_role("dialog", name="Project Settings")
         expect(member_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
         choose_difficulty(member_dialog, "Hard")
-        member_dialog.get_by_role("button", name="Save", exact=True).click()
+        member_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(member_dialog).not_to_be_visible()
         updated = get_json(
             owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
@@ -228,10 +229,11 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert updated["project"]["difficulty"] == "hard", updated
 
         choose_difficulty(owner_dialog, "Easy")
-        owner_dialog.get_by_role("button", name="Save", exact=True).click()
         expect(owner_dialog.locator(".error")).to_contain_text("saved by")
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Easy")
-        owner.keyboard.press("Escape")
+        # A stale draft remains visible for review, but cannot overwrite the
+        # collaborator's newer change. Reopen the original for a clean editor.
+        owner.goto(url)
         expect(owner_dialog).not_to_be_visible()
 
         # The Shared shortcut leaves ?settings=collaborators in the URL.
@@ -242,7 +244,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Hard")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()
-        owner_dialog.get_by_role("button", name="Save", exact=True).click()
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
 
         # Revocation must be enforced by the server, not just by a hidden icon.
