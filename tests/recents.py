@@ -61,6 +61,10 @@ def check_recents_lock_scope(root: Path) -> None:
             except ProjectError as exc:
                 assert "cannot be reopened" in str(exc)
 
+    # An accidental same-thread advisory update must not recurse into flock().
+    with recents._index():
+        assert open_project(view.path).project.id == view.project.id
+
     # An unrelated writer holds the lock: reads and project opening still work.
     with lock_path.open("a+b") as holder:
         fcntl.flock(holder.fileno(), fcntl.LOCK_EX)
