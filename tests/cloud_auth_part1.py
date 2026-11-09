@@ -29,8 +29,16 @@ class CloudAuthTests(CloudAuthFixture):
                     "INSERT INTO shared_projects "
                     "(path,project_id,owner_hash,owner_email,model,thinking,last_writer,updated_at) "
                     "VALUES (?,?,?,?,?,?,?,?)",
-                    (path, str(uuid4()), "z-owner", "zetacontinuation@gmail.com",
-                     "gpt-6.1-sol", "high", "zetacontinuation@gmail.com", time.time()),
+                    (
+                        path,
+                        str(uuid4()),
+                        "z-owner",
+                        "zetacontinuation@gmail.com",
+                        "gpt-6.1-sol",
+                        "high",
+                        "zetacontinuation@gmail.com",
+                        time.time(),
+                    ),
                 )
                 db.execute(
                     "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
