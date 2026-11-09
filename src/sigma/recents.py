@@ -447,6 +447,14 @@ class RecentProject:
 
 
 def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
+    """List Saved projects with one scoped authorization snapshot."""
+    from sigma import cloud_workspaces
+
+    with cloud_workspaces.batch_legacy_access():
+        return _recent_projects(lightweight=lightweight, activity_only=activity_only)
+
+
+def _recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
     """Render project identity first; expensive status and paper details are optional."""
     from sigma import cloud_workspaces, project_collaboration
 
@@ -475,13 +483,6 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                             entry["path"] = str(rebased)
                 except ValueError:
                     pass
-            if (
-                workspace is not None
-                and not Path(copied["path"]).is_relative_to(workspace.path)
-                and copied["path"] not in shared_by_path
-                and not cloud_workspaces.local_legacy_owner_access(Path(copied["path"]))
-            ):
-                continue
             entries.append(copied)
         known_paths = {entry["path"] for entry in entries}
         for row in shared_rows:
@@ -494,6 +495,16 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                         "included_example": False,
                     }
                 )
+    # Never acquire the legacy index or collaboration authorization locks while
+    # holding the authenticated user's Saved index lock.
+    if workspace is not None:
+        entries = [
+            entry
+            for entry in entries
+            if Path(entry["path"]).is_relative_to(workspace.path)
+            or entry["path"] in shared_by_path
+            or cloud_workspaces.local_legacy_owner_access(Path(entry["path"]))
+        ]
     if not lightweight:
         from sigma import papers
         from sigma.research_sessions import has_active_session
