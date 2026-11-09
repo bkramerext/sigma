@@ -748,3 +748,17 @@
 .sigma-project-classification-dialog .project-collaborator-local-note { margin-top: 20px; color: #aab9c7; font-size: 12px; line-height: 1.6; }
 .sigma-project-classification-dialog .project-collaborator-mail-failed { margin: 12px 0 0; color: #e3c8a2; font-size: 12px; }
 .sigma-project-classification-dialog .project-collaborator-mail-failed button { margin-left: 10px; border: 0; background: transparent; color: var(--sigma-copper-foreground); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+
+/* New Project fields are fixed-height; only the dialog body scrolls if needed. */
+.project-settings-dialog.new-project-dialog textarea { resize: none; }
+.project-settings-dialog.new-project-dialog .new-project-edit-note {
+  margin: 12px 24px 0;
+  color: #aab9c7;
+  font-size: 12px;
+  line-height: 1.5;
+  flex: 0 0 auto;
+}
+@media (max-width: 560px) {
+  .project-settings-dialog.new-project-dialog .new-project-edit-note { margin-inline: 18px; }
+}
