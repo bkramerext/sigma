@@ -65,7 +65,7 @@ def _fingerprint(source: Path) -> str:
 
 
 _FROZEN_SNAPSHOT = re.compile(
-    r"^((?:artifacts/papers/snapshots|papers/\\.snapshots)/)([0-9a-f]{64})(\\.json\\.zlib)$"
+    r"^((?:artifacts/papers/snapshots|papers/\.snapshots)/)([0-9a-f]{64})(\.json\.zlib)$"
 )
 _MAX_FROZEN_BYTES = 128 * 1024 * 1024
 
@@ -164,7 +164,7 @@ def _relocate_staged(source: Path, destination: Path, staged: Path, project_id: 
         rewritten = _relocate_members(members, source, destination, project_id)
         if rewritten != members:
             staged.write_text(
-                json.dumps(stored_bundle(rewritten), sort_keys=True, indent=2) + "\\n",
+                json.dumps(stored_bundle(rewritten), sort_keys=True, indent=2) + "\n",
                 encoding="utf-8",
             )
         return
