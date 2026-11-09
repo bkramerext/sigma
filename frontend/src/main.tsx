@@ -7594,6 +7594,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   const dialog = useRef<HTMLDialogElement>(null);
   const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
   const [addOpen, setAddOpen] = useState(false);
+  const [authorizedUsersExpanded, setAuthorizedUsersExpanded] = useState(true);
   const [newKind, setNewKind] = useState<'email' | 'domain'>('email');
   const [newValue, setNewValue] = useState('');
   const [newRole, setNewRole] = useState<'member' | 'admin'>('member');
@@ -7718,6 +7719,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     try {
       await onAdd({ kind: newKind, value, role: newKind === 'domain' ? 'member' : newRole, allowance_usd: newKind === 'email' && newRole === 'admin' ? null : newAllowance.trim() ? Number(newAllowance) : null });
       setNewValue(''); setNewAllowance(''); setAddOpen(false); setMessage('');
+      setAuthorizedUsersExpanded(true);
       requestAnimationFrame(() => addButton.current?.focus());
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
   }
@@ -7754,6 +7756,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       );
       await onAdd({ kind: 'email', value: item.email, role: 'member', allowance_usd: policy?.allowance_usd ?? null });
       await onUpdateInvitation(item, 'reviewed');
+      setAuthorizedUsersExpanded(true);
       setMessage(`Added ${item.email} as an authorized member.`);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
   }
@@ -7787,7 +7790,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       <details className="admin-collapsible-section admin-feedback-section" open><summary><h3>Product feedback</h3></summary>
       {feedbackRequests.length ? <div className="admin-table-scroll admin-feedback-scroll"><table className="admin-grants-table admin-feedback-table"><colgroup><col style={{ width: '33%' }}/><col style={{ width: '22%' }}/><col style={{ width: '15%' }}/><col style={{ width: '9%' }}/><col style={{ width: '21%' }}/></colgroup><thead><tr><th scope="col">Feedback</th><th scope="col">Google account</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}</th><td className="admin-feedback-account">{item.account_email || 'Not signed in'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td><div className="admin-feedback-actions"><button type="button" className="admin-text-action admin-icon-action" disabled={busy || item.status === 'closed'} aria-pressed={item.status === 'reviewed'} aria-label={item.status === 'reviewed' ? 'Mark feedback unreviewed' : 'Mark feedback reviewed'} data-tooltip={item.status === 'reviewed' ? 'Mark unreviewed' : 'Mark reviewed'} onClick={() => void onUpdateFeedback(item, item.status === 'reviewed' ? 'new' : 'reviewed')}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/>{item.status === 'reviewed' && <path d="m8 12 3 3 5-6" strokeWidth="2.3"/>}</svg></button><button type="button" className="admin-text-action admin-remove admin-icon-action" disabled={busy} aria-label="Remove feedback" data-tooltip="Remove feedback" onClick={() => void onRemoveFeedback(item)}><AdminActionIcon kind="remove"/></button></div></td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
       </details>
-      <details className="admin-collapsible-section admin-authorized-users-section" open><summary><h3>Authorized users</h3></summary>
+      <details className="admin-collapsible-section admin-authorized-users-section" open={authorizedUsersExpanded} onToggle={event => setAuthorizedUsersExpanded(event.currentTarget.open)}><summary><h3>Authorized users</h3><button ref={addButton} type="button" className="admin-text-action admin-icon-action admin-authorized-add" aria-label="Add authorized user or domain" data-tooltip="Add authorized user or domain" aria-expanded={addOpen} onClick={event => { event.preventDefault(); event.stopPropagation(); setAuthorizedUsersExpanded(true); setAddOpen(true); }}><CirclePlusIcon/></button></summary>
       <div className="admin-table-scroll admin-authorized-table-scroll"><table className="admin-grants-table admin-authorized-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col" className="admin-allowance-heading">Sponsorship allowance</th><th scope="col">Actions</th></tr></thead><tbody>
         {ordered.map(grant => {
           const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
@@ -7803,7 +7806,6 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
           </tr>;
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
-        <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action admin-icon-action" aria-label="New access rule" data-tooltip="New access rule" aria-expanded={addOpen} onClick={() => setAddOpen(true)}><AdminActionIcon kind="new"/></button></td></tr>
       </tbody></table></div></details>
       {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p></div>}
       {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
