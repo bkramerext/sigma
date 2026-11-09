@@ -3117,7 +3117,6 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
         if tex_bytes:
             artifacts[tex_name] = tex_bytes
         save_project_artifacts(target, artifacts)
-        project_collaboration.note_artifact_author(path, "paper", identifier, created_only=True)
         return
     directory = _paper_dir(path)
     destination = directory / f"{identifier}.json"
@@ -3157,7 +3156,6 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
         staged_pdf.unlink(missing_ok=True)
         if staged_tex is not None:
             staged_tex.unlink(missing_ok=True)
-    project_collaboration.note_artifact_author(path, "paper", identifier, created_only=True)
 
 
 def _work_file(path: str, *, create: bool) -> Path:
