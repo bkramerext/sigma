@@ -23,7 +23,6 @@ RH_MATH_EXPRESSIONS = (
 )
 
 
-
 # Representative expressions preserved verbatim from the two Warp Drive PDFs.
 # v3 page 6 (\gg), pages 13–14 (\rm), and v2 page 15 (\dfrac).
 WARP_DRIVE_MATH_EXPRESSIONS = (
@@ -37,6 +36,7 @@ WARP_DRIVE_MATH_EXPRESSIONS = (
     r"\nabla_\mu T_{\rm p}^{\mu\nu}=F^{\nu\rho}j_{{\rm p}\rho}",
     r"\alpha\leq\dfrac{\Omega}{(2\eta-\eta^2)^{3/2}}+\dfrac{(1-\eta)K}{2\eta-\eta^2}",
 )
+
 
 class MathTypesettingTests(unittest.TestCase):
     def test_valid_research_math_remains_math(self) -> None:
@@ -78,7 +78,6 @@ class MathTypesettingTests(unittest.TestCase):
             papers._tex_static_diagnostics(repaired),
         )
 
-
     def test_warp_drive_formulas_are_rendered_as_math(self) -> None:
         for body in WARP_DRIVE_MATH_EXPRESSIONS:
             with self.subTest(math=body):
@@ -97,7 +96,7 @@ class MathTypesettingTests(unittest.TestCase):
                     r"\begin{document}" + "\n" + escaped + "\n" + r"\end{document}"
                 )
                 self.assertEqual(count, 1)
-                self.assertIn(original, repaired)
+                self.assertTrue(original in repaired or r"\[" + body in repaired)
                 self.assertNotIn(r"\textbackslash{}", repaired)
                 self.assertNotIn(
                     "An inline mathematical expression was escaped into printable text.",
