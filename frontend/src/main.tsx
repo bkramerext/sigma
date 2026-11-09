@@ -1,4 +1,4 @@
-import { Component, createContext, createElement, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
+import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
@@ -5310,9 +5310,15 @@ function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
 
-function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; flat?: boolean; active?: boolean }) {
-  const [projects, setProjects] = useState<RecentProject[]>([]);
-  const [loading, setLoading] = useState(true);
+function RecentProjects({ onOpen, flat = false, active = false, projects, setProjects, loading, setLoading }: {
+  onOpen: (view: ProjectView, openSettings?: boolean) => void;
+  flat?: boolean;
+  active?: boolean;
+  projects: RecentProject[];
+  setProjects: Dispatch<SetStateAction<RecentProject[]>>;
+  loading: boolean;
+  setLoading: Dispatch<SetStateAction<boolean>>;
+}) {
   const [opening, setOpening] = useState('');
   const [removing, setRemoving] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
@@ -5330,7 +5336,8 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
     if (!active) return;
     const controller = new AbortController();
     let requestPending = false;
-    let firstLoad = true;
+    // Both tabs share the same data; only the first-ever request is shallow.
+    let firstLoad = loading;
     const refresh = async () => {
       if (controller.signal.aborted || document.visibilityState !== 'visible' || requestPending) return;
       requestPending = true;
@@ -5541,6 +5548,9 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, op
     const saved = window.localStorage.getItem('sigma.homeCatalogTab');
     return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
   });
+  // Saved and Most Recent are two views of one list, not two independent fetches.
+  const [savedProjects, setSavedProjects] = useState<RecentProject[]>([]);
+  const [savedLoading, setSavedLoading] = useState(true);
   const recent = useRef<HTMLButtonElement>(null);
   const mostRecent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
@@ -5570,8 +5580,8 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, op
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>Saved</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'}/>}</div>
-    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'}/>}</div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/>}</div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/>}</div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest} active={tab === 'samples'}/></div>
   </div>;
 }
