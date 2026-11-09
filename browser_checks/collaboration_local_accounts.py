@@ -176,9 +176,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         member.goto(invitation_url)
         expect(member.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
-        expect(
-            member.get_by_role("dialog", name="Open shared project")
-        ).to_have_count(0)
+        expect(member.get_by_role("dialog", name="Open shared project")).to_have_count(0)
 
         # A different signed-in account is guided Home instead of getting
         # the raw Project unavailable/access-denied error.
