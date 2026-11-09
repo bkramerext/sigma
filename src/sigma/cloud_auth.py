@@ -876,6 +876,18 @@ def resolve_session(raw: str | None) -> Principal | None:
             # never bypass a subject-bound administrator identity.
             _materialize_domain_member(db, row["subject"], row["email"])
             role = _authorization_in_db(db, cfg, row["subject"], row["email"])
+        if (
+            role is None
+            and cfg.local
+            and row["email"] not in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email}
+        ):
+            # Adding a collaborator is an invitation to the project, even if
+            # the recipient has not received a separate global member grant.
+            # ACL checks still fence every cross-workspace project operation.
+            from sigma import project_collaboration
+
+            if project_collaboration.has_invited_collaborator(row["email"]):
+                role = "member"
         # A verified Google identity remains signed in locally while awaiting
         # an invitation. This is identity only: middleware keeps guest access
         # on the public sample and invitation paths below.
