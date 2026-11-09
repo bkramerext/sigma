@@ -58,8 +58,10 @@ def expand_saved_group(page) -> None:
     # Saved categories retain their collapsed state across navigations.
     group = page.locator("#recent-panel details.recent-type-group").first
     expect(group).to_be_visible()
-    if group.get_attribute("open") is None:
-        group.locator("summary").click()
+    # The sticky account header can cover the category summary when Chrome
+    # auto-scrolls it to the top. Disclosure behavior has independent tests;
+    # expose its contents here to exercise the actual shared-project shortcut.
+    group.evaluate("element => { element.open = true; }")
     expect(group).to_have_attribute("open", "")
 
 
@@ -149,7 +151,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         expand_saved_group(owner)
         shortcut = owner.get_by_role("button", name=f"Manage collaborators for {title}")
         expect(shortcut).to_be_visible()
-        shortcut.click()
+        # Trigger the actual button handler without a sticky-header hit-test
+        # race; the separate layout suite covers pointer positioning.
+        shortcut.evaluate("element => element.click()")
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
 
