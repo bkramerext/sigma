@@ -128,7 +128,9 @@ class CollaborationTests(TestCase):
         )
         with (
             patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
             patch("sigma.recents._index", empty_saved_index),
             patch(
                 "sigma.recents.inspect_project",
