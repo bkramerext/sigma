@@ -5167,8 +5167,8 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
   const [error, setError] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pending = useRef(false);
-  const load = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch('/api/projects/recent', { signal });
+  const load = useCallback(async (signal?: AbortSignal, lightweight = false) => {
+    const response = await fetch(lightweight ? '/api/projects/recent?lightweight=true' : '/api/projects/recent', { signal });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
     setProjects(data.projects); setError(''); setLoading(false);
   }, []);
@@ -5176,12 +5176,19 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
     if (!active) return;
     const controller = new AbortController();
     let requestPending = false;
+    let firstLoad = true;
     const refresh = async () => {
       if (controller.signal.aborted || document.visibilityState !== 'visible' || requestPending) return;
       requestPending = true;
       try {
-        await load(controller.signal);
-        if (!controller.signal.aborted) setError('');
+        const lightweight = firstLoad;
+        firstLoad = false;
+        await load(controller.signal, lightweight);
+        if (!controller.signal.aborted) {
+          setError('');
+          // Render project names now; hydrate paper scores/activity afterward.
+          if (lightweight) window.setTimeout(() => void refresh(), 250);
+        }
       } catch (error) {
         if (!controller.signal.aborted) {
           setProjects(current => current.map(entry => ({ ...entry, research_running: false, paper_generating: false, paper_activity: null })));
@@ -6582,7 +6589,7 @@ function App() {
       if (pending || controller.signal.aborted) return;
       pending = true;
       try {
-        const response = await fetch('/api/projects/recent', { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
+        const response = await fetch('/api/projects/recent/activity', { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok) throw new Error('Global activity unavailable');
         const body = await response.json() as { projects: RecentProject[] };
         if (controller.signal.aborted) return;
@@ -6592,10 +6599,11 @@ function App() {
       } catch { /* Keep the last known activity; a transient error must not clear it. */ }
       finally { pending = false; }
     };
-    void poll();
+    // Defer activity scan until after the first Home list has painted.
+    const firstPoll = window.setTimeout(() => void poll(), 1000);
     const timer = window.setInterval(() => void poll(), 10000);
     window.addEventListener("focus", poll);
-    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", poll); };
+    return () => { controller.abort(); window.clearTimeout(firstPoll); window.clearInterval(timer); window.removeEventListener("focus", poll); };
   // Page navigation does not change the workspace identity or running jobs.
   // Do not trigger an extra full Saved-project scan every time a project opens.
   }, [cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
