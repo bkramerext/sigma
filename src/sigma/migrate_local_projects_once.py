@@ -237,13 +237,23 @@ def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
     )
     seen: dict[str, Path] = {}
     inventory: list[tuple[Path, str, str]] = []
+    skipped_missing: list[dict[str, str]] = []
+    saved_by_path = {str(Path(row["path"]).absolute()): row for row in index["entries"]}
     for path in paths:
         original = path.absolute()
+        # The historical Saved list includes paths in disposable test worktrees.
+        # Missing paths are not corrupt projects: keep an audit record but don't
+        # prevent surviving projects from migrating. Existing invalid projects
+        # still fail closed, rather than silently losing research.
+        if original in saved_paths and not original.exists() and not original.is_symlink():
+            entry = saved_by_path[str(original)]
+            skipped_missing.append({"id": entry["id"], "path": str(original)})
+            continue
         try:
             project_id, title = _metadata(original)
         except (ProjectError, OSError, ValueError, KeyError, TypeError):
             if original in saved_paths:
-                raise  # A Saved project must never silently disappear.
+                raise  # A present but invalid Saved project requires investigation.
             continue  # The project root also contains non-project JSON metadata.
         if project_id in seen:
             if seen[project_id] != original:
@@ -251,6 +261,7 @@ def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
             continue
         seen[project_id] = original
         inventory.append((original, project_id, title))
+    index["skipped_missing"] = skipped_missing
     return index, inventory
 
 
@@ -308,7 +319,9 @@ def migrate_if_needed(principal: cloud_auth.Principal) -> None:
             # Keep the old Saved order and pins, without dropping projects that
             # were already created in the new workspace.
             imported = [
-                {**entry, "path": destinations[entry["id"]]} for entry in original_index["entries"]
+                {**entry, "path": destinations[entry["id"]]}
+                for entry in original_index["entries"]
+                if entry["id"] in destinations
             ]
             imported_ids = {row["id"] for row in imported}
             existing = [
@@ -331,13 +344,27 @@ def migrate_if_needed(principal: cloud_auth.Principal) -> None:
                     )
                     indexed.add(project_id)
             index["entries"] = imported + existing
-            index["pins"] = {**index["pins"], **original_index["pins"]}
+            # A pin referencing a vanished test project cannot be carried to
+            # the new workspace; retain it in the original Saved index.
+            index["pins"] = {
+                **index["pins"],
+                **{
+                    family: project_id
+                    for family, project_id in original_index["pins"].items()
+                    if project_id in destinations
+                },
+            }
             index["dismissed_default_pins"] = sorted(
                 set(index["dismissed_default_pins"]) | set(original_index["dismissed_default_pins"])
             )
 
         # Publish completion last. Until then retries verify, never overwrite.
-        data = {"target": TARGET_EMAIL, "project_count": len(inventory), "version": 1}
+        data = {
+            "target": TARGET_EMAIL,
+            "project_count": len(inventory),
+            "skipped_missing": original_index["skipped_missing"],
+            "version": 1,
+        }
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", dir=marker.parent, prefix=".migration-", delete=False
         ) as stream:
