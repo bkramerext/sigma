@@ -145,9 +145,7 @@ def check_compact_project_open() -> None:
     """Interactive opens omit the hidden event history; default reads retain it."""
     created = create_project("Compact opening contract", "Keep research history intact")
     with TestClient(app) as client:
-        compact = client.post(
-            "/api/projects/open", json={"path": created.path, "compact": True}
-        )
+        compact = client.post("/api/projects/open", json={"path": created.path, "compact": True})
         full = client.post("/api/projects/open", json={"path": created.path})
     assert compact.status_code == 200, compact.text
     assert full.status_code == 200, full.text
