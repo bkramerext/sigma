@@ -141,6 +141,18 @@ def check_one_time_owner_migration(base: Path) -> None:
                 session_dir = Path(original.path) / "research-sessions"
                 session_dir.mkdir()
                 (session_dir / f"{session_id}.json").write_bytes(payload)
+        # A newer-version directory copy wins, even when its project.json
+        # timestamp is older than the original. For unversioned copies, use
+        # the most recently modified project document.
+        import shutil
+
+        versioned = root / "previous-v2.sigma"
+        shutil.copytree(saved.path, versioned)
+        os.utime(versioned / "project.json", ns=(1_000_000_000, 1_000_000_000))
+        newer = root / "other-copy.json"
+        shutil.copy2(unlisted.path, newer)
+        newer_time = Path(unlisted.path).stat().st_mtime_ns + 10_000_000_000
+        os.utime(newer, ns=(newer_time, newer_time))
         # Old Saved may reference temporary worktrees removed after a test.
         # Only those missing paths are skipped; surviving projects still move.
         from sigma import recents
@@ -200,6 +212,9 @@ def check_one_time_owner_migration(base: Path) -> None:
                 for original in (saved, unlisted):
                     row = imported[original.project.id]
                     assert Path(row["path"]).is_relative_to(workspace_path)
+                    assert Path(row["path"]).name == (
+                        "previous-v2.sigma" if original.project.id == saved.project.id else "other-copy.json"
+                    )
                     assert inspect_project(row["path"]).project.id == original.project.id
                     records, unavailable = read_session_snapshot(row["path"])
                     assert unavailable == 0 and len(records) == 1

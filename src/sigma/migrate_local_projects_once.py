@@ -213,6 +213,18 @@ def _copy_verified(source: Path, destination: Path) -> None:
             raise ProjectError(f"Relocated project did not verify: {destination}")
 
 
+def _source_rank(path: Path, title: str) -> tuple[tuple[int, ...], int, str]:
+    """Prefer the highest explicit vN; otherwise the newest project document."""
+    version = None
+    for label in (path.stem, title):
+        match = re.search(r"(?:^|[\\s._-])v(?:ersion)?[\\s._-]*(\\d+(?:\\.\\d+)*)$", label, re.I)
+        if match is not None:
+            version = tuple(int(part) for part in match.group(1).split("."))
+            break
+    document = path / "project.json" if path.is_dir() else path
+    return (version or (), document.stat().st_mtime_ns, str(path))
+
+
 def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
     """Read old local state only during this one-time transfer."""
     from sigma import recents
@@ -235,7 +247,7 @@ def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
             or (path.suffix == ".sigma" and path.is_dir())
         )
     )
-    seen: dict[str, Path] = {}
+    positions: dict[str, int] = {}
     inventory: list[tuple[Path, str, str]] = []
     skipped_missing: list[dict[str, str]] = []
     saved_by_path = {str(Path(row["path"]).absolute()): row for row in index["entries"]}
@@ -255,11 +267,17 @@ def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
             if original in saved_paths:
                 raise  # A present but invalid Saved project requires investigation.
             continue  # The project root also contains non-project JSON metadata.
-        if project_id in seen:
-            if seen[project_id] != original:
-                raise ProjectError(f"Duplicate project identity in migration: {project_id}")
+        if project_id in positions:
+            # Historical copies can retain the same project UUID. Migrate only
+            # the newest/highest-version copy, leaving all originals untouched.
+            position = positions[project_id]
+            selected, _, selected_title = inventory[position]
+            if original != selected and _source_rank(original, title) > _source_rank(
+                selected, selected_title
+            ):
+                inventory[position] = (original, project_id, title)
             continue
-        seen[project_id] = original
+        positions[project_id] = len(inventory)
         inventory.append((original, project_id, title))
     index["skipped_missing"] = skipped_missing
     return index, inventory
