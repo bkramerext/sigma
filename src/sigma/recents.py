@@ -389,7 +389,8 @@ def forget_recent(project_id: str, path: str | None = None) -> None:
         # Retired Saved pins must not prevent removal of a project.
         forgotten = {entry["id"] for entry in matched}
         index["pins"] = {
-            family: project_id for family, project_id in index["pins"].items()
+            family: project_id
+            for family, project_id in index["pins"].items()
             if project_id not in forgotten
         }
         index["entries"] = [
