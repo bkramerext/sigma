@@ -19,6 +19,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from email.message import EmailMessage
+from html import escape as html_escape
 from functools import wraps
 from pathlib import Path
 from threading import Event, Thread
@@ -967,19 +968,31 @@ def drain_notifications() -> list[str]:
                 if origin.startswith(("https://", "http://localhost"))
                 else ""
             )
-            body = (
-                f"You have been added as a collaborator on SIGMA project "
-                f"“{event['project_title']}”.\n\n"
-                + (
-                    f"Open project: {project_link}\n\n"
-                    if project_link
-                    else "Sign in to SIGMA with this Google account to find the shared project.\n\n"
+            if added:
+                # The title itself is the link in HTML-capable mail clients.
+                # Keep a usable plain-text alternative for text-only mail.
+                body = (
+                    f"You have been added as a collaborator on SIGMA project "
+                    f"{event['project_title']}.\n\n"
+                    + (
+                        f"Open project: {project_link}\n\n"
+                        if project_link
+                        else "Sign in to SIGMA with this Google account to find the shared project.\n\n"
+                    )
                 )
-                if added
-                else f"You have been removed as a collaborator on SIGMA project "
-                f"“{event['project_title']}”.\n"
-            )
-            message.set_content(body)
+                message.set_content(body)
+                if project_link:
+                    message.add_alternative(
+                        "<p>You have been added as a collaborator on SIGMA project "
+                        f'<a href="{html_escape(project_link, quote=True)}">'
+                        f"{html_escape(event['project_title'])}</a>.</p>",
+                        subtype="html",
+                    )
+            else:
+                message.set_content(
+                    f"You have been removed as a collaborator on SIGMA project "
+                    f"“{event['project_title']}”.\n"
+                )
             send_message(message, recipients=[event["recipient"]])
         except (cloud_auth.SMTPDeliveryError, RuntimeError, OSError, ValueError) as exc:
             attempts = int(event["attempts"]) + 1
