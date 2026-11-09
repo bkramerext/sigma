@@ -94,6 +94,7 @@ jobs:
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           uv run --with playwright python browser_checks/project_types_436.py
           uv run --with playwright python browser_checks/project_email.py
+          uv run --with playwright python browser_checks/collaboration_settings.py
       - name: Research Q/A browser acceptance
         # Validate the exact Q/A toolbar, scroll and source navigation in real Chrome.
         if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
