@@ -579,8 +579,21 @@ class CollaborationTests(TestCase):
                 ("failed-notice", "other@example.org", self.path, "Study", "added", 1, 3, 999),
             )
         self.assertEqual(shared.summary(self.path)["failed_notifications"], 1)
+        outsider_workspace = replace(
+            self.workspace,
+            subject_hash="outsider-hash",
+            verified_subject=self.outsider.subject,
+            email=self.outsider.email,
+        )
         with (
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.outsider),
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current",
+                return_value=outsider_workspace,
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.outsider,
+            ),
             self.assertRaisesRegex(ValueError, "access denied"),
         ):
             shared.retry_failed_notifications(self.path)
