@@ -4285,7 +4285,22 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
             <button type="button" className="about-action" aria-label="About SIGMA" data-tooltip-disabled onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
             {onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="SIGMA Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/></button>}
           </div>
-          <ConnectedModelPill enabled={showConnectionStatus}/>
+          <ConnectedModelPill enabled={showConnectionStatus}
+            project={projectView ? { model: projectView.project.ai_model, thinking: projectView.project.reasoning_effort } : undefined}
+            onProjectChange={onProjectUpdated && projectView ? async (model, thinking) => {
+              const previous = settingsOf(projectView);
+              const collaborationResponse = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: projectView.path, verify_revision: 'true' })}`, {
+                headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
+              });
+              if (!collaborationResponse.ok) throw new Error('Could not read current project revision.');
+              const shared = await collaborationResponse.json() as SharedProjectInfo;
+              const next = await post<ProjectView>('update', {
+                path: projectView.path, ...previous, ai_model: model, reasoning_effort: thinking,
+                expected: previous,
+                ...(shared.owner ? { expected_revision: shared.revision, collaborators: shared.collaborators } : {}),
+              });
+              onProjectUpdated(next);
+            } : undefined}/>
         </div>
       </div>
     </div>}
@@ -4982,26 +4997,6 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
         expected: previous,
         ...(shared.owner ? { expected_revision: shared.revision, collaborators } : {}),
       });
-      if (shared.owner && (model !== shared.model || thinking !== shared.thinking)) {
-        // The header pill is backed by the user's model defaults, not the project.
-        // Keep its persisted selection in sync after a successful project save.
-        try {
-          const preferencesResponse = await fetch('/api/user-preferences/research-settings', {
-            headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
-          });
-          if (!preferencesResponse.ok) throw new Error('Could not load model pill settings.');
-          const preferences = await preferencesResponse.json();
-          const updateResponse = await fetch('/api/user-preferences/research-settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-            body: JSON.stringify({ ...preferences, ai_model: model, reasoning_effort: thinking }),
-          });
-          if (!updateResponse.ok) throw new Error('Could not update model pill settings.');
-          window.dispatchEvent(new Event('sigma-global-settings-saved'));
-        } catch (pillError) {
-          reportRequestFailure(errorMessage(pillError));
-        }
-      }
       if (shared.owner) {
         const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`, {
           headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
@@ -7070,7 +7065,11 @@ function cloudFundingFor(cloud: CloudIdentityState | null): CloudFunding | undef
 
 /** Match ConnectionStatus's connected state, including sponsored sessions.
  * Google authentication alone is not sufficient to show the model selector. */
-function ConnectedModelPill({ enabled }: { enabled: boolean }) {
+function ConnectedModelPill({ enabled, project, onProjectChange }: {
+  enabled: boolean;
+  project?: { model: string; thinking: string };
+  onProjectChange?: (model: string, thinking: string) => Promise<void>;
+}) {
   const ai = useAI();
   const cloud = useCloudIdentity();
   const funding = cloudFundingFor(cloud);
@@ -7085,7 +7084,7 @@ function ConnectedModelPill({ enabled }: { enabled: boolean }) {
     && ai.info?.status === 'connected';
   const visible = sponsoredPillVisible || (!sponsoredSelected && personalConnected);
   return enabled && visible && !googleRequired
-    ? <GlobalModelPill enabled/>
+    ? <GlobalModelPill enabled project={project} onProjectChange={onProjectChange}/>
     : null;
 }
 
