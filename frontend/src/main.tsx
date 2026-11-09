@@ -5503,6 +5503,18 @@ function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
 
+/** Avoid flashing an hourglass/message for operations that finish quickly. */
+function useDelayedProjectProgress(operation: string): string {
+  const [visible, setVisible] = useState('');
+  useEffect(() => {
+    setVisible('');
+    if (!operation) return;
+    const timer = window.setTimeout(() => setVisible(operation), 1000);
+    return () => window.clearTimeout(timer);
+  }, [operation]);
+  return visible === operation ? visible : '';
+}
+
 function RecentProjects({ onOpen, flat = false, active = false, projects, setProjects, loading, setLoading }: {
   onOpen: (view: ProjectView, openSettings?: boolean) => void;
   flat?: boolean;
@@ -5514,6 +5526,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
 }) {
   const [opening, setOpening] = useState('');
   const [removing, setRemoving] = useState('');
+  const visibleProgress = useDelayedProjectProgress(opening ? `open:${opening}` : removing ? `remove:${removing}` : '');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [saveAsEntry, setSaveAsEntry] = useState<RecentProject | null>(null);
   const [confirmRemovePlacement, setConfirmRemovePlacement] = useState<'above' | 'below'>('below');
@@ -5654,7 +5667,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(opening === entry.id || removing === entry.id) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
             {entry.best_paper_score != null && entry.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
           </div>
@@ -5685,6 +5698,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [opening, setOpening] = useState('');
+  const visibleProgress = useDelayedProjectProgress(opening ? `open:${opening}` : '');
   const pending = useRef(false);
   const loaded = useRef(false);
   useEffect(() => {
@@ -5725,7 +5739,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
     {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
-      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{opening === sample.id && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{visibleProgress === `open:${sample.id}` && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
