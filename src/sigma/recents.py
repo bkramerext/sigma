@@ -395,36 +395,6 @@ def forget_recent(project_id: str, path: str | None = None) -> None:
         ]
 
 
-def _import_local_admin_recents() -> None:
-    """Copy the existing local Saved index once, without moving project files.
-
-    The original local index and its pin choices are preserved. A signed-in
-    administrator then manages its own copy under the verified workspace.
-    """
-    from sigma import cloud_workspaces
-
-    if not cloud_workspaces.local_legacy_owner_access():
-        return
-    with cloud_workspaces.without_workspace():
-        legacy_directory = state_directory()
-        with _index() as legacy:
-            entries = list(legacy["entries"])
-            pins = dict(_effective_pins(legacy))
-            dismissed = list(legacy.get("dismissed_default_pins", []))
-    with _index() as index:
-        marker = str(legacy_directory)
-        if marker in index["bootstrapped_roots"]:
-            return
-        existing_ids = {entry["id"] for entry in index["entries"]}
-        index["entries"].extend(entry for entry in entries if entry["id"] not in existing_ids)
-        for family, project_id in pins.items():
-            index["pins"].setdefault(family, project_id)
-        index["dismissed_default_pins"] = sorted(
-            set(index.get("dismissed_default_pins", [])) | set(dismissed)
-        )
-        index["bootstrapped_roots"][marker] = "Imported original local Saved Projects index"
-
-
 @dataclass(frozen=True)
 class RecentProject:
     id: str
@@ -449,22 +419,12 @@ class RecentProject:
 
 
 def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
-    """List Saved projects with one scoped authorization snapshot."""
-    from sigma import cloud_workspaces
-
-    with cloud_workspaces.batch_legacy_access():
-        return _recent_projects(lightweight=lightweight, activity_only=activity_only)
-
-
-def _recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
     """Render project identity first; expensive status and paper details are optional."""
     from sigma import cloud_workspaces, project_collaboration
 
     workspace = cloud_workspaces.current()
     if workspace is not None and workspace.guest:
         return {"projects": []}
-    if workspace is not None:
-        _import_local_admin_recents()
     shared_rows = project_collaboration.shared_with_me() if workspace is not None else []
     shared_paths = project_collaboration.shared_project_paths() if workspace is not None else set()
     shared_by_path = {row["path"]: row for row in shared_rows}
@@ -497,15 +457,14 @@ def _recent_projects(*, lightweight: bool = False, activity_only: bool = False) 
                         "included_example": False,
                     }
                 )
-    # Never acquire the legacy index or collaboration authorization locks while
-    # holding the authenticated user's Saved index lock.
+    # Private entries belong to this workspace. Cross-workspace entries must
+    # originate from the authorized collaboration directory only.
     if workspace is not None:
         entries = [
             entry
             for entry in entries
             if Path(entry["path"]).is_relative_to(workspace.path)
             or entry["path"] in shared_by_path
-            or cloud_workspaces.local_legacy_owner_access(Path(entry["path"]))
         ]
     if not lightweight:
         from sigma import papers
