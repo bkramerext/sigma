@@ -329,7 +329,8 @@ def _initialize(path: Path) -> None:
                 nonce TEXT NOT NULL,
                 verifier TEXT NOT NULL,
                 expires_at INTEGER NOT NULL,
-                return_to TEXT
+                return_to TEXT,
+                window_id TEXT
             );
             CREATE TABLE IF NOT EXISTS denied_access (
                 token_hash TEXT PRIMARY KEY,
@@ -431,6 +432,8 @@ def _initialize(path: Path) -> None:
         flow_columns = {row["name"] for row in db.execute("PRAGMA table_info(flows)")}
         if "return_to" not in flow_columns:
             db.execute("ALTER TABLE flows ADD COLUMN return_to TEXT")
+        if "window_id" not in flow_columns:
+            db.execute("ALTER TABLE flows ADD COLUMN window_id TEXT")
         # Remove legacy inactive grants. Audit and usage history are separate.
         db.execute("DELETE FROM grants WHERE active=0")
     if not existed:
@@ -1629,8 +1632,11 @@ def login(
     request: Request,
     invite: bool = False,
     return_to: str = "",
+    window_id: str = "",
 ):
     cfg = config()
+    if window_id and not _WINDOW_ID.fullmatch(window_id):
+        raise HTTPException(400, "Invalid window identity.")
     if not cfg.enabled:
         return RedirectResponse("/")
     if cfg.error or not cfg.origin:
@@ -1659,7 +1665,7 @@ def login(
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    session_cookie = _raw_session(request, cfg)
+    session_cookie = request.cookies.get(_session_cookie_name(cfg, window_id or None))
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
@@ -1667,13 +1673,14 @@ def login(
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
         db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
         db.execute(
-            "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to) VALUES(?,?,?,?,?)",
+            "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to,window_id) VALUES(?,?,?,?,?,?)",
             (
                 _hash(state),
                 nonce,
                 verifier,
                 _now() + FLOW_SECONDS,
                 _safe_login_return_to(return_to),
+                window_id or None,
             ),
         )
     params = {
@@ -1705,7 +1712,7 @@ def login(
     else:
         _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
-    _clear_cookie(response, cfg, SESSION_COOKIE)
+    _clear_window_session(response, cfg, window_id or None)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -1764,7 +1771,7 @@ async def callback(
             return result
     flow_cookie = request.cookies.get(_cookie_name(FLOW_COOKIE, cfg))
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    session_cookie = _raw_session(request, cfg)
+    session_cookie = None
     if (
         error
         or not state
@@ -1775,12 +1782,13 @@ async def callback(
         raise HTTPException(400, "Sign-in could not be verified.")
     with _db(cfg) as db:
         flow = db.execute(
-            "SELECT nonce,verifier,expires_at,return_to FROM flows WHERE state_hash=?",
+            "SELECT nonce,verifier,expires_at,return_to,window_id FROM flows WHERE state_hash=?",
             (_hash(state),),
         ).fetchone()
         db.execute("DELETE FROM flows WHERE state_hash=?", (_hash(state),))
     if not flow or flow["expires_at"] <= _now():
         raise HTTPException(400, "Sign-in has expired. Please try again.")
+    session_cookie = request.cookies.get(_session_cookie_name(cfg, flow["window_id"]))
     try:
         async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
             token_response = await client.post(
@@ -2026,7 +2034,7 @@ async def callback(
                 )
     response = RedirectResponse(return_to, status_code=303)
     response.set_cookie(
-        _cookie_name(SESSION_COOKIE, cfg),
+        _session_cookie_name(cfg, flow["window_id"]),
         raw,
         **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
     )
