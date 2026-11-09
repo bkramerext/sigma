@@ -6159,18 +6159,32 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
   useEffect(() => {
     if (guest) return;
-    let active = true;
-    const poll = () => {
-      void fetch(`/api/projects/collaboration?${new URLSearchParams({ path })}`, {
-        headers: { 'X-Sigma-Error-Handled': 'true' },
-        cache: 'no-store',
-      }).then(response => response.ok ? response.json() : Promise.reject())
-        .then((value: SharedProjectInfo) => { if (active) setSharedActivity(value); })
-        .catch(() => { if (active) setSharedActivity(null); });
+    const controller = new AbortController();
+    let pending = false;
+    const poll = async () => {
+      if (controller.signal.aborted || pending || document.visibilityState !== 'visible') return;
+      pending = true;
+      try {
+        const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path })}`, {
+          headers: { 'X-Sigma-Error-Handled': 'true' },
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('Collaboration state unavailable');
+        const value = await response.json() as SharedProjectInfo;
+        if (!controller.signal.aborted) setSharedActivity(value);
+      } catch {
+        if (!controller.signal.aborted) setSharedActivity(null);
+      } finally { pending = false; }
     };
-    poll();
-    const interval = window.setInterval(poll, 5000);
-    return () => { active = false; window.clearInterval(interval); };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 5000);
+    document.addEventListener('visibilitychange', poll);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', poll);
+    };
   }, [path, guest]);
   const [initialResearchActivity, setInitialResearchActivity] = useState<'running' | 'queued' | null>();
   const [initialPaperActivity, setInitialPaperActivity] = useState<'active' | 'queued' | null>();
