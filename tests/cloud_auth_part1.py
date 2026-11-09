@@ -21,6 +21,8 @@ class CloudAuthTests(CloudAuthFixture):
                 follow_redirects=False,
             )
             self.assertEqual(start.status_code, 302, start.text)
+            flow_name = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cloud_auth.config())
+            self.client.cookies.set(flow_name, start.cookies[flow_name])
             state = parse_qs(urlsplit(start.headers["location"]).query)["state"][0]
             with cloud_auth._db(cloud_auth.config()) as db:
                 flow = db.execute(
