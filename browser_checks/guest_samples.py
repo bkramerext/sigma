@@ -208,7 +208,14 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         )
 
         def capture_request(request):
-            if any(part in request.url for part in ("/api/user-preferences/", "/api/projects/diagnostics", "/api/projects/research-qa")):
+            if any(
+                part in request.url
+                for part in (
+                    "/api/user-preferences/",
+                    "/api/projects/diagnostics",
+                    "/api/projects/research-qa",
+                )
+            ):
                 protected_guest_requests.append(request.url)
             if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
                 mutation_requests.append(request.url)
@@ -435,11 +442,9 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(page.get_by_role("heading", name="Paper Requirements")).to_be_visible()
         pencil_button = page.locator(".project-pane-actions .project-description-toolbar-edit")
         expect(pencil_button).to_be_visible()
-        icon_style = (
-            "element => { const s = getComputedStyle(element); "
-            "return [s.color, s.backgroundImage, s.borderTopColor, "
-            "s.borderTopLeftRadius, s.boxShadow, s.textShadow]; }"
-        )
+        expect(pencil_button).to_be_disabled()
+        expect(page.locator(".project-classification-settings-button")).to_be_disabled()
+        expect(page.locator(".project-download-button")).to_be_disabled()
         pencil_button.hover()
         expect(page.locator("#sigma-ui-tooltip")).to_have_text("Edit project fields")
         assert pencil_button.get_attribute("title") is None
@@ -461,15 +466,16 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             ".strategy-title-line .strategy-markdown-slot .sigma-render-toggle"
         ).first
         strategy_pencil = strategy_pencils.first
+        expect(strategy_pencil).to_be_disabled()
         expect(strategy_markdown).to_be_visible()
         assert strategy_markdown.get_attribute("title") is None
-        assert strategy_markdown.evaluate(icon_style) == strategy_pencil.evaluate(icon_style)
-        strategy_pencil.hover()
-        expect(strategy_pencil).to_have_css("color", "rgb(255, 242, 233)")
-        strategy_hover_style = strategy_pencil.evaluate(icon_style)
-        strategy_markdown.hover()
-        expect(strategy_markdown).to_have_css("color", "rgb(255, 242, 233)")
-        assert strategy_markdown.evaluate(icon_style) == strategy_hover_style
+        # In guest mode editing is disabled; cached Markdown remains readable.
+        # An uncached AI conversion control must also be disabled.
+        if strategy_markdown.is_enabled():
+            strategy_markdown.hover()
+            expect(strategy_markdown).to_have_css("color", "rgb(255, 242, 233)")
+        else:
+            expect(strategy_markdown).to_be_disabled()
         strategy_offset = strategy_markdown.locator("svg.markdown-logo").evaluate(
             """svg => {
               const bounds = svg.getBBox();

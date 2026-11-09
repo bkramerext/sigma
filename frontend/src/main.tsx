@@ -6616,7 +6616,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         {projectActionBar}
       </header>
       <div id="project-pane-content" hidden={!projectExpanded}>
-      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
+      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. {guest ? 'Sign in to replace the project type.' : 'Choose a replacement in Project Settings to use a current type.'}</p>{!guest && <button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button>}</div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
       <ProjectDescriptionEditor view={view}
