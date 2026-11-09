@@ -21,7 +21,7 @@ if (windowId) {
   const nativeFetch = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const target = new URL(input instanceof Request ? input.url : String(input), window.location.href);
-    if (target.origin !== window.location.origin) return nativeFetch(input, init);
+    if (target.origin !== window.location.origin || !target.pathname.startsWith('/api/')) return nativeFetch(input, init);
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     if (init?.headers) new Headers(init.headers).forEach((value, name) => headers.set(name, value));
     headers.set('X-Sigma-Window', windowId);
