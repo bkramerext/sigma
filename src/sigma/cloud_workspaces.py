@@ -46,6 +46,20 @@ class Workspace:
 
 
 _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", default=None)
+_LEGACY_ACCESS_CACHE: ContextVar[dict[str, set[str]] | None] = ContextVar(
+    "sigma_legacy_access_cache", default=None
+)
+
+
+@contextmanager
+def batch_legacy_access() -> Iterator[None]:
+    """Share one authenticated legacy-index snapshot across a Saved listing."""
+    token = _LEGACY_ACCESS_CACHE.set({})
+    try:
+        yield
+    finally:
+        _LEGACY_ACCESS_CACHE.reset(token)
+
 _GUESTS: dict[str, tuple[Workspace, tempfile.TemporaryDirectory[str], float]] = {}
 _GUESTS_LOCK = threading.Lock()
 GUEST_TTL_SECONDS = 8 * 60 * 60
@@ -126,8 +140,14 @@ def local_legacy_owner_access(path: Path | None = None) -> bool:
     try:
         from sigma import recents
 
+        cache = _LEGACY_ACCESS_CACHE.get()
+        if cache is not None and "paths" in cache:
+            return str(candidate) in cache["paths"]
         with without_workspace(), recents._index() as index:
-            return any(entry["path"] == str(candidate) for entry in index["entries"])
+            paths = {entry["path"] for entry in index["entries"]}
+        if cache is not None:
+            cache["paths"] = paths
+        return str(candidate) in paths
     except (OSError, ValueError):
         return False
 
