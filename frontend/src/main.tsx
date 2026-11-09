@@ -2090,7 +2090,7 @@ function getPendingSharedInvite(): SharedInviteIntent | null {
       const value = parsed as Record<string, unknown>;
       if (typeof value.path === 'string' && value.path.length > 0 && value.path.length <= 2048
         && typeof value.email === 'string' && value.email.length <= 254
-        && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value.email))
+        && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email))
         return { path: value.path, email: value.email.toLowerCase() };
     }
     window.sessionStorage.removeItem(SHARED_INVITE_KEY);
@@ -8056,7 +8056,7 @@ function CloudAuthGate() {
     ? (sharedInviteParams.get('invited_email') ?? '').trim().toLowerCase() : '';
   const inviteePath = sharedInviteParams.get('path') ?? '';
   const redirectSharedInvite = !!status?.enabled && !!inviteePath && inviteePath.length <= 2048
-    && inviteeEmail.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(inviteeEmail)
+    && inviteeEmail.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteeEmail)
     && (!status.authenticated || status.user?.role === 'guest'
       || status.user?.email.toLowerCase() !== inviteeEmail);
   useEffect(() => {
