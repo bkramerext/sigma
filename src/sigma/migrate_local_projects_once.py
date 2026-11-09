@@ -47,7 +47,7 @@ def _fingerprint(source: Path) -> str:
     digest = hashlib.sha256()
     paths = [source] if source.is_file() else sorted(source.rglob("*"))
     for path in paths:
-        relative = path.relative_to(source).as_posix() if path != source else source.name
+        relative = path.relative_to(source).as_posix() if path != source else "project"
         info = path.lstat()
         if stat.S_ISLNK(info.st_mode):
             raise ProjectError(f"Cannot migrate symbolic-link project member: {path}")
@@ -99,15 +99,23 @@ def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
             }
 
     paths = [Path(entry["path"]) for entry in index["entries"]]
+    saved_paths = {path.absolute() for path in paths}
     root = local_projects_root()
-    paths.extend(sorted(path for path in root.iterdir() if
-        (path.suffix == ".json" and path.is_file())
-        or (path.suffix == ".sigma" and path.is_dir())))
+    paths.extend(sorted(
+        path for path in root.iterdir()
+        if (path.suffix == ".json" and path.is_file())
+        or (path.suffix == ".sigma" and path.is_dir())
+    ))
     seen: dict[str, Path] = {}
     inventory: list[tuple[Path, str, str]] = []
     for path in paths:
         original = path.absolute()
-        project_id, title = _metadata(original)
+        try:
+            project_id, title = _metadata(original)
+        except (ProjectError, OSError, ValueError, KeyError, TypeError):
+            if original in saved_paths:
+                raise  # A Saved project must never silently disappear.
+            continue  # The project root also contains non-project JSON metadata.
         if project_id in seen:
             if seen[project_id] != original:
                 raise ProjectError(f"Duplicate project identity in migration: {project_id}")
@@ -172,10 +180,11 @@ def migrate_if_needed(principal: cloud_auth.Principal) -> None:
                 {**entry, "path": destinations[entry["id"]]}
                 for entry in original_index["entries"]
             ]
+            imported_ids = {row["id"] for row in imported}
             existing = [
                 {**entry, "path": destinations.get(entry["id"], entry["path"])}
                 for entry in index["entries"]
-                if entry["id"] not in {row["id"] for row in imported}
+                if entry["id"] not in imported_ids
             ]
             indexed = {row["id"] for row in imported + existing}
             for _source, project_id, _title in inventory:
