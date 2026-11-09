@@ -906,6 +906,7 @@ def _forget_project_locked(
     db.execute("DELETE FROM shared_email_outbox WHERE project_path=?", (path,))
     db.execute("DELETE FROM shared_leases WHERE path=?", (path,))
     db.execute("DELETE FROM shared_collaborators WHERE path=?", (path,))
+    db.execute("DELETE FROM shared_artifact_authors WHERE path=?", (path,))
     db.execute("DELETE FROM shared_projects WHERE path=?", (path,))
     now = time.time()
     db.executemany(
