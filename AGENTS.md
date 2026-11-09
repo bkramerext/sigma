@@ -16,3 +16,13 @@ every 30 seconds with a clean tree and fast-forward-only synchronization.
 ## CI failure batching
 
 When running CI, **wait for all workflows and test shards to finish reporting failures** before preparing a correction. Review the complete failure set, fix **all known issues together**, and push **one consolidated batch** rather than pushing a fix after each failure. In particular, collect all Ruff lint and formatting diagnostics, run **both** `ruff check` and `ruff format --check` on the complete patch, and resolve every Ruff finding before the next push. This avoids repeated CI rounds and reduces fix cycle time. Do not launch overlapping CI reruns merely to address individual failures.
+
+## Smoke-test launch handoff
+
+When reporting a branch or commit ready for smoke testing, always include a separate, copyable plain-text command in this exact form:
+
+```text
+launch <SHA>
+```
+
+Use the full commit SHA that contains all requested fixes. If the user should launch the current default branch instead, provide `launch main`. Do not substitute a branch name, a PR number, or only a GitHub URL for this message.
