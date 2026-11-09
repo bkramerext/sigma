@@ -73,6 +73,29 @@ def _cookie_name(name: str, cfg: Config) -> str:
     return name.removeprefix("__Host-") if cfg.local else name
 
 
+_WINDOW_ID = re.compile(r"^[a-f0-9]{32}$")
+
+
+def _window_id(request: Request) -> str | None:
+    value = request.headers.get("x-sigma-window") or request.query_params.get("sigma_window")
+    return value if value and _WINDOW_ID.fullmatch(value) else None
+
+
+def _session_cookie_name(cfg: Config, window_id: str | None) -> str:
+    name = _cookie_name(SESSION_COOKIE, cfg)
+    return f"{name}_{window_id}" if window_id else name
+
+
+def _raw_session(request: Request, cfg: Config) -> str | None:
+    return request.cookies.get(_session_cookie_name(cfg, _window_id(request)))
+
+
+def _clear_window_session(response: Response, cfg: Config, window_id: str | None) -> None:
+    response.delete_cookie(
+        _session_cookie_name(cfg, window_id), **_cookie_options(cfg, SESSION_COOKIE)
+    )
+
+
 def _cookie_options(cfg: Config, name: str, *, max_age: int | None = None) -> dict[str, Any]:
     options: dict[str, Any] = {
         "path": "/",
@@ -306,7 +329,8 @@ def _initialize(path: Path) -> None:
                 nonce TEXT NOT NULL,
                 verifier TEXT NOT NULL,
                 expires_at INTEGER NOT NULL,
-                return_to TEXT
+                return_to TEXT,
+                window_id TEXT
             );
             CREATE TABLE IF NOT EXISTS denied_access (
                 token_hash TEXT PRIMARY KEY,
@@ -408,6 +432,8 @@ def _initialize(path: Path) -> None:
         flow_columns = {row["name"] for row in db.execute("PRAGMA table_info(flows)")}
         if "return_to" not in flow_columns:
             db.execute("ALTER TABLE flows ADD COLUMN return_to TEXT")
+        if "window_id" not in flow_columns:
+            db.execute("ALTER TABLE flows ADD COLUMN window_id TEXT")
         # Remove legacy inactive grants. Audit and usage history are separate.
         db.execute("DELETE FROM grants WHERE active=0")
     if not existed:
@@ -850,6 +876,18 @@ def resolve_session(raw: str | None) -> Principal | None:
             # never bypass a subject-bound administrator identity.
             _materialize_domain_member(db, row["subject"], row["email"])
             role = _authorization_in_db(db, cfg, row["subject"], row["email"])
+        if (
+            role is None
+            and cfg.local
+            and row["email"] not in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email}
+        ):
+            # Adding a collaborator is an invitation to the project, even if
+            # the recipient has not received a separate global member grant.
+            # ACL checks still fence every cross-workspace project operation.
+            from sigma import project_collaboration
+
+            if project_collaboration.has_invited_collaborator(row["email"]):
+                role = "member"
         # A verified Google identity remains signed in locally while awaiting
         # an invitation. This is identity only: middleware keeps guest access
         # on the public sample and invitation paths below.
@@ -1058,7 +1096,7 @@ async def middleware(request: Request, call_next):
     if public or demo_public:
         return await call_next(request)
     try:
-        principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+        principal = resolve_session(_raw_session(request, cfg))
     except (sqlite3.Error, OSError, RuntimeError):
         return JSONResponse(
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503
@@ -1279,7 +1317,7 @@ def mock_funding(request: Request):
     cfg = config()
     if not _mock_enabled(cfg):
         raise HTTPException(404, "Not found")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     _persist_user_state(cfg, principal)
@@ -1299,7 +1337,7 @@ def mock_allowance(request: Request, scenario: str):
         raise HTTPException(403, "Request origin is not authorized.")
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Mock authentication requires a loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     if scenario not in _MOCK_ALLOWANCES:
@@ -1345,7 +1383,7 @@ def mock_provider(request: Request, scenario: str):
         or request.client.host not in {"127.0.0.1", "::1", "localhost"}
     ):
         raise HTTPException(403, "Mock scenario changes require a same-origin loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     if scenario not in _MOCK_PROVIDERS:
@@ -1372,7 +1410,7 @@ def mock_model_access(request: Request, mode: str):
         raise HTTPException(403, "Request origin is not authorized.")
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Mock authentication requires a loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     if mode not in {"personal", "sponsored"}:
@@ -1398,7 +1436,8 @@ def mock_select(request: Request, identity: str):
     # Never accept mock identity changes through a remote-facing listener.
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Mock authentication requires a loopback client.")
-    old = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    window_id = _window_id(request)
+    old = _raw_session(request, cfg)
     previous_denied = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     with _db(cfg) as db:
         if old:
@@ -1406,7 +1445,7 @@ def mock_select(request: Request, identity: str):
         if previous_denied:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(previous_denied),))
         response = Response(status_code=204)
-        _clear_cookie(response, cfg, SESSION_COOKIE)
+        _clear_window_session(response, cfg, window_id)
         _clear_cookie(response, cfg, DENIED_COOKIE)
         if identity != "guest":
             email, role = _MOCK_IDENTITIES[identity]
@@ -1459,7 +1498,7 @@ def mock_select(request: Request, identity: str):
                     (_hash(raw), subject, email, _now() + SESSION_SECONDS),
                 )
                 response.set_cookie(
-                    _cookie_name(SESSION_COOKIE, cfg),
+                    _session_cookie_name(cfg, window_id),
                     raw,
                     **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
                 )
@@ -1482,9 +1521,7 @@ def status(request: Request):
         ]
     try:
         principal = (
-            resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
-            if cfg.enabled and not cfg.error
-            else None
+            resolve_session(_raw_session(request, cfg)) if cfg.enabled and not cfg.error else None
         )
     except (sqlite3.Error, OSError, RuntimeError):
         return {
@@ -1552,7 +1589,7 @@ def local_sponsored_allowance(request: Request):
         raise HTTPException(404, "Not found")
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Local sponsored preview requires a loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None:
         raise HTTPException(401, "Sign in with an eligible account to view its allowance.")
     account = _persist_user_state(cfg, principal)
@@ -1606,8 +1643,11 @@ def login(
     request: Request,
     invite: bool = False,
     return_to: str = "",
+    window_id: str = "",
 ):
     cfg = config()
+    if window_id and not _WINDOW_ID.fullmatch(window_id):
+        raise HTTPException(400, "Invalid window identity.")
     if not cfg.enabled:
         return RedirectResponse("/")
     if cfg.error or not cfg.origin:
@@ -1636,7 +1676,7 @@ def login(
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    session_cookie = request.cookies.get(_session_cookie_name(cfg, window_id or None))
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
@@ -1644,13 +1684,14 @@ def login(
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
         db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
         db.execute(
-            "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to) VALUES(?,?,?,?,?)",
+            "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to,window_id) VALUES(?,?,?,?,?,?)",
             (
                 _hash(state),
                 nonce,
                 verifier,
                 _now() + FLOW_SECONDS,
                 _safe_login_return_to(return_to),
+                window_id or None,
             ),
         )
     params = {
@@ -1682,7 +1723,7 @@ def login(
     else:
         _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
-    _clear_cookie(response, cfg, SESSION_COOKIE)
+    _clear_window_session(response, cfg, window_id or None)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -1741,7 +1782,7 @@ async def callback(
             return result
     flow_cookie = request.cookies.get(_cookie_name(FLOW_COOKIE, cfg))
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    session_cookie = None
     if (
         error
         or not state
@@ -1752,12 +1793,13 @@ async def callback(
         raise HTTPException(400, "Sign-in could not be verified.")
     with _db(cfg) as db:
         flow = db.execute(
-            "SELECT nonce,verifier,expires_at,return_to FROM flows WHERE state_hash=?",
+            "SELECT nonce,verifier,expires_at,return_to,window_id FROM flows WHERE state_hash=?",
             (_hash(state),),
         ).fetchone()
         db.execute("DELETE FROM flows WHERE state_hash=?", (_hash(state),))
     if not flow or flow["expires_at"] <= _now():
         raise HTTPException(400, "Sign-in has expired. Please try again.")
+    session_cookie = request.cookies.get(_session_cookie_name(cfg, flow["window_id"]))
     try:
         async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
             token_response = await client.post(
@@ -2003,7 +2045,7 @@ async def callback(
                 )
     response = RedirectResponse(return_to, status_code=303)
     response.set_cookie(
-        _cookie_name(SESSION_COOKIE, cfg),
+        _session_cookie_name(cfg, flow["window_id"]),
         raw,
         **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
     )
@@ -2312,7 +2354,7 @@ def request_invitation(
     denied_cookie: str | None = None
     authenticated: Principal | None = None
     if body.request_type == "reload":
-        raw_session = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+        raw_session = _raw_session(request, cfg)
         principal = resolve_session(raw_session)
         if principal is None:
             raise HTTPException(401, "Sign in with Google before requesting a reload.")
@@ -2329,7 +2371,7 @@ def request_invitation(
             raise HTTPException(403, "This account is not eligible for sponsored reload requests.")
         identity = {"email": principal.email, "subject": principal.subject}
     elif (
-        authenticated := resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+        authenticated := resolve_session(_raw_session(request, cfg))
     ) is not None and authenticated.role in {"guest", "member"}:
         identity = {"email": authenticated.email, "subject": authenticated.subject}
     else:
@@ -2573,7 +2615,7 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
 
-    raw_session = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    raw_session = _raw_session(request, cfg)
     try:
         principal = resolve_session(raw_session)
     except (sqlite3.Error, OSError, RuntimeError) as exc:
@@ -2709,12 +2751,13 @@ def remove_feedback(feedback_id: str, request: Request):
 @router.post("/logout")
 def logout(request: Request):
     cfg = config()
-    raw = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    window_id = _window_id(request)
+    raw = _raw_session(request, cfg)
     if raw and cfg.database:
         with _db(cfg) as db:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
     response = Response(status_code=204)
-    _clear_cookie(response, cfg, SESSION_COOKIE)
+    _clear_window_session(response, cfg, window_id)
     return response
 
 

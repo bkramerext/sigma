@@ -1,6 +1,7 @@
 import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
+import { windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
 import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
@@ -5447,7 +5448,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
         .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0) || right.paper_version - left.paper_version);
       if (!scored.length) throw new Error('No scored paper with an available PDF meets the 50-point threshold.');
       const pdf = `/api/projects/papers/${encodeURIComponent(scored[0].paper_id)}/pdf?${new URLSearchParams({ path: entry.path, open_in_browser: 'true' })}`;
-      tab.location.replace(pdf);
+      tab.location.replace(windowAuthUrl(pdf));
     } catch (cause) {
       tab.close();
       setError(errorMessage(cause));
@@ -6877,7 +6878,7 @@ function App() {
     // Server-side heartbeat tracks this project page, including background tabs.
     // Closing or navigating away releases only this page's lease.
     if (!presencePath || (cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest'))) return;
-    const viewer = new EventSource(`/api/projects/research-presence?${new URLSearchParams({ path: presencePath })}`);
+    const viewer = new EventSource(windowAuthUrl(`/api/projects/research-presence?${new URLSearchParams({ path: presencePath })}`));
     return () => viewer.close();
   }, [presencePath, cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
   const [lastPath, setLastPath] = useState(() =>
@@ -7629,7 +7630,7 @@ function CloudAuthGate() {
           if (identity.retry_signin === true) {
             // Authorization changed since this verified Google identity was
             // denied. Return through Google's standard account chooser.
-            window.location.replace('/api/cloud-auth/login');
+            window.location.replace(windowAuthUrl('/api/cloud-auth/login'));
             return;
           }
           setDeniedIdentityAvailable(identity.identity_available === true);

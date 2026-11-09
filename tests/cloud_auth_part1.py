@@ -4,6 +4,124 @@ from cloud_auth_fixture import *
 
 
 class CloudAuthTests(CloudAuthFixture):
+    def test_local_project_invitation_admits_only_active_verified_collaborator(self):
+        from sigma import project_collaboration
+
+        email = "nontrivialzeeros@gmail.com"
+        raw = "local-collaborator-session"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            },
+        ):
+            cfg = cloud_auth.config()
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                    (cloud_auth._hash(raw), "verified-n", email, int(time.time()) + 3600),
+                )
+            self.assertEqual(
+                cloud_auth.resolve_session(raw), cloud_auth.Principal("verified-n", email, "guest")
+            )
+            path = str(self.root / "workspaces" / "owner" / "tadpoles.json")
+            with project_collaboration._db() as db:
+                db.execute(
+                    "INSERT INTO shared_projects "
+                    "(path,project_id,owner_hash,owner_email,model,thinking,last_writer,updated_at) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (
+                        path,
+                        str(uuid4()),
+                        "z-owner",
+                        "zetacontinuation@gmail.com",
+                        "gpt-6.1-sol",
+                        "high",
+                        "zetacontinuation@gmail.com",
+                        time.time(),
+                    ),
+                )
+                db.execute(
+                    "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
+                    (path, email),
+                )
+            self.assertEqual(
+                cloud_auth.resolve_session(raw), cloud_auth.Principal("verified-n", email, "member")
+            )
+            with cloud_auth._db(cfg) as db:
+                self.assertIsNone(
+                    db.execute(
+                        "SELECT role FROM grants WHERE kind='email' AND value=?", (email,)
+                    ).fetchone()
+                )
+            with project_collaboration._db() as db:
+                db.execute(
+                    "DELETE FROM shared_collaborators WHERE path=? AND email=?", (path, email)
+                )
+            self.assertEqual(
+                cloud_auth.resolve_session(raw), cloud_auth.Principal("verified-n", email, "guest")
+            )
+
+    def test_two_windows_keep_independent_accounts_after_sign_out(self):
+        """Two browser windows share cookies but never share the active identity."""
+        # Hosted Secure cookies require HTTPS even in the in-process test client.
+        self.client.base_url = "https://127.0.0.1"
+        first, second = "a" * 32, "b" * 32
+        with cloud_auth._db(cloud_auth.config()) as db:
+            db.execute(
+                "INSERT INTO grants(kind,value,role,active,updated_at) "
+                "VALUES('email',?,'member',1,?)",
+                ("nontrivialzeeros@gmail.com", int(time.time())),
+            )
+
+        def sign_in(window_id, email, subject):
+            start = self.client.get(
+                "/api/cloud-auth/login",
+                params={"window_id": window_id},
+                follow_redirects=False,
+            )
+            self.assertEqual(start.status_code, 302, start.text)
+            flow_name = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cloud_auth.config())
+            self.assertIn(flow_name, self.client.cookies)
+            state = parse_qs(urlsplit(start.headers["location"]).query)["state"][0]
+            with cloud_auth._db(cloud_auth.config()) as db:
+                flow = db.execute(
+                    "SELECT nonce,window_id FROM flows WHERE state_hash=?",
+                    (cloud_auth._hash(state),),
+                ).fetchone()
+            self.assertEqual(flow["window_id"], window_id)
+            GoogleClient.token = token(nonce=flow["nonce"], email=email, subject=subject)
+            with patch.object(cloud_auth.httpx, "AsyncClient", GoogleClient):
+                result = self.client.get(
+                    "/api/cloud-auth/callback",
+                    params={"state": state, "code": "fixture"},
+                    follow_redirects=False,
+                )
+            self.assertEqual(result.status_code, 303, result.text)
+
+        sign_in(first, "admin@example.org", "google-owner")
+        sign_in(second, "nontrivialzeeros@gmail.com", "google-colleague")
+        for window_id, email in (
+            (first, "admin@example.org"),
+            (second, "nontrivialzeeros@gmail.com"),
+        ):
+            result = self.client.get(
+                "/api/cloud-auth/status", headers={"X-Sigma-Window": window_id}
+            )
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json()["user"]["email"], email)
+
+        signed_out = self.client.post(
+            "/api/cloud-auth/logout",
+            headers={"X-Sigma-Window": second, "Origin": ORIGIN},
+        )
+        self.assertEqual(signed_out.status_code, 204)
+        owner = self.client.get("/api/cloud-auth/status", headers={"X-Sigma-Window": first})
+        colleague = self.client.get("/api/cloud-auth/status", headers={"X-Sigma-Window": second})
+        self.assertEqual(owner.json()["user"]["email"], "admin@example.org")
+        self.assertFalse(colleague.json()["authenticated"])
+
     def test_e003_local_readonly_build_preflight_without_workspace(self):
         """Local operator can check a stale process without granting workspace access."""
         environment = {
