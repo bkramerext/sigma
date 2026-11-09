@@ -468,6 +468,7 @@ def summary(path: str) -> dict[str, Any]:
                 "SELECT email FROM shared_collaborators WHERE path=? ORDER BY email", (view.path,)
             )
         ]
+        db.commit()
         return {
             "owner": row["owner_email"],
             "collaborators": members,
@@ -541,6 +542,7 @@ def require_revision(path: str, expected: int) -> None:
         _membership(db, path)
         _reconcile_project_digest(db, path)
         row = _row(db, path)
+        db.commit()
         if row["revision"] != expected:
             raise ValueError(
                 f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
