@@ -386,8 +386,12 @@ def forget_recent(project_id: str, path: str | None = None) -> None:
             for entry in index["entries"]
             if entry["id"] == project_id or (path is not None and entry["path"] == path)
         ]
-        if any(entry["id"] in _effective_pins(index).values() for entry in matched):
-            raise ProjectError("Unpin this project before removing it from Saved Projects.")
+        # Retired Saved pins must not prevent removal of a project.
+        forgotten = {entry["id"] for entry in matched}
+        index["pins"] = {
+            family: project_id for family, project_id in index["pins"].items()
+            if project_id not in forgotten
+        }
         index["entries"] = [
             entry
             for entry in index["entries"]
