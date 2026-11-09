@@ -5842,34 +5842,23 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   invite: SharedInviteIntent; cloud: CloudIdentityState | null; onDismiss: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [error, setError] = useState('');
-  const [requested, setRequested] = useState(false);
   const currentEmail = cloud?.authenticated ? cloud.user?.email : null;
-  const canRequestDirectly = cloud?.user?.role === 'guest' || !!cloud?.deniedIdentityAvailable;
-  const invitationStatus = cloud?.user?.role === 'guest' ? cloud.account?.invitation_status : cloud?.deniedInvitationStatus;
-  const requestPending = requested || hasOpenInvitationRequest(invitationStatus);
   useEffect(() => {
     if (dialog.current && !dialog.current.open) dialog.current.showModal();
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, []);
-  return <dialog ref={dialog} className="google-account-dialog invitation-welcome-dialog"
+  return <dialog ref={dialog} className="google-account-dialog invitation-welcome-dialog shared-collaborator-welcome"
     aria-labelledby="shared-project-invitation-heading"
     onCancel={event => { event.preventDefault(); onDismiss(); }}
     onClick={event => { if (event.target === event.currentTarget) onDismiss(); }}>
-    <h2 id="shared-project-invitation-heading">You've been invited to collaborate!</h2>
-    <p className="invitation-welcome-intro">To open this shared project, sign in with Google as <strong>{invite.email}</strong>.</p>
+    <h2 id="shared-project-invitation-heading">Open shared project</h2>
+    <p className="invitation-welcome-intro">Sign in with Google as <strong>{invite.email}</strong> to open the project.</p>
     {currentEmail && currentEmail.toLowerCase() !== invite.email &&
-      <p className="invitation-welcome-intro">You're currently signed in as {currentEmail}. Choose the invited account instead.</p>}
+      <p className="invitation-welcome-current-account">Currently signed in as {currentEmail}.</p>}
     <div className="invitation-welcome-actions">
       <a className="invitation-welcome-link" href="/api/cloud-auth/login">Sign in with Google</a>
-      {requestPending ? <p role="status">Your SIGMA invitation request is awaiting review.</p>
-        : canRequestDirectly ? <InvitationRequestControls error={error} onError={setError}
-            onRecorded={() => { setRequested(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); }}
-            buttonLabel="Request invitation" buttonClassName="invitation-welcome-link"/>
-        : <a className="invitation-welcome-link" href="/api/cloud-auth/login?invite=1">Request invitation</a>}
-      <button type="button" className="invitation-welcome-link" onClick={onDismiss}>Explore SIGMA</button>
+      <button type="button" className="invitation-welcome-link" onClick={onDismiss}>Not now</button>
     </div>
-    <p className="invitation-welcome-about-hint">A SIGMA invitation request is for membership. To share this particular project with a different account, ask the project owner.</p>
   </dialog>;
 }
 
