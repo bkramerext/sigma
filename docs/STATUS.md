@@ -1,5 +1,30 @@
 # SIGMA status
 
+## 2026-11-08 — SIGMA v0.3.0 frontend hotfix deployed
+
+Production now runs exact commit `ae33319702edcf069cbad5be1e694eaf6c06ee9a`,
+a descendant of the deployed v0.3.0 release and still versioned `0.3.0` in
+both backend and frontend metadata. The exact-SHA frontend typecheck/build
+passed in [CI run 42555987530](https://github.com/bkramerext/sigma/actions/runs/42555987530).
+The commit changes frontend layout and labels only; backend/schema code is
+unchanged.
+
+The guarded helper completed for the exact SHA. The active host checkout and
+release pin match it, backend and frontend image labels match it, and backend,
+frontend, and edge are healthy. The backend package reports `0.3.0`; public
+frontend reports `Version 0.3.0 · Build ae33319`. Public HTTPS returned HTTP
+200, hosted auth status returned HTTP 200, and unauthenticated `/api/health`
+returned the expected HTTP 401.
+
+Before cutover, current state was copied to root-only directory
+`/var/backups/sigma-state-v030-pre-ae333197-20261109` on the existing boot disk.
+The copy compared equal to source and passed the read-only verifier. The
+post-deploy verifier again passed SQLite integrity and preserved 3
+identities/workspaces, 17 projects, 42 artifacts, one verified TeX/PDF pair,
+10 terminal historical job rows, and 46 accounting rows ($5.938237
+recorded/reserved, including 15 reserved or unknown outcomes). No new cloud
+resources or paid inference were used.
+
 ## 2026-11-08 — SIGMA v0.2.2 production deployment complete
 
 Production now runs SIGMA v0.2.2 from merged `main` SHA
