@@ -478,7 +478,9 @@ class CollaborationTests(TestCase):
                 side_effect=AssertionError(),
             ),
         ):
-            self.assertEqual(api.update_project_view(cast(api.UpdateProjectRequest, request)), {"saved": True})
+            self.assertEqual(
+                api.update_project_view(cast(api.UpdateProjectRequest, request)), {"saved": True}
+            )
 
         deletion = SimpleNamespace(path=self.path, expected_project_id="saved-project")
         with (
