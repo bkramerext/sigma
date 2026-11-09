@@ -121,11 +121,6 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
     except cloud_workspaces.WorkspaceUnavailable as exc:
         raise HTTPException(status_code=503, detail="Private workspace is unavailable.") from exc
     try:
-        # TEMPORARY (#702): transfer the original local library once for the
-        # verified owner. Ordinary requests never query the original index.
-        from sigma.migrate_local_projects_once import migrate_if_needed
-
-        await run_in_threadpool(migrate_if_needed, principal)
         yield
     finally:
         cloud_workspaces.reset(token)

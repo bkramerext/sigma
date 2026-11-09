@@ -5576,12 +5576,9 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
 }
 
 function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; guest?: boolean }) {
-  const cloud = useCloudIdentity();
   const savedTooltip = guest
     ? 'Sign in to view your saved projects.'
-    : !cloud?.target || cloud.target === 'local'
-      ? 'In local mode, all signed-in accounts share this project list.'
-      : 'Show saved projects. Click again to collapse or expand all.';
+    : 'Show saved projects. Click again to collapse or expand all.';
   const [tab, setTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
     if (guest) return 'samples';
     const saved = window.localStorage.getItem('sigma.homeCatalogTab');
