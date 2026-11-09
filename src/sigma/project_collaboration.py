@@ -519,7 +519,8 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
         members = [record["email"] for record in membership]
         is_owner = row["owner_hash"] == _identity()[0].subject_hash
         removable = [
-            record["email"] for record in membership if is_owner or record["added_by"] == email
+            record["email"] for record in membership
+            if is_owner or record["added_by"] == email or record["email"] == email
         ]
         if verify_revision:
             db.commit()
@@ -682,9 +683,9 @@ def save_settings(
         removed = previous - new_members
         is_owner = row["owner_hash"] == _identity()[0].subject_hash
         for member in removed:
-            if not is_owner and membership[member] != actor:
+            if not is_owner and membership[member] != actor and member != actor:
                 raise ProjectError(
-                    "Only the project owner or the collaborator who added this account can remove it."
+                    "Only the owner, the inviter, or the account itself can remove a collaborator."
                 )
         changed = new_members != previous or row["model"] != model or row["thinking"] != thinking
         if changed:
@@ -1061,7 +1062,7 @@ def drain_notifications() -> list[str]:
             try:
                 project_link = deep_link(origin, event["project_path"]) if origin else ""
                 if project_link and added:
-                    project_link += "&" + urlencode({"invited_email": event["recipient"]})
+                    project_link += "&" + urlencode({"invited_email": event["recipient"], "project_title": event["project_title"]})
             except ValueError:
                 # Malformed origins are never embedded as clickable links.
                 project_link = ""
