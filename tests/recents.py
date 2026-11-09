@@ -7,8 +7,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
