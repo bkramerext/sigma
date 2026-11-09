@@ -79,6 +79,73 @@ def check_index_sample_read_outside_lock() -> None:
         recent_projects(lightweight=True)
 
 
+def check_one_time_owner_migration(base: Path) -> None:
+    """A verified owner gets one complete transfer, then never reopens old state."""
+    from types import SimpleNamespace
+
+    from sigma import cloud_workspaces, migrate_local_projects_once, project_collaboration
+    from sigma.projects import initialize_project
+
+    root = base / "migration-original-projects"
+    root.mkdir(mode=0o700)
+    state = base / "migration-original-state"
+    workspace_path = base / "migration-owner-workspace"
+    workspace_path.mkdir(mode=0o700)
+    with (
+        patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root), "SIGMA_STATE_DIR": str(state)}),
+        patch("sigma.projects._current_build_commit", return_value=None),
+    ):
+        saved = initialize_project(root / "previous.sigma", "Original project", "Existing research")
+        record_access(saved)
+        unlisted = initialize_project(root / "other.json", "Unlisted project", "Retain this also")
+        index_before = (state / "recents.json").read_bytes()
+        workspace = cloud_workspaces.Workspace(
+            "a" * 32,
+            "owner-hash",
+            workspace_path,
+            email=migrate_local_projects_once.TARGET_EMAIL,
+            verified_subject="google:verified-owner",
+        )
+        principal = SimpleNamespace(
+            subject="google:verified-owner",
+            email=migrate_local_projects_once.TARGET_EMAIL,
+            role="admin",
+        )
+        config = SimpleNamespace(local=True)
+        with (
+            cloud_workspaces.bind_workspace(workspace) if False else patch.object(
+                cloud_workspaces, "current", return_value=workspace
+            ),
+            patch.object(cloud_workspaces, "local_projects_root", create=True),
+        ):
+            pass
+        token = cloud_workspaces.bind_workspace(workspace)
+        try:
+            with (
+                patch("sigma.cloud_auth.config", return_value=config),
+                patch.object(project_collaboration, "register_owner") as registered,
+            ):
+                migrate_local_projects_once.migrate_if_needed(principal)
+                assert registered.call_count == 2
+                assert (workspace_path / ".sigma-state/local-projects-migrated-v1.json").is_file()
+                imported = {row["id"]: row for row in recent_projects(lightweight=True)["projects"]}
+                assert set(imported) == {saved.project.id, unlisted.project.id}
+                for original in (saved, unlisted):
+                    row = imported[original.project.id]
+                    assert Path(row["path"]).is_relative_to(workspace_path)
+                    assert inspect_project(row["path"]).project.id == original.project.id
+                # Second sign-in does not scan or copy the old library.
+                with patch.object(
+                    migrate_local_projects_once,
+                    "_source_inventory",
+                    side_effect=AssertionError("Migration ran a second time"),
+                ):
+                    migrate_local_projects_once.migrate_if_needed(principal)
+        finally:
+            cloud_workspaces.reset(token)
+        assert (state / "recents.json").read_bytes() == index_before
+
+
 def check_title_collision_avoids_deep_metadata() -> None:
     """Creating a project must not hydrate Saved status or sample paper scores."""
     with (
@@ -847,6 +914,7 @@ def check(root: Path, base: Path) -> None:
         backup.rename(index_path)
     assert recent_projects()["projects"]
     check_index_sample_read_outside_lock()
+    check_one_time_owner_migration(base)
     check_title_collision_avoids_deep_metadata()
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
