@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import time
-from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -346,6 +346,21 @@ class CollaborationTests(TestCase):
             )
         shared.release_lease(self.path, token)
 
+    def test_expired_deletion_lease_blocks_destructive_publication(self) -> None:
+        token = shared.acquire_lease(self.path, "Project deletion")
+        self.assertIsNotNone(token)
+        self.clock[0] += shared.LEASE_SECONDS + 1
+        with (
+            shared.bind_lease(self.path, token),
+            self.assertRaisesRegex(ProjectError, "lease was lost"),
+            shared.finalize_deletion(self.path, "Study"),
+        ):
+            self.fail("A stale deletion lease published removal")
+        with shared._db() as db:
+            self.assertIsNotNone(
+                db.execute("SELECT 1 FROM shared_projects WHERE path=?", (self.path,)).fetchone()
+            )
+
     def test_deletion_heartbeat_renews_independent_of_event_loop(self) -> None:
         with (
             patch("sigma.project_collaboration.LEASE_SECONDS", 0.09),
@@ -385,7 +400,8 @@ class CollaborationTests(TestCase):
             self.assertEqual(delivered, ["good@example.net"])
             with shared._db() as db:
                 poison = db.execute(
-                    "SELECT attempts,retry_after,failed_at FROM shared_email_outbox WHERE id='a-poison'"
+                    "SELECT attempts,retry_after,failed_at "
+                    "FROM shared_email_outbox WHERE id='a-poison'"
                 ).fetchone()
                 self.assertEqual(poison["attempts"], 1)
                 self.assertGreater(poison["retry_after"], self.clock[0])
@@ -454,8 +470,12 @@ class CollaborationTests(TestCase):
         with (
             patch("sigma.api.inspect_project", return_value=view),
             patch("sigma.api.update_project", return_value=view),
+            patch("sigma.project_collaboration.register_owner", return_value=None),
             patch("sigma.api.asdict", return_value={"saved": True}),
-            patch("sigma.project_collaboration.drain_notifications", side_effect=AssertionError()),
+            patch(
+                "sigma.project_collaboration.drain_notifications",
+                side_effect=AssertionError(),
+            ),
         ):
             self.assertEqual(api.update_project_view(request), {"saved": True})
 
@@ -465,7 +485,10 @@ class CollaborationTests(TestCase):
             patch("sigma.projects.projects_root", return_value=self.root),
             patch("sigma.project_collaboration.acquire_lease", return_value=None),
             patch("sigma.api._delete_project_unleased", new_callable=AsyncMock) as delete,
-            patch("sigma.project_collaboration.drain_notifications", side_effect=AssertionError()),
+            patch(
+                "sigma.project_collaboration.drain_notifications",
+                side_effect=AssertionError(),
+            ),
         ):
             delete.return_value = {"deleted": True}
             self.assertEqual(

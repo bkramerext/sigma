@@ -273,7 +273,9 @@ def _db() -> Iterator[sqlite3.Connection]:
         # Existing hosted databases have the earlier outbox schema.
         fields = {row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")}
         if "attempts" not in fields:
-            db.execute("ALTER TABLE shared_email_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+            db.execute(
+                "ALTER TABLE shared_email_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
+            )
         if "retry_after" not in fields:
             db.execute(
                 "ALTER TABLE shared_email_outbox ADD COLUMN retry_after REAL NOT NULL DEFAULT 0"
