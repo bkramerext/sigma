@@ -465,7 +465,7 @@ class CollaborationTests(TestCase):
             )
         self.assertEqual(
             shared.summary(self.path)["removable_collaborators"],
-            [self.other.email, "invitee@example.org"],
+            ["invitee@example.org", self.other.email],
         )
         shared.save_settings(
             self.path, self.revision(), [self.other.email], "gpt-6.1-sol", "high", "Study"
