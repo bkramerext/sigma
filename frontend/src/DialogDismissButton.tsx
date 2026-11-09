@@ -6,7 +6,7 @@ const DialogDismissButton = forwardRef<HTMLButtonElement, Props>(function Dialog
   { label = 'Close dialog', className = '', ...props }, ref,
 ) {
   return <button {...props} ref={ref} type="button" className={`sigma-dialog-dismiss ${className}`.trim()}
-    aria-label={label}>
+    aria-label={label} data-tooltip-disabled>
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
       strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
   </button>;
