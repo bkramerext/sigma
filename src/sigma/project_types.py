@@ -216,10 +216,18 @@ def _store_path() -> Path:
     from sigma import cloud_auth, cloud_workspaces
 
     workspace = cloud_workspaces.current()
-    if workspace is not None:
+    principal = cloud_auth.current_principal()
+    # Real local Google users already have per-subject catalogs under the
+    # original local project root. Continue using that private location so
+    # an upgrade cannot silently reset types, references or research limits.
+    # Hosted and loopback mock identities keep workspace-based storage.
+    if workspace is not None and (
+        not cloud_auth.config().local
+        or principal is None
+        or principal.subject.startswith("mock:")
+    ):
         return workspace.path / ".sigma-project-types.json"
 
-    principal = cloud_auth.current_principal()
     if principal is None or not cloud_auth.config().enabled:
         # Single-user, anonymous local SIGMA and trusted offline tools retain
         # the established legacy path without migrating historical data.
@@ -237,9 +245,10 @@ def _store_path() -> Path:
 
     import hashlib
 
+    from sigma.projects import local_projects_root
     from sigma.ui_instance import private_directory
 
-    root = projects_root() / ".sigma-project-types-users"
+    root = local_projects_root() / ".sigma-project-types-users"
     private_directory(root)
     # Domain-separated subject hash; never trust a browser ID, email, or path.
     subject_hash = hashlib.sha256(

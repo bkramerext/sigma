@@ -313,7 +313,9 @@ async def require_cloud_inference_binding(
 ) -> None:
     """Require explicit project/account intent before admitting sponsored inference."""
     memory_guard.require_capacity()
-    if not cloud_workspaces.enabled():
+    # Local inference uses the user's personal ChatGPT connection even when
+    # Google authentication supplies per-user collaboration workspaces.
+    if not cloud_workspaces.enabled() or cloud_auth.config().local:
         return
     view = inspect_project(path)
     if expected_project_id is not None and expected_project_id != view.project.id:
@@ -2598,7 +2600,7 @@ async def auth_begin(body: AuthBeginRequest):
 @app.get("/api/ai/auth/callback/{identifier}")
 async def hosted_chatgpt_callback(identifier: str, request: Request):
     """Public OAuth return; validation and credential exchange stay server-side."""
-    if not cloud_workspaces.enabled():
+    if cloud_auth.config().local or not cloud_workspaces.enabled():
         raise HTTPException(404, "Hosted callback unavailable.")
     try:
         await chatgpt_auth.hosted_callback(identifier, request.url.query)

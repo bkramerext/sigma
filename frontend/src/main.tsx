@@ -4784,6 +4784,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   const [thinking, setThinking] = useState(initial.project.reasoning_effort);
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
+  const [modelLookupFailed, setModelLookupFailed] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [retryingEmails, setRetryingEmails] = useState(false);
@@ -4799,24 +4800,33 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       if (!response.ok) throw new Error(data.error ?? 'Project settings are unavailable.');
       return data;
     };
-    void Promise.all([
-      json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`),
-      json('/api/ai/models'),
-    ]).then(([saved, available]: [SharedProjectInfo, { models: CatalogChoice[] }]) => {
-      if (controller.signal.aborted) return;
-      setShared(saved);
-      setModel(saved.model);
-      setThinking(saved.thinking);
-      setCollaborators(saved.collaborators);
-      setCatalog(available.models);
-      setLoading(false);
-    }).catch(cause => {
-      if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
-    });
+    // Membership must remain editable even if the model provider is down.
+    void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`)
+      .then((saved: SharedProjectInfo) => {
+        if (controller.signal.aborted) return;
+        setShared(saved);
+        setModel(saved.model);
+        setThinking(saved.thinking);
+        setCollaborators(saved.collaborators);
+        setLoading(false);
+      }).catch(cause => {
+        if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
+      });
+    void json('/api/ai/models')
+      .then((available: { models: CatalogChoice[] }) => {
+        if (!controller.signal.aborted) {
+          setCatalog(available.models);
+          setModelLookupFailed(false);
+        }
+      }).catch(() => {
+        if (!controller.signal.aborted) setModelLookupFailed(true);
+      });
     return () => controller.abort();
   }, [initial.path]);
   const selected = catalog.find(choice => choice.id === model);
-  const validPair = !shared?.owner || !!selected?.efforts.includes(thinking);
+  const validPair = !shared?.owner
+    || (model === shared.model && thinking === shared.thinking)
+    || !!selected?.efforts.includes(thinking);
   const changed = projectType !== initial.project.investigation_type
     || difficulty !== initial.project.difficulty
     || (!!shared?.owner && (model !== shared.model || thinking !== shared.thinking
@@ -4908,7 +4918,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             <div className="settings-model-row">
               <div>
                 <label htmlFor="shared-project-model">Model</label>
-                <select id="shared-project-model" value={model} onChange={event => {
+                <select id="shared-project-model" value={model} disabled={modelLookupFailed || catalog.length === 0} onChange={event => {
                   const next = event.target.value;
                   setModel(next);
                   const option = catalog.find(item => item.id === next);
@@ -4920,13 +4930,13 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
               </div>
               <div>
                 <label htmlFor="shared-project-thinking">Thinking</label>
-                <select id="shared-project-thinking" value={thinking} onChange={event => setThinking(event.target.value)}>
+                <select id="shared-project-thinking" value={thinking} disabled={modelLookupFailed || catalog.length === 0} onChange={event => setThinking(event.target.value)}>
                   {!selected?.efforts.includes(thinking) && <option value={thinking}>{thinkingLabels[thinking] ?? thinking} · unavailable</option>}
                   {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
                 </select>
               </div>
             </div>
-
+            {modelLookupFailed && <p className="settings-hint" role="status">Model choices are unavailable. You can still edit collaborators and save their changes.</p>}
           </>}
           {shared && !shared.owner && <p className="project-collaborator-local-note">
             Collaboration requires individual Google sign-ins, locally or hosted.

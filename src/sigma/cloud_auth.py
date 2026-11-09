@@ -588,7 +588,6 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     from sigma.cloud_workspaces import WorkspaceUnavailable, enabled, workspace_for_subject
 
     if enabled() and not (cfg.local and principal.subject.startswith("local-admin:")):
-
         try:
             workspace_id = workspace_for_subject(principal.subject).workspace_id
         except WorkspaceUnavailable as exc:
@@ -821,6 +820,10 @@ def resolve_session(raw: str | None) -> Principal | None:
         and not _mock_enabled(cfg)
         and os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
         and cfg.admin_contact_email
+        # A configured Google sign-in makes this a multi-user server:
+        # never give an unauthenticated browser the local administrator.
+        and not cfg.client_id
+        and not cfg.client_secret
         and not raw
     ):
         return Principal("local-admin:" + cfg.admin_contact_email, cfg.admin_contact_email, "admin")
@@ -1884,7 +1887,9 @@ async def callback(
     # identity/provider concerns out of project path handling.
     workspace_id = None
     authenticated_workspace = None
-    if not cfg.local:
+    from sigma import cloud_workspaces
+
+    if cloud_workspaces.enabled():
         from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
         try:
