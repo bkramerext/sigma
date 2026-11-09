@@ -2077,6 +2077,28 @@ async function sha256Text(value: string): Promise<string> {
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
+// A recipient hint affects navigation only; it never grants access to projects.
+const SHARED_INVITE_KEY = 'sigma.pendingSharedCollaboratorWelcome';
+type SharedInviteIntent = { path: string; email: string };
+function getPendingSharedInvite(): SharedInviteIntent | null {
+  try {
+    const raw = window.sessionStorage.getItem(SHARED_INVITE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const value = parsed as Record<string, unknown>;
+      if (typeof value.path === 'string' && value.path.length > 0 && value.path.length <= 2048
+        && typeof value.email === 'string' && value.email.length <= 254
+        && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value.email))
+        return { path: value.path, email: value.email.toLowerCase() };
+    }
+    window.sessionStorage.removeItem(SHARED_INVITE_KEY);
+  } catch { /* Storage may be unavailable in private browsing. */ }
+  return null;
+}
+function clearPendingSharedInvite() {
+  try { window.sessionStorage.removeItem(SHARED_INVITE_KEY); } catch { /* no-op */ }
+}
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 function formatDuration(totalSeconds: number) {
   const seconds = Math.max(0, Math.floor(totalSeconds));
@@ -5774,10 +5796,52 @@ type CloudResearchBudget = {
   unknown_provider_attempts: number;
 };
 
+function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
+  invite: SharedInviteIntent; cloud: CloudIdentityState | null; onDismiss: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [error, setError] = useState('');
+  const [requested, setRequested] = useState(false);
+  const currentEmail = cloud?.authenticated ? cloud.user?.email : null;
+  const canRequestDirectly = cloud?.user?.role === 'guest' || !!cloud?.deniedIdentityAvailable;
+  const invitationStatus = cloud?.user?.role === 'guest' ? cloud.account?.invitation_status : cloud?.deniedInvitationStatus;
+  const requestPending = requested || hasOpenInvitationRequest(invitationStatus);
+  useEffect(() => {
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+    return () => { if (dialog.current?.open) dialog.current.close(); };
+  }, []);
+  return <dialog ref={dialog} className="google-account-dialog invitation-welcome-dialog"
+    aria-label="Shared project invitation" aria-labelledby="shared-project-invitation-heading"
+    onCancel={event => { event.preventDefault(); onDismiss(); }}
+    onClick={event => { if (event.target === event.currentTarget) onDismiss(); }}>
+    <h2 id="shared-project-invitation-heading">You've been invited to collaborate!</h2>
+    <p className="invitation-welcome-intro">To open this shared project, sign in with Google as <strong>{invite.email}</strong>.</p>
+    {currentEmail && currentEmail.toLowerCase() !== invite.email &&
+      <p className="invitation-welcome-intro">You're currently signed in as {currentEmail}. Choose the invited account instead.</p>}
+    <div className="invitation-welcome-actions">
+      <a className="invitation-welcome-link" href="/api/cloud-auth/login">Sign in with Google</a>
+      {requestPending ? <p role="status">Your SIGMA invitation request is awaiting review.</p>
+        : canRequestDirectly ? <InvitationRequestControls error={error} onError={setError}
+            onRecorded={() => { setRequested(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); }}
+            buttonLabel="Request invitation" buttonClassName="invitation-welcome-link"/>
+        : <a className="invitation-welcome-link" href="/api/cloud-auth/login?invite=1">Request invitation</a>}
+      <button type="button" className="invitation-welcome-link" onClick={onDismiss}>Explore SIGMA</button>
+    </div>
+    <p className="invitation-welcome-about-hint">A SIGMA invitation request is for membership. To share this particular project with a different account, ask the project owner.</p>
+  </dialog>;
+}
+
 function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView, openSettings?: boolean) => void;
 }) {
   const cloud = useCloudIdentity();
+  const [sharedInvite, setSharedInvite] = useState(getPendingSharedInvite);
+  useEffect(() => {
+    if (!sharedInvite || !cloud?.enabled || !cloud.authenticated || cloud.user?.role === 'guest'
+      || cloud.user?.email.toLowerCase() !== sharedInvite.email) return;
+    clearPendingSharedInvite();
+    window.location.replace(projectUrl(sharedInvite.path));
+  }, [sharedInvite, cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.user?.email]);
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
   const [signOutCopyUnavailable] = useState(() => {
@@ -5916,6 +5980,8 @@ function Home({ initialPath, onOpen }: {
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
       {projectTypesOpen && <GlobalSettingsDialog key={cloud?.user?.email ?? 'local'} onClose={() => { setProjectTypesOpen(false); requestAnimationFrame(() => settingsButton.current?.focus()); }}/>}
+      {sharedInvite && <SharedCollaboratorWelcome invite={sharedInvite} cloud={cloud}
+        onDismiss={() => { clearPendingSharedInvite(); setSharedInvite(null); }}/>}
     </div>
   </div>;
 }
@@ -7952,9 +8018,26 @@ function CloudAuthGate() {
     setSponsoredUsageConnection(funding.target === 'hosted' || funding.selectedConnection === 'sponsored');
   }, [funding.target, funding.selectedConnection]);
   const context: CloudIdentityState | null = status ? { ...status, deniedIdentityAvailable, deniedInvitationStatus, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
+  const sharedInviteParams = new URLSearchParams(window.location.search);
+  const inviteeEmail = window.location.pathname === '/project'
+    ? (sharedInviteParams.get('invited_email') ?? '').trim().toLowerCase() : '';
+  const inviteePath = sharedInviteParams.get('path') ?? '';
+  const redirectSharedInvite = !!status?.enabled && !!inviteePath && inviteePath.length <= 2048
+    && inviteeEmail.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(inviteeEmail)
+    && (!status.authenticated || status.user?.role === 'guest'
+      || status.user?.email.toLowerCase() !== inviteeEmail);
+  useEffect(() => {
+    if (!redirectSharedInvite) return;
+    try {
+      window.sessionStorage.setItem(SHARED_INVITE_KEY, JSON.stringify({ path: inviteePath, email: inviteeEmail }));
+    } catch { /* Continue to Home even when storage is restricted. */ }
+    // Never mount the inaccessible project screen for the wrong Google account.
+    window.location.replace('/');
+  }, [redirectSharedInvite, inviteePath, inviteeEmail]);
+  const pendingSharedInvite = redirectSharedInvite || !!getPendingSharedInvite();
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = !!status?.account?.invitation_welcome_pending
-    && !welcomeDismissedForPage;
+    && !welcomeDismissedForPage && !pendingSharedInvite;
   const nonMemberIdentity = !!status?.enabled
     && ((status.authenticated && status.user?.role === 'guest')
       || (!status.authenticated && deniedIdentityAvailable));
@@ -7962,14 +8045,14 @@ function CloudAuthGate() {
     ? status.account?.invitation_status
     : deniedInvitationStatus;
   const inviteParams = new URLSearchParams(window.location.search);
-  const showNonMemberWelcome = nonMemberIdentity && !showSponsorWelcome
+  const showNonMemberWelcome = nonMemberIdentity && !showSponsorWelcome && !pendingSharedInvite
     && window.location.pathname !== '/demo'
     && navigationEntry?.type !== 'reload'
     && navigationEntry?.type !== 'back_forward'
     && inviteParams.get('invite') !== '1'
     && inviteParams.get('show_invitation') !== '1'
     && !welcomeDismissedForPage;
-  const showGuestWelcome = !!status?.enabled && !status?.authenticated
+  const showGuestWelcome = !!status?.enabled && !status?.authenticated && !pendingSharedInvite
     && !deniedIdentityAvailable
     && window.location.pathname !== '/demo'
     && navigationEntry?.type !== 'reload'
@@ -7977,6 +8060,7 @@ function CloudAuthGate() {
     && window.sessionStorage.getItem('sigma.guestWelcomeDismissed') !== 'true'
     && !welcomeDismissedForPage;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
+  if (redirectSharedInvite) return <main className="cloud-auth-shell"><p role="status">Opening SIGMA Home…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedIdentityAvailable={deniedIdentityAvailable} authenticated={status.authenticated} user={status.user}/>;
   return <CloudIdentityContext.Provider value={context}>
