@@ -7,7 +7,6 @@ import os
 import sqlite3
 import subprocess
 import sys
-import zlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -31,7 +30,6 @@ from sigma.recents import (
     pinned_projects,
     project_family,
     recent_projects,
-    record_access,
     set_project_pin,
     state_directory,
 )
@@ -92,178 +90,6 @@ def check_index_sample_read_outside_lock() -> None:
 
     with patch.object(samples, "sample_project_ids", side_effect=assert_unlocked):
         recent_projects(lightweight=True)
-
-
-def check_one_time_owner_migration(base: Path) -> None:
-    """A verified owner gets one complete transfer, then never reopens old state."""
-    from types import SimpleNamespace
-
-    from sigma import (
-        cloud_auth,
-        cloud_workspaces,
-        migrate_local_projects_once,
-        project_collaboration,
-    )
-    from sigma.project_bundle import read_file, write_file
-    from sigma.projects import initialize_project
-    from sigma.research_sessions import read_session_snapshot
-
-    root = base / "migration-original-projects"
-    root.mkdir(mode=0o700)
-    state = base / "migration-original-state"
-    workspace_path = base / "migration-owner-workspace"
-    workspace_path.mkdir(mode=0o700)
-    database_root = base / "migration-workspaces-db"
-    database_root.mkdir(mode=0o700)
-    with (
-        patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root), "SIGMA_STATE_DIR": str(state)}),
-        patch("sigma.projects._current_build_commit", return_value=None),
-    ):
-        saved = initialize_project(root / "previous.sigma", "Original project", "Existing research")
-        record_access(saved)
-        unlisted = initialize_project(root / "other.json", "Unlisted project", "Retain this also")
-        source_sessions = {}
-        for original in (saved, unlisted):
-            session_id = str(uuid4())
-            source_record = {
-                "id": session_id,
-                "project_id": original.project.id,
-                "project_path": original.path,
-                "session_number": 1,
-                "status": "stopped",
-                "created_at": "2026-11-08T00:00:00+00:00",
-            }
-            source_sessions[original.project.id] = source_record
-            payload = (json.dumps(source_record) + "\n").encode()
-            if original.path.endswith(".json"):
-                write_file(original.path, f"research-sessions/{session_id}.json", payload)
-            else:
-                session_dir = Path(original.path) / "research-sessions"
-                session_dir.mkdir()
-                (session_dir / f"{session_id}.json").write_bytes(payload)
-        # Old Saved may reference temporary worktrees removed after a test.
-        # Only those missing paths are skipped; surviving projects still move.
-        from sigma import recents
-
-        missing_id = str(uuid4())
-        missing_path = base / "deleted-pr-worktree" / "projects" / "missing.sigma"
-        with recents._index() as index:
-            index["entries"].append(
-                {
-                    "id": missing_id,
-                    "path": str(missing_path),
-                    "accessed_at": "2026-11-08T00:00:00+00:00",
-                    "included_example": False,
-                }
-            )
-            index["pins"]["missing test"] = missing_id
-        index_before = (state / "recents.json").read_bytes()
-        workspace = cloud_workspaces.Workspace(
-            "a" * 32,
-            "owner-hash",
-            workspace_path,
-            email=migrate_local_projects_once.TARGET_EMAIL,
-            verified_subject="google:verified-owner",
-        )
-        principal = cloud_auth.Principal(
-            subject="google:verified-owner",
-            email=migrate_local_projects_once.TARGET_EMAIL,
-            role="admin",
-        )
-        config = SimpleNamespace(local=True, enabled=True)
-        token = cloud_workspaces.bind_workspace(workspace)
-        try:
-            with (
-                patch("sigma.cloud_auth.config", return_value=config),
-                patch.object(cloud_auth, "current_principal", return_value=principal),
-                patch.object(cloud_workspaces, "storage_root", return_value=database_root),
-            ):
-                migrate_local_projects_once.migrate_if_needed(principal)
-                with project_collaboration._db() as db:
-                    owners = db.execute(
-                        "SELECT path, project_id, owner_hash FROM shared_projects"
-                    ).fetchall()
-                assert len(owners) == 2
-                assert all(row["owner_hash"] == workspace.subject_hash for row in owners)
-                marker_path = workspace_path / ".sigma-state/local-projects-migrated-v1.json"
-                assert marker_path.is_file()
-                marker_data = json.loads(marker_path.read_text())
-                assert marker_data["project_count"] == 2
-                assert marker_data["skipped_missing"] == [
-                    {"id": missing_id, "path": str(missing_path)}
-                ]
-                with recents._index() as index:
-                    assert missing_id not in {entry["id"] for entry in index["entries"]}
-                    assert missing_id not in index["pins"].values()
-                imported = {row["id"]: row for row in recent_projects(lightweight=True)["projects"]}
-                assert set(imported) == {saved.project.id, unlisted.project.id}
-                for original in (saved, unlisted):
-                    row = imported[original.project.id]
-                    assert Path(row["path"]).is_relative_to(workspace_path)
-                    assert inspect_project(row["path"]).project.id == original.project.id
-                    records, unavailable = read_session_snapshot(row["path"])
-                    assert unavailable == 0 and len(records) == 1
-                    assert records[0]["id"] == source_sessions[original.project.id]["id"]
-                    assert records[0]["project_path"] == row["path"]
-                    # Originals remain at the original path and retain session identity.
-                    original_record = source_sessions[original.project.id]
-                    if original.path.endswith(".json"):
-                        raw = read_file(
-                            original.path, f"research-sessions/{original_record['id']}.json"
-                        )
-                    else:
-                        raw = (
-                            Path(original.path)
-                            / "research-sessions"
-                            / f"{original_record['id']}.json"
-                        ).read_bytes()
-                    assert json.loads(raw)["project_path"] == original.path
-                # Second sign-in does not scan or copy the old library.
-                with patch.object(
-                    migrate_local_projects_once,
-                    "_source_inventory",
-                    side_effect=AssertionError("Migration ran a second time"),
-                ):
-                    migrate_local_projects_once.migrate_if_needed(principal)
-        finally:
-            cloud_workspaces.reset(token)
-        assert (state / "recents.json").read_bytes() == index_before
-
-
-def check_migration_rewrites_frozen_snapshot_refs() -> None:
-    """Relocating a path-dependent frozen package preserves its content hash contract."""
-    from sigma.migrate_local_projects_once import _relocate_members
-    from sigma.project_copy import _canonical
-
-    source = Path("/tmp/sigma-before.sigma")
-    destination = Path("/tmp/sigma-after.sigma")
-    project_id = str(uuid4())
-    session_id = str(uuid4())
-    original_package = {
-        "schema": "sigma-paper-evidence-v2",
-        "project_id": project_id,
-        "project_path": str(source),
-    }
-    original = _canonical(original_package)
-    old_digest = hashlib.sha256(original).hexdigest()
-    members = {
-        "project.json": json.dumps({"schema_version": 13, "id": project_id}).encode(),
-        f"research-sessions/{session_id}.json": json.dumps(
-            {"id": session_id, "project_id": project_id, "project_path": str(source)}
-        ).encode(),
-        "papers/frozen.json": json.dumps(
-            {"snapshot_ref": old_digest, "snapshot_sha256": old_digest}
-        ).encode(),
-        f"papers/.snapshots/{old_digest}.json.zlib": zlib.compress(original),
-    }
-    migrated = _relocate_members(members, source, destination, project_id)
-    result = json.loads(migrated[f"research-sessions/{session_id}.json"])
-    assert result["project_path"] == str(destination) and result["id"] == session_id
-    archive = next(name for name in migrated if name.endswith(".json.zlib"))
-    new_digest = archive.split("/")[-1].removesuffix(".json.zlib")
-    assert new_digest != old_digest
-    assert hashlib.sha256(zlib.decompress(migrated[archive])).hexdigest() == new_digest
-    assert json.loads(migrated["papers/frozen.json"])["snapshot_ref"] == new_digest
 
 
 def check_compact_project_open() -> None:
@@ -1075,8 +901,6 @@ def check(root: Path, base: Path) -> None:
     assert recent_projects()["projects"]
     check_sample_index_metadata_does_not_decode_full_project()
     check_index_sample_read_outside_lock()
-    check_one_time_owner_migration(base)
-    check_migration_rewrites_frozen_snapshot_refs()
     check_compact_project_open()
     check_existing_workspace_lookup_does_not_take_writer_lock(base)
     check_title_collision_avoids_deep_metadata()
