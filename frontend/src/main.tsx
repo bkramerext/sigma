@@ -5811,7 +5811,7 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, []);
   return <dialog ref={dialog} className="google-account-dialog invitation-welcome-dialog"
-    aria-label="Shared project invitation" aria-labelledby="shared-project-invitation-heading"
+    aria-labelledby="shared-project-invitation-heading"
     onCancel={event => { event.preventDefault(); onDismiss(); }}
     onClick={event => { if (event.target === event.currentTarget) onDismiss(); }}>
     <h2 id="shared-project-invitation-heading">You've been invited to collaborate!</h2>

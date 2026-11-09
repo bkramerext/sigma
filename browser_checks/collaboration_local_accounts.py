@@ -165,26 +165,27 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
 
-
         # An email deep link opens immediately only for the invited account.
         invitation_url = url + "&invited_email=" + quote(COLLABORATOR, safe="")
         member.goto(invitation_url)
         expect(member.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
-        expect(member.get_by_role("dialog", name="Shared project invitation")).to_have_count(0)
+        expect(member.get_by_role("dialog", name="You've been invited to collaborate!")).to_have_count(0)
 
         # A different signed-in account is guided Home instead of getting
         # the raw Project unavailable/access-denied error.
-        owner.goto(invitation_url)
-        expect(owner).to_have_url(ui + "/")
-        welcome = owner.get_by_role("dialog", name="Shared project invitation")
+        wrong_account = owner_context.new_page()
+        wrong_account.goto(invitation_url)
+        expect(wrong_account).to_have_url(ui + "/")
+        welcome = wrong_account.get_by_role("dialog", name="You've been invited to collaborate!")
         expect(welcome).to_be_visible()
         expect(welcome.get_by_text(COLLABORATOR)).to_be_visible()
         expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_attribute(
             "href", "/api/cloud-auth/login"
         )
-        expect(owner.get_by_text("Project unavailable")).to_have_count(0)
+        expect(wrong_account.get_by_text("Project unavailable")).to_have_count(0)
         welcome.get_by_role("button", name="Explore SIGMA").click()
         expect(welcome).not_to_be_visible()
+        wrong_account.close()
 
         # A signed-out visitor should see the same welcome, with an existing
         # sign-in/invitation route, before any project API request is made.
@@ -192,14 +193,13 @@ def exercise(ui: str, workspaces: Path) -> None:
         guest = guest_context.new_page()
         guest.goto(invitation_url)
         expect(guest).to_have_url(ui + "/")
-        guest_welcome = guest.get_by_role("dialog", name="Shared project invitation")
+        guest_welcome = guest.get_by_role("dialog", name="You've been invited to collaborate!")
         expect(guest_welcome).to_be_visible()
         expect(guest_welcome.get_by_text(COLLABORATOR)).to_be_visible()
         expect(guest_welcome.get_by_role("link", name="Request invitation")).to_be_visible()
         guest_context.close()
 
-        # The original owner session still works after dismissing the welcome.
-        owner.goto(url)
+        # Preserve the original owner's staged settings for conflict testing.
         # Concurrent settings: a collaborator can edit the same file, while
         # the owner's stale draft must fail revision CAS, not overwrite it.
         member.goto(url)
