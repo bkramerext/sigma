@@ -1,5 +1,41 @@
 # SIGMA status
 
+## 2026-11-08 — SIGMA v0.3.0 production deployment complete
+
+Production runs SIGMA v0.3.0 from the immutable approved commit
+`3e51e21fe3ea5d631798e3810d421ea180b25475`. Tag `v0.3.0` points to that
+commit. Exact-SHA CI passed [Ruff](https://github.com/bkramerext/sigma/actions/runs/42535184741),
+[SIGMA verification](https://github.com/bkramerext/sigma/actions/runs/42535184802),
+and [Browser verification](https://github.com/bkramerext/sigma/actions/runs/42535184772);
+those results were reused without rerunning tests. Backend and frontend
+versions in the frozen source are both `0.3.0`.
+
+The guarded deployment completed at 2026-11-09 02:10:58 UTC (2026-11-08
+18:10:58 PDT) through the existing keyless IAP/OS Login path. The host release
+pin and active checkout match the full SHA. The backend and frontend images
+are labeled with that SHA and are healthy; their image IDs are
+`sha256:4ddcf4a1e77b264c98b5f40082bdcdf5d9d6c8cb4b6cbef9bb54b258d8f04731`
+and `sha256:53fa5b37fe0dd87a17ea612550b2832be18191d85ec58f346e939c44afe39d99`.
+The running backend package reports `0.3.0`; edge is healthy. The public
+frontend bundle reports `Version 0.3.0 · Build 3e51e21`.
+
+Before cutover, SIGMA writers were stopped and the complete mounted state tree
+was copied with ownership and metadata to root-only directory
+`/var/backups/sigma-state-v030-pre-20261108` on the existing boot disk. The
+copy compared equal to the source and passed the existing read-only verifier.
+After deployment, the verifier again passed SQLite integrity and preserved
+3 identities/workspaces, 17 projects, 42 research artifacts, one saved
+TeX/PDF pair with matching hash and size, 10 terminal job-history rows, and
+46 accounting rows ($5.938237 recorded/reserved, including 15 reserved or
+unknown outcomes). No projects, papers, identities, or accounting history
+were reset or deleted.
+
+Public HTTPS root returned HTTP 200; hosted auth status returned HTTP 200;
+unauthenticated `/api/health` returned the expected HTTP 401. No new cloud
+resources or paid inference were used. The existing boot-disk copy remains
+available for software rollback. This is an operational record only; the
+production application remains pinned to the exact v0.3.0 SHA above.
+
 ## 2026-11-08 — SIGMA v0.2.2 production deployment complete
 
 Production now runs SIGMA v0.2.2 from merged `main` SHA
