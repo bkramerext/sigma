@@ -482,8 +482,8 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                     }
                 )
     if not lightweight:
-        from sigma.research_sessions import has_active_session
         from sigma import papers
+        from sigma.research_sessions import has_active_session
 
     recent = []
     for entry in entries:
