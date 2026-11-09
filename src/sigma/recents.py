@@ -426,8 +426,7 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
     workspace = cloud_workspaces.current()
     if workspace is not None and workspace.guest:
         return {"projects": []}
-    shared_rows = project_collaboration.shared_with_me() if workspace is not None else []
-    shared_paths = project_collaboration.shared_project_paths() if workspace is not None else set()
+    shared_rows, shared_paths = project_collaboration.shared_listing()
     shared_by_path = {row["path"]: row for row in shared_rows}
     with _index() as index:
         pins = _effective_pins(index)
