@@ -24,6 +24,7 @@ from html import escape as html_escape
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, TypeVar
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from sigma import cloud_auth, cloud_workspaces
@@ -1059,6 +1060,8 @@ def drain_notifications() -> list[str]:
             origin = cloud_auth.config().origin
             try:
                 project_link = deep_link(origin, event["project_path"]) if origin else ""
+                if project_link and added:
+                    project_link += "&" + urlencode({"invited_email": event["recipient"]})
             except ValueError:
                 # Malformed origins are never embedded as clickable links.
                 project_link = ""

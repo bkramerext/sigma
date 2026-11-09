@@ -527,6 +527,9 @@ class CollaborationTests(TestCase):
         self.assertIn("/project?path=", added[0])
         self.assertIn(">Study</a>", added[1])
         self.assertIn('href="https://sigma.example.org/project?path=', added[1])
+        self.assertIn("invited_email=new%40example.net", added[0])
+        self.assertIn("invited_email=new%40example.net", added[1])
+        self.assertNotIn("invited_email=", removed[0])
         self.assertNotIn("“Study”", added[0])
         self.assertNotIn("“Study”", added[1])
         self.assertIn("“Study”", removed[0])
@@ -569,6 +572,8 @@ class CollaborationTests(TestCase):
         self.assertIn("Open project: http://127.0.0.1:8844/project?path=", plain)
         self.assertIn('href="http://127.0.0.1:8844/project?path=', html)
         self.assertIn(f">{title}</a>", html)
+        self.assertIn("invited_email=new%40example.net", plain)
+        self.assertIn("invited_email=new%40example.net", html)
         self.assertNotIn(f"“{title}”", html)
         self.assertNotIn("Sign in to SIGMA with this Google account", plain)
 
