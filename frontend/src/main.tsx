@@ -5844,10 +5844,10 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const currentEmail = cloud?.authenticated ? cloud.user?.email : null;
   useEffect(() => {
-    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+    if (dialog.current && !dialog.current.open) { dialog.current.showModal(); dialog.current.focus(); }
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, []);
-  return <dialog ref={dialog} className="google-account-dialog invitation-welcome-dialog shared-collaborator-welcome"
+  return <dialog ref={dialog} tabIndex={-1} className="google-account-dialog invitation-welcome-dialog shared-collaborator-welcome"
     aria-labelledby="shared-project-invitation-heading"
     onCancel={event => { event.preventDefault(); onDismiss(); }}
     onClick={event => { if (event.target === event.currentTarget) onDismiss(); }}>
