@@ -232,7 +232,10 @@ with sync_playwright() as playwright:
     with page.expect_response(project_types_put, timeout=15000):
         common.locator(".pt-reference-toggle[aria-pressed='false']").first.click()
     expect(common.locator(".pt-reference-toggle[aria-pressed='false']")).to_have_count(0)
-    assert page.request.get(f"{FIXTURE_URL}/api/project-types").json()["revision"] != original["revision"]
+    assert (
+        page.request.get(f"{FIXTURE_URL}/api/project-types").json()["revision"]
+        != original["revision"]
+    )
 
     # Blank inline reference edits cancel on blur. Valid links save without
     # exposing an obsolete dialog-level Save control.
@@ -269,7 +272,9 @@ with sync_playwright() as playwright:
     with page.expect_response(project_types_put, timeout=15000):
         parent.get_by_label("Scope").press("Tab")
     catalog = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
-    parent_record = next(item for item in catalog["project_types"] if item["name"] == "CI Browser Parent")
+    parent_record = next(
+        item for item in catalog["project_types"] if item["name"] == "CI Browser Parent"
+    )
     assert parent_record["scope"] == "Shared research scope"
     assert parent_record["icon"]["key"] == "placeholder"
 
@@ -286,15 +291,46 @@ with sync_playwright() as playwright:
         child.get_by_label("Scope").fill("Independent derived scope")
         child.get_by_label("Scope").press("Tab")
     catalog = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
-    child_record = next(item for item in catalog["project_types"] if item["name"] == "CI Browser Derived")
+    child_record = next(
+        item for item in catalog["project_types"] if item["name"] == "CI Browser Derived"
+    )
     assert child_record["based_on"] == parent_record["id"]
     assert child_record["scope"] == "Independent derived scope"
     assert child_record["icon"]["key"] == "placeholder"
 
-    # Preserve deleted-type continuation and saved-paper recovery coverage.
-    # The editor saves each valid custom type automatically before Close.
+    # Settings remain responsive on mobile, preserve the user's tab, and
+    # must close without a Save button.
+    page.set_viewport_size({"width": 390, "height": 844})
+    bounds = dialog.bounding_box()
+    assert bounds and 0 <= bounds["x"] and bounds["x"] + bounds["width"] <= 390, bounds
+    page.screenshot(path=str(EVIDENCE / "types-mobile.png"), full_page=True)
+    dialog.get_by_role("tab", name="Preferences").click()
+    unattended = dialog.get_by_label("Allow unattended background execution")
+    before_unattended = unattended.is_checked()
+    with page.expect_response(
+        lambda response: response.url.endswith("/api/user-preferences/unattended-execution")
+        and response.request.method == "PUT",
+        timeout=15000,
+    ):
+        unattended.set_checked(not before_unattended)
+    with page.expect_response(
+        lambda response: response.url.endswith("/api/user-preferences/unattended-execution")
+        and response.request.method == "PUT",
+        timeout=15000,
+    ):
+        unattended.set_checked(before_unattended)
     dialog.get_by_role("button", name="Close Settings").click()
     expect(dialog).not_to_be_visible()
+    settings.click()
+    dialog = page.get_by_role("dialog", name="Settings")
+    expect(dialog.get_by_role("tab", name="Preferences")).to_have_attribute("aria-selected", "true")
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_have_count(0)
+    dialog.get_by_role("button", name="Close Settings").click()
+    expect(dialog).not_to_be_visible()
+    page.set_viewport_size({"width": 1440, "height": 1000})
+
+    # Preserve deleted-type continuation and saved-paper recovery coverage.
+    # The editor saves each valid custom type automatically before Close.
     types_button = settings
     parent_type = parent_record
     child_type = child_record
@@ -1127,37 +1163,10 @@ with sync_playwright() as playwright:
     )
     assert 0 <= scored_position <= 30, scored_position
 
-    # Settings remain responsive on mobile, preserve the user's tab, and
-    # must close without a Save button.
-    page.set_viewport_size({"width": 390, "height": 844})
-    bounds = dialog.bounding_box()
-    assert bounds and 0 <= bounds["x"] and bounds["x"] + bounds["width"] <= 390, bounds
-    page.screenshot(path=str(EVIDENCE / "types-mobile.png"), full_page=True)
-    dialog.get_by_role("tab", name="Preferences").click()
-    unattended = dialog.get_by_label("Allow unattended background execution")
-    before_unattended = unattended.is_checked()
-    with page.expect_response(
-        lambda response: response.url.endswith("/api/user-preferences/unattended-execution")
-        and response.request.method == "PUT",
-        timeout=15000,
-    ):
-        unattended.set_checked(not before_unattended)
-    with page.expect_response(
-        lambda response: response.url.endswith("/api/user-preferences/unattended-execution")
-        and response.request.method == "PUT",
-        timeout=15000,
-    ):
-        unattended.set_checked(before_unattended)
-    dialog.get_by_role("button", name="Close Settings").click()
-    expect(dialog).not_to_be_visible()
-    settings.click()
-    dialog = page.get_by_role("dialog", name="Settings")
-    expect(dialog.get_by_role("tab", name="Preferences")).to_have_attribute("aria-selected", "true")
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_have_count(0)
-    dialog.get_by_role("button", name="Close Settings").click()
-    expect(dialog).not_to_be_visible()
-
     assert not errors, errors
     browser.close()
 
-print("PASS Project Types auto-save, references, custom inheritance, responsive Settings, and no global Save button.")
+print(
+    "PASS Project Types autosave, references, deleted-type recovery, papers, "
+    "responsive Settings, and no global Save button."
+)
