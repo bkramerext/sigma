@@ -278,7 +278,7 @@ def _legacy_pins_before_lock(directory: Path) -> tuple[str, dict[str, str]] | No
 
 
 @contextmanager
-def _index():
+def _index(*, blocking: bool = True):
     descriptor = None
     directory = state_directory()
     lock_path = directory / "recents.lock"
@@ -290,15 +290,7 @@ def _index():
         raise ProjectError("Recent Projects index cannot be reopened during an index transaction.")
     held.add(lock_path)
     try:
-        # Parsing shipped samples or inspecting pinned projects while holding
-        # recents.lock can block every project listing and sample operation.
-        # Do all unrelated I/O before acquiring the file lock.
-        from sigma.samples import sample_project_ids
-
-        try:
-            sample_ids = sample_project_ids()
-        except (ProjectError, OSError, ValueError, TypeError, KeyError):
-            sample_ids = set()
+        # No project/sample inspection belongs to an index transaction.
         v1_pins = _legacy_pins_before_lock(directory)
         descriptor = os.open(
             directory / "recents.lock",
@@ -306,7 +298,7 @@ def _index():
             0o600,
         )
         _check_index_file(descriptor)
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        fcntl.flock(descriptor, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         path = directory / "recents.json"
         try:
             read_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -337,12 +329,6 @@ def _index():
             value["pins"] = v1_pins[1]
         if "dismissed_default_pins" not in value:
             value["dismissed_default_pins"] = []
-        # Built-in sample IDs were loaded before the file lock.
-        value["entries"] = [
-            entry
-            for entry in value["entries"]
-            if not entry["included_example"] and entry["id"] not in sample_ids
-        ]
         yield value
         _validate(value)
         encoded = json.dumps(value, indent=2).encode()
@@ -359,7 +345,7 @@ def _index():
                     os.close(parent_fd)
             finally:
                 staged.unlink(missing_ok=True)
-    except ProjectError:
+    except (ProjectError, BlockingIOError):
         raise
     except (OSError, ValueError, TypeError, KeyError):
         raise ProjectError(
@@ -371,6 +357,32 @@ def _index():
         held.remove(lock_path)
 
 
+def _snapshot() -> dict:
+    """Read the atomically published index without taking a writer lock."""
+    directory = state_directory()
+    try:
+        try:
+            fd = os.open(directory / "recents.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except FileNotFoundError:
+            return {"version": 2, "entries": [], "bootstrapped_roots": {}, "pins": {}, "dismissed_default_pins": []}
+        with os.fdopen(fd, encoding="utf-8") as stream:
+            _check_index_file(stream.fileno())
+            raw = stream.read(1000001)
+        if len(raw) > 1000000:
+            raise ValueError("Index too large")
+        index = _validate(json.loads(raw))
+        if index["version"] == 1:
+            # The original one-time migration is the only reader requiring a write lock.
+            with _index() as migrated:
+                index = dict(migrated)
+        index.setdefault("dismissed_default_pins", [])
+        return index
+    except ProjectError:
+        raise
+    except (OSError, ValueError, TypeError, KeyError):
+        raise ProjectError("Saved Projects index is unavailable; original data was preserved.") from None
+
+
 def record_access(view: ProjectView) -> None:
     """A secondary index failure must not turn a successful research write into a retry."""
     from sigma import cloud_workspaces
@@ -378,15 +390,12 @@ def record_access(view: ProjectView) -> None:
     workspace = cloud_workspaces.current()
     if workspace is not None and workspace.guest:
         return
-    from sigma.samples import sample_project_ids
+    from sigma.samples import SAMPLES
 
+    if Path(view.path).is_relative_to(SAMPLES):
+        return
     try:
-        if view.project.id in sample_project_ids():
-            return
-    except (ProjectError, OSError, ValueError, TypeError, KeyError):
-        pass
-    try:
-        with _index() as index:
+        with _index(blocking=False) as index:
             entries = [
                 {
                     "id": str(UUID(view.project.id)),
@@ -397,6 +406,8 @@ def record_access(view: ProjectView) -> None:
                 *(entry for entry in index["entries"] if entry["id"] != str(UUID(view.project.id))),
             ]
             index["entries"] = entries
+    except BlockingIOError:
+        return  # Last-opened ordering is advisory.
     except ProjectError:
         print(
             "Recent Projects could not be updated. The project operation succeeded; check application state permissions.",
@@ -433,12 +444,14 @@ def _import_local_admin_recents() -> set[str]:
         return set()
     with cloud_workspaces.without_workspace():
         legacy_directory = state_directory()
-        with _index() as legacy:
-            entries = list(legacy["entries"])
-            pins = dict(_effective_pins(legacy))
-            dismissed = list(legacy.get("dismissed_default_pins", []))
+        legacy = _snapshot()
+        entries = list(legacy["entries"])
+        pins = dict(_effective_pins(legacy))
+        dismissed = list(legacy.get("dismissed_default_pins", []))
+    marker = str(legacy_directory)
+    if marker in _snapshot()["bootstrapped_roots"]:
+        return {entry["path"] for entry in entries}
     with _index() as index:
-        marker = str(legacy_directory)
         if marker not in index["bootstrapped_roots"]:
             existing_ids = {entry["id"] for entry in index["entries"]}
             index["entries"].extend(entry for entry in entries if entry["id"] not in existing_ids)
@@ -492,12 +505,11 @@ def recent_project_titles(*, exclude_id: str | None = None) -> set[str]:
     if workspace is not None:
         _import_local_admin_recents()
     shared = project_collaboration.shared_with_me() if workspace is not None else []
-    with _index() as index:
-        paths = {
-            entry["path"]
-            for entry in index["entries"]
-            if entry["id"] != exclude_id
-        }
+    paths = {
+        entry["path"]
+        for entry in _snapshot()["entries"]
+        if entry["id"] != exclude_id and not entry["included_example"]
+    }
     paths.update(
         row["path"] for row in shared if row["id"] != exclude_id
     )
@@ -529,48 +541,56 @@ def recent_projects() -> dict:
     shared_rows = project_collaboration.shared_with_me() if workspace is not None else []
     shared_paths = project_collaboration.shared_project_paths() if workspace is not None else set()
     shared_by_path = {row["path"]: row for row in shared_rows}
-    with _index() as index:
-        pins = _effective_pins(index)
-        entries = []
-        for entry in index["entries"]:
-            copied = dict(entry)
-            if workspace is not None:
-                old_path = Path(copied["path"])
-                try:
-                    marker = old_path.parts.index(workspace.workspace_id)
-                    suffix = old_path.parts[marker + 1 :]
-                    if suffix and all(part not in {".", ".."} for part in suffix):
-                        rebased = workspace.path.joinpath(*suffix)
-                        if rebased.is_relative_to(workspace.path):
-                            copied["path"] = str(rebased)
-                            entry["path"] = str(rebased)
-                except ValueError:
-                    pass
-            if (
-                workspace is not None
-                and not Path(copied["path"]).is_relative_to(workspace.path)
-                and copied["path"] not in shared_by_path
-                and not (
-                    legacy_root is not None
-                    and (
-                        Path(copied["path"]).is_relative_to(legacy_root)
-                        or copied["path"] in legacy_paths
-                    )
+    from sigma.samples import sample_project_ids
+
+    try:
+        sample_ids = sample_project_ids()
+    except (ProjectError, OSError, ValueError, TypeError, KeyError):
+        sample_ids = set()
+    index = _snapshot()
+    pins = _effective_pins(index)
+    entries = []
+    for entry in index["entries"]:
+        if entry["included_example"] or entry["id"] in sample_ids:
+            continue
+        copied = dict(entry)
+        if workspace is not None:
+            old_path = Path(copied["path"])
+            try:
+                marker = old_path.parts.index(workspace.workspace_id)
+                suffix = old_path.parts[marker + 1 :]
+                if suffix and all(part not in {".", ".."} for part in suffix):
+                    rebased = workspace.path.joinpath(*suffix)
+                    if rebased.is_relative_to(workspace.path):
+                        copied["path"] = str(rebased)
+                        entry["path"] = str(rebased)
+            except ValueError:
+                pass
+        if (
+            workspace is not None
+            and not Path(copied["path"]).is_relative_to(workspace.path)
+            and copied["path"] not in shared_by_path
+            and not (
+                legacy_root is not None
+                and (
+                    Path(copied["path"]).is_relative_to(legacy_root)
+                    or copied["path"] in legacy_paths
                 )
-            ):
-                continue
-            entries.append(copied)
-        known_paths = {entry["path"] for entry in entries}
-        for row in shared_rows:
-            if row["path"] not in known_paths:
-                entries.append(
-                    {
-                        "id": row["id"],
-                        "path": row["path"],
-                        "accessed_at": datetime.now(UTC).isoformat(),
-                        "included_example": False,
-                    }
-                )
+            )
+        ):
+            continue
+        entries.append(copied)
+    known_paths = {entry["path"] for entry in entries}
+    for row in shared_rows:
+        if row["path"] not in known_paths:
+            entries.append(
+                {
+                    "id": row["id"],
+                    "path": row["path"],
+                    "accessed_at": datetime.now(UTC).isoformat(),
+                    "included_example": False,
+                }
+            )
     from sigma.research_sessions import has_active_session
 
     recent = []
