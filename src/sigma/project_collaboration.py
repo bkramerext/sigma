@@ -655,6 +655,44 @@ def note_change(path: str) -> None:
         pass
 
 
+def shared_listing() -> tuple[list[dict[str, str]], set[str]]:
+    """Read collaborator membership and shared-owner paths in one DB snapshot.
+
+    Saved/Recent opens frequently. Using two separately initialized SQLite
+    connections amplified schema contention and the cost of opening Home.
+    """
+    workspace = cloud_workspaces.current()
+    if workspace is None or workspace.guest:
+        return [], set()
+    try:
+        owner, email = _identity()
+    except ValueError:
+        return [], set()
+    with _db() as db:
+        invited = [
+            {"path": row["path"], "id": row["project_id"]}
+            for row in db.execute(
+                """SELECT p.path,p.project_id FROM shared_projects p
+                JOIN shared_collaborators c ON c.path=p.path
+                WHERE c.email=? ORDER BY p.updated_at DESC""",
+                (email,),
+            )
+        ]
+        visible_shared_paths = {
+            row["path"]
+            for row in db.execute(
+                """SELECT p.path FROM shared_projects p
+                WHERE EXISTS (SELECT 1 FROM shared_collaborators c WHERE c.path=p.path)
+                AND (p.owner_hash=? OR EXISTS (
+                    SELECT 1 FROM shared_collaborators c
+                    WHERE c.path=p.path AND c.email=?
+                ))""",
+                (owner.subject_hash, email),
+            )
+        }
+        return invited, visible_shared_paths
+
+
 def shared_project_paths() -> set[str]:
     """Paths with collaborators visible to their owner or a listed collaborator."""
     try:
