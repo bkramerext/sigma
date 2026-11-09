@@ -4394,7 +4394,7 @@ type ResearchQARecord = { qa_id: string; request_id: string; question: string; a
 function LeanPlaceholderDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { dialog.current?.showModal(); }, []);
-  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="lean-placeholder-heading" onCancel={event => { event.preventDefault(); onClose(); }}>
+  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog lean-placeholder-dialog" aria-labelledby="lean-placeholder-heading" onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header"><h2 id="lean-placeholder-heading">Lean proof verification</h2><div className="settings-actions"><DialogDismissButton label="Close Lean dialog" onClick={onClose}/></div></header>
     <div className="settings-body ai-paper-body"><p>Yeah, I'd love to see this too.<br/>Still under consideration!</p></div>
   </dialog>;
