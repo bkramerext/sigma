@@ -706,3 +706,17 @@
 .project-settings-dialog .research-type-options [role="option"]:hover:not([aria-selected="true"]) {
   background: transparent !important; border-color: #a87950;
 }
+
+
+/* New Project fields are fixed-height; only the dialog body scrolls if needed. */
+.project-settings-dialog.new-project-dialog textarea { resize: none; }
+.project-settings-dialog.new-project-dialog .new-project-edit-note {
+  margin: 12px 24px 0;
+  color: #aab9c7;
+  font-size: 12px;
+  line-height: 1.5;
+  flex: 0 0 auto;
+}
+@media (max-width: 560px) {
+  .project-settings-dialog.new-project-dialog .new-project-edit-note { margin-inline: 18px; }
+}
