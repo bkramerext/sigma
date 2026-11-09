@@ -125,12 +125,32 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="New", exact=True).click()
     dialog = page.get_by_role("dialog", name="New Project")
     expect(dialog).to_be_visible()
-    dialog.get_by_label("Project name").fill("Create Contract Regression")
-    dialog.get_by_label("Research problem").fill("Check the project creation API contract.")
+    expect(
+        dialog.get_by_text(
+            "Project name and type required; you can edit these settings later in Project Settings."
+        )
+    ).to_be_visible()
+    assert dialog.locator("textarea").evaluate_all(
+        "items => items.every(el => getComputedStyle(el).resize === 'none')"
+    )
+    create = dialog.get_by_role("button", name="Create", exact=True)
+    name = dialog.get_by_label("Project name")
+    expect(create).to_be_disabled()
+    name.fill("Create Contract Regression")
+    # A name alone is insufficient. Exactly name and type enable Create.
+    expect(create).to_be_disabled()
+    expect(dialog.get_by_label("Research Subject")).to_have_value("")
     dialog.get_by_role("combobox", name="Research category").click()
     dialog.get_by_role("option", name="Mathematics").click()
+    expect(create).to_be_enabled()
+    # Clearing and restoring the same required field must be symmetric.
+    name.fill("")
+    expect(create).to_be_disabled()
+    name.fill("   ")
+    expect(create).to_be_disabled()
+    name.fill("Create Contract Regression")
+    expect(create).to_be_enabled()
     dialog.get_by_label("Difficulty").select_option("hard")
-    create = dialog.get_by_role("button", name="Create", exact=True)
     expect(create).to_be_enabled()
     create.click()
     assert len(create_payloads) == 1, create_payloads
@@ -138,6 +158,8 @@ with sync_playwright() as playwright:
     assert set(payload) == {
         "title",
         "problem",
+        "desired_outcomes",
+        "paper_requirements",
         "investigation_type",
         "ai_model",
         "reasoning_effort",
@@ -145,21 +167,22 @@ with sync_playwright() as playwright:
         "show_advanced_outcome_details",
     }, payload
     assert payload["show_advanced_outcome_details"] is False, payload
+    assert payload["problem"] == "Create Contract Regression", payload
+    assert payload["desired_outcomes"] == "", payload
+    assert payload["paper_requirements"] == "", payload
     page.wait_for_function(
         "JSON.parse(localStorage.getItem('sigma.newProjectValues') || '{}').title === 'Create Contract Regression'"
     )
     saved = page.evaluate("JSON.parse(localStorage.getItem('sigma.newProjectValues'))")
     assert saved["investigation_type"] == "mathematical", saved
     assert saved["difficulty"] == "hard", saved
-    assert saved["problem"] == "Check the project creation API contract.", saved
+    assert saved["problem"] == "", saved
     # Reload Home and verify the last successfully created values initialize the next form.
     page.goto(UI_URL)
     page.get_by_role("button", name="New", exact=True).click()
     dialog = page.get_by_role("dialog", name="New Project")
     expect(dialog.get_by_label("Project name")).to_have_value("Create Contract Regression")
-    expect(dialog.get_by_label("Research problem")).to_have_value(
-        "Check the project creation API contract."
-    )
+    expect(dialog.get_by_label("Research Subject")).to_have_value("")
     expect(dialog.get_by_role("combobox", name="Research category")).to_contain_text("Mathematics")
     expect(dialog.get_by_label("Difficulty")).to_have_value("hard")
     browser.close()

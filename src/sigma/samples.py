@@ -236,19 +236,32 @@ def _sample_papers(identifier: str) -> dict[str, tuple[dict[str, Any], bytes]]:
 
 
 def _best_sample_paper(identifier: str) -> tuple[int | None, str | None]:
-    """Find a scored, PDF-backed sample paper using the canonical score validator."""
+    """Use sample paper JSON only; verify PDFs when the sample is opened."""
     from sigma.paper_scores import validate_score
 
+    directory = SAMPLES / identifier / SAMPLE_PAPERS
+    if not directory.exists():
+        return (None, None)
+    if directory.is_symlink() or not directory.is_dir():
+        raise ProjectError("Sample paper storage is unsafe.")
     best: tuple[int | None, str | None] = (None, None)
-    for paper_id, (record, _pdf) in _sample_papers(identifier).items():
-        score = record.get("score")
-        if (
-            isinstance(score, dict)
-            and validate_score(score, record.get("pdf_sha256", ""))
-            and isinstance(score.get("total"), int)
-            and (best[0] is None or score["total"] > best[0])
-        ):
-            best = (score["total"], paper_id)
+    for file in directory.glob("*.json"):
+        try:
+            if file.is_symlink() or not file.is_file() or file.stat().st_size > 12 * 1024 * 1024:
+                continue
+            record = json.loads(file.read_text(encoding="utf-8"))
+            if not isinstance(record, dict) or record.get("paper_id") != file.stem:
+                continue
+            score = record.get("score")
+            if (
+                isinstance(score, dict)
+                and validate_score(score, record.get("pdf_sha256", ""))
+                and type(score.get("total")) is int
+                and (best[0] is None or score["total"] > best[0])
+            ):
+                best = (score["total"], file.stem)
+        except (OSError, ValueError, TypeError):
+            continue
     return best
 
 

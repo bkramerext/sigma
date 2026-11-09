@@ -2013,6 +2013,8 @@ class CreateProjectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
     problem: str
+    desired_outcomes: str = ""
+    paper_requirements: str = ""
     investigation_type: str = Field(
         default="default", validation_alias=AliasChoices("investigation_type", "research_mode")
     )
@@ -2048,6 +2050,8 @@ def create_project_view(body: CreateProjectRequest):
         user["reasoning_effort"],
         body.difficulty,
         user["show_advanced_outcome_details"],
+        body.desired_outcomes,
+        body.paper_requirements,
     )
     project_collaboration.register_owner(view)
     return asdict(view)
@@ -2730,17 +2734,25 @@ async def auth_welcome():
 
 
 @app.get("/api/projects/recent")
-def recent_view(response: Response):
+def recent_view(response: Response, lightweight: bool = False):
     from sigma.recents import home_projects
 
     started = perf_counter()
-    result = home_projects()
+    result = home_projects(lightweight=lightweight)
     # Chrome DevTools can now distinguish backend listing time from browser
     # rendering/network delay without logging sensitive project information.
     response.headers["Server-Timing"] = (
         f"saved-projects;dur={(perf_counter() - started) * 1000:.1f}"
     )
     return result
+
+
+@app.get("/api/projects/recent/activity")
+def recent_activity_view():
+    """Activity is fetched after Home renders; never scan paper records."""
+    from sigma.recents import recent_activity
+
+    return recent_activity()
 
 
 @app.get("/api/projects/pinned")

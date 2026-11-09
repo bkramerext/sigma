@@ -1,4 +1,4 @@
-import { Component, createContext, createElement, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
+import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
@@ -5091,13 +5091,14 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const samePair = !!initial && values.ai_model === initial.project.ai_model && values.reasoning_effort === initial.project.reasoning_effort;
   const compatible = selected?.efforts.includes(values.reasoning_effort) || samePair;
   const pairError = selected && !selected.efforts.includes(values.reasoning_effort) && !samePair ? 'This model does not support the selected Thinking level. Choose a supported level explicitly.' : '';
+  const canCreate = !!values.title.trim() && !!values.investigation_type.trim();
   async function save(event: FormEvent) {
-    event.preventDefault(); if (submitting.current || (initial && (!compatible || !limitValidation.value)) || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
+    event.preventDefault(); if (submitting.current || (initial && (!compatible || !limitValidation.value)) || (!initial && !canCreate)) return;
     submitting.current = true; setBusy(true); setError('');
     try {
       const createValues = {
         title: values.title,
-        problem: values.problem,
+        problem: values.problem.trim() || values.title.trim(),
         desired_outcomes: values.desired_outcomes,
         paper_requirements: values.paper_requirements,
         investigation_type: values.investigation_type,
@@ -5151,7 +5152,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby={initial ? "project-settings-help" : undefined} onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !canCreate}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
+      {!initial && <p className="settings-hint new-project-edit-note">Project name and type required; you can edit these settings later in Project Settings.</p>}
       {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their saved research configuration; some limits can be adjusted when resuming.</p>}
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
@@ -5161,7 +5163,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}>{initial && <p id="project-settings-help">Set this project’s research type and AI options.</p>}
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
-      <label htmlFor="project-problem">Research Subject</label><p className="settings-hint">What are we investigating?</p><textarea id="project-problem" required maxLength={20000} rows={3} value={values.problem} onChange={event => change('problem', event.target.value)}/>
+      <label htmlFor="project-problem">Research Subject</label><p className="settings-hint">What are we investigating?</p><textarea id="project-problem" maxLength={20000} rows={3} value={values.problem} onChange={event => change('problem', event.target.value)}/>
       <label htmlFor="project-desired-outcomes">Desired Outcomes</label><p className="settings-hint">What insights or advances are we hoping for?</p><textarea id="project-desired-outcomes" maxLength={20000} rows={4} value={values.desired_outcomes} onChange={event => change('desired_outcomes', event.target.value)}/>
       <label htmlFor="project-paper-requirements">Paper Requirements</label><p className="settings-hint">What should the finished publication contain?</p><textarea id="project-paper-requirements" maxLength={20000} rows={4} value={values.paper_requirements} onChange={event => change('paper_requirements', event.target.value)}/></>}
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
@@ -5310,9 +5312,15 @@ function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
 
-function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; flat?: boolean; active?: boolean }) {
-  const [projects, setProjects] = useState<RecentProject[]>([]);
-  const [loading, setLoading] = useState(true);
+function RecentProjects({ onOpen, flat = false, active = false, projects, setProjects, loading, setLoading }: {
+  onOpen: (view: ProjectView, openSettings?: boolean) => void;
+  flat?: boolean;
+  active?: boolean;
+  projects: RecentProject[];
+  setProjects: Dispatch<SetStateAction<RecentProject[]>>;
+  loading: boolean;
+  setLoading: Dispatch<SetStateAction<boolean>>;
+}) {
   const [opening, setOpening] = useState('');
   const [removing, setRemoving] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
@@ -5321,8 +5329,8 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
   const [error, setError] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pending = useRef(false);
-  const load = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch('/api/projects/recent', { signal });
+  const load = useCallback(async (signal?: AbortSignal, lightweight = false) => {
+    const response = await fetch(lightweight ? '/api/projects/recent?lightweight=true' : '/api/projects/recent', { signal });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
     setProjects(data.projects); setError(''); setLoading(false);
   }, []);
@@ -5330,12 +5338,20 @@ function RecentProjects({ onOpen, flat = false, active = false }: { onOpen: (vie
     if (!active) return;
     const controller = new AbortController();
     let requestPending = false;
+    // Both tabs share the same data; only the first-ever request is shallow.
+    let firstLoad = loading;
     const refresh = async () => {
       if (controller.signal.aborted || document.visibilityState !== 'visible' || requestPending) return;
       requestPending = true;
       try {
-        await load(controller.signal);
-        if (!controller.signal.aborted) setError('');
+        const lightweight = firstLoad;
+        firstLoad = false;
+        await load(controller.signal, lightweight);
+        if (!controller.signal.aborted) {
+          setError('');
+          // Render project names now; hydrate paper scores/activity afterward.
+          if (lightweight) window.setTimeout(() => void refresh(), 250);
+        }
       } catch (error) {
         if (!controller.signal.aborted) {
           setProjects(current => current.map(entry => ({ ...entry, research_running: false, paper_generating: false, paper_activity: null })));
@@ -5534,6 +5550,9 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, op
     const saved = window.localStorage.getItem('sigma.homeCatalogTab');
     return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
   });
+  // Saved and Most Recent are two views of one list, not two independent fetches.
+  const [savedProjects, setSavedProjects] = useState<RecentProject[]>([]);
+  const [savedLoading, setSavedLoading] = useState(true);
   const recent = useRef<HTMLButtonElement>(null);
   const mostRecent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
@@ -5563,8 +5582,8 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, op
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>Saved</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'}/>}</div>
-    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'}/>}</div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/>}</div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/>}</div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest} active={tab === 'samples'}/></div>
   </div>;
 }
@@ -6764,7 +6783,7 @@ function App() {
       if (pending || controller.signal.aborted) return;
       pending = true;
       try {
-        const response = await fetch('/api/projects/recent', { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
+        const response = await fetch('/api/projects/recent/activity', { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok) throw new Error('Global activity unavailable');
         const body = await response.json() as { projects: RecentProject[] };
         if (controller.signal.aborted) return;
@@ -6774,10 +6793,11 @@ function App() {
       } catch { /* Keep the last known activity; a transient error must not clear it. */ }
       finally { pending = false; }
     };
-    void poll();
+    // Defer activity scan until after the first Home list has painted.
+    const firstPoll = window.setTimeout(() => void poll(), 1000);
     const timer = window.setInterval(() => void poll(), 10000);
     window.addEventListener("focus", poll);
-    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", poll); };
+    return () => { controller.abort(); window.clearTimeout(firstPoll); window.clearInterval(timer); window.removeEventListener("focus", poll); };
   // Page navigation does not change the workspace identity or running jobs.
   // Do not trigger an extra full Saved-project scan every time a project opens.
   }, [cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);

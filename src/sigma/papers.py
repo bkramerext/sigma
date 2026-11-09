@@ -11797,6 +11797,11 @@ def preflight(
 
 
 def list_papers(path: str) -> list[dict[str, Any]]:
+    """List saved paper records without opening or verifying PDF contents.
+
+    PDF integrity is checked when a paper is retrieved or scored, not while
+    decorating Home or Most Recent with counts and scores.
+    """
     target = project_path(path)
     if target.suffix == ".json":
         names = sorted(
@@ -11844,7 +11849,14 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                                 "source_reference_map",
                             }
                         },
-                        "pdf_available": _valid_pdf_file(path, value),
+                        # Publication metadata is enough for a listing; integrity
+                        # remains checked by get_paper/get_pdf/score operations.
+                        "pdf_available": (
+                            isinstance(value.get("pdf_sha256"), str)
+                            and len(value["pdf_sha256"]) == 64
+                            and type(value.get("pdf_size_bytes")) is int
+                            and 0 < value["pdf_size_bytes"] <= 80_000_000
+                        ),
                         "pdf_sha256": value.get("pdf_sha256"),
                         "score": __import__(
                             "sigma.paper_scores", fromlist=["cached_score"]
@@ -11894,7 +11906,12 @@ def get_paper(path: str, paper_id: str, *, include_tex: bool = True) -> dict[str
     record = _read_one(path, paper_id)
     if record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Paper belongs to a different project")
-    record["pdf_available"] = _valid_pdf_file(path, record)
+    record["pdf_available"] = (
+        isinstance(record.get("pdf_sha256"), str)
+        and len(record["pdf_sha256"]) == 64
+        and type(record.get("pdf_size_bytes")) is int
+        and 0 < record["pdf_size_bytes"] <= 80_000_000
+    )
     if include_tex and "tex_sha256" in record:
         record["tex_source"] = _paper_tex_source(path, paper_id, record)
     elif not include_tex:
@@ -12008,10 +12025,10 @@ def delete_paper(path: str, paper_id: str) -> None:
 def _cached_pdf_digest(
     filename: str, expected_sha256: str, signature: tuple[int, int, int, int]
 ) -> bool:
-    """Verify each unchanged PDF once across Home, Papers, and project reopening.
+    """Cache verification for explicit PDF retrieval or scoring only.
 
-    Re-check whenever inode, size, mtime, or ctime changes, including atomic
-    replacements and same-size edits. Cache only the boolean, never PDF bytes.
+    Invalidate on inode, size, mtime or ctime changes, including replacement.
+    Never call from a metadata listing or project opening.
     """
     del signature  # Cache invalidation key; the caller already validated the stat.
     checksum = hashlib.sha256()
@@ -12055,7 +12072,7 @@ def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
 
 def get_pdf(path: str, paper_id: str) -> bytes:
     record = get_paper(path, paper_id, include_tex=False)
-    if not record["pdf_available"]:
+    if not _valid_pdf_file(path, record):
         raise ProjectError("Compiled PDF is missing or unsafe")
     target = project_path(path)
     if target.suffix == ".json":

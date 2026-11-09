@@ -433,7 +433,8 @@ class RecentProject:
     shared: bool = False
 
 
-def recent_projects() -> dict:
+def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
+    """Render project identity first; expensive status and paper details are optional."""
     from sigma import cloud_workspaces, project_collaboration
 
     workspace = cloud_workspaces.current()
@@ -480,7 +481,9 @@ def recent_projects() -> dict:
                         "included_example": False,
                     }
                 )
-    from sigma.research_sessions import has_active_session
+    if not lightweight:
+        from sigma import papers
+        from sigma.research_sessions import has_active_session
 
     recent = []
     for entry in entries:
@@ -488,9 +491,15 @@ def recent_projects() -> dict:
             view = inspect_project(entry["path"])
             if str(UUID(view.project.id)) != entry["id"]:
                 raise ProjectError("Project identity changed")
-            from sigma import paper_scores, papers
+            paper_metadata = {"paper_count": 0, "best_paper_score": None}
+            if not lightweight and not activity_only:
+                from sigma import paper_scores
 
-            paper_metadata = paper_scores.project_metadata(view.path)
+                try:
+                    paper_metadata = paper_scores.project_metadata(view.path)
+                except Exception:  # noqa: BLE001 - paper decoration must never block project access
+                    # Broken paper decoration must never make the project unavailable.
+                    paper_metadata = {"paper_count": 0, "best_paper_score": None}
             recent.append(
                 asdict(
                     RecentProject(
@@ -501,9 +510,15 @@ def recent_projects() -> dict:
                         strategy_count=len(view.project.active_order),
                         paper_count=paper_metadata["paper_count"],
                         best_paper_score=paper_metadata["best_paper_score"],
-                        paper_activity=papers.activity_status(view.path),
+                        paper_activity=(
+                            papers.activity_status(view.path) if not lightweight else None
+                        ),
                         difficulty=view.project.difficulty,
-                        research_running=has_active_session(view.path, project_id=view.project.id),
+                        research_running=(
+                            has_active_session(view.path, project_id=view.project.id)
+                            if not lightweight
+                            else False
+                        ),
                         available=True,
                         shared=view.path in shared_paths,
                         pinned=(view.project.id in pins.values()),
@@ -542,8 +557,23 @@ def recent_projects() -> dict:
     return {"projects": recent}
 
 
-def home_projects() -> dict:
-    return recent_projects()
+def home_projects(*, lightweight: bool = False) -> dict:
+    return recent_projects(lightweight=lightweight)
+
+
+def recent_activity() -> dict:
+    """Return activity without reading paper records; intended for UI polling."""
+    return {
+        "projects": [
+            {
+                "id": item["id"],
+                "research_running": item["research_running"],
+                "paper_activity": item["paper_activity"],
+            }
+            for item in recent_projects(activity_only=True)["projects"]
+            if item["available"]
+        ]
+    }
 
 
 def pinned_projects() -> dict:
