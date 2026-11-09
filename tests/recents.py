@@ -153,12 +153,14 @@ def check_home_list_uses_only_paper_records(root: Path) -> None:
             assert len(rows) == 1 and rows[0]["available"], rows
             assert rows[0]["paper_count"] == 1, rows
             assert rows[0]["best_paper_score"] == 70, rows
+        # Paper details and the Papers list must also remain metadata-only.
+        assert papers.list_papers(view.path)[0]["score"]["total"] == 70
+        assert papers.get_paper(view.path, paper_id, include_tex=False)["score"]["total"] == 70
         # Corrupt individual paper records must not hide the saved project.
         paper_dir = Path(view.path) / "papers"
         (paper_dir / "malformed.json").write_text("{broken", encoding="utf-8")
         assert any(
-            row["id"] == view.project.id and row["available"]
-            for row in home_projects()["projects"]
+            row["id"] == view.project.id and row["available"] for row in home_projects()["projects"]
         )
         with patch.object(paper_scores, "project_metadata", side_effect=OSError("broken")):
             rows = [row for row in recent_projects()["projects"] if row["id"] == view.project.id]
