@@ -520,6 +520,37 @@ class CollaborationTests(TestCase):
                 2,
             )
 
+    def test_added_collaborator_email_links_title_from_local_loopback(self) -> None:
+        title = "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration? v10"
+        shared.save_settings(self.path, 0, ["new@example.net"], "gpt-6.1-sol", "high", title)
+        delivered = []
+
+        def capture(message, *, recipients):
+            delivered.append((recipients[0], message))
+
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.account_scoping_enabled",
+                return_value=True,
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.config",
+                return_value=SimpleNamespace(origin="http://127.0.0.1:8844"),
+            ),
+            patch("sigma.mail_transport.send_message", side_effect=capture),
+        ):
+            self.assertEqual(shared.drain_notifications(), [])
+
+        message = next(message for recipient, message in delivered if recipient == "new@example.net")
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+        self.assertIn(f"SIGMA project {title}.", plain)
+        self.assertIn("Open project: http://127.0.0.1:8844/project?path=", plain)
+        self.assertIn('href="http://127.0.0.1:8844/project?path=', html)
+        self.assertIn(f">{title}</a>", html)
+        self.assertNotIn(f"“{title}”", html)
+        self.assertNotIn("Sign in to SIGMA with this Google account", plain)
+
     def test_project_deletion_fences_execution_and_revokes_membership(self) -> None:
         with shared._db() as db:
             db.execute(

@@ -24,7 +24,6 @@ from functools import wraps
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, TypeVar
-from urllib.parse import quote
 from uuid import uuid4
 
 from sigma import cloud_auth, cloud_workspaces
@@ -1021,6 +1020,7 @@ def drain_notifications() -> list[str]:
     if not cloud_workspaces.account_scoping_enabled():
         return []
     from sigma.mail_transport import send_message
+    from sigma.progress_notifications import deep_link
 
     warnings: list[str] = []
     for _ in range(20):
@@ -1056,12 +1056,12 @@ def drain_notifications() -> list[str]:
                 if added
                 else f"SIGMA: Removed from {event['project_title']}"
             )
-            origin = (cloud_auth.config().origin or "").rstrip("/")
-            project_link = (
-                f"{origin}/project?path={quote(event['project_path'], safe='')}"
-                if origin.startswith(("https://", "http://localhost"))
-                else ""
-            )
+            origin = cloud_auth.config().origin
+            try:
+                project_link = deep_link(origin, event["project_path"]) if origin else ""
+            except ValueError:
+                # Malformed origins are never embedded as clickable links.
+                project_link = ""
             if added:
                 # The title itself is the link in HTML-capable mail clients.
                 # Keep a usable plain-text alternative for text-only mail.
