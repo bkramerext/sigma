@@ -320,7 +320,9 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
                 return {nameX: name.left, nameRight: name.right, countX: count.left};
             })"""
         )
-        assert all(row["countX"] >= row["nameRight"] + 4 for row in category_layout), category_layout
+        assert all(row["countX"] >= row["nameRight"] + 4 for row in category_layout), (
+            category_layout
+        )
         assert (
             max(row["nameX"] for row in category_layout)
             - min(row["nameX"] for row in category_layout)
