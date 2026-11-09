@@ -5083,7 +5083,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
                   disabled={modelLookupFailed || catalog.length === 0}
                   choices={[
                     ...(model && !selected ? [{ value: model, label: `${model} · unavailable` }] : []),
-                    ...catalog.map(option => ({ value: option.id, label: modelDisplayLabel(option) })),
+                    ...[...catalog].sort((a, b) => a.relative_cost.length - b.relative_cost.length || a.label.localeCompare(b.label)).map(option => ({ value: option.id, label: modelDisplayLabel(option) })),
                   ]}
                   onChange={next => {
                     setModel(next);
