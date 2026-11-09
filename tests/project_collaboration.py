@@ -338,6 +338,121 @@ class CollaborationTests(TestCase):
         with self.assertRaisesRegex(ProjectError, "saved by"):
             shared.save_settings(self.path, 0, ["new@example.net"], "gpt-6.1-sol", "high", "Study")
 
+    def test_only_owner_or_original_inviter_can_remove_collaborator(self) -> None:
+        owner_invited = "owner-invited@example.org"
+        other_invited = "other-invited@example.org"
+        # Legacy collaborator has no verified inviter, so only owner may remove.
+        with shared._db() as db:
+            legacy = db.execute(
+                "SELECT added_by FROM shared_collaborators WHERE path=? AND email=?",
+                (self.path, self.other.email),
+            ).fetchone()
+            self.assertIsNone(legacy["added_by"])
+
+        shared.save_settings(
+            self.path, self.revision(), [self.other.email, owner_invited],
+            "gpt-6.1-sol", "high", "Study",
+        )
+        self.assertEqual(
+            shared.summary(self.path)["removable_collaborators"],
+            [owner_invited, self.other.email],
+        )
+
+        workspace = Workspace(
+            workspace_id="other-workspace",
+            subject_hash="other-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=workspace),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            # A collaborator may invite someone and subsequently remove that invitee.
+            shared.save_settings(
+                self.path, self.revision(),
+                [self.other.email, owner_invited, other_invited],
+                "gpt-6.1-sol", "high", "Study",
+            )
+            self.assertEqual(shared.summary(self.path)["removable_collaborators"], [other_invited])
+            revision = self.revision()
+            with self.assertRaisesRegex(ProjectError, "Only the project owner"):
+                shared.save_settings(
+                    self.path, revision,
+                    [self.other.email, other_invited, "unrelated@example.org"],
+                    "gpt-6.1-sol", "high", "Study",
+                )
+            self.assertEqual(self.revision(), revision)
+            with shared._db() as db:
+                self.assertIsNone(
+                    db.execute(
+                        "SELECT 1 FROM shared_collaborators WHERE path=? AND email=?",
+                        (self.path, "unrelated@example.org"),
+                    ).fetchone()
+                )
+            # Editing model/thinking must not silently replace inviter provenance.
+            shared.save_settings(
+                self.path, revision,
+                [self.other.email, owner_invited, other_invited],
+                "gpt-6.1-sol", "medium", "Study",
+            )
+            with shared._db() as db:
+                inviter = db.execute(
+                    "SELECT added_by FROM shared_collaborators WHERE path=? AND email=?",
+                    (self.path, other_invited),
+                ).fetchone()
+                self.assertEqual(inviter["added_by"], self.other.email)
+            shared.save_settings(
+                self.path, self.revision(), [self.other.email, owner_invited],
+                "gpt-6.1-sol", "medium", "Study",
+            )
+
+        # Owner can override an inviter's choice and remove any invitee.
+        with shared._db() as db:
+            members = {
+                record["email"]: record["added_by"]
+                for record in db.execute(
+                    "SELECT email,added_by FROM shared_collaborators WHERE path=?", (self.path,)
+                )
+            }
+        self.assertEqual(members, {self.other.email: None, owner_invited: self.owner.email})
+        shared.save_settings(
+            self.path, self.revision(), [], "gpt-6.1-sol", "medium", "Study"
+        )
+        self.assertEqual(shared.summary(self.path)["collaborators"], [])
+
+    def test_owner_can_remove_invitee_added_by_another_collaborator(self) -> None:
+        inviter = Workspace(
+            workspace_id="other-workspace",
+            subject_hash="other-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=inviter),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            shared.save_settings(
+                self.path, self.revision(), [self.other.email, "invitee@example.org"],
+                "gpt-6.1-sol", "high", "Study",
+            )
+        self.assertEqual(
+            shared.summary(self.path)["removable_collaborators"],
+            [self.other.email, "invitee@example.org"],
+        )
+        shared.save_settings(
+            self.path, self.revision(), [self.other.email], "gpt-6.1-sol", "high", "Study"
+        )
+        self.assertEqual(shared.summary(self.path)["collaborators"], [self.other.email])
+
     def test_collaboration_email_uses_shared_transport_and_retries_failures(self) -> None:
         shared.save_settings(self.path, 0, ["new@example.net"], "gpt-6.1-sol", "high", "Study")
         messages: list[tuple[str, str, str | None]] = []
