@@ -151,7 +151,7 @@ def main() -> None:
         expect(dialog.get_by_text("Owner", exact=True)).to_be_visible()
         assert dialog.get_by_role("button", name="Remove owner@example.org").count() == 0
 
-        # Classification, collaborators, then the aligned model/thinking pair.
+        # Classification, aligned model/thinking pair, then collaborators.
         classification = dialog.locator(".settings-classification-row")
         category = dialog.get_by_role("combobox", name="Research category")
         difficulty = dialog.get_by_label("Difficulty")
@@ -181,10 +181,10 @@ def main() -> None:
             assert cat_box and diff_box and collab_box and model_box
             assert abs(cat_box["y"] - diff_box["y"]) < 4, (width, cat_box, diff_box)
             assert cat_box["x"] + cat_box["width"] <= diff_box["x"] + 1
-            assert collab_box["y"] >= (
+            assert model_box["y"] >= (
                 classification.bounding_box()["y"] + category.bounding_box()["height"]
             )
-            assert model_box["y"] >= collab_box["y"] + collab_box["height"] - 1
+            assert collab_box["y"] >= model_box["y"] + model_box["height"] - 1
             assert dialog.evaluate("element => element.scrollWidth <= element.clientWidth")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=f"/tmp/sigma-collaboration-settings-{width}.png")
