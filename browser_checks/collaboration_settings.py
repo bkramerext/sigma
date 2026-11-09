@@ -139,6 +139,17 @@ def main() -> None:
         difficulty = dialog.get_by_label("Difficulty")
         collaborators = dialog.get_by_role("region", name="Collaborators")
         model_row = dialog.locator(".settings-model-row")
+        assert model_row.locator("select").count() == 0, "Model/Thinking must use SIGMA dropdowns"
+        model_picker = model_row.get_by_role("combobox", name="Model")
+        thinking_picker = model_row.get_by_role("combobox", name="Thinking")
+        expect(model_picker).to_be_visible()
+        expect(thinking_picker).to_be_visible()
+        model_picker.click()
+        expect(dialog.get_by_role("listbox", name="Model")).to_be_visible()
+        page.keyboard.press("Escape")
+        thinking_picker.click()
+        expect(dialog.get_by_role("listbox", name="Thinking")).to_be_visible()
+        page.keyboard.press("Escape")
         for width in (1440, 390):
             page.set_viewport_size({"width": width, "height": 930 if width == 1440 else 844})
             cat_box = category.bounding_box()
