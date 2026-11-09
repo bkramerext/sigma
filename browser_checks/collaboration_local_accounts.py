@@ -54,6 +54,15 @@ def choose_difficulty(dialog, name: str) -> None:
     dialog.get_by_role("option", name=name).click()
 
 
+def expand_saved_group(page) -> None:
+    # Saved categories retain their collapsed state across navigations.
+    group = page.locator("#recent-panel details.recent-type-group").first
+    expect(group).to_be_visible()
+    if group.get_attribute("open") is None:
+        group.locator("summary").click()
+    expect(group).to_have_attribute("open", "")
+
+
 def exercise(ui: str, workspaces: Path) -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
@@ -98,9 +107,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert Path(path).is_file()
 
         # Member cannot see the owner's project before invitation.
-        forbidden = member_context.request.get(
-            ui + "/api/projects/inspect", params={"path": path}
-        )
+        forbidden = member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
         assert forbidden.status in {400, 401, 403, 404}, forbidden.text()
         before = get_json(member_context.request.get(ui + "/api/projects/recent"))
         assert all(item["path"] != path for item in before["projects"])
@@ -127,9 +134,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert shared["collaborators"] == [COLLABORATOR]
         assert shared["revision"] >= 1
 
-        permitted = member_context.request.get(
-            ui + "/api/projects/inspect", params={"path": path}
-        )
+        permitted = member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
         assert permitted.status == 200, permitted.text()
         assert get_json(permitted)["path"] == path
         recent = get_json(member_context.request.get(ui + "/api/projects/recent"))
@@ -141,6 +146,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         # The Users Round shortcut opens the owner's original project in Settings.
         owner.goto(ui)
         owner.get_by_role("tab", name="Saved").click()
+        expand_saved_group(owner)
         shortcut = owner.get_by_role("button", name=f"Manage collaborators for {title}")
         expect(shortcut).to_be_visible()
         shortcut.click()
@@ -177,17 +183,16 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(owner_dialog).not_to_be_visible()
 
         # Revocation must be enforced by the server, not just by a hidden icon.
-        revoked = member_context.request.get(
-            ui + "/api/projects/inspect", params={"path": path}
-        )
+        revoked = member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
         assert revoked.status in {400, 401, 403, 404}, revoked.text()
         recent = get_json(member_context.request.get(ui + "/api/projects/recent"))
         assert all(row["path"] != path for row in recent["projects"])
         owner.goto(ui)
         owner.get_by_role("tab", name="Saved").click()
-        expect(
-            owner.get_by_role("button", name=f"Manage collaborators for {title}")
-        ).to_have_count(0)
+        expand_saved_group(owner)
+        expect(owner.get_by_role("button", name=f"Manage collaborators for {title}")).to_have_count(
+            0
+        )
         assert Path(path).is_file(), "Revocation must not move or delete the owner's project"
         owner_context.close()
         member_context.close()
