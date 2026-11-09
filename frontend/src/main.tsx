@@ -4755,6 +4755,7 @@ type SharedProjectInfo = {
   model: string;
   thinking: string;
   shared: boolean;
+  failed_notifications: number;
   lease: { email: string; activity: string; expires_at: number } | null;
 };
 
@@ -4781,6 +4782,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
+  const [retryingEmails, setRetryingEmails] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -4824,6 +4826,15 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
     setCollaborators(previous => [...previous, email].sort());
     setNewEmail(''); setAdding(false); setError('');
   }
+  async function retryEmails() {
+    if (retryingEmails || !shared?.owner) return;
+    setRetryingEmails(true); setError('');
+    try {
+      await post('collaboration/notifications/retry', { path: initial.path }, undefined, true);
+      setShared(previous => previous ? { ...previous, failed_notifications: 0 } : previous);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setRetryingEmails(false); }
+  }
   async function save(event: FormEvent) {
     event.preventDefault();
     if (busy || loading || !changed || !validPair || !shared) return;
@@ -4854,11 +4865,42 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       </header>
       <div className="settings-body">
         <fieldset disabled={busy || loading}>
-          <label id="sigma-project-type-label">Project Type</label>
-          <ResearchTypePicker fieldLabel="Project Type" value={projectType} onChange={setProjectType}/>
-          <label id="sigma-project-difficulty-label">Difficulty</label>
-          <DifficultyPicker value={difficulty} onChange={setDifficulty}/>
+          <div className="settings-classification-row">
+            <div>
+              <label id="project-mode-label">Research category</label>
+              <ResearchTypePicker fieldLabel="Research category" value={projectType} onChange={setProjectType}/>
+            </div>
+            <div>
+              <label id="sigma-project-difficulty-label">Difficulty</label>
+              <DifficultyPicker value={difficulty} onChange={setDifficulty}/>
+            </div>
+          </div>
           {!!shared?.owner && <>
+            <section className="project-collaborators" aria-label="Collaborators">
+              <div className="project-collaborators-heading">
+                <h3>Collaborators</h3>
+                <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add collaborator" data-tooltip="Add collaborator" onClick={() => { setAdding(true); setError(''); }}><CirclePlusIcon/></button>
+              </div>
+              <div className="project-collaborator-row">
+                <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
+              </div>
+              {collaborators.map(email => <div className="project-collaborator-row" key={email}>
+                <span>{email}</span>
+                <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
+                </button>
+              </div>)}
+              {adding && <div className="project-collaborator-add">
+                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => setNewEmail(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCollaborator(); } if (event.key === 'Escape') { event.stopPropagation(); setAdding(false); setNewEmail(''); } }}/>
+                <button type="button" onClick={addCollaborator}>Add</button>
+                <button type="button" onClick={() => { setAdding(false); setNewEmail(''); }}>Cancel</button>
+              </div>}
+              {shared.failed_notifications > 0 && <p className="project-collaborator-mail-failed" role="status">
+                {shared.failed_notifications} collaboration {shared.failed_notifications === 1 ? 'email could' : 'emails could'} not be delivered.
+                <button type="button" disabled={retryingEmails} onClick={() => void retryEmails()}>{retryingEmails ? 'Retrying…' : 'Retry emails'}</button>
+              </p>}
+            </section>
             <div className="settings-model-row">
               <div>
                 <label htmlFor="shared-project-model">Model</label>
@@ -4880,26 +4922,12 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
                 </select>
               </div>
             </div>
-            <section className="project-collaborators" aria-label="Collaborators">
-              <div className="project-collaborators-heading">
-                <h3>Collaborators</h3>
-                <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add collaborator" data-tooltip="Add collaborator" onClick={() => { setAdding(true); setError(''); }}><CirclePlusIcon/></button>
-              </div>
-              <div className="project-collaborator-row">
-                <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
-              </div>
-              {collaborators.map(email => <div className="project-collaborator-row" key={email}>
-                <span>{email}</span>
-                <button type="button" aria-label={`Remove ${email}`} className="project-collaborator-remove" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>×</button>
-              </div>)}
-              {adding && <div className="project-collaborator-add">
-                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => setNewEmail(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCollaborator(); } if (event.key === 'Escape') { event.stopPropagation(); setAdding(false); setNewEmail(''); } }}/>
-                <button type="button" onClick={addCollaborator}>Add</button>
-                <button type="button" onClick={() => { setAdding(false); setNewEmail(''); }}>Cancel</button>
-              </div>}
-            </section>
+
           </>}
+          {shared && !shared.owner && <p className="project-collaborator-local-note">
+            Collaboration requires a hosted SIGMA project with verified Google sign-in.
+            This local project remains private; sharing cannot be enabled from local mode.
+          </p>}
         </fieldset>
         {loading && <p className="settings-hint">Loading shared settings…</p>}
         {!validPair && <p role="alert" className="error">Choose a compatible model and Thinking level.</p>}
