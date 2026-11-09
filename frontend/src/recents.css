@@ -26,7 +26,7 @@
 .home-page .home-recents .recent-title-shared { margin-left: -2px; color: var(--sigma-copper-foreground); }
 .home-page .home-recents .recent-title-shared svg { display: block; width: 17px; height: 17px; }
 .home-page .home-recents .recent-title-annotation:disabled { opacity: .6; cursor: wait; }
-.home-page .home-recents .home-page .home-recents .recent-save-as,
+.home-page .home-recents .recent-save-as,
 .home-page .home-recents .recent-forget {
   flex: 0 0 auto; width: auto; height: auto; min-height: 0; margin: 0; padding: 0;
   border: 0; border-radius: 0; background: transparent; box-shadow: none;
@@ -40,12 +40,10 @@
 .home-page .home-recents .recent-save-as:focus-visible,
 .home-page .home-recents .recent-forget:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 /* Consistent actions across project rows. */
-.home-page .home-recents .recent-pin:hover:not(:disabled),
 .home-page .home-recents .recent-save-as:hover:not(:disabled),
 .home-page .home-recents .recent-forget:hover:not(:disabled) {
   background: transparent; color: var(--sigma-copper-foreground);
 }
-.home-page .home-recents .recent-pin:disabled,
 .home-page .home-recents .recent-save-as:disabled,
 .home-page .home-recents .recent-forget:disabled { opacity: .5; cursor: default; }
 
