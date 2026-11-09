@@ -4682,6 +4682,102 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
   </div>;
 }
 
+function SigmaChoicePicker({ id, label, value, choices, onChange, disabled = false }: {
+  id: string;
+  label: string;
+  value: string;
+  choices: { value: string; label: string }[];
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const options = useRef<Array<HTMLButtonElement | null>>([]);
+  const [menuStyle, setMenuStyle] = useState({ top: -10000, left: -10000, width: 0, maxHeight: 220 });
+  const current = Math.max(0, choices.findIndex(item => item.value === value));
+  useEffect(() => { if (open) options.current[active]?.focus(); }, [open, active]);
+  useEffect(() => {
+    if (!open || !disabled) return;
+    setOpen(false);
+  }, [disabled, open]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [open]);
+  useLayoutEffect(() => {
+    if (!open || !menu.current) return;
+    const panel = menu.current;
+    panel.showPopover();
+    const place = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const height = Math.min(220, Math.max(80, Math.max(below, above)));
+      const menuHeight = Math.min(height, choices.length * 34 + 10);
+      setMenuStyle({
+        top: below < 130 && above > below ? Math.max(8, rect.top - menuHeight - 4) : rect.bottom + 4,
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
+        width: rect.width, maxHeight: height,
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      if (panel.matches(':popover-open')) panel.hidePopover();
+    };
+  }, [open, choices.length]);
+  function choose(next: string) {
+    onChange(next);
+    setOpen(false);
+    requestAnimationFrame(() => trigger.current?.focus());
+  }
+  return <div className="research-type-picker sigma-choice-picker" ref={root}>
+    <button ref={trigger} id={id} type="button" role="combobox"
+      aria-label={label} aria-haspopup="listbox" aria-expanded={open}
+      aria-controls={`${id}-options`} disabled={disabled}
+      onClick={() => { setActive(current); setOpen(previous => !previous); }}
+      onKeyDown={event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          setActive(event.key === 'ArrowDown' ? current : choices.length - 1);
+          setOpen(true);
+        }
+      }}>
+      <span>{choices[current]?.value === value ? choices[current].label : value}</span>
+      <svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
+    </button>
+    {open && <div ref={menu} popover="manual" style={menuStyle}
+      className="research-type-options" id={`${id}-options`}
+      role="listbox" aria-label={label}>
+      {choices.map((item, index) => <button key={item.value}
+        ref={element => { options.current[index] = element; }}
+        type="button" role="option" aria-selected={item.value === value}
+        tabIndex={active === index ? 0 : -1}
+        onFocus={() => setActive(index)}
+        onClick={() => choose(item.value)}
+        onKeyDown={event => {
+          if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index + 1) % choices.length); }
+          else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index - 1 + choices.length) % choices.length); }
+          else if (event.key === 'Home') { event.preventDefault(); setActive(0); }
+          else if (event.key === 'End') { event.preventDefault(); setActive(choices.length - 1); }
+          else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); }
+          else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(item.value); }
+        }}><span>{item.label}</span></button>)}
+    </div>}
+  </div>;
+}
+
 function DifficultyPicker({ value, onChange }: {
   value: ProjectDifficulty | null;
   onChange: (next: ProjectDifficulty | null) => void;
@@ -4944,22 +5040,27 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             <div className="settings-model-row">
               <div>
                 <label htmlFor="shared-project-model">Model</label>
-                <select id="shared-project-model" value={model} disabled={modelLookupFailed || catalog.length === 0} onChange={event => {
-                  const next = event.target.value;
-                  setModel(next);
-                  const option = catalog.find(item => item.id === next);
-                  if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
-                }}>
-                  {model && !selected && <option value={model}>{model} · unavailable</option>}
-                  {catalog.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
+                <SigmaChoicePicker id="shared-project-model" label="Model" value={model}
+                  disabled={modelLookupFailed || catalog.length === 0}
+                  choices={[
+                    ...(model && !selected ? [{ value: model, label: `${model} · unavailable` }] : []),
+                    ...catalog.map(option => ({ value: option.id, label: option.label })),
+                  ]}
+                  onChange={next => {
+                    setModel(next);
+                    const option = catalog.find(item => item.id === next);
+                    if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
+                  }}/>
               </div>
               <div>
                 <label htmlFor="shared-project-thinking">Thinking</label>
-                <select id="shared-project-thinking" value={thinking} disabled={modelLookupFailed || catalog.length === 0} onChange={event => setThinking(event.target.value)}>
-                  {!selected?.efforts.includes(thinking) && <option value={thinking}>{thinkingLabels[thinking] ?? thinking} · unavailable</option>}
-                  {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
-                </select>
+                <SigmaChoicePicker id="shared-project-thinking" label="Thinking" value={thinking}
+                  disabled={modelLookupFailed || catalog.length === 0}
+                  choices={[
+                    ...(!selected?.efforts.includes(thinking) ? [{ value: thinking, label: `${thinkingLabels[thinking] ?? thinking} · unavailable` }] : []),
+                    ...(selected?.efforts ?? []).map(effort => ({ value: effort, label: thinkingLabels[effort] ?? effort })),
+                  ]}
+                  onChange={setThinking}/>
               </div>
             </div>
             {modelLookupFailed && <p className="settings-hint" role="status">Model choices are unavailable. You can still edit collaborators and save their changes.</p>}
