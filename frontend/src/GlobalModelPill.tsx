@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { modelDisplayLabel, modelDisplayName } from './model-display';
 import './global-model-pill.css';
 
 type ModelChoice = {
@@ -17,13 +18,8 @@ type ResearchSettings = {
 };
 const costTier = (s: string) => /^\${1,3}$/.test(s) ? s.length : Number.POSITIVE_INFINITY;
 const effortOrder = ['low', 'medium', 'high', 'xhigh'];
-const modelNames: Record<string, string> = {
-  'gpt-6-luna': 'GPT-6-Luna',
-  'gpt-6.1-sol': 'GPT-6.1-Sol',
-  'gpt-6-astra': 'GPT-6-Astra',
-};
 const modelName = (m: ModelChoice | undefined, fallback: string) =>
-  (m && modelNames[m.id]) ?? m?.label.split(' · ')[0] ?? modelNames[fallback] ?? fallback;
+  m ? modelDisplayName(m) : fallback;
 function suitableEffort(model: ModelChoice, current: string): string | null {
   if (!model.efforts?.length) return null;
   if (model.efforts.includes(current)) return current;
@@ -142,7 +138,7 @@ export default function GlobalModelPill({ enabled = true, project, onProjectChan
   const nextThinking = supportedEfforts.length > 1
     ? supportedEfforts[(thinkingIndex + 1) % supportedEfforts.length] : null;
   const selectedName = modelName(selected, effective?.ai_model ?? 'Unavailable');
-  const label = !enabled ? 'Sign in' : effective ? selectedName + (selected?.relative_cost ? ' ' + selected.relative_cost : '') : 'Unavailable';
+  const label = !enabled ? 'Sign in' : effective ? (selected ? modelDisplayLabel(selected) : selectedName) : 'Unavailable';
   const thinkingLabel = effective?.reasoning_effort
     ? 'Thinking · ' + (effective.reasoning_effort === 'xhigh' ? 'Extra High'
       : effective.reasoning_effort.charAt(0).toUpperCase() + effective.reasoning_effort.slice(1))
@@ -213,7 +209,7 @@ export default function GlobalModelPill({ enabled = true, project, onProjectChan
         {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward" userCycleRevision={thinkingCycleRevision}/>}
       </span>
       <span className="global-model-pill-max-labels" aria-hidden="true">
-        <span>Model · GPT-6-Astra $$$</span>
+        <span>Model · GPT-6-Astra · $$</span>
         <span>Thinking · Extra High</span>
       </span>
     </button>
