@@ -1,7 +1,8 @@
 """Real Chromium acceptance for collaboration layout, staged edits and failure feedback.
 
-Uses the deterministic provider fixture. Collaboration API responses are
-simulated verified accounts; no real identities or emails are contacted.
+The deterministic provider fixture isolates UI behavior and simulates owner
+data. See collaboration_local_accounts.py for real two-profile ACL and revision
+checks against the local authenticated backend.
 """
 
 from __future__ import annotations
@@ -61,10 +62,10 @@ def main() -> None:
         dialog = page.get_by_role("dialog", name="Project Settings")
         expect(dialog).to_be_visible()
 
-        # Local SIGMA must not silently pretend an unverified owner can invite
-        # Google accounts. It should explain why sharing is not available.
+        # Unauthenticated fixture: explain that Google identity is required
+        # locally or hosted, not that collaboration is hosted-only.
         expect(
-            dialog.get_by_text("This local project remains private", exact=False)
+            dialog.get_by_text("Collaboration requires individual Google sign-ins", exact=False)
         ).to_be_visible()
         expect(dialog.get_by_role("region", name="Collaborators")).to_have_count(0)
         expect(dialog.get_by_role("combobox", name="Research category")).to_be_visible()
@@ -188,7 +189,7 @@ def main() -> None:
         browser.close()
 
     print(
-        "PASS collaboration controls, local-mode clarity, 1440/390px layout, "
+        "PASS collaboration controls, local sign-in guidance, 1440/390px layout, "
         "staged Save, notification retry and stale-editor refusal"
     )
 

@@ -220,9 +220,14 @@ def _store_path() -> Path:
     # Real local Google users already have per-subject catalogs under the
     # original local project root. Continue using that private location so
     # an upgrade cannot silently reset types, references or research limits.
-    # Hosted and loopback mock identities keep workspace-based storage.
+    # Hosted, loopback mock identities and guest sample workspaces keep
+    # workspace-local storage. Real signed-in local members retain their
+    # established per-subject catalog under the original projects root.
     if workspace is not None and (
-        not cloud_auth.config().local or principal is None or principal.subject.startswith("mock:")
+        workspace.guest
+        or not cloud_auth.config().local
+        or principal is None
+        or principal.subject.startswith("mock:")
     ):
         return workspace.path / ".sigma-project-types.json"
 
