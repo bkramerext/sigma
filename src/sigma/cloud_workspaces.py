@@ -52,16 +52,33 @@ GUEST_TTL_SECONDS = 8 * 60 * 60
 
 
 def enabled() -> bool:
-    """Cloud auth is an explicit opt-in; local SIGMA does not need cloud config."""
+    """Preserve the existing hosted execution-mode decision.
+
+    Other components use this to select hosted AI and billing behavior.
+    Do not use it to decide whether local Google users need private storage.
+    """
+    from sigma.storage import persistent_disk_enabled
+
     enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
-        "1",
-        "true",
-        "yes",
+        "1", "true", "yes",
     }
-    # The identity-bound workspace and collaboration rules are identical
-    # for hosted and local Google sign-ins. Requests using the explicit
-    # legacy auto-admin shortcut stay unpartitioned in the API dependency.
-    return enabled
+    local_auth = os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().casefold() in {
+        "1", "true", "yes",
+    }
+    mock_auth = os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
+    mock_local = mock_auth and local_auth and cloud_auth._mock_enabled(cloud_auth.config())
+    return enabled and (persistent_disk_enabled() or not local_auth or mock_local)
+
+
+def account_scoping_enabled() -> bool:
+    """Use identity-bound workspaces for both local and hosted Google accounts.
+
+    A request using the explicit local auto-admin shortcut is exempted by the
+    request-scope dependency; it keeps the legacy single-user filesystem.
+    """
+    return os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
+        "1", "true", "yes",
+    }
 
 
 def current() -> Workspace | None:

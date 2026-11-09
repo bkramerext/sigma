@@ -87,7 +87,7 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
             cloud_workspaces.reset(token)
         return
     if (
-        not cloud_workspaces.enabled()
+        not cloud_workspaces.account_scoping_enabled()
         or request.url.path == "/api/ui-instance"
         or (
             request.url.path == "/api/local-runtime/build"

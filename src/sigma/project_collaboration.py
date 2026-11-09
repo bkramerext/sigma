@@ -875,7 +875,7 @@ def drain_notifications() -> list[str]:
     Claims are serialized in SQLite. A stale claim can be replayed after
     a crash, so delivery is at least once in ambiguous transport failures.
     """
-    if not cloud_workspaces.enabled():
+    if not cloud_workspaces.account_scoping_enabled():
         return []
     from sigma.mail_transport import send_message
 

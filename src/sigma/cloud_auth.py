@@ -585,9 +585,15 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     workspace_id: str | None = None
     # All account-scoped SIGMA deployments, including real local Google
     # sign-ins, expose their per-user workspace in account status.
-    from sigma.cloud_workspaces import WorkspaceUnavailable, enabled, workspace_for_subject
+    from sigma.cloud_workspaces import (
+        WorkspaceUnavailable,
+        account_scoping_enabled,
+        workspace_for_subject,
+    )
 
-    if enabled() and not (cfg.local and principal.subject.startswith("local-admin:")):
+    if account_scoping_enabled() and not (
+        cfg.local and principal.subject.startswith("local-admin:")
+    ):
         try:
             workspace_id = workspace_for_subject(principal.subject).workspace_id
         except WorkspaceUnavailable as exc:
@@ -1889,7 +1895,7 @@ async def callback(
     authenticated_workspace = None
     from sigma import cloud_workspaces
 
-    if cloud_workspaces.enabled():
+    if cloud_workspaces.account_scoping_enabled():
         from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
         try:
