@@ -1,5 +1,35 @@
 # SIGMA status
 
+## 2026-11-08 — SIGMA v0.3.0 follow-up hotfix deployed
+
+Production now runs exact operator-selected commit
+`7ee1b409a73702bb3451e477e7a33410b86a41c4` (both backend and frontend
+metadata remain version `0.3.0`). The commit was deployed from the supplied
+release branch SHA; the deployed commit was not replaced with `main` or a
+later tip. GitHub had no check runs attached to this SHA. Per operator
+instruction, deployment proceeded despite local `./sigma test` failures.
+Observed failures were `tests/chatgpt.py` (selected model unavailable for the
+API account), `tests/proposals.py` (expected reasoning payload mismatch), and
+`tests/research_sessions_part2.py` (resume call timeout); the suite was
+interrupted during part 3 after the operator overrode the test gate. These
+results are retained as known verification gaps, not reported as passing.
+
+The guarded helper completed for the exact SHA. Production checkout, release
+pin, and backend/frontend image source labels match it; all three containers
+are healthy. Backend package version is `0.3.0`; the public frontend bundle
+reports build prefix `7ee1b40`. Public HTTPS returned HTTP 200, hosted auth
+status returned HTTP 200, and unauthenticated `/api/health` returned the
+expected HTTP 401.
+
+Before cutover, current state was copied to root-only directory
+`/var/backups/sigma-state-v030-pre-7ee1b409-20261109` on the existing boot
+disk. The byte-for-byte copy and read-only verifier passed. Post-deploy
+verification passed SQLite integrity and preserved 3 identities/workspaces,
+18 projects, 42 artifacts, one verified TeX/PDF pair, 10 terminal historical
+job rows, and 46 accounting rows ($5.938237 recorded/reserved, including 15
+reserved or unknown outcomes). No new cloud resources or paid inference were
+used.
+
 ## 2026-11-08 — SIGMA v0.2.2 production deployment complete
 
 Production now runs SIGMA v0.2.2 from merged `main` SHA
