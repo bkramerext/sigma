@@ -10,9 +10,11 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
+import zlib
 from pathlib import Path
 
 from sigma import cloud_auth, cloud_workspaces
@@ -62,13 +64,129 @@ def _fingerprint(source: Path) -> str:
     return digest.hexdigest()
 
 
-def _copy_verified(source: Path, destination: Path) -> None:
-    """No overwrite. Retain the source untouched until copy verification completes."""
-    original = _fingerprint(source)
-    if destination.exists():
-        if _fingerprint(destination) != original:
-            raise ProjectError(f"Migration destination differs from original: {destination}")
+_FROZEN_SNAPSHOT = re.compile(
+    r"^((?:artifacts/papers/snapshots|papers/\\.snapshots)/)([0-9a-f]{64})(\\.json\\.zlib)$"
+)
+_MAX_FROZEN_BYTES = 128 * 1024 * 1024
+
+
+def _relocate_members(
+    members: dict[str, bytes], source: Path, destination: Path, project_id: str
+) -> dict[str, bytes]:
+    """Rebind path-owned records without rekeying project/session/evidence IDs.
+
+    Only temporary migration code uses this; the ordinary copy operation
+    intentionally creates a distinct project and cannot be reused here.
+    """
+    from sigma.project_copy import _canonical, _encode, _rewrite
+
+    old_path, new_path = str(source.resolve()), str(destination.resolve())
+    historical_paths = {old_path}
+    for name, raw in members.items():
+        if not (name.startswith("research-sessions/") and name.endswith(".json")):
+            continue
+        try:
+            record = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if isinstance(record, dict) and record.get("project_id") == project_id:
+            recorded_path = record.get("project_path")
+            if isinstance(recorded_path, str) and recorded_path.startswith("/"):
+                historical_paths.add(recorded_path)
+    substitutions = {
+        path: new_path
+        for path in sorted(historical_paths, key=len, reverse=True)
+        if path != new_path
+    }
+
+    rewritten: dict[str, bytes] = {}
+    digest_map: dict[str, str] = {}
+    for name, raw in members.items():
+        match = _FROZEN_SNAPSHOT.fullmatch(name)
+        if match is None:
+            rewritten[name] = raw
+            continue
+        old_digest = match.group(2)
+        try:
+            inflated = zlib.decompressobj()
+            expanded = inflated.decompress(raw, _MAX_FROZEN_BYTES + 1)
+            if len(expanded) > _MAX_FROZEN_BYTES or not inflated.eof or inflated.unused_data:
+                raise ValueError("Invalid frozen evidence")
+            expanded += inflated.flush()
+            if hashlib.sha256(expanded).hexdigest() != old_digest:
+                raise ValueError("Frozen evidence checksum changed")
+            record = json.loads(expanded)
+            updated = _rewrite(record, substitutions)
+            if updated == record:
+                rewritten[name] = raw
+                continue
+            packed = _canonical(updated)
+            new_digest = hashlib.sha256(packed).hexdigest()
+            target = match.group(1) + new_digest + match.group(3)
+            if target in rewritten:
+                raise ValueError("Relocated frozen evidence name collision")
+            digest_map[old_digest] = new_digest
+            rewritten[target] = zlib.compress(packed, level=6)
+        except (ValueError, UnicodeDecodeError, zlib.error) as exc:
+            raise ProjectError(f"Cannot relocate frozen evidence {name}: {exc}") from exc
+
+    result: dict[str, bytes] = {}
+    for name, raw in rewritten.items():
+        if not name.endswith(".json"):
+            result[name] = raw
+            continue
+        try:
+            record = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            if any(path.encode() in raw for path in substitutions):
+                raise ProjectError(f"Unreadable JSON contains project path: {name}") from None
+            result[name] = raw
+            continue
+        updated = _rewrite(_rewrite(record, substitutions), digest_map)
+        if isinstance(updated, dict):
+            for field in ("snapshot", "frozen_package"):
+                package = updated.get(field)
+                if isinstance(package, dict) and package.get("schema") == "sigma-paper-evidence-v2":
+                    updated["snapshot_sha256"] = hashlib.sha256(_canonical(package)).hexdigest()
+            if name.startswith("research-sessions/") and updated.get("project_id") == project_id:
+                if "project_path" in updated and updated["project_path"] != new_path:
+                    raise ProjectError(f"Research session path did not migrate: {name}")
+        result[name] = _encode(updated) if updated != record else raw
+    return result
+
+
+def _relocate_staged(source: Path, destination: Path, staged: Path, project_id: str) -> None:
+    """Transform only path-dependent records in the private staging copy."""
+    if staged.is_file():
+        from sigma.project_bundle import _decode, stored_bundle
+
+        members = _decode(json.loads(staged.read_bytes()))
+        rewritten = _relocate_members(members, source, destination, project_id)
+        if rewritten != members:
+            staged.write_text(
+                json.dumps(stored_bundle(rewritten), sort_keys=True, indent=2) + "\\n",
+                encoding="utf-8",
+            )
         return
+
+    members: dict[str, bytes] = {}
+    for file in staged.rglob("*"):
+        if file.is_file() and (file.name.endswith(".json") or file.name.endswith(".json.zlib")):
+            members[file.relative_to(staged).as_posix()] = file.read_bytes()
+    changed = _relocate_members(members, source, destination, project_id)
+    for removed in members.keys() - changed.keys():
+        (staged / removed).unlink()
+    for name, raw in changed.items():
+        if members.get(name) != raw:
+            path = staged / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+
+
+def _copy_verified(source: Path, destination: Path) -> None:
+    """Copy/rebind in staging; compare fingerprints before any publication."""
+    project_id, _ = _metadata(source)
+    original = _fingerprint(source)
     with tempfile.TemporaryDirectory(prefix=".sigma-migrate-", dir=destination.parent) as temp:
         staged = Path(temp) / destination.name
         if source.is_dir():
@@ -77,12 +195,18 @@ def _copy_verified(source: Path, destination: Path) -> None:
             shutil.copy2(source, staged, follow_symlinks=False)
         if _fingerprint(source) != original or _fingerprint(staged) != original:
             raise ProjectError(f"Project changed during migration: {source}")
-        # The workspace is private; never replace an existing project.
+        _relocate_staged(source, destination, staged, project_id)
+        relocated = _fingerprint(staged)
+        if _fingerprint(source) != original:
+            raise ProjectError(f"Project changed while rebasing paths: {source}")
+        # Retries validate an already published copy without ever overwriting it.
         if destination.exists():
-            if _fingerprint(destination) != original:
-                raise ProjectError(f"Migration destination already exists: {destination}")
+            if _fingerprint(destination) != relocated:
+                raise ProjectError(f"Migration destination differs from original: {destination}")
             return
         staged.rename(destination)
+        if _fingerprint(destination) != relocated:
+            raise ProjectError(f"Relocated project did not verify: {destination}")
 
 
 def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
