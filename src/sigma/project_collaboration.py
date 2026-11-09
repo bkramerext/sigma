@@ -278,10 +278,6 @@ def normalize_collaborator(value: str) -> str:
         or len(domain.rsplit(".", 1)[1]) < 2
     ):
         raise ValueError("Enter a valid Google account email address.")
-    if domain in {"gmail.com", "googlemail.com"} and (
-        not 6 <= len(local) <= 30 or not re.fullmatch(r"[a-z0-9]+(?:\.[a-z0-9]+)*", local)
-    ):
-        raise ValueError("Gmail names must be 6–30 characters of letters, digits and dots.")
     return email
 
 

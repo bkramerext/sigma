@@ -144,6 +144,7 @@ def main() -> None:
             cat_box = category.bounding_box()
             diff_box = difficulty.bounding_box()
             collab_box = collaborators.bounding_box()
+            assert collaborators.evaluate("element => getComputedStyle(element).borderTopWidth") == "1px"
             model_box = model_row.bounding_box()
             assert cat_box and diff_box and collab_box and model_box
             assert abs(cat_box["y"] - diff_box["y"]) < 4, (width, cat_box, diff_box)
@@ -164,9 +165,9 @@ def main() -> None:
         assert len(retries) == 1
 
         dialog.get_by_role("button", name="Add collaborator").click()
-        dialog.get_by_label("New collaborator email").fill("bob@example.net")
+        dialog.get_by_label("New collaborator email").fill("brian@gmail.com")
         dialog.get_by_role("button", name="Add", exact=True).click()
-        expect(dialog.get_by_text("bob@example.net")).to_be_visible()
+        expect(dialog.get_by_text("brian@gmail.com")).to_be_visible()
         dialog.get_by_role("button", name="Remove alice@example.net").click()
         expect(dialog.get_by_text("alice@example.net")).to_have_count(0)
         assert not updates, "Adding/removing collaborators must not auto-save"
@@ -174,7 +175,7 @@ def main() -> None:
         dialog.get_by_role("button", name="Save", exact=True).click()
         expect(dialog).not_to_be_visible()
         assert len(updates) == 1
-        assert updates[0]["collaborators"] == ["bob@example.net"], updates
+        assert updates[0]["collaborators"] == ["brian@gmail.com"], updates
         assert updates[0]["expected_revision"] == 7, updates
 
         settings.click()

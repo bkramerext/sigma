@@ -683,7 +683,8 @@ class CollaborationTests(TestCase):
         self.assertEqual(
             shared.normalize_collaborator(" SCARKRA01@TAMU.EDU "), "scarkra01@tamu.edu"
         )
-        for address in ("a@gmail.com", "a..b@gmail.com", "bad@@gmail.com", "foo@-evil.org"):
+        self.assertEqual(shared.normalize_collaborator("brian@gmail.com"), "brian@gmail.com")
+        for address in ("a..b@gmail.com", "bad@@gmail.com", "foo@-evil.org"):
             with self.subTest(address=address), self.assertRaises(ValueError):
                 shared.normalize_collaborator(address)
         self.assertTrue(shared.authorized_shared_path(Path(self.path)))
