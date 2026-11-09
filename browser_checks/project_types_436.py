@@ -215,15 +215,16 @@ with sync_playwright() as playwright:
     # Settings has one geometry regardless of selected tab, and hover is unfilled.
     original_box = dialog.bounding_box()
     assert original_box
-    model_tab = dialog.get_by_role("tab", name="Model", exact=True)
-    model_tab.hover()
+    assert dialog.get_by_role("tab", name="Model", exact=True).count() == 0
+    limits_tab = dialog.get_by_role("tab", name="Limits", exact=True)
+    limits_tab.hover()
     assert (
-        model_tab.evaluate("node => getComputedStyle(node).backgroundColor") == "rgba(0, 0, 0, 0)"
+        limits_tab.evaluate("node => getComputedStyle(node).backgroundColor") == "rgba(0, 0, 0, 0)"
     )
     # Hover must not underline tabs; the selected tab already has a copper indicator.
-    assert model_tab.evaluate("node => getComputedStyle(node).textDecorationLine") == "none"
-    assert model_tab.get_attribute("aria-selected") == "false"
-    for tab_name in ("Model", "Limits", "Preferences", "Project Types"):
+    assert limits_tab.evaluate("node => getComputedStyle(node).textDecorationLine") == "none"
+    assert limits_tab.get_attribute("aria-selected") == "false"
+    for tab_name in ("Limits", "Preferences", "Research Ethos", "Project Types"):
         dialog.get_by_role("tab", name=tab_name, exact=True).click()
         next_box = dialog.bounding_box()
         assert next_box
@@ -378,8 +379,8 @@ with sync_playwright() as playwright:
     page.route("**/api/user-preferences/research-ethos", broken_ethos)
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
-    dialog.get_by_role("tab", name="Model", exact=True).click()
-    expect(dialog.locator("#sigma-global-model")).to_be_visible()
+    dialog.get_by_role("tab", name="Limits", exact=True).click()
+    expect(dialog.locator("#sigma-global-rounds")).to_be_visible()
     dialog.get_by_role("tab", name="Research Ethos", exact=True).click()
     expect(
         dialog.get_by_role("status").filter(has_text="Research Ethos could not be loaded")
