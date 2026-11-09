@@ -4536,7 +4536,7 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current) return; submitting.current = true; setBusy(true); setError('');
-    try { onOpen(await post<ProjectView>('open', { path })); }
+    try { onOpen(await post<ProjectView>('open', { path, compact: true })); }
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -5391,7 +5391,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   }, [load, active]);
   async function open(entry: RecentProject, openSettings = false) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
-    try { onOpen(await post<ProjectView>('open', { path: entry.path }), openSettings); }
+    try { onOpen(await post<ProjectView>('open', { path: entry.path, compact: true }), openSettings); }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
@@ -6331,7 +6331,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   useEffect(() => {
     if (initialView) return;
     const controller = new AbortController();
-    post<ProjectView>('open', { path }, controller.signal).then(setView).catch(error => {
+    post<ProjectView>('open', { path, compact: true }, controller.signal).then(setView).catch(error => {
       if (!controller.signal.aborted) setError(errorMessage(error));
     });
     return () => controller.abort();
