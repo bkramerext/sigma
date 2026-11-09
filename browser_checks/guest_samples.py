@@ -262,6 +262,18 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
         welcome.get_by_role("button", name="Let's get started").click()
         expect(welcome).to_have_count(0)
+        # Regression: opening Settings while signed out must not crash React.
+        # The guest project-types response has no private custom references.
+        page.get_by_role("button", name="Settings", exact=True).click()
+        settings = page.get_by_role("dialog", name="Settings")
+        expect(settings).to_be_visible()
+        expect(settings.get_by_role("tab", name="Project Types")).to_have_attribute(
+            "aria-selected", "true"
+        )
+        expect(settings.locator(".project-type-card").first).to_be_visible()
+        assert not failures, failures
+        settings.get_by_role("button", name="Close Settings").click()
+        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         page.route(
             "**/api/test-long-error",
             lambda route: route.fulfill(
