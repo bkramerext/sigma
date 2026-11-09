@@ -4396,7 +4396,7 @@ function LeanPlaceholderDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => { dialog.current?.showModal(); }, []);
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="lean-placeholder-heading" onCancel={event => { event.preventDefault(); onClose(); }}>
     <header className="settings-header"><h2 id="lean-placeholder-heading">Lean proof verification</h2><div className="settings-actions"><DialogDismissButton label="Close Lean dialog" onClick={onClose}/></div></header>
-    <div className="settings-body ai-paper-body"><p>Yeah, I'd love to see this too. Still under consideration!</p></div>
+    <div className="settings-body ai-paper-body"><p>Yeah, I'd love to see this too.<br/>Still under consideration!</p></div>
   </dialog>;
 }
 
@@ -6835,7 +6835,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         </svg>
       </button>}
       <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
-      <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Lean proof verification" data-tooltip="Lean proof verification" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setLeanOpen(true)}><img src="/lean-logo.svg" alt="" aria-hidden="true"/></button>
+      {project.investigation_type === 'mathematical' && <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Lean proof verification" data-tooltip="Lean proof verification" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setLeanOpen(true)}><img src="/lean-logo.svg" alt="" aria-hidden="true"/></button>}
       <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={guest || closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
