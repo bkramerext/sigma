@@ -241,6 +241,15 @@ def _validate(value: Any) -> dict:
 
 @contextmanager
 def _index():
+    # Sample files are immutable templates. Read them before acquiring the saved-index
+    # lock, so concurrent Home polling and project creation never hold that lock
+    # while decoding every sample project.
+    from sigma.samples import sample_project_ids
+
+    try:
+        sample_ids = sample_project_ids()
+    except (ProjectError, OSError, ValueError, TypeError, KeyError):
+        sample_ids = set()
     descriptor = None
     try:
         directory = state_directory()
@@ -292,12 +301,6 @@ def _index():
             value["dismissed_default_pins"] = []
         # Older releases inserted canonical sample examples in Recents. Keep
         # their directories but show only independent user work here.
-        from sigma.samples import sample_project_ids
-
-        try:
-            sample_ids = sample_project_ids()
-        except (ProjectError, OSError, ValueError, TypeError, KeyError):
-            sample_ids = set()
         value["entries"] = [
             entry
             for entry in value["entries"]
