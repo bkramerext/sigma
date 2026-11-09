@@ -4796,7 +4796,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       return data;
     };
     void Promise.all([
-      json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path })}`),
+      json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`),
       json('/api/ai/models'),
     ]).then(([saved, available]: [SharedProjectInfo, { models: CatalogChoice[] }]) => {
       if (controller.signal.aborted) return;

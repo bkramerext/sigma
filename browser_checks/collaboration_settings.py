@@ -7,8 +7,6 @@ simulated verified accounts; no real identities or emails are contacted.
 from __future__ import annotations
 
 import os
-import re
-from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
 

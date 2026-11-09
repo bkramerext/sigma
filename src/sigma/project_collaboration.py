@@ -79,9 +79,7 @@ def _reconcile_project_digest(db: sqlite3.Connection, path: str) -> None:
     collaborator cannot silently overwrite it. Missing projects are handled
     by their normal project validation.
     """
-    row = db.execute(
-        "SELECT project_sha256 FROM shared_projects WHERE path=?", (path,)
-    ).fetchone()
+    row = db.execute("SELECT project_sha256 FROM shared_projects WHERE path=?", (path,)).fetchone()
     if row is None:
         return
     digest = _project_digest(path)
@@ -375,9 +373,6 @@ def register_owner(view: Any) -> None:
             "SELECT project_id, owner_hash FROM shared_projects WHERE path=?", (view.path,)
         ).fetchone()
         if row is None:
-            from sigma import global_research_settings
-
-            config = global_research_settings.load_config()
             db.execute(
                 """INSERT INTO shared_projects
                 (path, project_id, owner_hash, owner_email, project_sha256, model, thinking,
@@ -389,8 +384,8 @@ def register_owner(view: Any) -> None:
                     workspace.subject_hash,
                     principal.email.casefold(),
                     _project_digest(view.path),
-                    config["ai_model"],
-                    config["reasoning_effort"],
+                    view.project.ai_model,
+                    view.project.reasoning_effort,
                     principal.email.casefold(),
                     time.time(),
                 ),
@@ -453,7 +448,7 @@ def _lease(db: sqlite3.Connection, path: str) -> dict[str, Any] | None:
     return dict(current)
 
 
-def summary(path: str) -> dict[str, Any]:
+def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
     from sigma.projects import inspect_project
 
     view = inspect_project(path)
@@ -469,17 +464,22 @@ def summary(path: str) -> dict[str, Any]:
             "failed_notifications": 0,
         }
     with _db() as db:
-        db.execute("BEGIN IMMEDIATE")
+        if verify_revision:
+            # The workspace status polls every five seconds; only opening the
+            # editor requests the potentially expensive file/bundle check.
+            db.execute("BEGIN IMMEDIATE")
         row, email = _membership(db, view.path)
-        _reconcile_project_digest(db, view.path)
-        row = _row(db, view.path)
+        if verify_revision:
+            _reconcile_project_digest(db, view.path)
+            row = _row(db, view.path)
         members = [
             record["email"]
             for record in db.execute(
                 "SELECT email FROM shared_collaborators WHERE path=? ORDER BY email", (view.path,)
             )
         ]
-        db.commit()
+        if verify_revision:
+            db.commit()
         return {
             "owner": row["owner_email"],
             "collaborators": members,

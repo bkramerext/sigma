@@ -60,7 +60,12 @@ class CollaborationTests(TestCase):
             (
                 "sigma.projects.inspect_project",
                 lambda path: SimpleNamespace(
-                    path=str(path), project=SimpleNamespace(id="saved-project")
+                    path=str(path),
+                    project=SimpleNamespace(
+                        id="saved-project",
+                        ai_model="gpt-6.1-sol",
+                        reasoning_effort="high",
+                    )
                 ),
             ),
         ):
@@ -503,8 +508,8 @@ class CollaborationTests(TestCase):
             )
 
     def test_revision_recovers_file_publication_after_sqlite_rollback(self) -> None:
-        original = b'{"id":"before"}'
-        updated = b'{"id":"after"}'
+        original = b'{"schema_version":8,"id":"before"}'
+        updated = b'{"schema_version":8,"id":"after"}'
         Path(self.path).write_text(
             json.dumps(project_bundle.portable_bundle({"project.json": original})),
             encoding="utf-8",
@@ -520,11 +525,13 @@ class CollaborationTests(TestCase):
             json.dumps(project_bundle.portable_bundle({"project.json": updated})),
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(ProjectError, "saved by recovered project file update"):
-            with shared.write_guard(self.path, expected_revision=0):
-                pass
+        with (
+            self.assertRaisesRegex(ProjectError, "saved by recovered project file update"),
+            shared.write_guard(self.path, expected_revision=0),
+        ):
+            pass
         # A later authenticated read establishes the new revision durably.
-        recovered = shared.summary(self.path)
+        recovered = shared.summary(self.path, verify_revision=True)
         self.assertEqual(recovered["revision"], 1)
         self.assertEqual(self.revision(), 1)
         with shared._db() as db:
@@ -535,7 +542,7 @@ class CollaborationTests(TestCase):
         self.assertEqual(project_bundle.read_file(self.path, "project.json"), updated)
 
     def test_publication_records_project_digest_in_same_write(self) -> None:
-        contents = b'{"id":"committed"}'
+        contents = b'{"schema_version":8,"id":"committed"}'
         with shared.write_guard(self.path, expected_revision=0):
             Path(self.path).write_text(
                 json.dumps(project_bundle.portable_bundle({"project.json": contents})),
@@ -548,7 +555,7 @@ class CollaborationTests(TestCase):
                 "SELECT project_sha256 FROM shared_projects WHERE path=?", (self.path,)
             ).fetchone()["project_sha256"]
         self.assertEqual(digest, hashlib.sha256(contents).hexdigest())
-        self.assertEqual(shared.summary(self.path)["revision"], 1)
+        self.assertEqual(shared.summary(self.path, verify_revision=True)["revision"], 1)
 
     def test_two_verified_accounts_share_access_and_handoff_after_expiry(self) -> None:
         other_workspace = replace(
@@ -571,9 +578,7 @@ class CollaborationTests(TestCase):
             ),
         ):
             self.assertTrue(shared.authorized_shared_path(Path(self.path)))
-            self.assertIn(
-                self.path, [item["path"] for item in shared.shared_with_me()]
-            )
+            self.assertIn(self.path, [item["path"] for item in shared.shared_with_me()])
             with self.assertRaisesRegex(ProjectError, "being used"):
                 shared.acquire_lease(self.path, "Paper generation")
             self.clock[0] += shared.LEASE_SECONDS + 1
@@ -581,10 +586,12 @@ class CollaborationTests(TestCase):
             self.assertIsNotNone(next_token)
             with shared.bind_lease(self.path, next_token), shared.write_guard(self.path):
                 pass
-        with shared.bind_lease(self.path, token):
-            with self.assertRaisesRegex(ProjectError, "lease was lost"):
-                with shared.write_guard(self.path):
-                    pass
+        with (
+            shared.bind_lease(self.path, token),
+            self.assertRaisesRegex(ProjectError, "lease was lost"),
+            shared.write_guard(self.path),
+        ):
+            pass
         shared.release_lease(self.path, next_token)
 
     def test_failed_notification_is_visible_and_retry_requires_membership(self) -> None:

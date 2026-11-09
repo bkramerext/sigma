@@ -1751,12 +1751,12 @@ def inspect_view(path: str):
 
 
 @app.get("/api/projects/collaboration")
-def project_collaboration_view(path: str):
+def project_collaboration_view(path: str, verify_revision: bool = False):
     from sigma import project_collaboration
 
     view = inspect_project(path)
     project_collaboration.register_owner(view)
-    return project_collaboration.summary(view.path)
+    return project_collaboration.summary(view.path, verify_revision=verify_revision)
 
 
 class RetryCollaborationNoticesRequest(BaseModel):
