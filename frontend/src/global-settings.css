@@ -105,7 +105,13 @@
   min-width: 0;
   justify-content: space-between;
 }
-.sigma-global-settings .settings-header .sigma-dialog-dismiss { margin-right: 12px; }
+/* Dismiss X is anchored to the dialog edge, not the padded heading. */
+.sigma-global-settings { position: relative; }
+.sigma-global-settings .settings-header { position: static; }
+.sigma-global-settings .settings-header .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 10px !important;
+  right: 10px !important;
+}
 .sigma-global-settings .settings-header .settings-actions > button:first-child {
   width: auto;
   flex: 0 0 auto;
