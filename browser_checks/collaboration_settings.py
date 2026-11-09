@@ -163,10 +163,10 @@ def main() -> None:
             assert cat_box and diff_box and collab_box and model_box
             assert abs(cat_box["y"] - diff_box["y"]) < 4, (width, cat_box, diff_box)
             assert cat_box["x"] + cat_box["width"] <= diff_box["x"] + 1
-            assert collab_box["y"] >= (
+            assert model_box["y"] >= (
                 classification.bounding_box()["y"] + category.bounding_box()["height"]
             )
-            assert model_box["y"] >= collab_box["y"] + collab_box["height"] - 1
+            assert collab_box["y"] >= model_box["y"] + model_box["height"] - 1
             assert dialog.evaluate("element => element.scrollWidth <= element.clientWidth")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=f"/tmp/sigma-collaboration-settings-{width}.png")
