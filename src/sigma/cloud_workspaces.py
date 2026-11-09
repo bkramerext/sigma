@@ -266,32 +266,41 @@ def workspace_for_subject(subject: str) -> Workspace:
     subject_hash = hashlib.sha256(b"sigma-cloud-workspace-v1\0" + subject.encode()).hexdigest()
     connection = _connect(root)
     try:
-        connection.execute("BEGIN IMMEDIATE")
+        # Opening an existing identity is a read, even when many project tabs
+        # are polling simultaneously. Reserve SQLite's writer lock exclusively
+        # for provisioning an identity not yet present.
         row = connection.execute(
             "SELECT workspace_id FROM workspaces WHERE subject_hash=?", (subject_hash,)
         ).fetchone()
         if row is None:
-            workspace_id = uuid4().hex
-            path = root / workspace_id
-            try:
-                path.mkdir(mode=0o700)
-                connection.execute(
-                    "INSERT INTO workspaces(subject_hash,workspace_id,created_at) VALUES(?,?,?)",
-                    (subject_hash, workspace_id, datetime.now(UTC).isoformat()),
-                )
-            except BaseException:
+            connection.execute("BEGIN IMMEDIATE")
+            # Recheck under the writer lock to avoid racing the first sign-in.
+            row = connection.execute(
+                "SELECT workspace_id FROM workspaces WHERE subject_hash=?", (subject_hash,)
+            ).fetchone()
+            if row is None:
+                workspace_id = uuid4().hex
+                path = root / workspace_id
                 try:
-                    path.rmdir()
-                except (OSError, UnboundLocalError):
-                    pass
-                connection.rollback()
-                raise
+                    path.mkdir(mode=0o700)
+                    connection.execute(
+                        "INSERT INTO workspaces(subject_hash,workspace_id,created_at) VALUES(?,?,?)",
+                        (subject_hash, workspace_id, datetime.now(UTC).isoformat()),
+                    )
+                except BaseException:
+                    try:
+                        path.rmdir()
+                    except (OSError, UnboundLocalError):
+                        pass
+                    connection.rollback()
+                    raise
+            else:
+                workspace_id = row["workspace_id"]
             connection.commit()
         else:
             workspace_id = row["workspace_id"]
-            if not isinstance(workspace_id, str) or not _SAFE_ID.fullmatch(workspace_id):
-                raise WorkspaceUnavailable("Private workspace storage is unavailable.")
-            connection.commit()
+        if not isinstance(workspace_id, str) or not _SAFE_ID.fullmatch(workspace_id):
+            raise WorkspaceUnavailable("Private workspace storage is unavailable.")
         path = root / workspace_id
         try:
             info = path.lstat()
