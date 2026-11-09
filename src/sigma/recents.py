@@ -506,9 +506,9 @@ class RecentProject:
 def recent_project_titles(*, exclude_id: str | None = None) -> set[str]:
     """Accessible saved titles for name allocation; never load paper metadata.
 
-    Snapshot paths under the index lock, then release it before inspecting a
-    project. This prevents the naming lock from waiting on a full Home scan
-    and avoids re-entering the Recent index through legacy authorization.
+    Read the atomically published index without taking its writer lock,
+    then inspect only the project titles. This avoids the full Home scan
+    and prevents naming operations from waiting on Recent-index updates.
     """
     from sigma import cloud_workspaces, project_collaboration
     from sigma.projects import _title_key
