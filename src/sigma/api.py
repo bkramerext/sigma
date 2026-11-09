@@ -29,6 +29,7 @@ from sigma import (
     memory_guard,
     paper_scores,
     papers,
+    project_collaboration,
     project_diagnostics,
     project_types,
     proposals,
@@ -901,6 +902,7 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
             force=body.force,
         )
         papers.mark_scored_progress(body.path, paper_id)
+        project_collaboration.note_artifact_author(body.path, "paper", paper_id)
         return {"score": score}
     except asyncio.CancelledError:
         if memory_guard.is_critical():
@@ -1590,6 +1592,10 @@ async def research_start_view(body: ResearchStartRequest):
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
+        if isinstance(result.get("id"), str):
+            project_collaboration.note_artifact_author(
+                body.path, "session", result["id"], created_only=True
+            )
         return result
     finally:
         if not transferred:
@@ -1985,7 +1991,9 @@ class CreateStrategyRequest(StrategyRequest):
 @app.post("/api/projects/strategies", status_code=201)
 def create_strategy_view(body: CreateStrategyRequest):
     provenance = accepted_provenance(body.receipt, body.path) if body.receipt else None
-    return asdict(create_strategy(body.path, body.title, body.approach, body.summary, provenance))
+    view = create_strategy(body.path, body.title, body.approach, body.summary, provenance)
+    project_collaboration.note_artifact_author(body.path, "strategy", view.project.strategies[-1].id)
+    return asdict(view)
 
 
 class RemoveStrategyRequest(OpenRequest):
@@ -1994,7 +2002,9 @@ class RemoveStrategyRequest(OpenRequest):
 
 @app.post("/api/projects/strategies/remove")
 def remove_strategy_view(body: RemoveStrategyRequest):
-    return asdict(remove_strategy(body.path, body.strategy_id))
+    view = remove_strategy(body.path, body.strategy_id)
+    project_collaboration.note_artifact_author(body.path, "strategy", body.strategy_id)
+    return asdict(view)
 
 
 class EditStrategyRequest(StrategyRequest):
@@ -2003,7 +2013,9 @@ class EditStrategyRequest(StrategyRequest):
 
 @app.post("/api/projects/strategies/edit")
 def edit_strategy_view(body: EditStrategyRequest):
-    return asdict(edit_strategy(body.path, body.strategy_id, body.title, body.approach))
+    view = edit_strategy(body.path, body.strategy_id, body.title, body.approach)
+    project_collaboration.note_artifact_author(body.path, "strategy", body.strategy_id)
+    return asdict(view)
 
 
 class StrategyEnabledRequest(OpenRequest):
@@ -2014,7 +2026,9 @@ class StrategyEnabledRequest(OpenRequest):
 
 @app.post("/api/projects/strategies/enabled")
 def strategy_enabled_view(body: StrategyEnabledRequest):
-    return asdict(set_strategy_enabled(body.path, body.strategy_id, body.enabled))
+    view = set_strategy_enabled(body.path, body.strategy_id, body.enabled)
+    project_collaboration.note_artifact_author(body.path, "strategy", body.strategy_id)
+    return asdict(view)
 
 
 class CreateProjectRequest(BaseModel):
@@ -2086,7 +2100,9 @@ class ReorderRequest(OpenRequest):
 
 @app.post("/api/projects/strategies/stage")
 def stage_view(body: StageRequest):
-    return asdict(change_stage(body.path, body.strategy_id, body.stage))
+    view = change_stage(body.path, body.strategy_id, body.stage)
+    project_collaboration.note_artifact_author(body.path, "strategy", body.strategy_id)
+    return asdict(view)
 
 
 @app.post("/api/projects/strategies/reorder")
