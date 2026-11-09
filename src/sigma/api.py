@@ -1546,13 +1546,17 @@ def mock_research_start_view(
         scenario = "provider-error"
     if inspect_project(body.path).project.id != body.expected_project_id:
         raise HTTPException(409, "Project changed; reopen it before starting research")
-    return research_sessions.mock_session(
+    result = research_sessions.mock_session(
         body.path,
         body.strategy_id,
         body.idempotency_key,
         scenario,
         body.continue_using_saved_type_settings,
     )
+    project_collaboration.note_artifact_author(
+        body.path, "session", result["id"], created_only=True
+    )
+    return result
 
 
 @app.post("/api/projects/research-sessions/start")
@@ -1629,17 +1633,20 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         )
         if simulated is None:
             raise HTTPException(404, "Not found")
+        project_collaboration.note_artifact_author(body.path, "session", session_id)
         return simulated
     from sigma import project_collaboration
 
     if body.action not in {"resume", "repair"}:
-        return await research_sessions.control_session(
+        result = await research_sessions.control_session(
             body.path,
             session_id,
             body.action,
             additional_calls=body.additional_calls,
             browser_presence_required=body.browser_presence_required,
         )
+        project_collaboration.note_artifact_author(body.path, "session", session_id)
+        return result
     lease = project_collaboration.acquire_lease(body.path, "Research session")
     transferred = False
     try:
@@ -1655,6 +1662,7 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
+        project_collaboration.note_artifact_author(body.path, "session", session_id)
         return result
     finally:
         if not transferred:
