@@ -212,14 +212,13 @@ def check_shallow_home_does_not_load_deep_status(root: Path) -> None:
         ),
         patch.object(research_sessions, "has_active_session", return_value=True),
         patch.object(papers, "activity_status", return_value="queued"),
+        TestClient(app) as client,
     ):
-        with TestClient(app) as client:
-            response = client.get("/api/projects/recent/activity")
-            assert response.status_code == 200
-            by_id = {item["id"]: item for item in response.json()["projects"]}
-            assert by_id[view.project.id]["research_running"]
-            assert by_id[view.project.id]["paper_activity"] == "queued"
-
+        response = client.get("/api/projects/recent/activity")
+        assert response.status_code == 200
+        by_id = {item["id"]: item for item in response.json()["projects"]}
+        assert by_id[view.project.id]["research_running"]
+        assert by_id[view.project.id]["paper_activity"] == "queued"
 
 
 def check_home_session_status_cache(root: Path) -> None:
