@@ -17,7 +17,7 @@ from pathlib import Path
 import fcntl
 
 from sigma import cloud_auth, cloud_workspaces
-from sigma.projects import ProjectError, ProjectView, _decode, local_projects_root
+from sigma.projects import ProjectError, _decode, local_projects_root
 
 TARGET_EMAIL = "zetacontinuation@gmail.com"
 _MARKER = ".sigma-state/local-projects-migrated-v1.json"
@@ -101,11 +101,14 @@ def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
     paths = [Path(entry["path"]) for entry in index["entries"]]
     saved_paths = {path.absolute() for path in paths}
     root = local_projects_root()
-    paths.extend(sorted(
-        path for path in root.iterdir()
-        if (path.suffix == ".json" and path.is_file())
-        or (path.suffix == ".sigma" and path.is_dir())
-    ))
+    paths.extend(
+        sorted(
+            path
+            for path in root.iterdir()
+            if (path.suffix == ".json" and path.is_file())
+            or (path.suffix == ".sigma" and path.is_dir())
+        )
+    )
     seen: dict[str, Path] = {}
     inventory: list[tuple[Path, str, str]] = []
     for path in paths:
@@ -177,8 +180,7 @@ def migrate_if_needed(principal: cloud_auth.Principal) -> None:
             # Keep the old Saved order and pins, without dropping projects that
             # were already created in the new workspace.
             imported = [
-                {**entry, "path": destinations[entry["id"]]}
-                for entry in original_index["entries"]
+                {**entry, "path": destinations[entry["id"]]} for entry in original_index["entries"]
             ]
             imported_ids = {row["id"] for row in imported}
             existing = [
@@ -191,25 +193,25 @@ def migrate_if_needed(principal: cloud_auth.Principal) -> None:
                 if project_id not in indexed:
                     from datetime import UTC, datetime
 
-                    existing.append({
-                        "id": project_id,
-                        "path": destinations[project_id],
-                        "accessed_at": datetime.now(UTC).isoformat(),
-                        "included_example": False,
-                    })
+                    existing.append(
+                        {
+                            "id": project_id,
+                            "path": destinations[project_id],
+                            "accessed_at": datetime.now(UTC).isoformat(),
+                            "included_example": False,
+                        }
+                    )
                     indexed.add(project_id)
             index["entries"] = imported + existing
             index["pins"] = {**index["pins"], **original_index["pins"]}
             index["dismissed_default_pins"] = sorted(
-                set(index["dismissed_default_pins"])
-                | set(original_index["dismissed_default_pins"])
+                set(index["dismissed_default_pins"]) | set(original_index["dismissed_default_pins"])
             )
 
         # Publish completion last. Until then retries verify, never overwrite.
         data = {"target": TARGET_EMAIL, "project_count": len(inventory), "version": 1}
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=marker.parent, prefix=".migration-",
-            delete=False
+            mode="w", encoding="utf-8", dir=marker.parent, prefix=".migration-", delete=False
         ) as stream:
             temporary = Path(stream.name)
             json.dump(data, stream)
