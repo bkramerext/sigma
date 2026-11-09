@@ -500,7 +500,9 @@ async def _run_outbox() -> None:
 def start_outbox() -> None:
     """Replay the outbox only when email delivery and authentication are configured."""
     global _PUMP
-    if not _configured():
+    # Collaboration invitations use the same outbox worker but may be sent
+    # through SMTP even when opt-in progress emails (Gmail-only) are disabled.
+    if not (_configured() or cloud_auth.email_env("SMTP_USERNAME")):
         return
     cfg = cloud_auth.config()
     if not cfg.enabled or cfg.error or cfg.database is None:

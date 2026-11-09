@@ -32,7 +32,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sigma import (
     cloud_research,
     cloud_workspaces,
-    project_collaboration,
     reference_efficiency,
     research_ethos,
     research_preferences,
@@ -4179,7 +4178,6 @@ def _call_cost_reservation(
     return None
 
 
-@project_collaboration.fenced_checkpoint
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     """Save current user's limits (never write them into a project)."""
     from sigma import global_research_settings

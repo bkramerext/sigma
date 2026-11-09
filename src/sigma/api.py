@@ -2407,8 +2407,7 @@ class DeleteProjectRequest(BaseModel):
     expected_project_id: str = Field(min_length=1, max_length=100)
 
 
-@app.delete("/api/projects")
-async def delete_project_view(body: DeleteProjectRequest):
+async def _delete_project_unleased(body: DeleteProjectRequest):
     """Stop project executions before removing the saved project data."""
     import shutil
 
@@ -2461,6 +2460,28 @@ async def delete_project_view(body: DeleteProjectRequest):
         raise
     except (OSError, RuntimeError, ValueError) as exc:
         raise ProjectError("Project could not be deleted safely") from exc
+
+
+@app.delete("/api/projects")
+async def delete_project_view(body: DeleteProjectRequest):
+    """Fence owner deletion against all research and paper execution."""
+    from sigma import project_collaboration
+    from sigma.projects import project_path, projects_root
+
+    authorized = project_path(body.path)
+    root = projects_root().resolve(strict=True)
+    if authorized == root or not authorized.is_relative_to(root):
+        raise ProjectError("Project is outside the permitted projects directory")
+    view = inspect_project(str(authorized))
+    lease = project_collaboration.acquire_lease(str(authorized), "Project deletion")
+    try:
+        with project_collaboration.bind_lease(str(authorized), lease):
+            result = await _delete_project_unleased(body)
+            project_collaboration.forget_project(str(authorized), view.project.title)
+    finally:
+        project_collaboration.release_lease(str(authorized), lease)
+    project_collaboration.drain_notifications()
+    return result
 
 
 @app.post("/api/projects/update")

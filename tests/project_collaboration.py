@@ -181,6 +181,123 @@ class CollaborationTests(TestCase):
         with self.assertRaisesRegex(ProjectError, "saved by"):
             shared.save_settings(self.path, 0, ["new@example.net"], "gpt-6.1-sol", "high", "Study")
 
+    def test_collaboration_email_uses_shared_transport_and_retries_failures(self) -> None:
+        shared.save_settings(self.path, 0, ["new@example.net"], "gpt-6.1-sol", "high", "Study")
+        messages: list[tuple[str, str]] = []
+
+        def deliver(message, *, recipients):
+            messages.append((recipients[0], message.get_content()))
+
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.enabled", return_value=True),
+            patch(
+                "sigma.project_collaboration.cloud_auth.config",
+                return_value=SimpleNamespace(origin="https://sigma.example.org"),
+            ),
+            patch(
+                "sigma.mail_transport.send_message", side_effect=RuntimeError("temporary")
+            ) as mail,
+        ):
+            self.assertTrue(shared.drain_notifications())
+            self.assertEqual(mail.call_count, 1)
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.enabled", return_value=True),
+            patch(
+                "sigma.project_collaboration.cloud_auth.config",
+                return_value=SimpleNamespace(origin="https://sigma.example.org"),
+            ),
+            patch("sigma.mail_transport.send_message", side_effect=deliver),
+        ):
+            self.assertEqual(shared.drain_notifications(), [])
+            self.assertEqual(shared.drain_notifications(), [])
+        self.assertEqual(
+            {recipient for recipient, _ in messages}, {"new@example.net", "other@example.org"}
+        )
+        self.assertIn(
+            "/project?path=", next(body for email, body in messages if email == "new@example.net")
+        )
+        with shared._db() as db:
+            self.assertEqual(
+                db.execute("SELECT count(*) FROM shared_email_outbox WHERE sent_at>0").fetchone()[
+                    0
+                ],
+                2,
+            )
+
+    def test_project_deletion_fences_execution_and_revokes_membership(self) -> None:
+        with shared._db() as db:
+            db.execute(
+                """INSERT INTO shared_email_outbox
+                (id,recipient,project_path,project_title,event,created_at)
+                VALUES (?,?,?,?,?,?)""",
+                ("pending-add", self.other.email, self.path, "Study", "added", self.clock[0]),
+            )
+        token = shared.acquire_lease(self.path, "Project deletion")
+        self.assertIsNotNone(token)
+        with self.assertRaisesRegex(ProjectError, "being used"):
+            shared.acquire_lease(self.path, "Research session")
+        with shared.bind_lease(self.path, token):
+            shared.forget_project(self.path, "Study")
+        shared.release_lease(self.path, token)
+        with shared._db() as db:
+            self.assertIsNone(
+                db.execute("SELECT * FROM shared_projects WHERE path=?", (self.path,)).fetchone()
+            )
+            self.assertIsNone(
+                db.execute("SELECT * FROM shared_leases WHERE path=?", (self.path,)).fetchone()
+            )
+            records = list(
+                db.execute("SELECT recipient,project_title,event FROM shared_email_outbox")
+            )
+            self.assertEqual(
+                [(row["recipient"], row["project_title"], row["event"]) for row in records],
+                [(self.other.email, "Study", "removed")],
+            )
+
+    def test_notification_claim_is_single_dispatch_across_workers(self) -> None:
+        import time
+
+        with shared._db() as db:
+            db.execute(
+                """INSERT INTO shared_email_outbox
+                (id,recipient,project_path,project_title,event,created_at)
+                VALUES (?,?,?,?,?,?)""",
+                ("single-notice", self.other.email, self.path, "Study", "added", self.clock[0]),
+            )
+        calls: list[str] = []
+
+        def deliver(_message, *, recipients):
+            calls.append(recipients[0])
+            time.sleep(0.04)
+
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.enabled", return_value=True),
+            patch(
+                "sigma.project_collaboration.cloud_auth.config",
+                return_value=SimpleNamespace(origin="https://sigma.example.org"),
+            ),
+            patch("sigma.mail_transport.send_message", side_effect=deliver),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            list(pool.map(lambda _: shared.drain_notifications(), range(2)))
+        self.assertEqual(calls, [self.other.email])
+
+    def test_global_research_limits_save_does_not_take_project_lease(self) -> None:
+        from sigma import research_sessions
+
+        token = shared.acquire_lease(self.path, "Research session")
+        self.assertIsNotNone(token)
+        before = self.revision()
+        with patch(
+            "sigma.global_research_settings.save",
+            return_value={"research_rounds": 3},
+        ) as save:
+            saved = research_sessions.save_limits(self.path, {"research_rounds": 3})
+        self.assertEqual(saved["research_rounds"], 3)
+        save.assert_called_once_with({"research_rounds": 3})
+        self.assertEqual(self.revision(), before)
+        shared.release_lease(self.path, token)
+
     def test_gmail_validation_and_acl(self) -> None:
         self.assertEqual(
             shared.normalize_collaborator(" SCARKRA01@TAMU.EDU "), "scarkra01@tamu.edu"
