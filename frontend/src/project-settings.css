@@ -742,11 +742,16 @@
 .sigma-project-classification-dialog .project-collaborators { margin-top: 22px; }
 .sigma-project-classification-dialog .project-collaborator-remove {
   display: inline-flex; align-items: center; justify-content: center;
-  flex: 0 0 28px; width: 28px; height: 28px; padding: 4px;
-  border: 0; border-radius: 0; background: transparent; color: var(--sigma-copper-foreground);
+  box-sizing: border-box; flex: 0 0 28px; width: 28px; height: 28px; padding: 4px;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; box-shadow: none; color: var(--sigma-copper-foreground);
 }
-.sigma-project-classification-dialog .project-collaborator-remove:hover {
-  background: transparent; text-decoration: none; filter: brightness(1.15);
+.sigma-project-classification-dialog .project-collaborator-remove:hover:not(:disabled) {
+  background: #3b3029; border-color: #ac7054;
+  color: var(--sigma-copper-foreground); text-decoration: none;
+}
+.sigma-project-classification-dialog .project-collaborator-remove:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 2px;
 }
 .sigma-project-classification-dialog .project-collaborator-new,
 .sigma-project-classification-dialog .project-collaborator-new:hover,
