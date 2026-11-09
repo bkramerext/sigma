@@ -5599,7 +5599,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
     return groups;
   }, []).sort((a, b) => flat ? 0 : researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents" data-opening={!!opening || !!removing}>
-    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading My Work projects...'}</p> : !projects.length && <p>No recent projects yet. Upload a project or begin a new project.</p>}
+    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading My Work projects...'}</p> : !projects.length && <p>No projects are currently being worked on.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
