@@ -116,6 +116,11 @@ def main() -> None:
         live = root / "new.json"
         assert import_bundle(exported, live) == live
         assert read_bundle(live)["version"] == 3
+        # A metadata read must decode project.json alone, not every compressed
+        # PDF, research log, or artifact bundled alongside it.
+        with patch.object(project_bundle, "decompress", wraps=decompress) as unzip:
+            assert json.loads(read_file(live, "project.json")) == document
+            assert unzip.call_count == 1, "Single-member reads decoded unrelated artifacts"
         for name, value in members.items():
             if name.endswith(".json"):
                 assert json.loads(read_file(live, name)) == json.loads(value)

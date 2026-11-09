@@ -517,7 +517,17 @@ def read_file(bundle_path: str | Path, relative_path: str) -> bytes:
     if path.is_symlink() or not path.is_file():
         raise BundleError("Project JSON must be a regular file")
     try:
-        return _decode(json.loads(path.read_text(encoding="utf-8")))[relative_path]
+        bundle = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(bundle, dict) or not isinstance(bundle.get("files"), dict):
+            raise BundleError("Invalid project bundle")
+        # Validating/decompressing every member is appropriate for importing a
+        # bundle, but not for reading a single file from a live project.
+        # Project lists read project.json from every saved project; decoding all
+        # papers and artifacts here made even lightweight listings very slow.
+        selected = {relative_path: bundle["files"][relative_path]}
+        if relative_path != "project.json":
+            selected["project.json"] = bundle["files"]["project.json"]
+        return _decode({**bundle, "files": selected})[relative_path]
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise BundleError("Cannot read project bundle member") from exc
 

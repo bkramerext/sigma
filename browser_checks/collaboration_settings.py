@@ -144,7 +144,10 @@ def main() -> None:
             cat_box = category.bounding_box()
             diff_box = difficulty.bounding_box()
             collab_box = collaborators.bounding_box()
-            assert collaborators.evaluate("element => getComputedStyle(element).borderTopWidth") == "1px"
+            assert (
+                collaborators.evaluate("element => getComputedStyle(element).borderTopWidth")
+                == "1px"
+            )
             model_box = model_row.bounding_box()
             assert cat_box and diff_box and collab_box and model_box
             assert abs(cat_box["y"] - diff_box["y"]) < 4, (width, cat_box, diff_box)

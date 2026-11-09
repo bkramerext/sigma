@@ -93,12 +93,58 @@ class CollaborationTests(TestCase):
                 (self.path, self.other.email),
             )
 
+    def test_saved_listing_uses_single_db_snapshot_for_owner_and_collaborator(self) -> None:
+        with patch.object(shared, "_db", wraps=shared._db) as db_calls:
+            invited, shared_paths = shared.shared_listing()
+        self.assertEqual(invited, [])
+        self.assertEqual(shared_paths, {self.path})
+        self.assertEqual(db_calls.call_count, 1)
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
+        ):
+            invited, shared_paths = shared.shared_listing()
+        self.assertEqual(invited, [{"path": self.path, "id": "saved-project"}])
+        self.assertEqual(shared_paths, {self.path})
+
     def revision(self) -> int:
         with shared._db() as db:
             return int(
                 db.execute(
                     "SELECT revision FROM shared_projects WHERE path=?", (self.path,)
                 ).fetchone()["revision"]
+            )
+
+    def test_owner_reopen_is_read_only_and_rejects_identity_drift(self) -> None:
+        view = SimpleNamespace(
+            path=self.path,
+            project=SimpleNamespace(
+                id="saved-project",
+                ai_model="gpt-6.1-sol",
+                reasoning_effort="high",
+            ),
+        )
+        # Project polling/opening should never hash the project or write the
+        # shared SQLite row when ownership has already been established.
+        with patch.object(
+            shared, "_project_digest", side_effect=AssertionError("unneeded bundle scan")
+        ):
+            shared.register_owner(view)
+        with self.assertRaisesRegex(ValueError, "identity has changed"):
+            shared.register_owner(
+                SimpleNamespace(
+                    path=self.path,
+                    project=SimpleNamespace(id="different-project"),
+                )
             )
 
     def test_fence_prevents_stale_worker_and_foreign_writes(self) -> None:

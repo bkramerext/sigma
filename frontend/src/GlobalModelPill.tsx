@@ -184,7 +184,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   return <span className="global-model-pill-position">
     <button ref={trigger} type="button" className="global-model-pill"
       aria-label={'Model ' + label + (thinkingLabel ? ', ' + thinkingLabel : '')}
-      title={tooltip} data-tooltip={tooltip}
+      data-tooltip={tooltip}
       disabled={!enabled || !ready || busy || !!pending || !settings || (!next && !nextThinking)}
       onClick={event => {
         const rect = event.currentTarget.getBoundingClientRect();

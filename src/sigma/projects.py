@@ -1272,26 +1272,41 @@ def _title_key(title: str) -> str:
 
 
 def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
-    """Include sample, recent (even outside the root), and local saved projects."""
-    from sigma.recents import recent_projects
-    from sigma.samples import sample_projects
+    """Check owner titles without loading paper/status data or event histories."""
+    from sigma import cloud_workspaces
+    from sigma.samples import sample_project_titles
 
-    names = {_title_key(item["title"]) for item in sample_projects()["projects"]}
-    for item in recent_projects()["projects"]:
-        if item["available"] and item["id"] != exclude_id:
-            names.add(_title_key(item["title"]))
-    for directory in root.iterdir():
-        if directory.is_symlink() or not (
-            (directory.suffix == ".sigma" and directory.is_dir())
-            or (directory.suffix == ".json" and directory.is_file())
+    names = {_title_key(title) for title in sample_project_titles()}
+    # Once migration has completed, authenticated owners' projects reside in
+    # their workspace. Never enumerate Saved or acquire its lock under .names.lock.
+    if cloud_workspaces.current() is None:
+        from sigma.recents import recent_projects
+
+        for item in recent_projects(lightweight=True)["projects"]:
+            if item["available"] and item["id"] != exclude_id:
+                names.add(_title_key(item["title"]))
+    for candidate in root.iterdir():
+        if candidate.is_symlink() or not (
+            (candidate.suffix == ".sigma" and candidate.is_dir())
+            or (candidate.suffix == ".json" and candidate.is_file())
         ):
             continue
         try:
-            view = inspect_project(directory)
-        except ProjectError:
+            if candidate.suffix == ".json":
+                from sigma.project_bundle import read_file
+
+                raw = json.loads(read_file(candidate, STATE))
+            else:
+                source = candidate / STATE
+                if source.is_symlink():
+                    continue
+                raw = json.loads(source.read_bytes())
+            if not isinstance(raw, dict) or not isinstance(raw.get("title"), str):
+                continue
+            if str(UUID(raw["id"])) != exclude_id:
+                names.add(_title_key(raw["title"]))
+        except (OSError, ValueError, KeyError, TypeError):
             continue
-        if view.project.id != exclude_id:
-            names.add(_title_key(view.project.title))
     return names
 
 

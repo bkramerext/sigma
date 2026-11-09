@@ -306,6 +306,8 @@ export default function RenderedMarkdown({ body, citationProjectPath, citationUr
     urlTransform={urlTransform}
     components={{
       img: () => null,
+      // Markdown link titles must use SIGMA's tooltip; never emit a native HTML title.
+      a: ({ title, ...props }) => <a {...props} data-tooltip={title} />,
       h2: ({ children }) => {
         // Only the explicitly configured ELI5 view gets a heading copy action.
         const title = (Array.isArray(children) ? children.filter(item => typeof item === 'string').join('') : typeof children === 'string' ? children : '').trim().toLowerCase();

@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any
 from uuid import UUID
 
@@ -241,6 +242,15 @@ def _validate(value: Any) -> dict:
 
 @contextmanager
 def _index():
+    # Sample files are immutable templates. Read them before acquiring the saved-index
+    # lock, so concurrent Home polling and project creation never hold that lock
+    # while decoding every sample project.
+    from sigma.samples import sample_project_ids
+
+    try:
+        sample_ids = sample_project_ids()
+    except (ProjectError, OSError, ValueError, TypeError, KeyError):
+        sample_ids = set()
     descriptor = None
     try:
         directory = state_directory()
@@ -250,7 +260,18 @@ def _index():
             0o600,
         )
         _check_index_file(descriptor)
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        # A stuck index writer must not hold Saved or project creation forever.
+        deadline = monotonic() + 5
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if monotonic() >= deadline:
+                    raise ProjectError(
+                        "Saved Projects index is busy. Retry or check backend logs."
+                    ) from exc
+                sleep(0.05)
         path = directory / "recents.json"
         try:
             read_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -292,12 +313,6 @@ def _index():
             value["dismissed_default_pins"] = []
         # Older releases inserted canonical sample examples in Recents. Keep
         # their directories but show only independent user work here.
-        from sigma.samples import sample_project_ids
-
-        try:
-            sample_ids = sample_project_ids()
-        except (ProjectError, OSError, ValueError, TypeError, KeyError):
-            sample_ids = set()
         value["entries"] = [
             entry
             for entry in value["entries"]
@@ -380,36 +395,6 @@ def forget_recent(project_id: str, path: str | None = None) -> None:
         ]
 
 
-def _import_local_admin_recents() -> None:
-    """Copy the existing local Saved index once, without moving project files.
-
-    The original local index and its pin choices are preserved. A signed-in
-    administrator then manages its own copy under the verified workspace.
-    """
-    from sigma import cloud_workspaces
-
-    if not cloud_workspaces.local_legacy_owner_access():
-        return
-    with cloud_workspaces.without_workspace():
-        legacy_directory = state_directory()
-        with _index() as legacy:
-            entries = list(legacy["entries"])
-            pins = dict(_effective_pins(legacy))
-            dismissed = list(legacy.get("dismissed_default_pins", []))
-    with _index() as index:
-        marker = str(legacy_directory)
-        if marker in index["bootstrapped_roots"]:
-            return
-        existing_ids = {entry["id"] for entry in index["entries"]}
-        index["entries"].extend(entry for entry in entries if entry["id"] not in existing_ids)
-        for family, project_id in pins.items():
-            index["pins"].setdefault(family, project_id)
-        index["dismissed_default_pins"] = sorted(
-            set(index.get("dismissed_default_pins", [])) | set(dismissed)
-        )
-        index["bootstrapped_roots"][marker] = "Imported original local Saved Projects index"
-
-
 @dataclass(frozen=True)
 class RecentProject:
     id: str
@@ -435,15 +420,13 @@ class RecentProject:
 
 def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
     """Render project identity first; expensive status and paper details are optional."""
-    from sigma import cloud_workspaces, project_collaboration
+    from sigma import cloud_workspaces, papers, project_collaboration
+    from sigma.research_sessions import has_active_session
 
     workspace = cloud_workspaces.current()
     if workspace is not None and workspace.guest:
         return {"projects": []}
-    if workspace is not None:
-        _import_local_admin_recents()
-    shared_rows = project_collaboration.shared_with_me() if workspace is not None else []
-    shared_paths = project_collaboration.shared_project_paths() if workspace is not None else set()
+    shared_rows, shared_paths = project_collaboration.shared_listing()
     shared_by_path = {row["path"]: row for row in shared_rows}
     with _index() as index:
         pins = _effective_pins(index)
@@ -462,13 +445,6 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                             entry["path"] = str(rebased)
                 except ValueError:
                     pass
-            if (
-                workspace is not None
-                and not Path(copied["path"]).is_relative_to(workspace.path)
-                and copied["path"] not in shared_by_path
-                and not cloud_workspaces.local_legacy_owner_access(Path(copied["path"]))
-            ):
-                continue
             entries.append(copied)
         known_paths = {entry["path"] for entry in entries}
         for row in shared_rows:
@@ -481,9 +457,14 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                         "included_example": False,
                     }
                 )
-    if not lightweight:
-        from sigma import papers
-        from sigma.research_sessions import has_active_session
+    # Private entries belong to this workspace. Cross-workspace entries must
+    # originate from the authorized collaboration directory only.
+    if workspace is not None:
+        entries = [
+            entry
+            for entry in entries
+            if Path(entry["path"]).is_relative_to(workspace.path) or entry["path"] in shared_by_path
+        ]
 
     recent = []
     for entry in entries:

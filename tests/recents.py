@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -60,6 +61,90 @@ def check_recent_list_does_not_validate_sample_pdfs(root: Path) -> None:
             response = client.get("/api/projects/recent")
             assert response.status_code == 200
             assert response.headers["Server-Timing"].startswith("saved-projects;dur=")
+
+
+def check_sample_index_metadata_does_not_decode_full_project() -> None:
+    """Saved/name checks must not load project history or the project-type catalog."""
+    from sigma import samples
+
+    with patch.object(
+        samples, "_decode", side_effect=AssertionError("Sample metadata used full decoder")
+    ):
+        identifiers = samples.sample_project_ids()
+        titles = samples.sample_project_titles()
+    assert len(identifiers) == len(titles) == len(samples._projects())
+
+
+def check_index_sample_read_outside_lock() -> None:
+    """Sample identity decoding must never monopolize the Saved index lock."""
+    from sigma import samples
+
+    lock_path = state_directory() / "recents.lock"
+    original = samples.sample_project_ids
+
+    def assert_unlocked() -> set[str]:
+        with lock_path.open("a+b") as stream:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        return original()
+
+    with patch.object(samples, "sample_project_ids", side_effect=assert_unlocked):
+        recent_projects(lightweight=True)
+
+
+def check_compact_project_open() -> None:
+    """Interactive opens omit the hidden event history; default reads retain it."""
+    created = create_project("Compact opening contract", "Keep research history intact")
+    with TestClient(app) as client:
+        compact = client.post("/api/projects/open", json={"path": created.path, "compact": True})
+        full = client.post("/api/projects/open", json={"path": created.path})
+    assert compact.status_code == 200, compact.text
+    assert full.status_code == 200, full.text
+    assert compact.json()["project"]["events"] == []
+    assert full.json()["project"]["events"]
+    assert inspect_project(created.path).project.events == created.project.events
+
+
+def check_existing_workspace_lookup_does_not_take_writer_lock(base: Path) -> None:
+    """Ordinary signed-in requests must not wait for unrelated SQLite writers."""
+    from sigma import cloud_workspaces
+
+    storage = base / "workspace-registry-test"
+    storage.mkdir(mode=0o700)
+    actual_connect = cloud_workspaces._connect
+
+    def short_timeout_connect(root: Path):
+        connection = actual_connect(root)
+        connection.execute("PRAGMA busy_timeout=100")
+        return connection
+
+    with (
+        patch.object(cloud_workspaces, "storage_root", return_value=storage),
+        patch.object(cloud_workspaces, "_connect", side_effect=short_timeout_connect),
+    ):
+        before = cloud_workspaces.workspace_for_subject("google:workspace-regression")
+        with sqlite3.connect(storage / "workspaces.sqlite3", isolation_level=None) as writer:
+            writer.execute("BEGIN IMMEDIATE")
+            try:
+                after = cloud_workspaces.workspace_for_subject("google:workspace-regression")
+            finally:
+                writer.execute("ROLLBACK")
+        assert before.path == after.path and before.workspace_id == after.workspace_id
+
+
+def check_title_collision_avoids_deep_metadata() -> None:
+    """Creating a project must not hydrate Saved status or sample paper scores."""
+    with (
+        patch(
+            "sigma.samples._best_sample_paper", side_effect=AssertionError("sample scores scanned")
+        ),
+        patch(
+            "sigma.paper_scores.project_metadata",
+            side_effect=AssertionError("paper metadata scanned"),
+        ),
+    ):
+        created = create_project("Lightweight title collision check", "Fast creation")
+    assert created.project.title == "Lightweight title collision check"
 
 
 def check_project_metadata_cache_invalidation(root: Path) -> None:
@@ -814,6 +899,11 @@ def check(root: Path, base: Path) -> None:
         index_path.unlink(missing_ok=True)
         backup.rename(index_path)
     assert recent_projects()["projects"]
+    check_sample_index_metadata_does_not_decode_full_project()
+    check_index_sample_read_outside_lock()
+    check_compact_project_open()
+    check_existing_workspace_lookup_does_not_take_writer_lock(base)
+    check_title_collision_avoids_deep_metadata()
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
     check_home_list_uses_only_paper_records(root)

@@ -375,11 +375,19 @@ def register_owner(view: Any) -> None:
     ):
         return
     path = Path(view.path)
-    if not path.is_relative_to(workspace.path) and not cloud_workspaces.local_legacy_owner_access(
-        path
-    ):
+    if not path.is_relative_to(workspace.path):
         return
     with _db() as db:
+        row = db.execute(
+            "SELECT project_id, owner_hash FROM shared_projects WHERE path=?", (view.path,)
+        ).fetchone()
+        if row is not None:
+            if row["project_id"] != view.project.id or row["owner_hash"] != workspace.subject_hash:
+                raise ValueError(
+                    "Project identity has changed; collaboration access is unavailable."
+                )
+            return  # Opening and polling an existing project must not take a writer lock.
+        digest = _project_digest(view.path)
         db.execute("BEGIN IMMEDIATE")
         row = db.execute(
             "SELECT project_id, owner_hash FROM shared_projects WHERE path=?", (view.path,)
@@ -395,7 +403,7 @@ def register_owner(view: Any) -> None:
                     view.project.id,
                     workspace.subject_hash,
                     principal.email.casefold(),
-                    _project_digest(view.path),
+                    digest,
                     view.project.ai_model,
                     view.project.reasoning_effort,
                     principal.email.casefold(),
@@ -641,6 +649,44 @@ def note_change(path: str) -> None:
     """Record a validated mutation (or join an enclosing write transaction)."""
     with write_guard(path):
         pass
+
+
+def shared_listing() -> tuple[list[dict[str, str]], set[str]]:
+    """Read collaborator membership and shared-owner paths in one DB snapshot.
+
+    Saved/Recent opens frequently. Using two separately initialized SQLite
+    connections amplified schema contention and the cost of opening Home.
+    """
+    workspace = cloud_workspaces.current()
+    if workspace is None or workspace.guest:
+        return [], set()
+    try:
+        owner, email = _identity()
+    except ValueError:
+        return [], set()
+    with _db() as db:
+        invited = [
+            {"path": row["path"], "id": row["project_id"]}
+            for row in db.execute(
+                """SELECT p.path,p.project_id FROM shared_projects p
+                JOIN shared_collaborators c ON c.path=p.path
+                WHERE c.email=? ORDER BY p.updated_at DESC""",
+                (email,),
+            )
+        ]
+        visible_shared_paths = {
+            row["path"]
+            for row in db.execute(
+                """SELECT p.path FROM shared_projects p
+                WHERE EXISTS (SELECT 1 FROM shared_collaborators c WHERE c.path=p.path)
+                AND (p.owner_hash=? OR EXISTS (
+                    SELECT 1 FROM shared_collaborators c
+                    WHERE c.path=p.path AND c.email=?
+                ))""",
+                (owner.subject_hash, email),
+            )
+        }
+        return invited, visible_shared_paths
 
 
 def shared_project_paths() -> set[str]:

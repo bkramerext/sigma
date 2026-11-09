@@ -91,47 +91,6 @@ def current() -> Workspace | None:
     return _CURRENT.get()
 
 
-def local_legacy_owner_access(path: Path | None = None) -> bool:
-    """Limit legacy local-project adoption to the designated Google administrator.
-
-    Hosted and mock accounts never enter this compatibility path. A project
-    outside the administrator's own workspace must belong to the original
-    local project root or have been explicitly saved in the old local index.
-    This cannot authorize paths inside another user's workspace partition.
-    """
-    cfg = cloud_auth.config()
-    principal = cloud_auth.current_principal()
-    if not (
-        cfg.enabled
-        and cfg.local
-        and not cfg.error
-        and cfg.admin_contact_email
-        and principal is not None
-        and principal.role == "admin"
-        and principal.email.casefold() == cfg.admin_contact_email.casefold()
-        and not principal.subject.startswith(("mock:", "local-admin:"))
-        and current() is not None
-    ):
-        return False
-    if path is None:
-        return True
-    candidate = Path(path)
-    try:
-        from sigma.projects import local_projects_root
-
-        if candidate.is_relative_to(local_projects_root()):
-            return True
-    except (OSError, ValueError):
-        pass
-    try:
-        from sigma import recents
-
-        with without_workspace(), recents._index() as index:
-            return any(entry["path"] == str(candidate) for entry in index["entries"])
-    except (OSError, ValueError):
-        return False
-
-
 @contextmanager
 def without_workspace() -> Iterator[None]:
     """Read the original local Recent index without changing the request identity."""
@@ -278,7 +237,8 @@ def _connect(root: Path) -> sqlite3.Connection:
         connection = sqlite3.connect(database, timeout=30, isolation_level=None)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout=30000")
-        connection.execute("PRAGMA journal_mode=DELETE")
+        # The default SQLite rollback journal is DELETE. Re-setting journal
+        # mode on every auth/read request needlessly requires database locks.
         connection.execute(
             """CREATE TABLE IF NOT EXISTS workspaces (
                 subject_hash TEXT PRIMARY KEY,
@@ -306,32 +266,41 @@ def workspace_for_subject(subject: str) -> Workspace:
     subject_hash = hashlib.sha256(b"sigma-cloud-workspace-v1\0" + subject.encode()).hexdigest()
     connection = _connect(root)
     try:
-        connection.execute("BEGIN IMMEDIATE")
+        # Opening an existing identity is a read, even when many project tabs
+        # are polling simultaneously. Reserve SQLite's writer lock exclusively
+        # for provisioning an identity not yet present.
         row = connection.execute(
             "SELECT workspace_id FROM workspaces WHERE subject_hash=?", (subject_hash,)
         ).fetchone()
         if row is None:
-            workspace_id = uuid4().hex
-            path = root / workspace_id
-            try:
-                path.mkdir(mode=0o700)
-                connection.execute(
-                    "INSERT INTO workspaces(subject_hash,workspace_id,created_at) VALUES(?,?,?)",
-                    (subject_hash, workspace_id, datetime.now(UTC).isoformat()),
-                )
-            except BaseException:
+            connection.execute("BEGIN IMMEDIATE")
+            # Recheck under the writer lock to avoid racing the first sign-in.
+            row = connection.execute(
+                "SELECT workspace_id FROM workspaces WHERE subject_hash=?", (subject_hash,)
+            ).fetchone()
+            if row is None:
+                workspace_id = uuid4().hex
+                path = root / workspace_id
                 try:
-                    path.rmdir()
-                except (OSError, UnboundLocalError):
-                    pass
-                connection.rollback()
-                raise
+                    path.mkdir(mode=0o700)
+                    connection.execute(
+                        "INSERT INTO workspaces(subject_hash,workspace_id,created_at) VALUES(?,?,?)",
+                        (subject_hash, workspace_id, datetime.now(UTC).isoformat()),
+                    )
+                except BaseException:
+                    try:
+                        path.rmdir()
+                    except (OSError, UnboundLocalError):
+                        pass
+                    connection.rollback()
+                    raise
+            else:
+                workspace_id = row["workspace_id"]
             connection.commit()
         else:
             workspace_id = row["workspace_id"]
-            if not isinstance(workspace_id, str) or not _SAFE_ID.fullmatch(workspace_id):
-                raise WorkspaceUnavailable("Private workspace storage is unavailable.")
-            connection.commit()
+        if not isinstance(workspace_id, str) or not _SAFE_ID.fullmatch(workspace_id):
+            raise WorkspaceUnavailable("Private workspace storage is unavailable.")
         path = root / workspace_id
         try:
             info = path.lstat()
@@ -379,10 +348,7 @@ def assert_project_path(value: str | Path, resolved: Path) -> None:
         if not resolved.is_relative_to(workspace.path):
             from sigma import project_collaboration
 
-            if not (
-                local_legacy_owner_access(resolved)
-                or project_collaboration.authorized_shared_path(resolved)
-            ):
+            if not project_collaboration.authorized_shared_path(resolved):
                 raise ValueError("owner")
     except (OSError, RuntimeError, ValueError) as exc:
         raise ValueError("Project not found or access denied.") from exc
