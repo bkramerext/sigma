@@ -2,6 +2,7 @@ import { createElement, useCallback, useEffect, useRef, useState, type ReactNode
 import DialogDismissButton from './DialogDismissButton';
 import ProjectTypesDialog, { type ProjectTypeRecord, type ProjectTypesSaveState } from './ProjectTypesDialog';
 import RenderedMarkdown from './RenderedMarkdown';
+import SigmaSelect from './SigmaSelect';
 import './global-settings.css';
 
 type Tab = 'types' | 'limits' | 'preferences' | 'ethos';
@@ -156,6 +157,10 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const setLimit = (key: keyof LimitSettings, value: number | string | null) => {
     setSaved(false);
     setConfig(current => current ? { ...current, limits: { ...current.limits, [key]: value } } : current);
+  };
+  const setResearch = (patch: Partial<ResearchConfig>) => {
+    setSaved(false);
+    setConfig(current => current ? { ...current, ...patch } : current);
   };
   const setPref = (patch: Partial<Preference>) => { setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
   const hasOtherChanges = loaded && !!config && savedSnapshot.current !== JSON.stringify({ config, prefs });
