@@ -563,11 +563,14 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   outline-offset: 2px;
 }
 
-/* Individual project rows provide modest contrast without a solid panel.
-   Alpha 0x70 is half the previous 0xe0 panel opacity. */
-.home-page .home-recents .recent-entry,
-.home-page .home-samples .sample-type-group li {
-  background: #07111e70;
+/* Improve text legibility over the home artwork around each glyph,
+   rather than dimming a rectangular area behind the project list. */
+.home-page .home-recents .recent-open,
+.home-page .home-recents .recent-meta-row,
+.home-page .home-samples .sample-open,
+.home-page .home-samples .sample-open strong,
+.home-page .home-samples .sample-open small {
+  text-shadow: 0 1px 3px #000e, 0 0 6px #000b;
 }
 /* No separator rules between Saved/Sample category rows. */
 .home-page .home-catalog { border-top: 0; }
