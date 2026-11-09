@@ -766,3 +766,6 @@
 /* Match the Thinking control value inset; icon-only add never has a box. */
 .sigma-project-classification-dialog .settings-classification-row > div:nth-child(2) .sigma-select-trigger { text-align: left; padding-left: 12px; }
 .sigma-project-classification-dialog .project-collaborators-heading button.sigma-heading-icon-action, .sigma-project-classification-dialog .project-collaborators-heading button.sigma-heading-icon-action:hover:not(:disabled) { border-color: transparent; background: transparent; box-shadow: none; padding: 4px; }
+
+.sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] { justify-content: flex-start; text-align: left; }
+.sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] > span { text-align: left; margin-left: 0; }
