@@ -497,7 +497,7 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                     paper_metadata = paper_scores.project_metadata(view.path)
                 except Exception:  # noqa: BLE001 - paper decoration must never block project access
                     # Broken paper decoration must never make the project unavailable.
-                    pass
+                    paper_metadata = {"paper_count": 0, "best_paper_score": None}
             recent.append(
                 asdict(
                     RecentProject(
