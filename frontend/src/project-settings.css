@@ -710,7 +710,7 @@
 /* Shared project settings: transactional inline collaborator editor. */
 .sigma-project-classification-dialog { width: min(660px, calc(100vw - 24px)); }
 .project-collaborators { margin-top: 20px; }
-.project-collaborators-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.project-collaborators-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 .project-collaborators-heading h3 { margin: 0; font-size: 1rem; }
 .project-collaborators-heading button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; }
 .project-collaborators-heading .sigma-action-glyph { width: 20px; height: 20px; }
