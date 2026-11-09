@@ -1406,3 +1406,6 @@
 .workspace-page .strategy-remove-popover .research-stop-confirm { padding: 28px 14px 14px; }
 .workspace-page .strategy-remove-popover .research-stop-confirm > p { padding-right: 18px; }
 .workspace-page .strategy-remove-popover .session-remove-confirm-actions button.text-view-link { color: var(--sigma-copper-foreground); }
+
+/* Shared-project provenance stays on the existing metadata line. */
+.artifact-attribution { display: inline-block; white-space: nowrap; font-size: 0.85em; opacity: 0.82; }
