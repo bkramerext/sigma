@@ -65,7 +65,7 @@ class CollaborationTests(TestCase):
                         id="saved-project",
                         ai_model="gpt-6.1-sol",
                         reasoning_effort="high",
-                    )
+                    ),
                 ),
             ),
         ):
@@ -514,10 +514,12 @@ class CollaborationTests(TestCase):
             json.dumps(project_bundle.portable_bundle({"project.json": original})),
             encoding="utf-8",
         )
+        initial_digest = shared._project_digest(self.path)
+        self.assertIsNotNone(initial_digest)
         with shared._db() as db:
             db.execute(
                 "UPDATE shared_projects SET project_sha256=? WHERE path=?",
-                (hashlib.sha256(original).hexdigest(), self.path),
+                (initial_digest, self.path),
             )
         # A crash after os.replace but before SQLite COMMIT leaves the new
         # file behind. This represents precisely that interrupted publication.
@@ -538,7 +540,7 @@ class CollaborationTests(TestCase):
             digest = db.execute(
                 "SELECT project_sha256 FROM shared_projects WHERE path=?", (self.path,)
             ).fetchone()["project_sha256"]
-        self.assertEqual(digest, hashlib.sha256(updated).hexdigest())
+        self.assertEqual(digest, hashlib.sha256(b'{"id":"after","schema_version":8}').hexdigest())
         self.assertEqual(project_bundle.read_file(self.path, "project.json"), updated)
 
     def test_publication_records_project_digest_in_same_write(self) -> None:
@@ -554,7 +556,16 @@ class CollaborationTests(TestCase):
             digest = db.execute(
                 "SELECT project_sha256 FROM shared_projects WHERE path=?", (self.path,)
             ).fetchone()["project_sha256"]
-        self.assertEqual(digest, hashlib.sha256(contents).hexdigest())
+        self.assertEqual(
+            digest, hashlib.sha256(b'{"id":"committed","schema_version":8}').hexdigest()
+        )
+        self.assertEqual(shared.summary(self.path, verify_revision=True)["revision"], 1)
+        # Session and paper sidecars share the .json bundle but must not
+        # invalidate the project's settings revision.
+        project_bundle.write_file(
+            self.path, "research-sessions/finished.json", b'{"status":"ended"}'
+        )
+        project_bundle.write_file(self.path, "papers/finished.json", b'{"status":"ready"}')
         self.assertEqual(shared.summary(self.path, verify_revision=True)["revision"], 1)
 
     def test_two_verified_accounts_share_access_and_handoff_after_expiry(self) -> None:

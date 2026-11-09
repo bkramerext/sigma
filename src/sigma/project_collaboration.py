@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import re
 import sqlite3
@@ -54,6 +55,19 @@ def bind_lease(path: str, token: str | None) -> Iterator[None]:
         _LEASE_CONTEXT.reset(binding)
 
 
+def _document_digest(contents: bytes) -> str:
+    """Hash project JSON independently of bundle member serialization.
+
+    Portable and stored bundles normalize JSON whitespace on read. The
+    metadata revision must track semantic project changes, not that encoding.
+    """
+    document = json.loads(contents)
+    canonical = json.dumps(
+        document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def _project_digest(path: str) -> str | None:
     """Digest persisted project metadata, not large paper/session sidecars."""
     from sigma.project_bundle import read_file
@@ -68,7 +82,7 @@ def _project_digest(path: str) -> str | None:
     contents = (
         read_file(project, "project.json") if project.suffix == ".json" else file.read_bytes()
     )
-    return hashlib.sha256(contents).hexdigest()
+    return _document_digest(contents)
 
 
 def _reconcile_project_digest(db: sqlite3.Connection, path: str) -> None:
@@ -104,7 +118,7 @@ def note_project_published(path: str, contents: bytes) -> None:
     db = transaction[1]
     db.execute(
         "UPDATE shared_projects SET project_sha256=? WHERE path=?",
-        (hashlib.sha256(contents).hexdigest(), str(path)),
+        (_document_digest(contents), str(path)),
     )
 
 
