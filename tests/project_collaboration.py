@@ -101,6 +101,29 @@ class CollaborationTests(TestCase):
                 ).fetchone()["revision"]
             )
 
+    def test_owner_reopen_is_read_only_and_rejects_identity_drift(self) -> None:
+        view = SimpleNamespace(
+            path=self.path,
+            project=SimpleNamespace(
+                id="saved-project",
+                ai_model="gpt-6.1-sol",
+                reasoning_effort="high",
+            ),
+        )
+        # Project polling/opening should never hash the project or write the
+        # shared SQLite row when ownership has already been established.
+        with patch.object(
+            shared, "_project_digest", side_effect=AssertionError("unneeded bundle scan")
+        ):
+            shared.register_owner(view)
+        with self.assertRaisesRegex(ValueError, "identity has changed"):
+            shared.register_owner(
+                SimpleNamespace(
+                    path=self.path,
+                    project=SimpleNamespace(id="different-project"),
+                )
+            )
+
     def test_fence_prevents_stale_worker_and_foreign_writes(self) -> None:
         first = shared.acquire_lease(self.path, "Research session")
         self.assertIsNotNone(first)
