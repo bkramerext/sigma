@@ -678,7 +678,7 @@ def _sample_index_metadata(name: str, path: Path) -> tuple[str, str]:
             raise ValueError("Symbolic-link sample")
         raw = json.loads(path.read_bytes())
         if not isinstance(raw, dict):
-            raise ValueError("Invalid sample document")
+            raise TypeError("Invalid sample document")
         project_id, title = raw["id"], raw["title"]
         if (
             not isinstance(project_id, str)
