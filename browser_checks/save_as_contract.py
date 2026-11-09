@@ -126,7 +126,6 @@ with sync_playwright() as playwright:
         "(nodes) => nodes.map(node => node.getAttribute('aria-label'))"
     )
     assert actions == [
-        "Just show this version of the project",
         "Save project with a new name",
         "Remove this project",
     ], actions
@@ -196,4 +195,4 @@ with sync_playwright() as playwright:
     ], save_requests
     browser.close()
 
-print("PASS Chrome Save As icon, order, dialog, pinned warning, Cancel and Save.")
+print("PASS Chrome Save As icon, order, dialog, Cancel and Save.")
