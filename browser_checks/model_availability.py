@@ -74,7 +74,7 @@ with sync_playwright() as playwright:
         page.route("**/api/ai/models", catalog_failure(status))
         page.goto(BASE_URL)
         pill = page.locator(".home-account-grid .global-model-pill")
-        expect(pill).to_contain_text("GPT-6.1-Sol")
+        expect(pill).to_contain_text("gpt-6.1-sol")
         expect(pill).to_contain_text("Thinking · High")
         expect(pill).to_be_disabled()
         expect(page.get_by_role("tab", name="Model", exact=True)).to_have_count(0)
