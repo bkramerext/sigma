@@ -726,9 +726,9 @@ def _cached_sample_catalog_entry(
         ):
             raise ValueError("Invalid sample identity")
         problem = raw["problem"]
-        mode = raw["investigation_type"]
+        mode = raw.get("investigation_type", raw.get("research_mode", "default"))
         difficulty = raw.get("difficulty")
-        active_order = raw["active_order"]
+        active_order = raw.get("active_order", raw.get("strategies", []))
         if (
             not isinstance(problem, str)
             or not isinstance(mode, str)
