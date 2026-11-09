@@ -87,10 +87,20 @@ with sync_playwright() as playwright:
     expect(qa_button).to_be_visible()
     assert qa_button.bounding_box() is not None
     assert qa_button.get_attribute("aria-label") == "Research Q/A"
-    # The retired Lean action must not be reintroduced to the project header.
-    expect(
-        page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
-    ).to_have_count(0)
+    lean = page.get_by_role("button", name="Lean proof verification", exact=True)
+    expect(lean).to_be_visible()
+    expect(lean).to_be_enabled()
+    assert qa_button.bounding_box()["x"] < lean.bounding_box()["x"]
+    assert lean.bounding_box()["height"] == qa_button.bounding_box()["height"]
+    expect(lean.locator("img")).to_have_attribute("src", "/lean-logo.svg")
+    lean.click()
+    lean_dialog = page.get_by_role("dialog", name="Lean proof verification")
+    expect(lean_dialog).to_contain_text(
+        "Yeah, I'd love to see this too. Still under consideration!"
+    )
+    lean_dialog.get_by_role("button", name="Close Lean dialog").click()
+    expect(lean_dialog).to_be_hidden()
+    expect(lean).to_be_focused()
     expect(page.locator(".papers-pane").get_by_role("heading", name="Papers")).to_be_visible()
     page.screenshot(path=str(OUT / "research-qa-toolbar.png"), full_page=False)
     qa_button.click()
