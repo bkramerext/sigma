@@ -106,6 +106,13 @@ class CollaborationTests(TestCase):
                 "UPDATE shared_projects SET project_id=? WHERE path=?",
                 (project_id, self.path),
             )
+            db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
+
+        # Z saves N as collaborator; afterward no owner session is present.
+        shared.save_settings(
+            self.path, self.revision(), [self.other.email],
+            "gpt-6.1-sol", "high", "Xenopus Tadpoles"
+        )
 
         @contextmanager
         def empty_saved_index():
