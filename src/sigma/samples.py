@@ -720,7 +720,14 @@ def _cached_sample_catalog_entry(
         raw = json.loads(path.read_bytes())
         if not isinstance(raw, dict):
             raise ValueError("Invalid sample document")
-        identifier, title = _sample_index_metadata(name, path)
+        project_id, title = raw["id"], raw["title"]
+        if (
+            not isinstance(project_id, str)
+            or str(UUID(project_id)) != project_id
+            or not isinstance(title, str)
+            or not title.strip()
+        ):
+            raise ValueError("Invalid sample identity")
         problem = raw["problem"]
         mode = raw["investigation_type"]
         difficulty = raw.get("difficulty")
