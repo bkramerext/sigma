@@ -437,8 +437,17 @@
   justify-content: flex-start;
 }
 .project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-duration-unit-select {
-  flex: 0 0 120px;
-  width: 120px;
+  flex: 0 0 102px;
+  width: 102px;
+}
+/* Compact duration picker: retain the 8px field gap but bring the label and
+   menu items closer to the left edge, consistent with the numeric input. */
+.project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-duration-unit-select .sigma-select-trigger {
+  padding-left: 9px;
+  padding-right: 9px;
+}
+.sigma-select-options[aria-label="Maximum session duration unit"] [role="option"] {
+  padding-left: 8px;
 }
 .project-settings-dialog.sigma-global-settings .sigma-global-limits .sigma-duration-help span {
   display: block;
