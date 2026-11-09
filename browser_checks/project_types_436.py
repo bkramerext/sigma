@@ -1051,6 +1051,9 @@ with sync_playwright() as playwright:
     # Project Settings contains only project type and difficulty.
     page.get_by_role("button", name="Project settings", exact=True).click()
     project_settings = page.get_by_role("dialog", name="Project Settings")
+    # The modal is vertically centered. Wait for async collaboration/model
+    # loading before measuring two independent rectangles.
+    expect(project_settings.get_by_text("Loading shared settings…", exact=True)).not_to_be_visible()
     expect(project_settings.get_by_role("tab", name="Preferences")).to_have_count(0)
     expect(project_settings.get_by_label("Difficulty")).to_be_visible()
     # The close X uses the shared dialog header's upper-right inset,

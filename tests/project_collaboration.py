@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +16,7 @@ from typing import cast
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
 
+from sigma import project_bundle
 from sigma import project_collaboration as shared
 from sigma.cloud_auth import Principal
 from sigma.cloud_workspaces import Workspace
@@ -57,7 +60,12 @@ class CollaborationTests(TestCase):
             (
                 "sigma.projects.inspect_project",
                 lambda path: SimpleNamespace(
-                    path=str(path), project=SimpleNamespace(id="saved-project")
+                    path=str(path),
+                    project=SimpleNamespace(
+                        id="saved-project",
+                        ai_model="gpt-6.1-sol",
+                        reasoning_effort="high",
+                    ),
                 ),
             ),
         ):
@@ -498,6 +506,150 @@ class CollaborationTests(TestCase):
                 asyncio.run(api.delete_project_view(cast(api.DeleteProjectRequest, deletion))),
                 {"deleted": True},
             )
+
+    def test_revision_recovers_file_publication_after_sqlite_rollback(self) -> None:
+        original = b'{"schema_version":8,"id":"before"}'
+        updated = b'{"schema_version":8,"id":"after"}'
+        Path(self.path).write_text(
+            json.dumps(project_bundle.portable_bundle({"project.json": original})),
+            encoding="utf-8",
+        )
+        initial_digest = shared._project_digest(self.path)
+        self.assertIsNotNone(initial_digest)
+        with shared._db() as db:
+            db.execute(
+                "UPDATE shared_projects SET project_sha256=? WHERE path=?",
+                (initial_digest, self.path),
+            )
+        # A crash after os.replace but before SQLite COMMIT leaves the new
+        # file behind. This represents precisely that interrupted publication.
+        Path(self.path).write_text(
+            json.dumps(project_bundle.portable_bundle({"project.json": updated})),
+            encoding="utf-8",
+        )
+        with (
+            self.assertRaisesRegex(ProjectError, "saved by recovered project file update"),
+            shared.write_guard(self.path, expected_revision=0),
+        ):
+            pass
+        # A later authenticated read establishes the new revision durably.
+        recovered = shared.summary(self.path, verify_revision=True)
+        self.assertEqual(recovered["revision"], 1)
+        self.assertEqual(self.revision(), 1)
+        with shared._db() as db:
+            digest = db.execute(
+                "SELECT project_sha256 FROM shared_projects WHERE path=?", (self.path,)
+            ).fetchone()["project_sha256"]
+        self.assertEqual(digest, hashlib.sha256(b'{"id":"after","schema_version":8}').hexdigest())
+        self.assertEqual(
+            json.loads(project_bundle.read_file(self.path, "project.json")),
+            json.loads(updated),
+        )
+
+    def test_publication_records_project_digest_in_same_write(self) -> None:
+        contents = b'{"schema_version":8,"id":"committed"}'
+        with shared.write_guard(self.path, expected_revision=0):
+            Path(self.path).write_text(
+                json.dumps(project_bundle.portable_bundle({"project.json": contents})),
+                encoding="utf-8",
+            )
+            shared.note_project_published(self.path, contents)
+        self.assertEqual(self.revision(), 1)
+        with shared._db() as db:
+            digest = db.execute(
+                "SELECT project_sha256 FROM shared_projects WHERE path=?", (self.path,)
+            ).fetchone()["project_sha256"]
+        self.assertEqual(
+            digest, hashlib.sha256(b'{"id":"committed","schema_version":8}').hexdigest()
+        )
+        self.assertEqual(shared.summary(self.path, verify_revision=True)["revision"], 1)
+        # Session and paper sidecars share the .json bundle but must not
+        # invalidate the project's settings revision.
+        project_bundle.write_file(
+            self.path, "research-sessions/finished.json", b'{"status":"ended"}'
+        )
+        project_bundle.write_file(self.path, "papers/finished.json", b'{"status":"ready"}')
+        self.assertEqual(shared.summary(self.path, verify_revision=True)["revision"], 1)
+
+    def test_two_verified_accounts_share_access_and_handoff_after_expiry(self) -> None:
+        other_workspace = replace(
+            self.workspace,
+            path=self.root / "other-account",
+            subject_hash="other-hash",
+            verified_subject=self.other.subject,
+            email=self.other.email,
+        )
+        token = shared.acquire_lease(self.path, "Research session")
+        self.assertIsNotNone(token)
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current",
+                return_value=other_workspace,
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            self.assertTrue(shared.authorized_shared_path(Path(self.path)))
+            self.assertIn(self.path, [item["path"] for item in shared.shared_with_me()])
+            with self.assertRaisesRegex(ProjectError, "being used"):
+                shared.acquire_lease(self.path, "Paper generation")
+            self.clock[0] += shared.LEASE_SECONDS + 1
+            next_token = shared.acquire_lease(self.path, "Paper generation")
+            self.assertIsNotNone(next_token)
+            with shared.bind_lease(self.path, next_token), shared.write_guard(self.path):
+                pass
+        with (
+            shared.bind_lease(self.path, token),
+            self.assertRaisesRegex(ProjectError, "lease was lost"),
+            shared.write_guard(self.path),
+        ):
+            pass
+        shared.release_lease(self.path, next_token)
+
+    def test_failed_notification_is_visible_and_retry_requires_membership(self) -> None:
+        with shared._db() as db:
+            db.execute(
+                """INSERT INTO shared_email_outbox
+                (id,recipient,project_path,project_title,event,created_at,attempts,failed_at)
+                VALUES (?,?,?,?,?,?,?,?)""",
+                ("failed-notice", "other@example.org", self.path, "Study", "added", 1, 3, 999),
+            )
+        self.assertEqual(shared.summary(self.path)["failed_notifications"], 1)
+        outsider_workspace = replace(
+            self.workspace,
+            subject_hash="outsider-hash",
+            verified_subject=self.outsider.subject,
+            email=self.outsider.email,
+        )
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current",
+                return_value=outsider_workspace,
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.outsider,
+            ),
+            self.assertRaisesRegex(ValueError, "access denied"),
+        ):
+            shared.retry_failed_notifications(self.path)
+        self.assertEqual(shared.retry_failed_notifications(self.path), 1)
+        self.assertEqual(shared.summary(self.path)["failed_notifications"], 0)
+        with shared._db() as db:
+            row = db.execute(
+                "SELECT attempts,failed_at FROM shared_email_outbox WHERE id='failed-notice'"
+            ).fetchone()
+        self.assertEqual(row["attempts"], 0)
+        self.assertIsNone(row["failed_at"])
+
+    def test_local_summary_explicitly_has_no_collaborator_or_failed_mail(self) -> None:
+        with patch("sigma.project_collaboration.cloud_workspaces.current", return_value=None):
+            data = shared.summary(self.path)
+        self.assertIsNone(data["owner"])
+        self.assertEqual(data["collaborators"], [])
+        self.assertEqual(data["failed_notifications"], 0)
 
     def test_global_research_limits_save_does_not_take_project_lease(self) -> None:
         from sigma import research_sessions
