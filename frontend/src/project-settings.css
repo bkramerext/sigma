@@ -769,6 +769,29 @@
 .sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] { justify-content: flex-start; text-align: left; }
 .sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] > span { text-align: left; margin-left: 0; }
 
+/* New Project uses the same Difficulty text insets as Project Settings. */
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker [role="combobox"] {
+  padding-left: 12px;
+}
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker [role="combobox"] > span {
+  text-align: left;
+  margin-left: 0;
+  padding-left: 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker .research-type-options {
+  padding: 4px 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker .research-type-options [role="option"] {
+  box-sizing: border-box;
+  padding: 6px 9px 6px 11px;
+  gap: 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker .research-type-options [role="option"] > span {
+  margin-left: 0;
+  padding-left: 0;
+  text-align: left;
+}
+
 /* SIGMA dropdowns share the same text inset across the trigger and menu. */
 .sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"],
 .sigma-project-classification-dialog .sigma-choice-picker [role="combobox"] { padding-left: 12px; }
