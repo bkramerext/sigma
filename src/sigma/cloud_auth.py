@@ -1509,9 +1509,7 @@ def status(request: Request):
         ]
     try:
         principal = (
-            resolve_session(_raw_session(request, cfg))
-            if cfg.enabled and not cfg.error
-            else None
+            resolve_session(_raw_session(request, cfg)) if cfg.enabled and not cfg.error else None
         )
     except (sqlite3.Error, OSError, RuntimeError):
         return {
