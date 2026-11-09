@@ -768,3 +768,12 @@
 
 .sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] { justify-content: flex-start; text-align: left; }
 .sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] > span { text-align: left; margin-left: 0; }
+
+/* SIGMA dropdowns share the same text inset across the trigger and menu. */
+.sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"],
+.sigma-project-classification-dialog .sigma-choice-picker [role="combobox"] { padding-left: 12px; }
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options,
+.sigma-project-classification-dialog .sigma-choice-picker .research-type-options { padding: 4px 0; }
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"],
+.sigma-project-classification-dialog .sigma-choice-picker .research-type-options [role="option"] { padding-left: 11px; }
+.sigma-project-classification-dialog .settings-model-row .sigma-choice-picker { width: 100%; }
