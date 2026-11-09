@@ -169,6 +169,59 @@ def check_home_list_uses_only_paper_records(root: Path) -> None:
     paper_scores._project_metadata_cached.cache_clear()
 
 
+def check_shallow_home_does_not_load_deep_status(root: Path) -> None:
+    """First paint never parses research history or paper records."""
+    from sigma import paper_scores, papers, research_sessions
+
+    view = initialize_project(
+        root / "shallow-home-list-test.sigma",
+        "Fast Home listing",
+        "Read full history only when needed.",
+    )
+    open_project(view.path)
+    with (
+        patch.object(
+            research_sessions,
+            "has_active_session",
+            side_effect=AssertionError("Shallow Home parsed research history"),
+        ),
+        patch.object(
+            paper_scores,
+            "project_metadata",
+            side_effect=AssertionError("Shallow Home scanned papers"),
+        ),
+        patch.object(
+            papers,
+            "activity_status",
+            side_effect=AssertionError("Shallow Home scanned activity"),
+        ),
+    ):
+        rows = {item["id"]: item for item in home_projects(lightweight=True)["projects"]}
+        assert rows[view.project.id]["available"]
+        assert rows[view.project.id]["title"] == "Fast Home listing"
+        with TestClient(app) as client:
+            response = client.get("/api/projects/recent?lightweight=true")
+            assert response.status_code == 200
+            rows = {item["id"]: item for item in response.json()["projects"]}
+            assert rows[view.project.id]["available"]
+    with (
+        patch.object(
+            paper_scores,
+            "project_metadata",
+            side_effect=AssertionError("Activity poll scanned papers"),
+        ),
+        patch.object(research_sessions, "has_active_session", return_value=True),
+        patch.object(papers, "activity_status", return_value="queued"),
+    ):
+        with TestClient(app) as client:
+            response = client.get("/api/projects/recent/activity")
+            assert response.status_code == 200
+            by_id = {item["id"]: item for item in response.json()["projects"]}
+            assert by_id[view.project.id]["research_running"]
+            assert by_id[view.project.id]["paper_activity"] == "queued"
+
+
+
 def check_home_session_status_cache(root: Path) -> None:
     """Home listing must not repeatedly decode multi-MB research histories."""
     from sigma import cloud_research, research_sessions
@@ -765,6 +818,7 @@ def check(root: Path, base: Path) -> None:
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
     check_home_list_uses_only_paper_records(root)
+    check_shallow_home_does_not_load_deep_status(root)
     check_home_session_status_cache(root)
     check_paper_preflight_presence(root)
     check_pdf_verification_cache(root)
