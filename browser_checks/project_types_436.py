@@ -331,14 +331,18 @@ with sync_playwright() as playwright:
     unattended = dialog.get_by_label("Allow unattended background execution")
     before_unattended = unattended.is_checked()
     with page.expect_response(
-        lambda response: response.url.endswith("/api/user-preferences/unattended-execution")
-        and response.request.method == "PUT",
+        lambda response: (
+            response.url.endswith("/api/user-preferences/unattended-execution")
+            and response.request.method == "PUT"
+        ),
         timeout=15000,
     ):
         unattended.set_checked(not before_unattended)
     with page.expect_response(
-        lambda response: response.url.endswith("/api/user-preferences/unattended-execution")
-        and response.request.method == "PUT",
+        lambda response: (
+            response.url.endswith("/api/user-preferences/unattended-execution")
+            and response.request.method == "PUT"
+        ),
         timeout=15000,
     ):
         unattended.set_checked(before_unattended)
@@ -372,7 +376,8 @@ with sync_playwright() as playwright:
         second_card.get_by_label("Scope").fill("Second saved scope")
         second_card.get_by_label("Scope").press("Tab")
     second_type = next(
-        item for item in page.request.get(f"{FIXTURE_URL}/api/project-types").json()["project_types"]
+        item
+        for item in page.request.get(f"{FIXTURE_URL}/api/project-types").json()["project_types"]
         if item["name"] == "CI Browser Second"
     )
     dialog.get_by_role("button", name="Close Settings").click()
@@ -383,9 +388,7 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Settings")
     dialog.get_by_role("tab", name="Project Types").click()
     for type_name in ("CI Browser Parent", "CI Browser Second"):
-        card = dialog.locator(
-            f'.project-type-card:has(> summary strong:text-is("{type_name}"))'
-        )
+        card = dialog.locator(f'.project-type-card:has(> summary strong:text-is("{type_name}"))')
         card.locator("summary").click()
         with page.expect_response(project_types_put, timeout=15000):
             card.get_by_role("button", name="Remove project type").click()
@@ -395,8 +398,9 @@ with sync_playwright() as playwright:
     catalog_after_delete = page.request.get(f"{FIXTURE_URL}/api/project-types").json()[
         "project_types"
     ]
-    assert all(item["id"] not in {parent_type["id"], second_type["id"]}
-               for item in catalog_after_delete)
+    assert all(
+        item["id"] not in {parent_type["id"], second_type["id"]} for item in catalog_after_delete
+    )
     derived = next(item for item in catalog_after_delete if item["id"] == child_type["id"])
     assert derived["based_on"] == parent_type["id"]
     assert derived["scope"] == "Independent derived scope"
@@ -431,10 +435,7 @@ with sync_playwright() as playwright:
         ).click()
     exported = json.loads(Path(download_info.value.path()).read_text())
     snapshot = exported["files"]["project.json"]["project_type_snapshot"]
-    assert (
-        snapshot["id"] == parent_type["id"]
-        and snapshot["scope"] == "Shared research scope"
-    )
+    assert snapshot["id"] == parent_type["id"] and snapshot["scope"] == "Shared research scope"
 
     # The warning copy and native modal depend on snapshot completeness. No
     # project configuration or session request is made before an explicit choice.
@@ -608,8 +609,9 @@ with sync_playwright() as playwright:
     assert project_type_menu.evaluate('node => node.matches(":popover-open")')
     assert project_type_menu.evaluate("node => getComputedStyle(node).position") == "fixed"
     with page.expect_response(
-        lambda response: response.url.endswith("/api/projects/update")
-        and response.request.method == "POST",
+        lambda response: (
+            response.url.endswith("/api/projects/update") and response.request.method == "POST"
+        ),
         timeout=15000,
     ):
         settings.get_by_role("option", name="Mathematics").click()
@@ -688,8 +690,10 @@ with sync_playwright() as playwright:
     advanced = settings_dialog.get_by_role("checkbox", name="Show advanced Outcome details")
     original_advanced = advanced.is_checked()
     with page.expect_response(
-        lambda response: response.url.endswith("/api/user-preferences/research-settings")
-        and response.request.method == "PUT",
+        lambda response: (
+            response.url.endswith("/api/user-preferences/research-settings")
+            and response.request.method == "PUT"
+        ),
         timeout=15000,
     ):
         advanced.set_checked(not original_advanced)
@@ -713,8 +717,10 @@ with sync_playwright() as playwright:
         != original_advanced
     )
     with page.expect_response(
-        lambda response: response.url.endswith("/api/user-preferences/research-settings")
-        and response.request.method == "PUT",
+        lambda response: (
+            response.url.endswith("/api/user-preferences/research-settings")
+            and response.request.method == "PUT"
+        ),
         timeout=15000,
     ):
         restored.get_by_role("checkbox", name="Show advanced Outcome details").set_checked(

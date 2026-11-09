@@ -68,6 +68,7 @@ with sync_playwright() as playwright:
                 content_type="application/json",
                 body=json.dumps({"error": "fixture failure"}),
             )
+
         return handle
 
     for status in (401, 403, 503):
