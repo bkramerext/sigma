@@ -853,9 +853,9 @@ function ProviderInputAuditDisclosure({ audit }: { audit: NonNullable<ResearchSt
   </details>;
 }
 
-function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved, dismissedStatusNotice, onDismissStatusNotice }: {
+function ResearchSessionContents({ path, session, expanded, busy, guest, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved, dismissedStatusNotice, onDismissStatusNotice }: {
   path: string;
-  session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean;
+  session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean; guest: boolean;
   onEnableAdvancedOutcome: () => Promise<void>;
   onViewStrategy: (id: string) => void;
   onViewPriorSession: (id: string) => void;
@@ -979,7 +979,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const supportsIntervention = !!session.strategy_runs?.length;
   const interventionCount = session.interventions ?? [];
   const interventionWindowOpen = ['queued', 'running', 'paused', 'stopped'].includes(session.status);
-  const canIntervene = supportsIntervention && interventionWindowOpen
+  const canIntervene = !guest && supportsIntervention && interventionWindowOpen
     && interventionCount.filter(item => item.status !== 'rejected').length < 24
     && interventionCount.length < 32;
   async function submitIntervention(event: FormEvent<HTMLFormElement>) {
@@ -1076,7 +1076,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       if (conversionCurrent.current?.section === section) conversionAbort.current?.abort();
     } else {
       setMarkdownSections(current => [...current, section]);
-      enqueueConversions([section]);
+      if (!guest) enqueueConversions([section]);
     }
   }
   function toggleAllMarkdown() {
@@ -1087,7 +1087,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       conversionAbort.current?.abort();
     } else {
       setMarkdownSections(all);
-      enqueueConversions(all);
+      if (!guest) enqueueConversions(all);
     }
   }
   const markdownSymbol = <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>;
@@ -2019,7 +2019,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                 {strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
             </div>
-            {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={Boolean(sessionControlFailures[item.id]) || dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
+            {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} guest={guest} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={Boolean(sessionControlFailures[item.id]) || dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
           </li></SessionRenderBoundary>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
@@ -6123,6 +6123,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const guest = !!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest');
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [advancedOutcomeGlobal, setAdvancedOutcomeGlobal] = useState(false);
+  const [guestAdvancedOutcome, setGuestAdvancedOutcome] = useState(false);
   useEffect(() => {
     if (guest) return;
     const controller = new AbortController();
@@ -6504,7 +6505,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const projectActionBar = <div className="project-primary-actions">
     <div className="project-pane-actions">
       <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
-      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={guest || closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
       <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" data-tooltip="Email project with attachments" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
@@ -6658,7 +6659,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
+      if (guest) { setGuestAdvancedOutcome(true); return; }
       if (advancedOutcomeGlobal) return;
       const response = await fetch('/api/user-preferences/research-settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
