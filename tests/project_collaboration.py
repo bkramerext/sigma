@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -15,6 +16,7 @@ from typing import cast
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
 
+from sigma import project_bundle
 from sigma import project_collaboration as shared
 from sigma.cloud_auth import Principal
 from sigma.cloud_workspaces import Workspace
@@ -503,7 +505,10 @@ class CollaborationTests(TestCase):
     def test_revision_recovers_file_publication_after_sqlite_rollback(self) -> None:
         original = b'{"id":"before"}'
         updated = b'{"id":"after"}'
-        Path(self.path).write_bytes(original)
+        Path(self.path).write_text(
+            json.dumps(project_bundle.portable_bundle({"project.json": original})),
+            encoding="utf-8",
+        )
         with shared._db() as db:
             db.execute(
                 "UPDATE shared_projects SET project_sha256=? WHERE path=?",
@@ -511,7 +516,10 @@ class CollaborationTests(TestCase):
             )
         # A crash after os.replace but before SQLite COMMIT leaves the new
         # file behind. This represents precisely that interrupted publication.
-        Path(self.path).write_bytes(updated)
+        Path(self.path).write_text(
+            json.dumps(project_bundle.portable_bundle({"project.json": updated})),
+            encoding="utf-8",
+        )
         with self.assertRaisesRegex(ProjectError, "saved by recovered project file update"):
             with shared.write_guard(self.path, expected_revision=0):
                 pass
@@ -524,12 +532,15 @@ class CollaborationTests(TestCase):
                 "SELECT project_sha256 FROM shared_projects WHERE path=?", (self.path,)
             ).fetchone()["project_sha256"]
         self.assertEqual(digest, hashlib.sha256(updated).hexdigest())
-        self.assertEqual(Path(self.path).read_bytes(), updated)
+        self.assertEqual(project_bundle.read_file(self.path, "project.json"), updated)
 
     def test_publication_records_project_digest_in_same_write(self) -> None:
         contents = b'{"id":"committed"}'
         with shared.write_guard(self.path, expected_revision=0):
-            Path(self.path).write_bytes(contents)
+            Path(self.path).write_text(
+                json.dumps(project_bundle.portable_bundle({"project.json": contents})),
+                encoding="utf-8",
+            )
             shared.note_project_published(self.path, contents)
         self.assertEqual(self.revision(), 1)
         with shared._db() as db:

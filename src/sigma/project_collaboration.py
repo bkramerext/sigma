@@ -56,10 +56,17 @@ def bind_lease(path: str, token: str | None) -> Iterator[None]:
 
 def _project_digest(path: str) -> str | None:
     """Digest persisted project metadata, not large paper/session sidecars."""
-    file = Path(path) / "project.json" if Path(path).suffix == ".sigma" else Path(path)
+    from sigma.project_bundle import read_file
+
+    project = Path(path)
+    file = project / "project.json" if project.suffix == ".sigma" else project
     if not file.is_file() or file.is_symlink():
         return None
-    return hashlib.sha256(file.read_bytes()).hexdigest()
+    # Single-file .json projects are bundles whose session and paper members
+    # change independently. Hash just their project.json member, matching
+    # _update_project's published member bytes.
+    contents = read_file(project, "project.json") if project.suffix == ".json" else file.read_bytes()
+    return hashlib.sha256(contents).hexdigest()
 
 
 def _reconcile_project_digest(db: sqlite3.Connection, path: str) -> None:
