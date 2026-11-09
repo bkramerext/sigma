@@ -151,11 +151,8 @@ with sync_playwright() as playwright:
             row["nameLeft"] for row in layout
         ) < 2, layout
 
-    assert_counts_follow_category_names(type_groups)
-    # Project-type icons are optional. Their absence must not move the labels/counts.
-    type_groups.first.locator("summary > .research-type-icon").evaluate_all(
-        "icons => icons.forEach(icon => icon.remove())"
-    )
+    # The built-in diamond is the fallback when project-type metadata is unavailable.
+    assert type_groups.locator("summary > .research-type-icon").count() == type_groups.count()
     assert_counts_follow_category_names(type_groups)
     type_labels = type_groups.locator("summary > span").all_text_contents()
     assert type_labels == sorted(type_labels, key=str.casefold), type_labels
@@ -319,6 +316,7 @@ with sync_playwright() as playwright:
     running_project_ids.clear()
     expect(recent_meta).to_have_text(idle_metadata, timeout=10000)
     recent_groups = recent_panel.locator(".recent-type-group")
+    assert recent_groups.locator("summary > .research-type-icon").count() == recent_groups.count()
     assert_counts_follow_category_names(recent_groups)
     recent_labels = recent_groups.locator("summary > span").all_text_contents()
     assert recent_labels == sorted(recent_labels, key=str.casefold), recent_labels
