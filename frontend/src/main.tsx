@@ -4896,6 +4896,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
 }) {
   useDocumentScrollLock();
   const dialog = useRef<HTMLDialogElement>(null);
+  const [baseline, setBaseline] = useState(initial);
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
   const [shared, setShared] = useState<SharedProjectInfo | null>(null);
@@ -4946,8 +4947,8 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   const validPair = !shared?.owner
     || (model === shared.model && thinking === shared.thinking)
     || !!selected?.efforts.includes(thinking);
-  const changed = projectType !== initial.project.investigation_type
-    || difficulty !== initial.project.difficulty
+  const changed = projectType !== baseline.project.investigation_type
+    || difficulty !== baseline.project.difficulty
     || (!!shared?.owner && (model !== shared.model || thinking !== shared.thinking
       || JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators)));
   function finishCollaboratorEntry(value: string) {
@@ -4969,12 +4970,11 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRetryingEmails(false); }
   }
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (busy || loading || !changed || !validPair || !shared) return;
+  async function save(): Promise<boolean> {
+    if (busy || loading || !changed || !validPair || !shared) return false;
     setBusy(true); setError('');
     try {
-      const previous = settingsOf(initial);
+      const previous = settingsOf(baseline);
       const next = await post<ProjectView>('update', {
         path: initial.path, ...previous,
         investigation_type: projectType, difficulty,
@@ -5002,19 +5002,40 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
           reportRequestFailure(errorMessage(pillError));
         }
       }
+      if (shared.owner) {
+        const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`, {
+          headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
+        });
+        if (!response.ok) throw new Error('Saved project, but could not refresh collaboration state.');
+        setShared(await response.json() as SharedProjectInfo);
+      }
+      setBaseline(next);
       onSaved(next);
-    } catch (cause) { setError(errorMessage(cause)); }
+      return true;
+    } catch (cause) { setError(errorMessage(cause)); return false; }
     finally { setBusy(false); }
+  }
+  useEffect(() => {
+    if (loading || busy || !changed || !validPair || !shared || error) return;
+    const timer = window.setTimeout(() => { void save(); }, 350);
+    return () => window.clearTimeout(timer);
+  }, [loading, busy, changed, validPair, shared, projectType, difficulty, model, thinking, collaborators, error]);
+  async function close() {
+    if (busy || loading) return;
+    if (changed) {
+      if (!validPair) { setError('Choose a compatible model and Thinking level.'); return; }
+      if (!await save()) return;
+    }
+    onCancel();
   }
   return <dialog ref={dialog} className="project-settings-dialog sigma-project-classification-dialog"
     aria-labelledby="sigma-project-classification-title"
-    onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <form onSubmit={save}>
+    onCancel={event => { event.preventDefault(); void close(); }}>
+    <form onSubmit={event => event.preventDefault()}>
       <header className="settings-header">
         <h2 id="sigma-project-classification-title">Project Settings</h2>
         <div className="settings-actions">
-          <button type="submit" disabled={busy || loading || !changed || !validPair}>{busy ? 'Saving…' : 'Save'}</button>
-          <DialogDismissButton label="Close Project Settings" disabled={busy} onClick={onCancel}/>
+          <DialogDismissButton label="Close Project Settings" disabled={busy || loading} onClick={() => void close()}/>
         </div>
       </header>
       <div className="settings-body">
@@ -6850,7 +6871,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         ? `${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`
         : 'No collaborator is currently running this project.'}
     </p>}
-    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
+    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setAnnouncement('Project settings saved.'); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
       onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
