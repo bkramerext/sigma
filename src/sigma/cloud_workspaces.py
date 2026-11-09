@@ -22,13 +22,13 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from secrets import token_hex
 
 from sigma import cloud_auth
 from sigma.cloud_auth import Principal
 from sigma.ui_instance import private_directory
 
-_SAFE_ID = re.compile(r"^[0-9a-f]{32}$")
+_SAFE_ID = re.compile(r"^(?:[0-9a-f]{16}|[0-9a-f]{32})$")
 
 
 class WorkspaceUnavailable(RuntimeError):
@@ -126,8 +126,11 @@ def local_legacy_owner_access(path: Path | None = None) -> bool:
     try:
         from sigma import recents
 
-        with without_workspace(), recents._index() as index:
-            return any(entry["path"] == str(candidate) for entry in index["entries"])
+        # Authorization may read an atomically published index snapshot;
+        # it must never contend with a Recent Projects *write* lock.
+        with without_workspace():
+            index = recents._snapshot()
+        return any(entry["path"] == str(candidate) for entry in index["entries"])
     except (OSError, ValueError):
         return False
 
@@ -311,7 +314,7 @@ def workspace_for_subject(subject: str) -> Workspace:
             "SELECT workspace_id FROM workspaces WHERE subject_hash=?", (subject_hash,)
         ).fetchone()
         if row is None:
-            workspace_id = uuid4().hex
+            workspace_id = token_hex(8)
             path = root / workspace_id
             try:
                 path.mkdir(mode=0o700)
