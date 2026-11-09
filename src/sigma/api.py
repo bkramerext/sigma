@@ -2127,7 +2127,12 @@ def stage_view(body: StageRequest):
 
 @app.post("/api/projects/strategies/reorder")
 def reorder_view(body: ReorderRequest):
-    return asdict(reorder_strategies(body.path, body.order, body.expected_order))
+    view = reorder_strategies(body.path, body.order, body.expected_order)
+    previous_positions = {strategy_id: index for index, strategy_id in enumerate(body.expected_order)}
+    for index, strategy_id in enumerate(body.order):
+        if previous_positions.get(strategy_id) != index:
+            project_collaboration.note_artifact_author(body.path, "strategy", strategy_id)
+    return asdict(view)
 
 
 class ProposalRequest(OpenRequest):
