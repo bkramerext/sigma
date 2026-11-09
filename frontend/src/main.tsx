@@ -1,6 +1,7 @@
 import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
+import { windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
 import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
@@ -7629,7 +7630,7 @@ function CloudAuthGate() {
           if (identity.retry_signin === true) {
             // Authorization changed since this verified Google identity was
             // denied. Return through Google's standard account chooser.
-            window.location.replace('/api/cloud-auth/login');
+            window.location.replace(windowAuthUrl('/api/cloud-auth/login'));
             return;
           }
           setDeniedIdentityAvailable(identity.identity_available === true);
