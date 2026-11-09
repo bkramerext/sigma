@@ -167,7 +167,13 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
 
         # An email deep link opens immediately only for the invited account.
-        invitation_url = url + "&invited_email=" + quote(COLLABORATOR, safe="") + "&project_title=" + quote(title, safe="")
+        invitation_url = (
+            url
+            + "&invited_email="
+            + quote(COLLABORATOR, safe="")
+            + "&project_title="
+            + quote(title, safe="")
+        )
         member.goto(invitation_url)
         expect(member.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
         expect(
@@ -182,6 +188,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         welcome = wrong_account.get_by_role("dialog", name="Open shared project")
         expect(welcome).to_be_visible()
         expect(welcome.get_by_text(COLLABORATOR)).to_be_visible()
+        expect(welcome.get_by_text(title, exact=True)).to_be_visible()
         expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_attribute(
             "href", "/api/cloud-auth/login"
         )
