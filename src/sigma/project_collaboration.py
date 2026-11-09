@@ -18,8 +18,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from email.message import EmailMessage
 from functools import wraps
-from threading import Event, Thread
 from pathlib import Path
+from threading import Event, Thread
 from typing import Any, TypeVar
 from urllib.parse import quote
 from uuid import uuid4
@@ -788,14 +788,14 @@ def drain_notifications() -> list[str]:
             )
             db.commit()
 
-        message = EmailMessage()
-        added = event["event"] == "added"
-        message["Subject"] = (
-            f"SIGMA: Added to {event['project_title']}"
-            if added
-            else f"SIGMA: Removed from {event['project_title']}"
-        )
         try:
+            message = EmailMessage()
+            added = event["event"] == "added"
+            message["Subject"] = (
+                f"SIGMA: Added to {event['project_title']}"
+                if added
+                else f"SIGMA: Removed from {event['project_title']}"
+            )
             origin = (cloud_auth.config().origin or "").rstrip("/")
             project_link = (
                 f"{origin}/project?path={quote(event['project_path'], safe='')}"

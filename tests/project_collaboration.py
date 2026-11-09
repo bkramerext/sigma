@@ -10,6 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from typing import cast
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
 
@@ -477,7 +478,7 @@ class CollaborationTests(TestCase):
                 side_effect=AssertionError(),
             ),
         ):
-            self.assertEqual(api.update_project_view(request), {"saved": True})
+            self.assertEqual(api.update_project_view(cast(api.UpdateProjectRequest, request)), {"saved": True})
 
         deletion = SimpleNamespace(path=self.path, expected_project_id="saved-project")
         with (
@@ -492,7 +493,7 @@ class CollaborationTests(TestCase):
         ):
             delete.return_value = {"deleted": True}
             self.assertEqual(
-                asyncio.run(api.delete_project_view(deletion)),
+                asyncio.run(api.delete_project_view(cast(api.DeleteProjectRequest, deletion))),
                 {"deleted": True},
             )
 

@@ -2445,9 +2445,7 @@ async def _delete_project_unleased(body: DeleteProjectRequest):
                 await asyncio.to_thread(
                     session_log.delete_project, body.expected_project_id, authorized
                 )
-                with project_collaboration.finalize_deletion(
-                    str(authorized), view.project.title
-                ):
+                with project_collaboration.finalize_deletion(str(authorized), view.project.title):
                     if authorized.suffix == ".json":
                         authorized.unlink()
                     elif authorized.suffix == ".sigma" and authorized.is_dir():
