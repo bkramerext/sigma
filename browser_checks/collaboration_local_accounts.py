@@ -149,7 +149,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         member.goto(ui)
         member.get_by_role("tab", name="Saved").click()
         expand_saved_group(member)
-        expect(member.get_by_role("button", name=f"Manage collaborators for {title}")).to_be_visible()
+        expect(
+            member.get_by_role("button", name=f"Manage collaborators for {title}")
+        ).to_be_visible()
 
         # The Users Round shortcut opens the owner's original project in Settings.
         owner.goto(ui)
