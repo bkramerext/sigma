@@ -116,7 +116,9 @@ class CollaborationTests(TestCase):
         self.assertEqual(invited, [{"path": self.path, "id": "saved-project"}])
         self.assertEqual(shared_paths, {self.path})
 
-    def test_artifact_attribution_tracks_authenticated_actor_without_replacing_creator(self) -> None:
+    def test_artifact_attribution_tracks_authenticated_actor_without_replacing_creator(
+        self,
+    ) -> None:
         shared.note_artifact_author(self.path, "strategy", "strategy-one")
         shared.note_artifact_author(self.path, "paper", "paper-one", created_only=True)
         self.assertEqual(
