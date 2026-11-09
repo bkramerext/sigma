@@ -666,6 +666,17 @@ def _discard_partial_copy(destination: Path) -> None:
         pass
 
 
+def sample_project_titles() -> set[str]:
+    """Only the template titles needed for name uniqueness; no paper reads."""
+    titles: set[str] = set()
+    for name, path in _projects():
+        try:
+            titles.add(_decode(json.loads(path.read_bytes())).title)
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise ProjectError(f"Sample project {name} is unavailable: {exc}") from exc
+    return titles
+
+
 def sample_projects() -> dict[str, list[dict[str, Any]]]:
     """The Sample list always describes the untouched templates, not working projects."""
     return {"projects": [asdict(_load(name)[1]) for name, _ in _projects()]}
