@@ -2460,7 +2460,7 @@ async def _delete_project_unleased(body: DeleteProjectRequest):
         view = inspect_project(str(authorized))
         if view.project.id != body.expected_project_id:
             raise ProjectError("Project changed; refresh before deleting it")
-         # Admission holds the same manager lock until its worker is published.
+        # Admission holds the same manager lock until its worker is published.
         # Keep it across deletion; prove every saved session's original worker
         # has exited before removing its project, including foreign-process
         # workers whose local task is invisible in this process.
