@@ -147,9 +147,9 @@ with sync_playwright() as playwright:
         )
         assert layout
         assert all(row["countLeft"] >= row["nameRight"] + 4 for row in layout), layout
-        assert max(row["nameLeft"] for row in layout) - min(
-            row["nameLeft"] for row in layout
-        ) < 2, layout
+        assert (
+            max(row["nameLeft"] for row in layout) - min(row["nameLeft"] for row in layout) < 2
+        ), layout
 
     # The built-in diamond is the fallback when project-type metadata is unavailable.
     assert type_groups.locator("summary > .research-type-icon").count() == type_groups.count()
