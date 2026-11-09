@@ -1148,6 +1148,7 @@ def _update_project(
                     return _document(updated)
 
                 contents = transform_file(path, STATE, transform)
+                project_collaboration.note_project_published(str(path), contents)
                 result = ProjectView(str(path), _decode(json.loads(contents)))
                 if _after_commit is not None:
                     _after_commit(result)
@@ -1189,6 +1190,7 @@ def _update_project(
             if (path / STATE).is_symlink() or (path / STATE).read_bytes() != before:
                 raise ProjectError("Project changed during save; reopen and retry")
             os.replace(temporary, path / STATE)
+            project_collaboration.note_project_published(str(path), contents)
             result = ProjectView(str(path), updated)
             if _after_commit is not None:
                 _after_commit(result)

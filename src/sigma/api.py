@@ -1759,6 +1759,20 @@ def project_collaboration_view(path: str):
     return project_collaboration.summary(view.path)
 
 
+class RetryCollaborationNoticesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(min_length=1, max_length=4096)
+
+
+@app.post("/api/projects/collaboration/notifications/retry")
+def retry_collaboration_notices_view(body: RetryCollaborationNoticesRequest):
+    from sigma import project_collaboration
+
+    view = inspect_project(body.path)
+    count = project_collaboration.retry_failed_notifications(view.path)
+    return {"requeued": count}
+
+
 @app.get("/api/projects/audit")
 def export_project_view(path: str):
     """Return the structured audit view used by reports and review tooling."""

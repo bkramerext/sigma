@@ -9,6 +9,7 @@ membership invitations, never authorization assertions.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import sqlite3
@@ -51,6 +52,53 @@ def bind_lease(path: str, token: str | None) -> Iterator[None]:
         yield
     finally:
         _LEASE_CONTEXT.reset(binding)
+
+
+def _project_digest(path: str) -> str | None:
+    """Digest persisted project metadata, not large paper/session sidecars."""
+    file = Path(path) / "project.json" if Path(path).suffix == ".sigma" else Path(path)
+    if not file.is_file() or file.is_symlink():
+        return None
+    return hashlib.sha256(file.read_bytes()).hexdigest()
+
+
+def _reconcile_project_digest(db: sqlite3.Connection, path: str) -> None:
+    """Recover an interrupted file/SQLite publication before a revision compare.
+
+    A crashed write may have replaced project.json before SQLite committed.
+    Preserve the published file and advance the catalog revision so a stale
+    collaborator cannot silently overwrite it. Missing projects are handled
+    by their normal project validation.
+    """
+    row = db.execute(
+        "SELECT project_sha256 FROM shared_projects WHERE path=?", (path,)
+    ).fetchone()
+    if row is None:
+        return
+    digest = _project_digest(path)
+    if digest is None:
+        return
+    if row["project_sha256"] is None:
+        db.execute("UPDATE shared_projects SET project_sha256=? WHERE path=?", (digest, path))
+    elif digest != row["project_sha256"]:
+        db.execute(
+            """UPDATE shared_projects
+               SET project_sha256=?, revision=revision+1,
+                   last_writer=?, updated_at=? WHERE path=?""",
+            (digest, "recovered project file update", time.time(), path),
+        )
+
+
+def note_project_published(path: str, contents: bytes) -> None:
+    """Commit a project's new digest in its enclosing collaboration transaction."""
+    transaction = _WRITE_CONTEXT.get()
+    if transaction is None or transaction[0] != str(path):
+        return
+    db = transaction[1]
+    db.execute(
+        "UPDATE shared_projects SET project_sha256=? WHERE path=?",
+        (hashlib.sha256(contents).hexdigest(), str(path)),
+    )
 
 
 def _verify_fence(db: sqlite3.Connection, path: str, actor: str) -> None:
@@ -119,6 +167,9 @@ def write_guard(
         db.execute("BEGIN IMMEDIATE")
         try:
             row, actor = _membership(db, path)
+            if expected_revision is not None:
+                _reconcile_project_digest(db, path)
+                row = _row(db, path)
             if expected_revision is not None and (
                 type(expected_revision) is not int
                 or expected_revision < 0
@@ -239,11 +290,15 @@ def _db() -> Iterator[sqlite3.Connection]:
             owner_hash TEXT NOT NULL,
             owner_email TEXT NOT NULL,
             revision INTEGER NOT NULL DEFAULT 0,
+            project_sha256 TEXT,
             model TEXT NOT NULL,
             thinking TEXT NOT NULL,
             last_writer TEXT NOT NULL,
             updated_at REAL NOT NULL
         )""")
+        project_columns = {column["name"] for column in db.execute("PRAGMA table_info(shared_projects)")}
+        if "project_sha256" not in project_columns:
+            db.execute("ALTER TABLE shared_projects ADD COLUMN project_sha256 TEXT")
         db.execute("""CREATE TABLE IF NOT EXISTS shared_collaborators (
             path TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -314,13 +369,15 @@ def register_owner(view: Any) -> None:
             config = global_research_settings.load_config()
             db.execute(
                 """INSERT INTO shared_projects
-                (path, project_id, owner_hash, owner_email, model, thinking, last_writer, updated_at)
-                VALUES (?,?,?,?,?,?,?,?)""",
+                (path, project_id, owner_hash, owner_email, project_sha256, model, thinking,
+                 last_writer, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
                 (
                     view.path,
                     view.project.id,
                     workspace.subject_hash,
                     principal.email.casefold(),
+                    _project_digest(view.path),
                     config["ai_model"],
                     config["reasoning_effort"],
                     principal.email.casefold(),
@@ -398,9 +455,13 @@ def summary(path: str) -> dict[str, Any]:
             "thinking": view.project.reasoning_effort,
             "lease": None,
             "shared": False,
+            "failed_notifications": 0,
         }
     with _db() as db:
+        db.execute("BEGIN IMMEDIATE")
         row, email = _membership(db, view.path)
+        _reconcile_project_digest(db, view.path)
+        row = _row(db, view.path)
         members = [
             record["email"]
             for record in db.execute(
@@ -415,6 +476,11 @@ def summary(path: str) -> dict[str, Any]:
             "thinking": row["thinking"],
             "lease": _lease(db, view.path),
             "shared": bool(members),
+            "failed_notifications": db.execute(
+                """SELECT COUNT(*) FROM shared_email_outbox
+                   WHERE project_path=? AND failed_at IS NOT NULL""",
+                (view.path,),
+            ).fetchone()[0],
             "you": email,
         }
 
@@ -471,7 +537,10 @@ def require_revision(path: str, expected: int) -> None:
     if type(expected) is not int or expected < 0:
         raise ValueError("Project revision is missing or invalid.")
     with _db() as db:
-        row, _ = _membership(db, path)
+        db.execute("BEGIN IMMEDIATE")
+        _membership(db, path)
+        _reconcile_project_digest(db, path)
+        row = _row(db, path)
         if row["revision"] != expected:
             raise ValueError(
                 f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
@@ -845,3 +914,22 @@ def drain_notifications() -> list[str]:
                 (time.time(), event["id"], claim),
             )
     return warnings
+
+
+def retry_failed_notifications(path: str) -> int:
+    """Explicitly requeue terminally failed notices for a current collaborator."""
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None:
+        raise ProjectError("Collaboration notifications require verified sign-in.")
+    with _db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        _membership(db, path)
+        changed = db.execute(
+            """UPDATE shared_email_outbox
+               SET failed_at=NULL, attempts=0, retry_after=0
+               WHERE project_path=? AND failed_at IS NOT NULL AND sent_at IS NULL""",
+            (path,),
+        ).rowcount
+        db.commit()
+    return changed
