@@ -587,7 +587,7 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     # sign-ins, expose their per-user workspace in account status.
     from sigma.cloud_workspaces import WorkspaceUnavailable, enabled, workspace_for_subject
 
-    if enabled():
+    if enabled() and not (cfg.local and principal.subject.startswith("local-admin:")):
 
         try:
             workspace_id = workspace_for_subject(principal.subject).workspace_id
@@ -821,6 +821,7 @@ def resolve_session(raw: str | None) -> Principal | None:
         and not _mock_enabled(cfg)
         and os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
         and cfg.admin_contact_email
+        and not raw
     ):
         return Principal("local-admin:" + cfg.admin_contact_email, cfg.admin_contact_email, "admin")
     if not cfg.enabled or cfg.error or not raw or len(raw) > 128:

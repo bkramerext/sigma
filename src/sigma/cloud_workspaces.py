@@ -53,49 +53,61 @@ GUEST_TTL_SECONDS = 8 * 60 * 60
 
 def enabled() -> bool:
     """Cloud auth is an explicit opt-in; local SIGMA does not need cloud config."""
-    from sigma.storage import persistent_disk_enabled
-
     enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
         "1",
         "true",
         "yes",
     }
-    local_auth = os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().casefold() in {
-        "1",
-        "true",
-        "yes",
-    }
-    mock_auth = os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
-    mock_local = mock_auth and local_auth and cloud_auth._mock_enabled(cloud_auth.config())
-    # Real local Google sign-ins use the same account-scoped workspace and
-    # collaboration database as hosted SIGMA. The explicit auto-admin shortcut
-    # keeps its historical single-user local filesystem behavior.
-    auto_admin = os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
-    return enabled and (persistent_disk_enabled() or not local_auth or mock_local or not auto_admin)
+    # The identity-bound workspace and collaboration rules are identical
+    # for hosted and local Google sign-ins. Requests using the explicit
+    # legacy auto-admin shortcut stay unpartitioned in the API dependency.
+    return enabled
 
 
 def current() -> Workspace | None:
     return _CURRENT.get()
 
 
-def local_legacy_owner_access() -> bool:
-    """Permit the real local Google administrator to adopt existing local projects.
+def local_legacy_owner_access(path: Path | None = None) -> bool:
+    """Limit legacy local-project adoption to the designated Google administrator.
 
-    This retains the same filesystem reach that SIGMA's local administrator
-    already had, while every other account remains restricted to its workspace
-    and explicit shared-project membership. Mock identities are never legacy owners.
+    Hosted and mock accounts never enter this compatibility path. A project
+    outside the administrator's own workspace must belong to the original
+    local project root or have been explicitly saved in the old local index.
+    This cannot authorize paths inside another user's workspace partition.
     """
     cfg = cloud_auth.config()
     principal = cloud_auth.current_principal()
-    return bool(
+    if not (
         cfg.enabled
         and cfg.local
         and not cfg.error
+        and cfg.admin_contact_email
         and principal is not None
         and principal.role == "admin"
+        and principal.email.casefold() == cfg.admin_contact_email.casefold()
         and not principal.subject.startswith(("mock:", "local-admin:"))
         and current() is not None
-    )
+    ):
+        return False
+    if path is None:
+        return True
+    candidate = Path(path)
+    try:
+        from sigma.projects import local_projects_root
+        if candidate.is_relative_to(local_projects_root()):
+            return True
+    except (OSError, ValueError):
+        pass
+    try:
+        from sigma import recents
+        with without_workspace(), recents._index() as index:
+            return any(
+                entry["path"] == str(candidate)
+                for entry in index["entries"]
+            )
+    except (OSError, ValueError):
+        return False
 
 
 @contextmanager
@@ -346,7 +358,7 @@ def assert_project_path(value: str | Path, resolved: Path) -> None:
             from sigma import project_collaboration
 
             if not (
-                local_legacy_owner_access()
+                local_legacy_owner_access(resolved)
                 or project_collaboration.authorized_shared_path(resolved)
             ):
                 raise ValueError("owner")

@@ -111,6 +111,11 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
         return
     if not isinstance(principal, cloud_auth.Principal):
         raise HTTPException(status_code=401, detail="Authentication required.")
+    if cloud_auth.config().local and principal.subject.startswith("local-admin:"):
+        # Preserve the old unpartitioned developer shortcut. A real OAuth
+        # session is bound below to its own workspace, even on this server.
+        yield
+        return
     try:
         token = cloud_workspaces.bind(principal)
     except cloud_workspaces.WorkspaceUnavailable as exc:

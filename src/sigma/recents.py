@@ -465,7 +465,7 @@ def recent_projects() -> dict:
                 workspace is not None
                 and not Path(copied["path"]).is_relative_to(workspace.path)
                 and copied["path"] not in shared_by_path
-                and not cloud_workspaces.local_legacy_owner_access()
+                and not cloud_workspaces.local_legacy_owner_access(Path(copied["path"]))
             ):
                 continue
             entries.append(copied)
