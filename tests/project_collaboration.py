@@ -245,11 +245,13 @@ class CollaborationTests(TestCase):
 
         def deliver(message, *, recipients):
             html_part = message.get_body(preferencelist=("html",))
-            messages.append((
-                recipients[0],
-                message.get_body(preferencelist=("plain",)).get_content(),
-                html_part.get_content() if html_part is not None else None,
-            ))
+            messages.append(
+                (
+                    recipients[0],
+                    message.get_body(preferencelist=("plain",)).get_content(),
+                    html_part.get_content() if html_part is not None else None,
+                )
+            )
 
         with (
             patch(
@@ -286,9 +288,11 @@ class CollaborationTests(TestCase):
             {"new@example.net", "other@example.org"},
         )
         added = next((plain, html) for email, plain, html in messages if email == "new@example.net")
-        removed = next((plain, html) for email, plain, html in messages if email == "other@example.org")
+        removed = next(
+            (plain, html) for email, plain, html in messages if email == "other@example.org"
+        )
         self.assertIn("/project?path=", added[0])
-        self.assertIn('>Study</a>', added[1])
+        self.assertIn(">Study</a>", added[1])
         self.assertIn('href="https://sigma.example.org/project?path=', added[1])
         self.assertNotIn("“Study”", added[0])
         self.assertNotIn("“Study”", added[1])
