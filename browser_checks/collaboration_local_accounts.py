@@ -207,9 +207,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             ui + "/api/cloud-auth/mock/select?identity=member-b",
             headers={
                 "Origin": ui,
-                "X-Sigma-Window": guest.evaluate(
-                    "sessionStorage.getItem('sigma.auth.window')"
-                ),
+                "X-Sigma-Window": guest.evaluate("sessionStorage.getItem('sigma.auth.window')"),
             },
         )
         assert selected.status == 204, selected.text()
@@ -327,6 +325,11 @@ def verify_new_windows_inherit_latest_google_account(browser, ui: str) -> None:
         with first.expect_popup() as popup_info:
             first.evaluate("window.open('/', '_blank')")
         popup = popup_info.value
+        popup.wait_for_load_state("domcontentloaded")
+        popup.wait_for_function(
+            "previous => window.sessionStorage.getItem('sigma.auth.window') !== previous",
+            arg=first_id,
+        )
         popup.wait_for_function(
             "window.sessionStorage.getItem('sigma.auth.windowScoped') === 'yes'"
         )
