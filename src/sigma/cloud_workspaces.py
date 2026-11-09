@@ -237,7 +237,8 @@ def _connect(root: Path) -> sqlite3.Connection:
         connection = sqlite3.connect(database, timeout=30, isolation_level=None)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout=30000")
-        connection.execute("PRAGMA journal_mode=DELETE")
+        # The default SQLite rollback journal is DELETE. Re-setting journal
+        # mode on every auth/read request needlessly requires database locks.
         connection.execute(
             """CREATE TABLE IF NOT EXISTS workspaces (
                 subject_hash TEXT PRIMARY KEY,
