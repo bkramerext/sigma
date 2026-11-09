@@ -218,7 +218,10 @@ def list_project_types_view(request: Request):
         return {
             "project_types": builtins,
             "common_references": project_types.curated_common_references(),
-            "common_custom_references": {},
+            "common_custom_references": {
+                "research_standards_references": [],
+                "publication_standards_references": [],
+            },
             "builtin_custom_references": {},
             "reference_preferences": {},
             "icons": {"placeholder": project_types.placeholder_icon()},
