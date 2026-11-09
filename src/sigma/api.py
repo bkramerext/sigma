@@ -1043,6 +1043,17 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
         if completed.cancelled():
             return
         error = completed.exception()
+        if error is None:
+            paper_id = completed.result().get("paper_id")
+            if isinstance(paper_id, str):
+                try:
+                    project_collaboration.note_artifact_author(
+                        body.path, "paper", paper_id, created_only=True
+                    )
+                except (OSError, sqlite3.Error, ValueError):
+                    logging.getLogger(__name__).warning(
+                        "Paper author attribution unavailable for %s", paper_id
+                    )
         if error is not None and not isinstance(error, ProjectError):
             logging.getLogger(__name__).error(
                 "Detached paper generation failed: %s", type(error).__name__
