@@ -4,7 +4,7 @@
 
 **[See it in action](https://sigma-research.duckdns.org/)**
 
-SIGMA is a collaborative, cost-conscious research workspace for exploring difficult questions with AI. Researchers guide Investigator and Skeptic agents through competing approaches, preserving findings and open questions while keeping resource use in view.
+SIGMA is a **multi-user, collaborative research workspace** for exploring difficult questions with AI. Multiple researchers can work on **the same shared project**, contributing to its strategies, research sessions, findings, and papers rather than exchanging disconnected copies. Investigator and Skeptic agents examine competing approaches while SIGMA preserves evidence, objections, and open questions for the whole team. Research remains cost-conscious and inspectable.
 
 This effort grew from an investigation into the Riemann Hypothesis and the idea that even an unsolved question should leave a useful, inspectable record of what was tried, what failed, and what remains unknown.
 
@@ -14,18 +14,29 @@ SIGMA does **not** establish that an answer is correct. Investigator and Skeptic
 
 ## Using SIGMA
 
-Create a project or sample, then choose strategies to investigate. The overview below shows how SIGMA preserves findings for review and how you can optionally develop saved research into a paper. For session controls and limits, see [Connect AI and investigate](docs/GETTING_STARTED.md#connect-ai-and-investigate).
+Create a project or start from a sample, then invite collaborators to investigate the question together. Everyone authorized for a shared project works with the **same ongoing research record**—strategies, sessions, evidence, and papers—across their own signed-in accounts. You can also work privately. The overview below shows how SIGMA preserves findings and can optionally develop saved research into a paper. For session controls and limits, see [Connect AI and investigate](docs/GETTING_STARTED.md#connect-ai-and-investigate).
 
 ## Workflow
 
 <p align="center"><img src="assets/workflow.svg" alt="SIGMA workflow: Project → Strategies → Research → Refine → Optional paper → Review/export" width="75%" /></p>
 
 - **Create a project:** Choose a subject or sample and frame the question.
+- **Collaborate on the same project:** Add other Google-account users in Project Settings → Collaborators. They see the shared project in **My Work** and contribute to its research rather than working on separate copies.
 - **Explore strategies:** Develop approaches to the question and select which to investigate.
 - **Run research:** Investigator and Skeptic examine selected strategies; SIGMA saves findings, evidence, objections, and open questions.
 - **Review and refine:** Inspect sessions, the Outcome, and Current Understanding. Revise strategies or run more sessions when useful; research can be iterative.
 - **Draft a paper (optional):** SIGMA can synthesize saved research into an academic draft. A draft is not proof or independent verification.
 - **Review and export:** Export research records and reports for inspection or sharing, with no paper required. If you create a paper, review its claims, evidence, citations, and limitations before exporting PDF or TeX. You decide whether and where to share or publish a paper; SIGMA does not submit papers to journals.
+
+## Collaborate with other researchers
+
+SIGMA supports **multiple people working on one project**. A project owner can invite collaborators by their Google account email addresses in **Project Settings → Collaborators**. Invited users sign in with their own accounts and find the shared project under **My Work**, marked with a collaboration icon. An invitation email provides a direct link to the project when a public SIGMA URL is configured.
+
+A collaborator works in the owner's shared project, not a fork or emailed snapshot. Authorized participants can inspect and build upon the same project question, strategies, research history, and generated papers. Changes are attributed to the owner or collaborator who made them. Project changes are saved as they are made; returning to the project shows its latest saved state.
+
+Access is controlled by verified Google sign-in and project membership. The owner can remove any collaborator; a collaborator can remove only collaborators they added. SIGMA checks revisions to reject conflicting or stale edits, and coordinates execution so simultaneous users do not run conflicting research or paper work on the same project.
+
+**Private projects are still supported.** You can use SIGMA locally without Google sign-in; authenticated collaboration requires the local or hosted deployment to be configured for Google-based accounts. Sharing access to a project is different from exporting or emailing a copy.
 
 SIGMA supports ordinary local use without a Google account, local testing of Google-authenticated access, and a separately configured hosted deployment. Hosted access, membership, and provider funding depend on the deployment's configuration; a local launch does not automatically connect to the hosted service.
 
