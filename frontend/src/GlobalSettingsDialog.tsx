@@ -155,14 +155,14 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     return () => { controller.abort(); element?.removeEventListener("cancel", preventCancel); };
   }, []);
   const setLimit = (key: keyof LimitSettings, value: number | string | null) => {
-    setSaved(false);
+    setError(''); setSaved(false);
     setConfig(current => current ? { ...current, limits: { ...current.limits, [key]: value } } : current);
   };
   const setResearch = (patch: Partial<ResearchConfig>) => {
-    setSaved(false);
+    setError(''); setSaved(false);
     setConfig(current => current ? { ...current, ...patch } : current);
   };
-  const setPref = (patch: Partial<Preference>) => { setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
+  const setPref = (patch: Partial<Preference>) => { setError(''); setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
   const hasOtherChanges = loaded && !!config && savedSnapshot.current !== JSON.stringify({ config, prefs });
   const hasChanges = typesSaveState.dirty || hasOtherChanges;
   const validLimits = !!config && (['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const)
@@ -245,10 +245,10 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   }
   // Commit validated changes automatically, including embedded Project Types.
   useEffect(() => {
-    if (!canSave || !loaded) return;
+    if (!canSave || !loaded || error) return;
     const handle = window.setTimeout(() => { void save(); }, 650);
     return () => window.clearTimeout(handle);
-  }, [canSave, loaded, config, prefs, typesSaveState]);
+  }, [canSave, loaded, config, prefs, typesSaveState, error]);
   async function reloadEthos() {
     setEthosBusy(true); setEthosError('');
     try {
