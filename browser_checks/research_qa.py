@@ -95,9 +95,11 @@ with sync_playwright() as playwright:
     expect(lean.locator("img")).to_have_attribute("src", "/lean-logo.svg")
     lean.click()
     lean_dialog = page.get_by_role("dialog", name="Lean proof verification")
-    expect(lean_dialog).to_contain_text(
-        "Yeah, I'd love to see this too. Still under consideration!"
+    expect(lean_dialog.locator(".settings-body p")).to_contain_text(
+        "Yeah, I'd love to see this too."
     )
+    expect(lean_dialog.locator(".settings-body p br")).to_have_count(1)
+    expect(lean_dialog).to_contain_text("Still under consideration!")
     lean_dialog.get_by_role("button", name="Close Lean dialog").click()
     expect(lean_dialog).to_be_hidden()
     expect(lean).to_be_focused()
