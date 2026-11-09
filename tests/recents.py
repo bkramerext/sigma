@@ -30,7 +30,6 @@ from sigma.recents import (
     pinned_projects,
     project_family,
     recent_projects,
-    record_access,
     set_project_pin,
     state_directory,
 )
