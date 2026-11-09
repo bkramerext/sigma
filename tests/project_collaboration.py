@@ -524,14 +524,16 @@ class CollaborationTests(TestCase):
         removed = next(
             (plain, html) for email, plain, html in messages if email == "other@example.org"
         )
+        added_html = added[1]
+        assert added_html is not None
         self.assertIn("/project?path=", added[0])
-        self.assertIn(">Study</a>", added[1])
-        self.assertIn('href="https://sigma.example.org/project?path=', added[1])
+        self.assertIn(">Study</a>", added_html)
+        self.assertIn('href="https://sigma.example.org/project?path=', added_html)
         self.assertIn("invited_email=new%40example.net", added[0])
-        self.assertIn("invited_email=new%40example.net", added[1])
+        self.assertIn("invited_email=new%40example.net", added_html)
         self.assertNotIn("invited_email=", removed[0])
         self.assertNotIn("“Study”", added[0])
-        self.assertNotIn("“Study”", added[1])
+        self.assertNotIn("“Study”", added_html)
         self.assertIn("“Study”", removed[0])
         self.assertIsNone(removed[1])
         with shared._db() as db:
