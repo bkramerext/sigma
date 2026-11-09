@@ -4391,6 +4391,15 @@ type Destination = { root: string; path: string | null; exists: boolean };
 type ResearchQASource = { source_id: string; session_number: number | null; kind: string; label?: string; navigation_available?: boolean; navigation_url?: string; navigation_unavailable_reason?: string };
 type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; markdown_answer?: string | null; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
 
+function LeanPlaceholderDialog({ onClose }: { onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog lean-placeholder-dialog" aria-labelledby="lean-placeholder-heading" onCancel={event => { event.preventDefault(); onClose(); }}>
+    <header className="settings-header"><h2 id="lean-placeholder-heading">Lean proof verification</h2><div className="settings-actions"><DialogDismissButton label="Close Lean dialog" onClick={onClose}/></div></header>
+    <div className="settings-body ai-paper-body"><p>Yeah, I'd love to see this too.<br/>Still under consideration!</p></div>
+  </dialog>;
+}
+
 function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; projectId: string; guest: boolean; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -6468,6 +6477,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [exportOpen, setExportOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [qaOpen, setQaOpen] = useState(false);
+  const [leanOpen, setLeanOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
   useEffect(() => {
@@ -6825,6 +6835,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         </svg>
       </button>}
       <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
+      {project.investigation_type === 'mathematical' && <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Lean proof verification" data-tooltip="Lean proof verification" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setLeanOpen(true)}><img src="/lean-logo.svg" alt="" aria-hidden="true"/></button>}
       <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={guest || closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
@@ -6976,6 +6987,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
 
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
     {qaOpen && <ResearchQADialog path={view.path} projectId={project.id} guest={guest} onCancel={() => { setQaOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-qa-button')?.focus()); }}/>}
+    {leanOpen && <LeanPlaceholderDialog onClose={() => { setLeanOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-lean-button')?.focus()); }}/>}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
       <summary>Project details &amp; history</summary>
       <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research type</dt><dd>{researchTypeLabel(project.investigation_type)}</dd>{project.difficulty && <><dt>Difficulty</dt><dd>{difficultyLabels[project.difficulty]}</dd></>}<dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
