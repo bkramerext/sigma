@@ -734,7 +734,7 @@
 }
 
 /* The classification dialog retains the established upper-right close inset. */
-.sigma-project-classification-dialog .settings-header { padding-top: 6px; }
+.sigma-project-classification-dialog .settings-header { padding-top: 22px; }
 
 /* Project Settings uses the same classification grid and selector inset as New Project. */
 .sigma-project-classification-dialog .settings-classification-row { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
@@ -762,3 +762,7 @@
 @media (max-width: 560px) {
   .project-settings-dialog.new-project-dialog .new-project-edit-note { margin-inline: 18px; }
 }
+
+/* Match the Thinking control value inset; icon-only add never has a box. */
+.sigma-project-classification-dialog .settings-classification-row > div:nth-child(2) .sigma-select-trigger { text-align: left; padding-left: 12px; }
+.sigma-project-classification-dialog .project-collaborators-heading button.sigma-heading-icon-action, .sigma-project-classification-dialog .project-collaborators-heading button.sigma-heading-icon-action:hover:not(:disabled) { border-color: transparent; background: transparent; box-shadow: none; padding: 4px; }
