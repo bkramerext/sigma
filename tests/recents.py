@@ -92,7 +92,78 @@ def check_project_metadata_cache_invalidation(root: Path) -> None:
         assert len(calls) == 2, "Updating a paper must invalidate the cache"
         pdf.unlink()
         paper_scores.project_metadata(str(project_dir))
-        assert len(calls) == 3, "Deleting a PDF must invalidate the cache"
+        assert len(calls) == 2, "PDF deletion must not trigger Home revalidation"
+    paper_scores._project_metadata_cached.cache_clear()
+
+
+def check_home_list_uses_only_paper_records(root: Path) -> None:
+    """Cold Home/Most Recent listing must not read, inspect or hash PDFs."""
+    from sigma import paper_scores, papers
+
+    view = initialize_project(
+        root / "home-paper-metadata-test.sigma", "Paper summary only", "List without PDF reads."
+    )
+    paper_id = "e" * 32
+    papers._save(
+        view.path,
+        {
+            "schema_version": 1,
+            "paper_id": paper_id,
+            "project_id": view.project.id,
+            "created_at": "2026-11-08T00:00:00+00:00",
+            "snapshot_sha256": "c" * 64,
+            "draft": {"title": "Published paper"},
+            "generation": {},
+            "validation_warnings": [],
+        },
+        b"%PDF-home-metadata-fixture",
+    )
+    record = papers._read_one(view.path, paper_id)
+    judgment = paper_scores.PaperJudgment.model_validate(
+        {
+            name: {"earned": 70, "explanation": "Valid fixture with measured evidence."}
+            for name in paper_scores.WEIGHTS
+        }
+    )
+    score = paper_scores._make_score(judgment, record["pdf_sha256"])
+    paper_scores._save_score(view.path, paper_id, score)
+    open_project(view.path)
+    paper_scores._project_metadata_cached.cache_clear()
+    original_open = Path.open
+    original_read = Path.read_bytes
+
+    def refuse_pdf_open(path: Path, *args, **kwargs):
+        if path.suffix == ".pdf":
+            raise AssertionError("Home opened a PDF")
+        return original_open(path, *args, **kwargs)
+
+    def refuse_pdf_read(path: Path, *args, **kwargs):
+        if path.suffix == ".pdf":
+            raise AssertionError("Home read a PDF")
+        return original_read(path, *args, **kwargs)
+
+    with (
+        patch.object(papers, "_valid_pdf_file", side_effect=AssertionError("Home checked a PDF")),
+        patch.object(papers, "_cached_pdf_digest", side_effect=AssertionError("Home hashed a PDF")),
+        patch.object(Path, "open", refuse_pdf_open),
+        patch.object(Path, "read_bytes", refuse_pdf_read),
+    ):
+        for listing in (recent_projects, home_projects):
+            rows = [row for row in listing()["projects"] if row["id"] == view.project.id]
+            assert len(rows) == 1 and rows[0]["available"], rows
+            assert rows[0]["paper_count"] == 1, rows
+            assert rows[0]["best_paper_score"] == 70, rows
+        # Corrupt individual paper records must not hide the saved project.
+        paper_dir = Path(view.path) / "papers"
+        (paper_dir / "malformed.json").write_text("{broken", encoding="utf-8")
+        assert any(
+            row["id"] == view.project.id and row["available"]
+            for row in home_projects()["projects"]
+        )
+        with patch.object(paper_scores, "project_metadata", side_effect=OSError("broken")):
+            rows = [row for row in recent_projects()["projects"] if row["id"] == view.project.id]
+            assert len(rows) == 1 and rows[0]["available"]
+            assert rows[0]["paper_count"] == 0
     paper_scores._project_metadata_cached.cache_clear()
 
 
@@ -691,6 +762,7 @@ def check(root: Path, base: Path) -> None:
     assert recent_projects()["projects"]
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
+    check_home_list_uses_only_paper_records(root)
     check_home_session_status_cache(root)
     check_paper_preflight_presence(root)
     check_pdf_verification_cache(root)
