@@ -6,6 +6,7 @@ Delete this module after the zetacontinuation@gmail.com migration is verified
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -13,8 +14,6 @@ import shutil
 import stat
 import tempfile
 from pathlib import Path
-
-import fcntl
 
 from sigma import cloud_auth, cloud_workspaces
 from sigma.projects import ProjectError, _decode, local_projects_root
@@ -90,13 +89,12 @@ def _source_inventory() -> tuple[dict, list[tuple[Path, str, str]]]:
     """Read old local state only during this one-time transfer."""
     from sigma import recents
 
-    with cloud_workspaces.without_workspace():
-        with recents._index() as saved:
-            index = {
-                "entries": [dict(entry) for entry in saved["entries"]],
-                "pins": dict(recents._effective_pins(saved)),
-                "dismissed_default_pins": list(saved.get("dismissed_default_pins", [])),
-            }
+    with cloud_workspaces.without_workspace(), recents._index() as saved:
+        index = {
+            "entries": [dict(entry) for entry in saved["entries"]],
+            "pins": dict(recents._effective_pins(saved)),
+            "dismissed_default_pins": list(saved.get("dismissed_default_pins", [])),
+        }
 
     paths = [Path(entry["path"]) for entry in index["entries"]]
     saved_paths = {path.absolute() for path in paths}
