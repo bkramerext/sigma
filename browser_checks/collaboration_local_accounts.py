@@ -147,7 +147,7 @@ def exercise(ui: str, workspaces: Path) -> None:
 
         # N's own Saved tab must show the owner's project and group icon.
         member.goto(ui)
-        member.get_by_role("tab", name="Saved").click()
+        member.get_by_role("tab", name="My Work").click()
         expand_saved_group(member)
         expect(
             member.get_by_role("button", name=f"Manage collaborators for {title}")
@@ -155,7 +155,7 @@ def exercise(ui: str, workspaces: Path) -> None:
 
         # The Users Round shortcut opens the owner's original project in Settings.
         owner.goto(ui)
-        owner.get_by_role("tab", name="Saved").click()
+        owner.get_by_role("tab", name="My Work").click()
         expand_saved_group(owner)
         shortcut = owner.get_by_role("button", name=f"Manage collaborators for {title}")
         expect(shortcut).to_be_visible()
@@ -251,7 +251,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         recent = get_json(member_context.request.get(ui + "/api/projects/recent"))
         assert all(row["path"] != path for row in recent["projects"])
         owner.goto(ui)
-        owner.get_by_role("tab", name="Saved").click()
+        owner.get_by_role("tab", name="My Work").click()
         expand_saved_group(owner)
         expect(owner.get_by_role("button", name=f"Manage collaborators for {title}")).to_have_count(
             0

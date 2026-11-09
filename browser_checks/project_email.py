@@ -46,6 +46,11 @@ def main() -> None:
             )
 
         page.route("**/api/**", proxy)
+        # Do not proxy an unending EventSource with route.fetch().
+        page.route(
+            "**/api/projects/research-presence?*",
+            lambda route: route.fulfill(status=204, body=""),
+        )
         page.goto(BASE)
         created = page.evaluate(
             """async title => {
