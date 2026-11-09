@@ -101,6 +101,8 @@ def check_one_time_owner_migration(base: Path) -> None:
     state = base / "migration-original-state"
     workspace_path = base / "migration-owner-workspace"
     workspace_path.mkdir(mode=0o700)
+    database_root = base / "migration-workspaces-db"
+    database_root.mkdir(mode=0o700)
     with (
         patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root), "SIGMA_STATE_DIR": str(state)}),
         patch("sigma.projects._current_build_commit", return_value=None),
@@ -145,10 +147,16 @@ def check_one_time_owner_migration(base: Path) -> None:
         try:
             with (
                 patch("sigma.cloud_auth.config", return_value=config),
-                patch.object(project_collaboration, "register_owner") as registered,
+                patch.object(cloud_auth, "current_principal", return_value=principal),
+                patch.object(cloud_workspaces, "storage_root", return_value=database_root),
             ):
                 migrate_local_projects_once.migrate_if_needed(principal)
-                assert registered.call_count == 2
+                with project_collaboration._db() as db:
+                    owners = db.execute(
+                        "SELECT path, project_id, owner_hash FROM shared_projects"
+                    ).fetchall()
+                assert len(owners) == 2
+                assert all(row["owner_hash"] == workspace.subject_hash for row in owners)
                 assert (workspace_path / ".sigma-state/local-projects-migrated-v1.json").is_file()
                 imported = {row["id"]: row for row in recent_projects(lightweight=True)["projects"]}
                 assert set(imported) == {saved.project.id, unlisted.project.id}

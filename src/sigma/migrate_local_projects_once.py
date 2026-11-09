@@ -148,9 +148,13 @@ def _relocate_members(
                 package = updated.get(field)
                 if isinstance(package, dict) and package.get("schema") == "sigma-paper-evidence-v2":
                     updated["snapshot_sha256"] = hashlib.sha256(_canonical(package)).hexdigest()
-            if name.startswith("research-sessions/") and updated.get("project_id") == project_id:
-                if "project_path" in updated and updated["project_path"] != new_path:
-                    raise ProjectError(f"Research session path did not migrate: {name}")
+            if (
+                name.startswith("research-sessions/")
+                and updated.get("project_id") == project_id
+                and "project_path" in updated
+                and updated["project_path"] != new_path
+            ):
+                raise ProjectError(f"Research session path did not migrate: {name}")
         result[name] = _encode(updated) if updated != record else raw
     return result
 
