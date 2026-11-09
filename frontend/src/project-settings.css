@@ -461,11 +461,12 @@
 ):focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
-/* Explaining is a temporary full-width label that replaces the balloon.
-   It must not inherit the 28px icon-slot width or use absolute positioning. */
+/* The explanation replaces the balloon inside the same action button.
+   Collapse the former 28px balloon slot so the hourglass begins at its
+   position, rather than appearing shifted to the right of an empty icon. */
 .project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools button.ai-paper-eli5-balloon.is-explaining:disabled {
   display: inline-flex; flex: 0 0 auto; width: auto; min-width: max-content;
-  height: 28px; padding: 0 4px; opacity: 1;
+  height: 28px; margin-left: -28px; padding: 0 4px; opacity: 1;
   border-color: transparent; background: transparent; box-shadow: none;
   cursor: progress;
 }
