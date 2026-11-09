@@ -4892,6 +4892,7 @@ type SharedProjectInfo = {
   artifact_authors?: Partial<Record<'strategy' | 'session' | 'paper', Record<string, string>>>;
   owner: string | null;
   collaborators: string[];
+  removable_collaborators?: string[];
   revision: number;
   model: string;
   thinking: string;
@@ -5058,9 +5059,9 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
               </div>
               {collaborators.map(email => <div className="project-collaborator-row" key={email}>
                 <span>{email}</span>
-                <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
+                {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
-                </button>
+                </button>}
               </div>)}
               {adding && <div className="project-collaborator-add">
                 <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => { setNewEmail(event.target.value); if (error) setError(''); }}
