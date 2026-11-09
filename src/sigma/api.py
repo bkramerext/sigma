@@ -2455,9 +2455,6 @@ async def _delete_project_unleased(body: DeleteProjectRequest):
         view = inspect_project(str(authorized))
         if view.project.id != body.expected_project_id:
             raise ProjectError("Project changed; refresh before deleting it")
-        from sigma.recents import assert_project_unpinned
-
-        assert_project_unpinned(body.expected_project_id)
         # Admission holds the same manager lock until its worker is published.
         # Keep it across deletion; prove every saved session's original worker
         # has exited before removing its project, including foreign-process
@@ -2468,7 +2465,6 @@ async def _delete_project_unleased(body: DeleteProjectRequest):
             view = inspect_project(str(authorized))
             if view.project.id != body.expected_project_id:
                 raise ProjectError("Project changed; refresh before deleting it")
-            assert_project_unpinned(body.expected_project_id)
             await research_sessions.stop_project_sessions(str(authorized))
             with ExitStack() as worker_fences:
                 for session in research_sessions._all(str(authorized)):

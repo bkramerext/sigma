@@ -3878,9 +3878,9 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
       <button type="submit" className="text-view-link" data-tooltip="Save project title" disabled={busy}>Save</button><button type="button" className="text-view-link" data-tooltip="Cancel editing the project title" disabled={busy} onClick={() => cancel()}>Cancel</button>
       {error && <p role="alert" className="project-title-error">{error}</p>}
     </form> : <><h3 className="current-project">{view.project.title}</h3>
-      <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} data-tooltip="Edit text and description" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
+      <button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} data-tooltip="Edit text and description" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg>
-      </button><span id="project-markdown-slot-copy" className="project-copy-slot"/> </>}
+      </button><span id="project-markdown-slot" className="project-markdown-slot"/><span id="project-markdown-slot-copy" className="project-copy-slot"/> </>}
   </div>;
 }
 
@@ -5256,15 +5256,22 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
 }
 
 type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; error: string | null };
-// A versioned project's family is its title without the final " vN" suffix.
-// Pinning is a presentation choice: hidden siblings remain in the account's
-// complete Saved Projects index and become visible again on unpin.
+// Saved groups by title without the terminal version; versions sort numerically descending.
+// Most Recent intentionally keeps last-accessed ordering.
+const savedVersionSuffix = /\s+(?:v(?:ersion)?\s*(\d+(?:\.\d+)*)|\(\s*v(?:ersion)?\s*(\d+(?:\.\d+)*)\s*\))$/i;
 function recentProjectFamilyKey(project: RecentProject): string {
-  return `${project.investigation_type ?? ''}::${project.title.replace(/\s+v\d+$/i, '').trim().toLocaleLowerCase()}`;
+  return project.title.replace(savedVersionSuffix, '').trim().toLocaleLowerCase();
 }
-function visibleRecentProjects(projects: RecentProject[]): RecentProject[] {
-  const pinnedFamilies = new Set(projects.filter(project => project.pinned && project.available).map(recentProjectFamilyKey));
-  return projects.filter(project => project.pinned || !pinnedFamilies.has(recentProjectFamilyKey(project)));
+function compareSavedVersions(a: RecentProject, b: RecentProject): number {
+  const family = recentProjectFamilyKey(a).localeCompare(recentProjectFamilyKey(b), undefined, { sensitivity: 'base' });
+  if (family) return family;
+  const numbers = (entry: RecentProject) => (entry.title.match(savedVersionSuffix)?.slice(1).find(Boolean) ?? '0').split('.').map(Number);
+  const left = numbers(a), right = numbers(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const delta = (right[i] ?? 0) - (left[i] ?? 0);
+    if (delta) return delta;
+  }
+  return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
 }
 type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number; best_paper_score?: number | null };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
@@ -5445,21 +5452,9 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
       setError(errorMessage(cause));
     } finally { pending.current = false; setOpening(''); }
   }
-  async function togglePin(entry: RecentProject) {
-    if (pending.current) return; pending.current = true; setOpening(entry.id); setError(''); setConfirmRemoveId('');
-    try {
-      await post('recent/pin', { project_id: entry.id, path: entry.path, pinned: !entry.pinned });
-      await load();
-    } catch (cause) { setError(errorMessage(cause)); }
-    finally { pending.current = false; setOpening(''); }
-  }
-  const familyCounts = new Map<string, number>();
-  for (const project of projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable'))) {
-    const family = recentProjectFamilyKey(project);
-    familyCounts.set(family, (familyCounts.get(family) ?? 0) + 1);
-  }
   const eligibleProjects = projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable'));
-  const visibleProjects = flat ? eligibleProjects : visibleRecentProjects(eligibleProjects);
+  const visibleProjects = flat ? eligibleProjects : [...eligibleProjects].sort((a, b) =>
+    researchTypeLabel(a.investigation_type).localeCompare(researchTypeLabel(b.investigation_type)) || compareSavedVersions(a, b));
   // Running work takes precedence over a queued paper on the same project.
   // The queue API exposes paper_activity when the queued-generation feature lands.
   const paperActivity = (entry: RecentProject): 'running' | 'queued' | null =>
@@ -5502,16 +5497,16 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             {entry.best_paper_score != null && entry.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{!flat && (familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}<button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
             onClick={() => { setConfirmRemoveId(''); setSaveAsEntry(entry); }}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
-          </button>{!entry.pinned && <button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" onClick={event => {
+          </button><button className="recent-forget" disabled={!!opening} aria-label="Remove this project" aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove this project" onClick={event => {
             if (confirmRemoveId === entry.id) { setConfirmRemoveId(''); return; }
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}{!entry.pinned && confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
+          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -5823,8 +5818,8 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptio
       <button type="button" className="text-view-link" data-tooltip="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
       <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} data-tooltip={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
-      <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><span id={`strategy-markdown-slot-${strategy.id}-copy`} className="strategy-copy-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and approach: ${shownTitle}`} data-tooltip="Edit strategy title and approach" disabled={modeDisabled}
-        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
+      <button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and approach: ${shownTitle}`} data-tooltip="Edit strategy title and approach" disabled={modeDisabled}
+        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><span id={`strategy-markdown-slot-${strategy.id}-copy`} className="strategy-copy-slot"/>
       {commands}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
@@ -5858,8 +5853,8 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
       {confirmingRemove && <div className="strategy-remove-popover"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove strategy ${strategy.title}`}>
         <p>Remove “{strategy.title}” from Strategies? Its research and history will be kept in the project.</p>
         <div className="session-remove-confirm-actions">
-          <button type="button" className="text-view-link destructive-action" disabled={disabled} onClick={() => { setConfirmingRemove(false); onCommand('remove', strategy); }}>Confirm</button>
-          <DialogDismissButton label="Cancel strategy removal" disabled={disabled} onClick={() => setConfirmingRemove(false)}/>
+          <button type="button" className="text-view-link" disabled={disabled} onClick={() => { setConfirmingRemove(false); onCommand('remove', strategy); }}>Confirm</button>
+          <DialogDismissButton label="Cancel strategy removal" onClick={() => setConfirmingRemove(false)}/>
         </div>
       </div></div>}
     </span>
@@ -6558,19 +6553,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   const projectActionBar = <div className="project-primary-actions">
     <div className="project-pane-actions">
-      <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
-      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={guest || closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
-        <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      </button>
-      <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" data-tooltip="Email project with attachments" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 5.5h13v11H3zM3.4 6l6.1 5 6.1-5"/>
-          <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
-        </svg>
-      </button>
-      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={guest || closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
-        <SlidersSettingsIcon/>
-      </button>
       {descriptionEditing ? <>
         <button type="submit" form="sigma-project-description-form"
           className="text-view-link sigma-description-toolbar-action" disabled={descriptionBusy || !descriptionDirty}>
@@ -6600,6 +6582,20 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
         </svg>
       </button>}
+      <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
+      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={guest || closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
+        <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" data-tooltip="Email project with attachments" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 5.5h13v11H3zM3.4 6l6.1 5 6.1-5"/>
+          <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
+        </svg>
+      </button>
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={guest || closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+        <SlidersSettingsIcon/>
+      </button>
+
     </div>
   </div>;
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView} >

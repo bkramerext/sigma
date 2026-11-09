@@ -195,11 +195,8 @@ with sync_playwright() as playwright:
     ).to_have_count(0)
     unavailable_fixture["enabled"] = False
 
-    # A singleton family needs neither Pin nor Unpin.
-    singleton_row = entry.locator("xpath=../..")
-    expect(singleton_row.locator(".recent-pin")).to_have_count(0)
-
-    # Another version in the same family stays visible until one is pinned.
+    # All project versions stay visible, latest numbered version first.
+    assert recent.locator(".recent-pin").count() == 0
     sibling_title = re.sub(r" v[0-9]+$", " v2", project_title)
     assert sibling_title != project_title
     siblings.update(enabled=True, project_id=project_id, sibling_title=sibling_title)
@@ -208,49 +205,14 @@ with sync_playwright() as playwright:
     recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     if not recent_group.evaluate("group => group.open"):
         recent_group.locator("summary").click()
-    expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
-
-    target_row = recent.locator("li").filter(has_text=project_title).first
-    pin = target_row.get_by_role("button", name="Just show this version of the project")
-    remove = target_row.get_by_role("button", name="Remove this project")
-    assert pin.get_attribute("data-tooltip") == "Just show this version of the project"
-    assert pin.get_attribute("title") is None
-    assert remove.get_attribute("data-tooltip") == "Remove this project"
-    assert remove.get_attribute("title") is None
-    pin_color = pin.evaluate("node => getComputedStyle(node).color")
-    assert pin_color == remove.evaluate("node => getComputedStyle(node).color")
-    pin.click()
-
-    # Stay in the same category and retain the same order after pinning.
-    expect(recent.locator("details.pinned-type-group")).to_have_count(0)
-    pinned = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
-    expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
-    expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_have_count(0)
-    expect(pinned.locator(".recent-title-pin")).to_have_count(0)
-    expect(pinned.get_by_role("button", name="Remove this project")).to_have_count(0)
-    unpin = pinned.get_by_role("button", name="Show all versions of this project")
-    expect(unpin).to_be_visible()
-    assert unpin.get_attribute("data-tooltip") == "Show all versions of this project"
-    assert unpin.get_attribute("title") is None
-    # Pin and Unpin keep the same idle color, and both brighten on hover.
-    page.mouse.move(1, 1)
-    assert unpin.evaluate("node => getComputedStyle(node).color") == pin_color
-    unpin.hover()
-    expect(unpin).to_be_visible()
-
-    page.reload()
-    recent = page.get_by_role("tabpanel", name="Saved")
-    pinned = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
-    if not pinned.evaluate("group => group.open"):
-        pinned.locator("summary").click()
-    expect(pinned.locator(".recent-title-pin")).to_have_count(0)
-    expect(pinned.get_by_role("button", name="Remove this project")).to_have_count(0)
-    pinned.get_by_role("button", name="Show all versions of this project").click()
-    expect(pinned.locator(".recent-title-pin")).to_have_count(0)
-    expect(pinned.get_by_role("button", name=project_title, exact=True)).to_be_visible()
-    expect(recent.get_by_role("button", name=sibling_title, exact=True)).to_be_visible()
-    expect(pinned.get_by_role("button", name="Remove this project").first).to_be_visible()
-    expect(pinned.locator("details.pinned-type-group")).to_have_count(0)
+    original = recent.get_by_role("button", name=project_title, exact=True)
+    sibling = recent.get_by_role("button", name=sibling_title, exact=True)
+    expect(original).to_be_visible()
+    expect(sibling).to_be_visible()
+    visible_titles = recent_group.locator("button.recent-open").all_text_contents()
+    assert visible_titles.index(sibling_title) < visible_titles.index(project_title), visible_titles
+    expect(recent_group.get_by_role("button", name="Remove this project").first).to_be_visible()
+    pinned = recent_group
 
     # Both Saved and Samples show the standard inline hourglass plus text
     # while loading, without replacing the ordinary hand cursor. Hold the
