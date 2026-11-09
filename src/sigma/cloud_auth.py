@@ -1051,9 +1051,7 @@ async def middleware(request: Request, call_next):
     )
     public = public or (request.method == "GET" and path.startswith("/api/ai/auth/callback/"))
     public = public or (path == "/api/cloud-auth/mock/select" and _mock_enabled(cfg))
-    public = public or (
-        path == "/api/cloud-auth/window/adopt" and request.method == "POST"
-    )
+    public = public or (path == "/api/cloud-auth/window/adopt" and request.method == "POST")
     public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
     public = public or (path == "/api/cloud-auth/feedback" and request.method == "POST")
     demo_public = path in {"/api/cloud-demo/", "/api/cloud-demo/report"} and request.method in {
@@ -1985,7 +1983,9 @@ async def callback(
         )
         _clear_cookie(response, cfg, FLOW_COOKIE)
         _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
-        _clear_cookie(response, cfg, SESSION_COOKIE)
+        # A denied Google attempt in this window must not erase the last
+        # successful sign-in from another window in the same browser profile.
+        _clear_window_session(response, cfg, flow["window_id"])
         response.set_cookie(
             _cookie_name(DENIED_COOKIE, cfg),
             denied_token,

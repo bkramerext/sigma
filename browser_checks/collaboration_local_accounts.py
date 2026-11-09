@@ -205,7 +205,12 @@ def exercise(ui: str, workspaces: Path) -> None:
         # leaving this browser context: its pending link should reopen itself.
         selected = guest_context.request.post(
             ui + "/api/cloud-auth/mock/select?identity=member-b",
-            headers={"Origin": ui},
+            headers={
+                "Origin": ui,
+                "X-Sigma-Window": guest.evaluate(
+                    "sessionStorage.getItem('sigma.auth.window')"
+                ),
+            },
         )
         assert selected.status == 204, selected.text()
         guest.reload()
@@ -265,11 +270,11 @@ def exercise(ui: str, workspaces: Path) -> None:
         browser.close()
 
 
-
 def verify_new_windows_inherit_latest_google_account(browser, ui: str) -> None:
     """One browser profile: each existing window stays put, a new one gets latest."""
     context = browser.new_context(viewport={"width": 1440, "height": 930})
     try:
+
         def open_window():
             page = context.new_page()
             page.goto(ui)
