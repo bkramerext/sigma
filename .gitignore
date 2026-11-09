@@ -228,3 +228,9 @@ frontend/dist/
 # Home runtime artwork is copied byte-for-byte from assets/ by Vite.
 frontend/public/sigma-home-background.png
 .aider*
+
+# macOS
+.DS_Store
+
+# SIGMA runtime locks
+projects/**/*.lock
