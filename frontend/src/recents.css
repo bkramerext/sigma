@@ -570,7 +570,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .home-page .home-samples .sample-open,
 .home-page .home-samples .sample-open strong,
 .home-page .home-samples .sample-open small {
-  text-shadow: 0 1px 3px #000e, 0 0 6px #000b;
+  text-shadow: 0 0 2px #000, 0 0 5px #000, 0 1px 10px #000f, 0 0 14px #000d;
 }
 /* No separator rules between Saved/Sample category rows. */
 .home-page .home-catalog { border-top: 0; }
