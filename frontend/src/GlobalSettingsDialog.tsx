@@ -236,11 +236,17 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       // Never claim atomicity across independent settings endpoints. The
       // unsaved edits stay on screen, and retry replays idempotent PUTs.
       setError(completed.length
-        ? message + '. Partially saved: ' + completed.join(', ') + '. Other edits remain unsaved; retry Save to finish.'
+        ? message + '. Partially saved: ' + completed.join(', ') + '. Other edits remain unsaved; correct the setting to retry.'
         : message);
     }
     finally { setBusy(false); }
   }
+  // Commit validated changes automatically, including embedded Project Types.
+  useEffect(() => {
+    if (!canSave || !loaded) return;
+    const handle = window.setTimeout(() => { void save(); }, 650);
+    return () => window.clearTimeout(handle);
+  }, [canSave, loaded, config, prefs, typesSaveState]);
   async function reloadEthos() {
     setEthosBusy(true); setEthosError('');
     try {
@@ -277,9 +283,16 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     } finally { setEthosBusy(false); }
   }
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
-  // Closing discards all unpersisted draft settings and embedded project types
-  // by unmounting this dialog. Only explicit Save sends their PUT requests.
-  const cancelAndClose = () => { if (!busy && !typesSaveState.busy && !ethosBusy) onClose(); };
+  // Close flushes the last valid change; it never rolls back a saved setting.
+  const cancelAndClose = async () => {
+    if (busy || typesSaveState.busy || ethosBusy) return;
+    if (hasChanges) {
+      if (!canSave) { setError('Finish or correct the current setting before closing.'); return; }
+      await save();
+      return; // Allow the committed state to settle; Close may then dismiss.
+    }
+    onClose();
+  };
   async function copyEthos() {
     if (!ethos || ethosEditing) return;
     try {
@@ -291,14 +304,13 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     }
   }
   return <dialog ref={dialog} className={`project-settings-dialog sigma-global-settings sigma-global-settings--${tab}`} aria-labelledby="sigma-global-settings-title"
-    onCancel={event => { event.preventDefault(); event.stopPropagation(); cancelAndClose(); }}
+    onCancel={event => { event.preventDefault(); event.stopPropagation(); void cancelAndClose(); }}
     onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelAndClose(); } }}>
     <div className="sigma-global-settings-content">
       <header className="settings-header">
         <h2 id="sigma-global-settings-title">Settings</h2>
         <div className="settings-actions">
-          <button type="button" disabled={!canSave} onClick={() => void save()}>{busy || typesSaveState.busy ? 'Saving…' : 'Save'}</button>
-          <DialogDismissButton label="Close Settings" disabled={busy || typesSaveState.busy || ethosBusy} onClick={cancelAndClose}/>
+          <DialogDismissButton label="Close Settings" disabled={busy || typesSaveState.busy || ethosBusy} onClick={() => void cancelAndClose()}/>
         </div>
       </header>
       <nav className="settings-tabs" role="tablist" aria-label="Settings">
