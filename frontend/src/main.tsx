@@ -5680,7 +5680,7 @@ function Home({ initialPath, onOpen }: {
                 <div className="sigma-header-about-model-anchor">
                   <div className="sigma-header-first-row">
                     <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" data-tooltip-disabled aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
-                    <button type="button" ref={settingsButton} className="home-settings-pill" aria-label="Settings" data-tooltip="SIGMA Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>
+                    {showConnectionStatus && <button type="button" ref={settingsButton} className="home-settings-pill" aria-label="Settings" data-tooltip="SIGMA Settings" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}><SlidersSettingsIcon/></button>}
                   </div>
                   <ConnectedModelPill enabled={showConnectionStatus}/>
                 </div>
