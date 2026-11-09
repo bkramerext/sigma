@@ -113,7 +113,8 @@ def main() -> None:
         updates: list[dict] = []
 
         def update(route):
-            updates.append(route.request.post_data_json)
+            payload = route.request.post_data_json
+            updates.append(payload)
             if len(updates) > 1:
                 route.fulfill(
                     status=409,
@@ -122,8 +123,16 @@ def main() -> None:
                         "Reopen it and redo your changes."
                     },
                 )
-            else:
-                route.fulfill(status=200, json=created["body"])
+                return
+            shared["revision"] += 1
+            shared["collaborators"] = payload["collaborators"]
+            created["body"]["project"].update({
+                "ai_model": payload["ai_model"],
+                "reasoning_effort": payload["reasoning_effort"],
+                "difficulty": payload["difficulty"],
+                "investigation_type": payload["investigation_type"],
+            })
+            route.fulfill(status=200, json=created["body"])
 
         page.route("**/api/projects/update", update)
         settings.click()
@@ -133,7 +142,7 @@ def main() -> None:
         expect(dialog.get_by_text("Owner", exact=True)).to_be_visible()
         assert dialog.get_by_role("button", name="Remove owner@example.org").count() == 0
 
-        # Classification row first, collaborators immediately below, model pair later.
+        # Classification, collaborators, then the aligned model/thinking pair.
         classification = dialog.locator(".settings-classification-row")
         category = dialog.get_by_role("combobox", name="Research category")
         difficulty = dialog.get_by_label("Difficulty")
@@ -163,10 +172,10 @@ def main() -> None:
             assert cat_box and diff_box and collab_box and model_box
             assert abs(cat_box["y"] - diff_box["y"]) < 4, (width, cat_box, diff_box)
             assert cat_box["x"] + cat_box["width"] <= diff_box["x"] + 1
-            assert model_box["y"] >= (
+            assert collab_box["y"] >= (
                 classification.bounding_box()["y"] + category.bounding_box()["height"]
             )
-            assert collab_box["y"] >= model_box["y"] + model_box["height"] - 1
+            assert model_box["y"] >= collab_box["y"] + collab_box["height"] - 1
             assert dialog.evaluate("element => element.scrollWidth <= element.clientWidth")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=f"/tmp/sigma-collaboration-settings-{width}.png")
@@ -188,20 +197,20 @@ def main() -> None:
         expect(dialog.get_by_text("brian@gmail.com")).to_be_visible()
         dialog.get_by_role("button", name="Remove alice@example.net").click()
         expect(dialog.get_by_text("alice@example.net")).to_have_count(0)
-        assert not updates, "Adding/removing collaborators must not auto-save"
-        expect(dialog.get_by_role("button", name="Save", exact=True)).to_be_enabled()
-        dialog.get_by_role("button", name="Save", exact=True).click()
-        expect(dialog).not_to_be_visible()
-        assert len(updates) == 1
+        expect(dialog.get_by_role("button", name="Save", exact=True)).to_have_count(0)
+        expect.poll(lambda: len(updates)).to_be(1)
         assert updates[0]["collaborators"] == ["brian@gmail.com"], updates
         assert updates[0]["expected_revision"] == 7, updates
+        expect(dialog).to_be_visible()
+        dialog.get_by_role("button", name="Close Project Settings").click()
+        expect(dialog).not_to_be_visible()
 
         settings.click()
         dialog = page.get_by_role("dialog", name="Project Settings")
-        dialog.get_by_role("button", name="Remove alice@example.net").click()
-        dialog.get_by_role("button", name="Save", exact=True).click()
+        expect(dialog.get_by_role("button", name="Remove brian@gmail.com")).to_be_visible()
+        dialog.get_by_role("button", name="Remove brian@gmail.com").click()
         expect(dialog.locator(".error")).to_contain_text("saved by other@example.net")
-        expect(dialog.get_by_role("button", name="Save", exact=True)).to_be_enabled()
+        expect(dialog.get_by_role("button", name="Save", exact=True)).to_have_count(0)
         page.keyboard.press("Escape")
 
         assert not errors, errors
@@ -209,7 +218,7 @@ def main() -> None:
 
     print(
         "PASS collaboration controls, local sign-in guidance, 1440/390px layout, "
-        "staged Save, notification retry and stale-editor refusal"
+        "automatic Save, notification retry and stale-editor refusal"
     )
 
 
