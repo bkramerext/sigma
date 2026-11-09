@@ -527,7 +527,9 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
                     )
                 }
                 for kind in ("strategy", "session", "paper")
-            } if members else {},
+            }
+            if members
+            else {},
             "failed_notifications": db.execute(
                 """SELECT COUNT(*) FROM shared_email_outbox
                    WHERE project_path=? AND failed_at IS NOT NULL""",
