@@ -818,3 +818,29 @@
   padding-left: 0;
   text-align: left;
 }
+
+/* Match row columns: wider Model/Research category, narrower Thinking/Difficulty. */
+.sigma-project-classification-dialog .settings-classification-row,
+.sigma-project-classification-dialog .settings-model-row {
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+}
+.sigma-project-classification-dialog .settings-classification-row .research-type-picker,
+.sigma-project-classification-dialog .settings-body #sigma-project-difficulty,
+.sigma-project-classification-dialog .settings-model-row .sigma-choice-picker {
+  width: 100%;
+  max-width: none;
+}
+.sigma-project-classification-dialog .project-collaborators {
+  margin-top: 16px;
+}
+.sigma-project-classification-dialog .settings-model-row {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #35404a;
+}
+@media (max-width: 500px) {
+  .sigma-project-classification-dialog .settings-classification-row,
+  .sigma-project-classification-dialog .settings-model-row {
+    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  }
+}
