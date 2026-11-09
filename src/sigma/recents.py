@@ -463,8 +463,7 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
         entries = [
             entry
             for entry in entries
-            if Path(entry["path"]).is_relative_to(workspace.path)
-            or entry["path"] in shared_by_path
+            if Path(entry["path"]).is_relative_to(workspace.path) or entry["path"] in shared_by_path
         ]
     if not lightweight:
         from sigma import papers
