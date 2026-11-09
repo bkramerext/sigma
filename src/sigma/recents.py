@@ -427,7 +427,9 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                 except ValueError:
                     pass
             entries.append(copied)
-    from sigma.research_sessions import has_active_session
+    if not lightweight:
+        from sigma.research_sessions import has_active_session
+        from sigma import papers
 
     recent = []
     for entry in entries:
@@ -435,10 +437,10 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
             view = inspect_project(entry["path"])
             if str(UUID(view.project.id)) != entry["id"]:
                 raise ProjectError("Project identity changed")
-            from sigma import paper_scores, papers
-
             paper_metadata = {"paper_count": 0, "best_paper_score": None}
             if not lightweight and not activity_only:
+                from sigma import paper_scores
+
                 try:
                     paper_metadata = paper_scores.project_metadata(view.path)
                 except Exception:  # noqa: BLE001 - paper decoration must never block project access
