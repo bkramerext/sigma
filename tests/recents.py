@@ -62,6 +62,33 @@ def check_recent_list_does_not_validate_sample_pdfs(root: Path) -> None:
             assert response.headers["Server-Timing"].startswith("saved-projects;dur=")
 
 
+def check_index_sample_read_outside_lock() -> None:
+    """Sample identity decoding must never monopolize the Saved index lock."""
+    from sigma import samples
+
+    lock_path = state_directory() / "recents.lock"
+    original = samples.sample_project_ids
+
+    def assert_unlocked() -> set[str]:
+        with lock_path.open("a+b") as stream:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        return original()
+
+    with patch.object(samples, "sample_project_ids", side_effect=assert_unlocked):
+        recent_projects(lightweight=True)
+
+
+def check_title_collision_avoids_deep_metadata() -> None:
+    """Creating a project must not hydrate Saved status or sample paper scores."""
+    with (
+        patch("sigma.samples._best_sample_paper", side_effect=AssertionError("sample scores scanned")),
+        patch("sigma.paper_scores.project_metadata", side_effect=AssertionError("paper metadata scanned")),
+    ):
+        created = create_project("Lightweight title collision check", "Fast creation")
+    assert created.project.title == "Lightweight title collision check"
+
+
 def check_project_metadata_cache_invalidation(root: Path) -> None:
     """Unchanged Saved-list polls must not read full paper records repeatedly."""
     from sigma import paper_scores, papers
@@ -814,6 +841,8 @@ def check(root: Path, base: Path) -> None:
         index_path.unlink(missing_ok=True)
         backup.rename(index_path)
     assert recent_projects()["projects"]
+    check_index_sample_read_outside_lock()
+    check_title_collision_avoids_deep_metadata()
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
     check_home_list_uses_only_paper_records(root)
