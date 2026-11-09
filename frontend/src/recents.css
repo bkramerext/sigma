@@ -171,6 +171,9 @@
 .home-page .home-samples .sample-type-group > summary::before { content: '›'; width: 10px; color: var(--sigma-copper-foreground); font-size: 18px; line-height: 1; transform: rotate(0); transition: transform 120ms ease; }
 .home-page .home-samples .sample-type-group[open] > summary::before { transform: rotate(90deg); }
 .home-page .home-samples .sample-type-group > summary .research-type-icon { width: 16px; height: 16px; flex-basis: 16px; }
+/* An optional project-type icon must not shift the name into the icon column. */
+.home-page .home-samples .sample-type-group > summary > span { grid-column: 3; min-width: 0; }
+.home-page .home-samples .sample-type-group > summary > small { grid-column: 4; }
 .home-page .home-samples .sample-type-group > summary small { margin: 0; color: #aeb9c4; font-size: 11px; }
 .home-page .home-samples .sample-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
 .home-page .home-cloud-prompt { position: absolute; z-index: 1; top: 72px; right: clamp(26px, 5vw, 72px); margin: 0; }
@@ -208,7 +211,8 @@
 .home-page .home-recents .recent-type-group > summary::before { content: '›'; width: 10px; color: var(--sigma-copper-foreground); font-size: 18px; line-height: 1; }
 .home-page .home-recents .recent-type-group[open] > summary::before { transform: rotate(90deg); }
 .home-page .home-recents .recent-type-group > summary .research-type-icon { display: block; flex: 0 0 16px; width: 16px; height: 16px; margin: 0; color: var(--sigma-copper-foreground); }
-.home-page .home-recents .recent-type-group > summary span { color: var(--sigma-copper-foreground); }
+.home-page .home-recents .recent-type-group > summary > span { grid-column: 3; min-width: 0; color: var(--sigma-copper-foreground); }
+.home-page .home-recents .recent-type-group > summary > small { grid-column: 4; }
 .home-page .home-recents .recent-type-group > summary .research-running-indicator { position: relative; top: -2px; margin-left: 6px; vertical-align: middle; }
 .home-page .home-recents .recent-type-group > summary small { display: block; margin: 0; color: #aeb9c4; font-size: 11px; }
 .home-page .home-recents .recent-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
