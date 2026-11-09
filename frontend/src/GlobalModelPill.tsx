@@ -150,7 +150,7 @@ export default function GlobalModelPill({ enabled = true, project, onProjectChan
   const notice = nextEffort && effective && nextEffort !== effective.reasoning_effort
     ? ' Switching to ' + modelName(next, '') + ' also changes Thinking to ' + nextEffort + '.' : '';
   const tooltip = !enabled ? 'Sign in to view the research model.' : effective
-    ? 'The selected default model is ' + selectedName + '. Relative published API token cost: ' +
+    ? (project ? 'The project model is ' : 'The selected default model is ') + selectedName + '. Relative published API token cost: ' +
       (selected?.relative_cost ?? 'unknown') + '. Applies to the next AI call in running research and paper generation, and to new work. In-flight calls are unchanged. ' +
       (thinkingLabel ? ' ' + thinkingLabel + '.' : '') +
       ' Click the upper half to cycle models; click the lower half to cycle thinking levels.' + notice
@@ -167,6 +167,7 @@ export default function GlobalModelPill({ enabled = true, project, onProjectChan
         if (userCycle === 'thinking') setThinkingCycleRevision(revision => revision + 1);
         return;
       }
+      if (!settings) throw new Error('Model defaults are unavailable.');
       const response = await fetch('/api/user-preferences/research-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
