@@ -1635,7 +1635,6 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
             raise HTTPException(404, "Not found")
         project_collaboration.note_artifact_author(body.path, "session", session_id)
         return simulated
-    from sigma import project_collaboration
 
     if body.action not in {"resume", "repair"}:
         result = await research_sessions.control_session(
