@@ -28,8 +28,11 @@ class SampleCatalogFastListingTests(unittest.TestCase):
                 "events": [{"kind": "unused"}] * 100,
             }
             path.write_text(json.dumps(project), encoding="utf-8")
-            with patch.object(samples, "SAMPLES", root), patch.object(
-                samples, "_decode", side_effect=AssertionError("catalog decoded a project")
+            with (
+                patch.object(samples, "SAMPLES", root),
+                patch.object(
+                    samples, "_decode", side_effect=AssertionError("catalog decoded a project")
+                ),
             ):
                 first = samples.sample_projects()["projects"]
                 self.assertEqual(first[0]["title"], "Original title")
