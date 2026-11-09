@@ -125,7 +125,9 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="New", exact=True).click()
     dialog = page.get_by_role("dialog", name="New Project")
     expect(dialog).to_be_visible()
-    expect(dialog.get_by_text("You can edit these settings later in Project Settings.")).to_be_visible()
+    expect(
+        dialog.get_by_text("You can edit these settings later in Project Settings.")
+    ).to_be_visible()
     assert dialog.locator("textarea").evaluate_all(
         "items => items.every(el => getComputedStyle(el).resize === 'none')"
     )
