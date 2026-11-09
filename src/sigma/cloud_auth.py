@@ -1424,6 +1424,7 @@ def mock_select(request: Request, identity: str):
     # Never accept mock identity changes through a remote-facing listener.
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Mock authentication requires a loopback client.")
+    window_id = _window_id(request)
     old = _raw_session(request, cfg)
     previous_denied = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     with _db(cfg) as db:
@@ -1432,7 +1433,7 @@ def mock_select(request: Request, identity: str):
         if previous_denied:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(previous_denied),))
         response = Response(status_code=204)
-        _clear_cookie(response, cfg, SESSION_COOKIE)
+        _clear_window_session(response, cfg, window_id)
         _clear_cookie(response, cfg, DENIED_COOKIE)
         if identity != "guest":
             email, role = _MOCK_IDENTITIES[identity]
@@ -1485,7 +1486,7 @@ def mock_select(request: Request, identity: str):
                     (_hash(raw), subject, email, _now() + SESSION_SECONDS),
                 )
                 response.set_cookie(
-                    _cookie_name(SESSION_COOKIE, cfg),
+                    _session_cookie_name(cfg, window_id),
                     raw,
                     **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
                 )
@@ -2740,12 +2741,13 @@ def remove_feedback(feedback_id: str, request: Request):
 @router.post("/logout")
 def logout(request: Request):
     cfg = config()
+    window_id = _window_id(request)
     raw = _raw_session(request, cfg)
     if raw and cfg.database:
         with _db(cfg) as db:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
     response = Response(status_code=204)
-    _clear_cookie(response, cfg, SESSION_COOKIE)
+    _clear_window_session(response, cfg, window_id)
     return response
 
 
