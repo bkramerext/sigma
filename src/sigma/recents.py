@@ -436,7 +436,11 @@ def recent_projects() -> dict:
                 raise ProjectError("Project identity changed")
             from sigma import paper_scores, papers
 
-            paper_metadata = paper_scores.project_metadata(view.path)
+            try:
+                paper_metadata = paper_scores.project_metadata(view.path)
+            except (OSError, ValueError, TypeError, KeyError):
+                # Broken paper decoration must never make the project unavailable.
+                paper_metadata = {"paper_count": 0, "best_paper_score": None}
             recent.append(
                 asdict(
                     RecentProject(
