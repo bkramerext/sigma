@@ -23,6 +23,21 @@ RH_MATH_EXPRESSIONS = (
 )
 
 
+# Representative expressions preserved verbatim from the two Warp Drive PDFs.
+# v3 page 6 (\gg), pages 13–14 (\rm), and v2 page 15 (\dfrac).
+WARP_DRIVE_MATH_EXPRESSIONS = (
+    r"qL_{\mathrm{bg}}\gg1",
+    r"|\Omega|L_{\mathrm{bg}}\gg1",
+    r"\|\mathcal A_{\rm control}\|^2=\gamma^4|\dot u|^2+\gamma^6(u\cdot\dot u)^2",
+    r"\|\mathcal A_{\rm gradient}\|^2=\gamma^4u_q^2[|\nabla a|^2-(\nabla a\cdot u)^2]",
+    r"m_{\rm p}c^2\alpha",
+    r"j_{\rm p}^\mu",
+    r"T_{\rm app}^{\mu\nu}",
+    r"\nabla_\mu T_{\rm p}^{\mu\nu}=F^{\nu\rho}j_{{\rm p}\rho}",
+    r"\alpha\leq\dfrac{\Omega}{(2\eta-\eta^2)^{3/2}}+\dfrac{(1-\eta)K}{2\eta-\eta^2}",
+)
+
+
 class MathTypesettingTests(unittest.TestCase):
     def test_valid_research_math_remains_math(self) -> None:
         for body in RH_MATH_EXPRESSIONS:
@@ -62,6 +77,42 @@ class MathTypesettingTests(unittest.TestCase):
             "An inline mathematical expression was escaped into printable text.",
             papers._tex_static_diagnostics(repaired),
         )
+
+    def test_warp_drive_formulas_are_rendered_as_math(self) -> None:
+        for body in WARP_DRIVE_MATH_EXPRESSIONS:
+            with self.subTest(math=body):
+                self.assertTrue(papers._safe_math(body))
+                rendered = papers._latex_prose("The result is $" + body + "$.")
+                self.assertIn("$" + body + "$", rendered)
+                self.assertNotIn(r"\textbackslash{}", rendered)
+                self.assertNotIn(r"\$", rendered)
+
+    def test_warp_drive_escaped_math_is_recovered_without_rewriting(self) -> None:
+        for body in WARP_DRIVE_MATH_EXPRESSIONS:
+            with self.subTest(math=body):
+                original = "$" + body + "$"
+                escaped = project_reports._latex(original)
+                repaired, count = papers._restore_escaped_math_in_tex(
+                    r"\begin{document}" + "\n" + escaped + "\n" + r"\end{document}"
+                )
+                self.assertEqual(count, 1)
+                self.assertTrue(original in repaired or r"\[" + body in repaired)
+                self.assertNotIn(r"\textbackslash{}", repaired)
+                self.assertNotIn(
+                    "An inline mathematical expression was escaped into printable text.",
+                    papers._tex_static_diagnostics(repaired),
+                )
+
+    def test_warp_drive_consecutive_formulas_and_prose(self) -> None:
+        section = (
+            r"The frequency window requires $qL_{\mathrm{bg}}\gg1$ "
+            r"and $|\Omega|L_{\mathrm{bg}}\gg1$."
+        )
+        rendered = papers._latex_prose(section)
+        self.assertIn(r"$qL_{\mathrm{bg}}\gg1$", rendered)
+        self.assertIn(r"$|\Omega|L_{\mathrm{bg}}\gg1$", rendered)
+        self.assertNotIn(r"\textbackslash{}", rendered)
+        self.assertNotIn(r"\$", rendered)
 
 
 if __name__ == "__main__":

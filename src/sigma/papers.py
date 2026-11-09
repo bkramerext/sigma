@@ -950,6 +950,7 @@ _MATH_TOKEN = re.compile(r"\\([A-Za-z]+)|([A-Za-z0-9+*/=<>()[\]{}.,:|^_\-'\s])")
 _SAFE_MATH_COMMANDS = {
     "displaystyle",
     "frac",
+    "dfrac",
     "sqrt",
     "cdot",
     "times",
@@ -961,6 +962,7 @@ _SAFE_MATH_COMMANDS = {
     "mathbb",
     "mathfrak",
     "mathrm",
+    "rm",  # Legacy math-font switch emitted by authored physics equations.
     "mathbf",
     "operatorname",
     "text",
@@ -1271,6 +1273,7 @@ _STANDARD_MATH_SYMBOLS = {
     "parallel",
     "mid",
     "nmid",
+    "gg",
     "cup",
     "cap",
     "bigcup",
