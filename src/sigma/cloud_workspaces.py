@@ -46,21 +46,6 @@ class Workspace:
 
 
 _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", default=None)
-_LEGACY_ACCESS_CACHE: ContextVar[dict[str, set[str]] | None] = ContextVar(
-    "sigma_legacy_access_cache", default=None
-)
-
-
-@contextmanager
-def batch_legacy_access() -> Iterator[None]:
-    """Share one authenticated legacy-index snapshot across a Saved listing."""
-    token = _LEGACY_ACCESS_CACHE.set({})
-    try:
-        yield
-    finally:
-        _LEGACY_ACCESS_CACHE.reset(token)
-
-
 _GUESTS: dict[str, tuple[Workspace, tempfile.TemporaryDirectory[str], float]] = {}
 _GUESTS_LOCK = threading.Lock()
 GUEST_TTL_SECONDS = 8 * 60 * 60
@@ -104,53 +89,6 @@ def account_scoping_enabled() -> bool:
 
 def current() -> Workspace | None:
     return _CURRENT.get()
-
-
-def local_legacy_owner_access(path: Path | None = None) -> bool:
-    """Limit legacy local-project adoption to the designated Google administrator.
-
-    Hosted and mock accounts never enter this compatibility path. A project
-    outside the administrator's own workspace must belong to the original
-    local project root or have been explicitly saved in the old local index.
-    This cannot authorize paths inside another user's workspace partition.
-    """
-    cfg = cloud_auth.config()
-    principal = cloud_auth.current_principal()
-    if not (
-        cfg.enabled
-        and cfg.local
-        and not cfg.error
-        and cfg.admin_contact_email
-        and principal is not None
-        and principal.role == "admin"
-        and principal.email.casefold() == cfg.admin_contact_email.casefold()
-        and not principal.subject.startswith(("mock:", "local-admin:"))
-        and current() is not None
-    ):
-        return False
-    if path is None:
-        return True
-    candidate = Path(path)
-    try:
-        from sigma.projects import local_projects_root
-
-        if candidate.is_relative_to(local_projects_root()):
-            return True
-    except (OSError, ValueError):
-        pass
-    try:
-        from sigma import recents
-
-        cache = _LEGACY_ACCESS_CACHE.get()
-        if cache is not None and "paths" in cache:
-            return str(candidate) in cache["paths"]
-        with without_workspace(), recents._index() as index:
-            paths = {entry["path"] for entry in index["entries"]}
-        if cache is not None:
-            cache["paths"] = paths
-        return str(candidate) in paths
-    except (OSError, ValueError):
-        return False
 
 
 @contextmanager
@@ -400,10 +338,7 @@ def assert_project_path(value: str | Path, resolved: Path) -> None:
         if not resolved.is_relative_to(workspace.path):
             from sigma import project_collaboration
 
-            if not (
-                local_legacy_owner_access(resolved)
-                or project_collaboration.authorized_shared_path(resolved)
-            ):
+            if not project_collaboration.authorized_shared_path(resolved):
                 raise ValueError("owner")
     except (OSError, RuntimeError, ValueError) as exc:
         raise ValueError("Project not found or access denied.") from exc
