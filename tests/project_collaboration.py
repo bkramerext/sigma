@@ -387,7 +387,7 @@ class CollaborationTests(TestCase):
             )
             self.assertEqual(
                 shared.summary(self.path)["removable_collaborators"],
-                [self.other.email, other_invited],
+                [other_invited, self.other.email],
             )
             revision = self.revision()
             with self.assertRaisesRegex(ProjectError, "Only the owner"):
