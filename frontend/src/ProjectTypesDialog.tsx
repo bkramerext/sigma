@@ -283,11 +283,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       reference_preferences: ReferencePreferences;
     };
     setCommonReferences(data.common_references);
-    // Public guests receive an empty custom-reference object; normalize it
-    // before rendering the shared Project Types editor.
-    const commonCustom = {
-      research_standards_references: data.common_custom_references?.research_standards_references ?? [],
-      publication_standards_references: data.common_custom_references?.publication_standards_references ?? [],
+    const commonCustom = data.common_custom_references ?? {
+      research_standards_references: [], publication_standards_references: [],
     };
     setCommonCustomReferences(commonCustom);
     setSavedCommonCustomReferences(structuredClone(commonCustom));
