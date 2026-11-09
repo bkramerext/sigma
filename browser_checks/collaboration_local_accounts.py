@@ -178,7 +178,10 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner.keyboard.press("Escape")
         expect(owner_dialog).not_to_be_visible()
 
-        owner.reload()
+        # The Shared shortcut leaves ?settings=collaborators in the URL.
+        # Reloading that deep link intentionally reopens the modal, so use
+        # the canonical project URL for a fresh editor after a stale Save.
+        owner.goto(url)
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Hard")
