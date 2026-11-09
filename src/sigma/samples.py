@@ -716,7 +716,7 @@ def _cached_sample_catalog_entry(
     try:
         raw = json.loads(path.read_bytes())
         if not isinstance(raw, dict):
-            raise ValueError("Invalid sample document")
+            raise TypeError("Invalid sample document")
         project_id, title = raw["id"], raw["title"]
         if (
             not isinstance(project_id, str)
