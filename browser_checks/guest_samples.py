@@ -307,6 +307,25 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         expect(page.locator("details.sample-type-group").first).to_be_visible()
         assert page.locator("details.sample-type-group[open]").count() == 0
+        category_headers = page.locator("details.sample-type-group > summary")
+        assert category_headers.count() > 0
+        assert (
+            page.locator("details.sample-type-group > summary > .research-type-icon").count()
+            == category_headers.count()
+        )
+        category_layout = category_headers.evaluate_all(
+            """headers => headers.map(header => {
+                const name = header.querySelector(':scope > span').getBoundingClientRect();
+                const count = header.querySelector(':scope > small').getBoundingClientRect();
+                return {nameX: name.left, nameRight: name.right, countX: count.left};
+            })"""
+        )
+        assert all(row["countX"] >= row["nameRight"] + 4 for row in category_layout), category_layout
+        assert (
+            max(row["nameX"] for row in category_layout)
+            - min(row["nameX"] for row in category_layout)
+            < 2
+        ), category_layout
         scored_group = page.locator("details.sample-type-group").filter(
             has_text="Warp Drive Design v9 (acceptance fixture)"
         )
