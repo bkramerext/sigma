@@ -583,10 +583,11 @@ def force_sponsored_mode_enabled() -> bool:
 def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     """Return the persistent account model, refreshing revocable access fields."""
     workspace_id: str | None = None
-    # Mock users need distinct workspace identities even though the local
-    # development server otherwise follows the local-storage path.
-    if not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:")):
-        from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
+    # All account-scoped SIGMA deployments, including real local Google
+    # sign-ins, expose their per-user workspace in account status.
+    from sigma.cloud_workspaces import WorkspaceUnavailable, enabled, workspace_for_subject
+
+    if enabled():
 
         try:
             workspace_id = workspace_for_subject(principal.subject).workspace_id

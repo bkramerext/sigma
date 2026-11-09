@@ -379,7 +379,7 @@ def register_owner(view: Any) -> None:
     ):
         return
     path = Path(view.path)
-    if not path.is_relative_to(workspace.path):
+    if not path.is_relative_to(workspace.path) and not cloud_workspaces.local_legacy_owner_access():
         return
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")

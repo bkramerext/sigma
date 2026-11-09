@@ -67,11 +67,45 @@ def enabled() -> bool:
     }
     mock_auth = os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
     mock_local = mock_auth and local_auth and cloud_auth._mock_enabled(cloud_auth.config())
-    return enabled and (persistent_disk_enabled() or not local_auth or mock_local)
+    # Real local Google sign-ins use the same account-scoped workspace and
+    # collaboration database as hosted SIGMA. The explicit auto-admin shortcut
+    # keeps its historical single-user local filesystem behavior.
+    auto_admin = os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
+    return enabled and (persistent_disk_enabled() or not local_auth or mock_local or not auto_admin)
 
 
 def current() -> Workspace | None:
     return _CURRENT.get()
+
+
+def local_legacy_owner_access() -> bool:
+    """Permit the real local Google administrator to adopt existing local projects.
+
+    This retains the same filesystem reach that SIGMA's local administrator
+    already had, while every other account remains restricted to its workspace
+    and explicit shared-project membership. Mock identities are never legacy owners.
+    """
+    cfg = cloud_auth.config()
+    principal = cloud_auth.current_principal()
+    return bool(
+        cfg.enabled
+        and cfg.local
+        and not cfg.error
+        and principal is not None
+        and principal.role == "admin"
+        and not principal.subject.startswith(("mock:", "local-admin:"))
+        and current() is not None
+    )
+
+
+@contextmanager
+def without_workspace() -> Iterator[None]:
+    """Read the original local Recent index without changing the request identity."""
+    token = _CURRENT.set(None)
+    try:
+        yield
+    finally:
+        _CURRENT.reset(token)
 
 
 def bind(principal: Principal) -> Token[Workspace | None]:
@@ -311,7 +345,10 @@ def assert_project_path(value: str | Path, resolved: Path) -> None:
         if not resolved.is_relative_to(workspace.path):
             from sigma import project_collaboration
 
-            if not project_collaboration.authorized_shared_path(resolved):
+            if not (
+                local_legacy_owner_access()
+                or project_collaboration.authorized_shared_path(resolved)
+            ):
                 raise ValueError("owner")
     except (OSError, RuntimeError, ValueError) as exc:
         raise ValueError("Project not found or access denied.") from exc
