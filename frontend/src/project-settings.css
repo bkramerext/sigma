@@ -777,3 +777,21 @@
 .sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"],
 .sigma-project-classification-dialog .sigma-choice-picker .research-type-options [role="option"] { padding-left: 11px; }
 .sigma-project-classification-dialog .settings-model-row .sigma-choice-picker { width: 100%; }
+/* Model and Thinking use exactly the same trigger and list text insets as Difficulty. */
+.sigma-project-classification-dialog .sigma-choice-picker [role="combobox"] > span {
+  text-align: left;
+  margin-left: 0;
+  padding-left: 0;
+}
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"],
+.sigma-project-classification-dialog .sigma-choice-picker .research-type-options [role="option"] {
+  box-sizing: border-box;
+  padding: 6px 9px 6px 11px;
+  gap: 0;
+}
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"] > span,
+.sigma-project-classification-dialog .sigma-choice-picker .research-type-options [role="option"] > span {
+  margin-left: 0;
+  padding-left: 0;
+  text-align: left;
+}
