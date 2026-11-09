@@ -2012,7 +2012,9 @@ def strategy_enabled_view(body: StrategyEnabledRequest):
 class CreateProjectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
-    problem: str
+    problem: str = ""
+    desired_outcomes: str = ""
+    paper_requirements: str = ""
     investigation_type: str = Field(
         default="default", validation_alias=AliasChoices("investigation_type", "research_mode")
     )
@@ -2048,6 +2050,8 @@ def create_project_view(body: CreateProjectRequest):
         user["reasoning_effort"],
         body.difficulty,
         user["show_advanced_outcome_details"],
+        body.desired_outcomes,
+        body.paper_requirements,
     )
     project_collaboration.register_owner(view)
     return asdict(view)
