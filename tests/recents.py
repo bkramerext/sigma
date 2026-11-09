@@ -7,8 +7,9 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -79,11 +80,42 @@ def check_index_sample_read_outside_lock() -> None:
         recent_projects(lightweight=True)
 
 
+def check_legacy_authorization_batch() -> None:
+    """Real local admin path checks open the legacy index only once per list."""
+    from sigma import cloud_auth, cloud_workspaces, projects, recents
+
+    legacy = "/outside/original/research.json"
+    index = MagicMock()
+    index.__enter__.return_value = {"entries": [{"path": legacy}]}
+    settings = SimpleNamespace(
+        enabled=True, local=True, error=None, admin_contact_email="owner@gmail.com"
+    )
+    principal = SimpleNamespace(role="admin", email="owner@gmail.com", subject="google:owner")
+    workspace = SimpleNamespace(path=Path("/owned/workspace"))
+    with (
+        patch.object(cloud_auth, "config", return_value=settings),
+        patch.object(cloud_auth, "current_principal", return_value=principal),
+        patch.object(cloud_workspaces, "current", return_value=workspace),
+        patch.object(projects, "local_projects_root", return_value=Path("/original/root")),
+        patch.object(recents, "_index", return_value=index) as load_index,
+        cloud_workspaces.batch_legacy_access(),
+    ):
+        assert cloud_workspaces.local_legacy_owner_access(Path(legacy))
+        assert cloud_workspaces.local_legacy_owner_access(Path(legacy))
+        assert not cloud_workspaces.local_legacy_owner_access(Path("/outside/other.json"))
+    assert load_index.call_count == 1
+
+
 def check_title_collision_avoids_deep_metadata() -> None:
     """Creating a project must not hydrate Saved status or sample paper scores."""
     with (
-        patch("sigma.samples._best_sample_paper", side_effect=AssertionError("sample scores scanned")),
-        patch("sigma.paper_scores.project_metadata", side_effect=AssertionError("paper metadata scanned")),
+        patch(
+            "sigma.samples._best_sample_paper", side_effect=AssertionError("sample scores scanned")
+        ),
+        patch(
+            "sigma.paper_scores.project_metadata",
+            side_effect=AssertionError("paper metadata scanned"),
+        ),
     ):
         created = create_project("Lightweight title collision check", "Fast creation")
     assert created.project.title == "Lightweight title collision check"
@@ -842,6 +874,7 @@ def check(root: Path, base: Path) -> None:
         backup.rename(index_path)
     assert recent_projects()["projects"]
     check_index_sample_read_outside_lock()
+    check_legacy_authorization_batch()
     check_title_collision_avoids_deep_metadata()
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)

@@ -268,7 +268,9 @@ def _index():
                 break
             except BlockingIOError as exc:
                 if monotonic() >= deadline:
-                    raise ProjectError("Saved Projects index is busy. Retry or check backend logs.") from exc
+                    raise ProjectError(
+                        "Saved Projects index is busy. Retry or check backend logs."
+                    ) from exc
                 sleep(0.05)
         path = directory / "recents.json"
         try:

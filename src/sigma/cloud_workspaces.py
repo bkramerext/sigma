@@ -60,6 +60,7 @@ def batch_legacy_access() -> Iterator[None]:
     finally:
         _LEGACY_ACCESS_CACHE.reset(token)
 
+
 _GUESTS: dict[str, tuple[Workspace, tempfile.TemporaryDirectory[str], float]] = {}
 _GUESTS_LOCK = threading.Lock()
 GUEST_TTL_SECONDS = 8 * 60 * 60
