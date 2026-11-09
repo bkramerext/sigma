@@ -5,7 +5,7 @@ import RenderedMarkdown from './RenderedMarkdown';
 import SigmaSelect from './SigmaSelect';
 import './global-settings.css';
 
-type Tab = 'types' | 'research' | 'limits' | 'preferences' | 'ethos';
+type Tab = 'types' | 'limits' | 'preferences' | 'ethos';
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
 const unitMinutes: Record<Exclude<DurationUnit, 'unlimited'>, number> = { minutes: 1, hours: 60, days: 1440 };
 type LimitSettings = {
@@ -25,13 +25,10 @@ type ResearchConfig = {
   reasoning_effort: string;
   show_advanced_outcome_details: boolean;
 };
-type CatalogModel = { id: string; label: string; efforts: string[]; relative_cost: string };
 type EthosConfig = { markdown: string; is_override: boolean; version: string; sha256: string };
 type Preference = { allow_unattended_background_execution: boolean; expand_one_project_section_at_a_time: boolean; progress_email: boolean };
-const modelCost = (value: string) => /^\${1,3}$/.test(value) ? value.length : Number.POSITIVE_INFINITY;
 const tabs: { id: Tab; title: string }[] = [
   { id: 'types', title: 'Project Types' },
-  { id: 'research', title: 'Model' },
   { id: 'limits', title: 'Limits' },
   { id: 'preferences', title: 'Preferences' },
   { id: 'ethos', title: 'Research Ethos' },
@@ -85,7 +82,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>(initialSettingsTab);
   const [config, setConfig] = useState<ResearchConfig | null>(null);
-  const [models, setModels] = useState<CatalogModel[]>([]);
   const [durationUnit, setDurationUnit] = useState<DurationUnit>('minutes');
   const [prefs, setPrefs] = useState<Preference>({
     allow_unattended_background_execution: false,
@@ -127,8 +123,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       readJson('/api/user-preferences/unattended-execution'),
       readJson('/api/user-preferences/section-layout'),
       readJson('/api/user-preferences/progress-email').catch(() => ({ enabled: false, available: false })),
-      readJson('/api/ai/models').catch(() => ({ models: [] })),
-    ]).then(([research, unattended, layout, progress, catalog]) => {
+    ]).then(([research, unattended, layout, progress]) => {
       if (controller.signal.aborted) return;
       setConfig(research as ResearchConfig);
       const minutes = (research as ResearchConfig).limits.session_duration_minutes;
@@ -140,7 +135,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         progress_email: !!progress.enabled,
       });
       setProgressAvailable(!!progress.available);
-      setModels(catalog.models ?? []);
       savedSnapshot.current = JSON.stringify({ config: research, prefs: {
         allow_unattended_background_execution: !!unattended.allow_unattended_background_execution,
         expand_one_project_section_at_a_time: !!layout.expand_one_project_section_at_a_time,
@@ -161,14 +155,14 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     return () => { controller.abort(); element?.removeEventListener("cancel", preventCancel); };
   }, []);
   const setLimit = (key: keyof LimitSettings, value: number | string | null) => {
-    setSaved(false);
+    setError(''); setSaved(false);
     setConfig(current => current ? { ...current, limits: { ...current.limits, [key]: value } } : current);
   };
   const setResearch = (patch: Partial<ResearchConfig>) => {
-    setSaved(false);
+    setError(''); setSaved(false);
     setConfig(current => current ? { ...current, ...patch } : current);
   };
-  const setPref = (patch: Partial<Preference>) => { setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
+  const setPref = (patch: Partial<Preference>) => { setError(''); setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
   const hasOtherChanges = loaded && !!config && savedSnapshot.current !== JSON.stringify({ config, prefs });
   const hasChanges = typesSaveState.dirty || hasOtherChanges;
   const validLimits = !!config && (['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const)
@@ -183,26 +177,26 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const canSave = hasChanges && !busy && !typesSaveState.busy && !ethosBusy &&
     (!typesSaveState.dirty || typesSaveState.valid) &&
     (!hasOtherChanges || (loaded && validLimits));
-  async function save() {
-    if (!canSave) return;
+  async function save(): Promise<boolean> {
+    if (!canSave) return false;
     setBusy(true); setError(''); setSaved(false);
     const completed: string[] = [];
     try {
       if (typesSaveState.dirty) {
         const didSave = await typesSaveRef.current?.();
-        if (!didSave) return;
+        if (!didSave) return false;
         completed.push('Project Types');
       }
       if (!hasOtherChanges) {
         setSaved(true);
-        return;
+        return true;
       }
-      if (!config) return;
+      if (!config) return false;
     const limits = { ...config.limits };
     const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
     for (const field of whole) {
       const value = Number(limits[field]);
-      if (!Number.isInteger(value) || value < 1) { setError('Enter positive whole numbers for research limits.'); setTab('limits'); return; }
+      if (!Number.isInteger(value) || value < 1) { setError('Enter positive whole numbers for research limits.'); setTab('limits'); return false; }
       (limits as any)[field] = value;
     }
     limits.scheduler_version = 2;
@@ -218,7 +212,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         show_advanced_outcome_details: config.show_advanced_outcome_details,
       });
       setConfig(next);
-      completed.push('Model, Limits, and Outcome preference');
+      completed.push('Limits and Outcome preference');
       await putJson('/api/user-preferences/unattended-execution', {
         allow_unattended_background_execution: prefs.allow_unattended_background_execution,
       });
@@ -237,16 +231,24 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       savedSnapshot.current = JSON.stringify({ config: next, prefs });
       setSaved(true);
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
+      return true;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       // Never claim atomicity across independent settings endpoints. The
       // unsaved edits stay on screen, and retry replays idempotent PUTs.
       setError(completed.length
-        ? message + '. Partially saved: ' + completed.join(', ') + '. Other edits remain unsaved; retry Save to finish.'
+        ? message + '. Partially saved: ' + completed.join(', ') + '. Other edits remain unsaved; correct the setting to retry.'
         : message);
+      return false;
     }
     finally { setBusy(false); }
   }
+  // Commit validated changes automatically, including embedded Project Types.
+  useEffect(() => {
+    if (!canSave || !loaded || error) return;
+    const handle = window.setTimeout(() => { void save(); }, 650);
+    return () => window.clearTimeout(handle);
+  }, [canSave, loaded, config, prefs, typesSaveState, error]);
   async function reloadEthos() {
     setEthosBusy(true); setEthosError('');
     try {
@@ -282,11 +284,17 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       setEthosError(cause instanceof Error ? cause.message : String(cause));
     } finally { setEthosBusy(false); }
   }
-  const model = models.find(item => item.id === config?.ai_model);
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
-  // Closing discards all unpersisted draft settings and embedded project types
-  // by unmounting this dialog. Only explicit Save sends their PUT requests.
-  const cancelAndClose = () => { if (!busy && !typesSaveState.busy && !ethosBusy) onClose(); };
+  // Close flushes the last valid change; it never rolls back a saved setting.
+  const cancelAndClose = async () => {
+    if (busy || typesSaveState.busy || ethosBusy) return;
+    if (hasChanges) {
+      if (!canSave) { setError('Finish or correct the current setting before closing.'); return; }
+      if (await save()) onClose();
+      return;
+    }
+    onClose();
+  };
   async function copyEthos() {
     if (!ethos || ethosEditing) return;
     try {
@@ -298,14 +306,13 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     }
   }
   return <dialog ref={dialog} className={`project-settings-dialog sigma-global-settings sigma-global-settings--${tab}`} aria-labelledby="sigma-global-settings-title"
-    onCancel={event => { event.preventDefault(); event.stopPropagation(); cancelAndClose(); }}
+    onCancel={event => { event.preventDefault(); event.stopPropagation(); void cancelAndClose(); }}
     onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelAndClose(); } }}>
     <div className="sigma-global-settings-content">
       <header className="settings-header">
         <h2 id="sigma-global-settings-title">Settings</h2>
         <div className="settings-actions">
-          <button type="button" disabled={!canSave} onClick={() => void save()}>{busy || typesSaveState.busy ? 'Saving…' : 'Save'}</button>
-          <DialogDismissButton label="Close Settings" disabled={busy || typesSaveState.busy || ethosBusy} onClick={cancelAndClose}/>
+          <DialogDismissButton label="Close Settings" disabled={busy || typesSaveState.busy || ethosBusy} onClick={() => void cancelAndClose()}/>
         </div>
       </header>
       <nav className="settings-tabs" role="tablist" aria-label="Settings">
@@ -318,26 +325,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       </section>
       {tab !== 'types' && <div className="settings-body">
         {!loaded && !error && <p role="status">Loading your settings…</p>}
-        {config && tab === 'research' && <fieldset disabled={busy}>
-          <label htmlFor="sigma-global-model">Model</label>
-          <SigmaSelect id="sigma-global-model" className="sigma-model-select" ariaLabel="Model"
-            value={config.ai_model}
-            options={[...(!model ? [{ value: config.ai_model, label: config.ai_model }] : []),
-              ...[...models].sort((a, b) => modelCost(a.relative_cost) - modelCost(b.relative_cost) || a.label.localeCompare(b.label))
-                .map(item => ({ value: item.id, label: item.label + ' · ' + item.relative_cost }))]}
-            onChange={value => {
-              const selected = models.find(m => m.id === value);
-              setResearch({ ai_model: value, reasoning_effort: selected?.efforts.includes(config.reasoning_effort)
-                ? config.reasoning_effort : selected?.efforts[0] ?? config.reasoning_effort });
-            }}/>
-          <label htmlFor="sigma-global-effort">Thinking level</label>
-          <SigmaSelect id="sigma-global-effort" className="sigma-effort-select" ariaLabel="Thinking level"
-            value={config.reasoning_effort}
-            options={(model?.efforts ?? [config.reasoning_effort])
-              .map(effort => ({ value: effort, label: effort.charAt(0).toUpperCase() + effort.slice(1) }))}
-            onChange={value => setResearch({ reasoning_effort: value })}/>
-          <p className="settings-hint">Applies to the next AI call in active research and paper generation, and to new work. Calls already in flight keep their model and Thinking level.</p>
-        </fieldset>}
         {config && tab === 'limits' && <fieldset disabled={busy} className="sigma-global-limits">
           <div className="sigma-global-limit-row">
             <div className="sigma-global-limit-field">

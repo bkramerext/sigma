@@ -3205,7 +3205,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
         ? result.generation?.layout_status === 'needs_review'
           ? 'Paper saved for review. Some PDF layout warnings remain after three TeX correction passes.'
           : 'Paper saved for review. TeX proofreading did not complete; inspect its archived diagnostics.'
-        : 'Paper saved in Saved versions. TeX proofreading completed; this does not certify independent scientific or visual review.');
+        : 'Paper saved in My Work versions. TeX proofreading completed; this does not certify independent scientific or visual review.');
     } catch (cause) {
       if (controller.signal.aborted) {
         // An abort may also mean the dialog was unmounted. The server task
@@ -3222,7 +3222,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
           : requestDispatched && providerCallsAttempted === 0
             ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
             : requestDispatched
-              ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
+              ? `${message} Check My Work versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
               : message);
       }
     } finally { finishProvider(); request.current = null; deliberatePaperStop.current = false; setBusy(false); }
@@ -4286,7 +4286,22 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
             <button type="button" className="about-action" aria-label="About SIGMA" data-tooltip-disabled onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
             {onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="SIGMA Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/></button>}
           </div>
-          <ConnectedModelPill enabled={showConnectionStatus}/>
+          <ConnectedModelPill enabled={showConnectionStatus}
+            project={projectView ? { model: projectView.project.ai_model, thinking: projectView.project.reasoning_effort } : undefined}
+            onProjectChange={onProjectUpdated && projectView ? async (model, thinking) => {
+              const previous = settingsOf(projectView);
+              const collaborationResponse = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: projectView.path, verify_revision: 'true' })}`, {
+                headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
+              });
+              if (!collaborationResponse.ok) throw new Error('Could not read current project revision.');
+              const shared = await collaborationResponse.json() as SharedProjectInfo;
+              const next = await post<ProjectView>('update', {
+                path: projectView.path, ...previous, ai_model: model, reasoning_effort: thinking,
+                expected: previous,
+                ...(shared.owner ? { expected_revision: shared.revision, collaborators: shared.collaborators } : {}),
+              });
+              onProjectUpdated(next);
+            } : undefined}/>
         </div>
       </div>
     </div>}
@@ -4683,6 +4698,102 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
   </div>;
 }
 
+function SigmaChoicePicker({ id, label, value, choices, onChange, disabled = false }: {
+  id: string;
+  label: string;
+  value: string;
+  choices: { value: string; label: string }[];
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const options = useRef<Array<HTMLButtonElement | null>>([]);
+  const [menuStyle, setMenuStyle] = useState({ top: -10000, left: -10000, width: 0, maxHeight: 220 });
+  const current = Math.max(0, choices.findIndex(item => item.value === value));
+  useEffect(() => { if (open) options.current[active]?.focus(); }, [open, active]);
+  useEffect(() => {
+    if (!open || !disabled) return;
+    setOpen(false);
+  }, [disabled, open]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [open]);
+  useLayoutEffect(() => {
+    if (!open || !menu.current) return;
+    const panel = menu.current;
+    panel.showPopover();
+    const place = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const height = Math.min(220, Math.max(80, Math.max(below, above)));
+      const menuHeight = Math.min(height, choices.length * 34 + 10);
+      setMenuStyle({
+        top: below < 130 && above > below ? Math.max(8, rect.top - menuHeight - 4) : rect.bottom + 4,
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
+        width: rect.width, maxHeight: height,
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      if (panel.matches(':popover-open')) panel.hidePopover();
+    };
+  }, [open, choices.length]);
+  function choose(next: string) {
+    onChange(next);
+    setOpen(false);
+    requestAnimationFrame(() => trigger.current?.focus());
+  }
+  return <div className="research-type-picker sigma-choice-picker" ref={root}>
+    <button ref={trigger} id={id} type="button" role="combobox"
+      aria-label={label} aria-haspopup="listbox" aria-expanded={open}
+      aria-controls={`${id}-options`} disabled={disabled}
+      onClick={() => { setActive(current); setOpen(previous => !previous); }}
+      onKeyDown={event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          setActive(event.key === 'ArrowDown' ? current : choices.length - 1);
+          setOpen(true);
+        }
+      }}>
+      <span>{choices[current]?.value === value ? choices[current].label : value}</span>
+      <svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
+    </button>
+    {open && <div ref={menu} popover="manual" style={menuStyle}
+      className="research-type-options" id={`${id}-options`}
+      role="listbox" aria-label={label}>
+      {choices.map((item, index) => <button key={item.value}
+        ref={element => { options.current[index] = element; }}
+        type="button" role="option" aria-selected={item.value === value}
+        tabIndex={active === index ? 0 : -1}
+        onFocus={() => setActive(index)}
+        onClick={() => choose(item.value)}
+        onKeyDown={event => {
+          if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index + 1) % choices.length); }
+          else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index - 1 + choices.length) % choices.length); }
+          else if (event.key === 'Home') { event.preventDefault(); setActive(0); }
+          else if (event.key === 'End') { event.preventDefault(); setActive(choices.length - 1); }
+          else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); }
+          else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(item.value); }
+        }}><span>{item.label}</span></button>)}
+    </div>}
+  </div>;
+}
+
 function DifficultyPicker({ value, onChange }: {
   value: ProjectDifficulty | null;
   onChange: (next: ProjectDifficulty | null) => void;
@@ -4802,6 +4913,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
 }) {
   useDocumentScrollLock();
   const dialog = useRef<HTMLDialogElement>(null);
+  const [baseline, setBaseline] = useState(initial);
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
   const [shared, setShared] = useState<SharedProjectInfo | null>(null);
@@ -4852,12 +4964,13 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   const validPair = !shared?.owner
     || (model === shared.model && thinking === shared.thinking)
     || !!selected?.efforts.includes(thinking);
-  const changed = projectType !== initial.project.investigation_type
-    || difficulty !== initial.project.difficulty
+  const changed = projectType !== baseline.project.investigation_type
+    || difficulty !== baseline.project.difficulty
     || (!!shared?.owner && (model !== shared.model || thinking !== shared.thinking
       || JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators)));
-  function addCollaborator() {
-    const email = plausibleCollaboratorEmail(newEmail);
+  function finishCollaboratorEntry(value: string) {
+    if (!value.trim()) { setAdding(false); setNewEmail(''); setError(''); return; }
+    const email = plausibleCollaboratorEmail(value);
     if (!email) { setError('Enter a Google account email address.'); return; }
     if (email === shared?.owner || collaborators.includes(email)) {
       setError('This account is already a collaborator.'); return;
@@ -4874,12 +4987,11 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRetryingEmails(false); }
   }
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (busy || loading || !changed || !validPair || !shared) return;
+  async function save(): Promise<boolean> {
+    if (busy || loading || !changed || !validPair || !shared) return false;
     setBusy(true); setError('');
     try {
-      const previous = settingsOf(initial);
+      const previous = settingsOf(baseline);
       const next = await post<ProjectView>('update', {
         path: initial.path, ...previous,
         investigation_type: projectType, difficulty,
@@ -4887,19 +4999,40 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
         expected: previous,
         ...(shared.owner ? { expected_revision: shared.revision, collaborators } : {}),
       });
+      if (shared.owner) {
+        const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`, {
+          headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
+        });
+        if (!response.ok) throw new Error('Saved project, but could not refresh collaboration state.');
+        setShared(await response.json() as SharedProjectInfo);
+      }
+      setBaseline(next);
       onSaved(next);
-    } catch (cause) { setError(errorMessage(cause)); }
+      return true;
+    } catch (cause) { setError(errorMessage(cause)); return false; }
     finally { setBusy(false); }
+  }
+  useEffect(() => {
+    if (loading || busy || !changed || !validPair || !shared || error) return;
+    const timer = window.setTimeout(() => { void save(); }, 350);
+    return () => window.clearTimeout(timer);
+  }, [loading, busy, changed, validPair, shared, projectType, difficulty, model, thinking, collaborators, error]);
+  async function close() {
+    if (busy || loading) return;
+    if (changed) {
+      if (!validPair) { setError('Choose a compatible model and Thinking level.'); return; }
+      if (!await save()) return;
+    }
+    onCancel();
   }
   return <dialog ref={dialog} className="project-settings-dialog sigma-project-classification-dialog"
     aria-labelledby="sigma-project-classification-title"
-    onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <form onSubmit={save}>
+    onCancel={event => { event.preventDefault(); void close(); }}>
+    <form onSubmit={event => event.preventDefault()}>
       <header className="settings-header">
         <h2 id="sigma-project-classification-title">Project Settings</h2>
         <div className="settings-actions">
-          <button type="submit" disabled={busy || loading || !changed || !validPair}>{busy ? 'Saving…' : 'Save'}</button>
-          <DialogDismissButton label="Close Project Settings" disabled={busy} onClick={onCancel}/>
+          <DialogDismissButton label="Close Project Settings" disabled={busy || loading} onClick={() => void close()}/>
         </div>
       </header>
       <div className="settings-body">
@@ -4930,10 +5063,12 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
                 </button>
               </div>)}
               {adding && <div className="project-collaborator-add">
-                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => setNewEmail(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCollaborator(); } if (event.key === 'Escape') { event.stopPropagation(); setAdding(false); setNewEmail(''); } }}/>
-                <button type="button" onClick={addCollaborator}>Add</button>
-                <button type="button" onClick={() => { setAdding(false); setNewEmail(''); }}>Cancel</button>
+                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => { setNewEmail(event.target.value); if (error) setError(''); }}
+                  onBlur={event => finishCollaboratorEntry(event.currentTarget.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setAdding(false); setNewEmail(''); setError(''); }
+                  }}/>
               </div>}
               {shared.failed_notifications > 0 && <p className="project-collaborator-mail-failed" role="status">
                 {shared.failed_notifications} collaboration {shared.failed_notifications === 1 ? 'email could' : 'emails could'} not be delivered.
@@ -4943,22 +5078,27 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             <div className="settings-model-row">
               <div>
                 <label htmlFor="shared-project-model">Model</label>
-                <select id="shared-project-model" value={model} disabled={modelLookupFailed || catalog.length === 0} onChange={event => {
-                  const next = event.target.value;
-                  setModel(next);
-                  const option = catalog.find(item => item.id === next);
-                  if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
-                }}>
-                  {model && !selected && <option value={model}>{model} · unavailable</option>}
-                  {catalog.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
+                <SigmaChoicePicker id="shared-project-model" label="Model" value={model}
+                  disabled={modelLookupFailed || catalog.length === 0}
+                  choices={[
+                    ...(model && !selected ? [{ value: model, label: `${model} · unavailable` }] : []),
+                    ...catalog.map(option => ({ value: option.id, label: option.label })),
+                  ]}
+                  onChange={next => {
+                    setModel(next);
+                    const option = catalog.find(item => item.id === next);
+                    if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
+                  }}/>
               </div>
               <div>
                 <label htmlFor="shared-project-thinking">Thinking</label>
-                <select id="shared-project-thinking" value={thinking} disabled={modelLookupFailed || catalog.length === 0} onChange={event => setThinking(event.target.value)}>
-                  {!selected?.efforts.includes(thinking) && <option value={thinking}>{thinkingLabels[thinking] ?? thinking} · unavailable</option>}
-                  {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
-                </select>
+                <SigmaChoicePicker id="shared-project-thinking" label="Thinking" value={thinking}
+                  disabled={modelLookupFailed || catalog.length === 0}
+                  choices={[
+                    ...(!selected?.efforts.includes(thinking) ? [{ value: thinking, label: `${thinkingLabels[thinking] ?? thinking} · unavailable` }] : []),
+                    ...(selected?.efforts ?? []).map(effort => ({ value: effort, label: thinkingLabels[effort] ?? effort })),
+                  ]}
+                  onChange={setThinking}/>
               </div>
             </div>
             {modelLookupFailed && <p className="settings-hint" role="status">Model choices are unavailable. You can still edit collaborators and save their changes.</p>}
@@ -5372,7 +5512,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
       setProjects(data.projects); setError(''); setLoading(false);
     } catch (cause) {
       if (controller.signal.aborted && !signal?.aborted) {
-        throw new Error('Saved Projects request timed out. Check the backend project-listing logs.');
+        throw new Error('My Work request timed out. Check the backend project-listing logs.');
       }
       throw cause;
     } finally {
@@ -5477,7 +5617,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
     return groups;
   }, []).sort((a, b) => flat ? 0 : researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents" data-opening={!!opening || !!removing}>
-    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading saved projects...'}</p> : !projects.length && <p>No recent projects yet. Upload a project or begin a new project.</p>}
+    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading My Work projects...'}</p> : !projects.length && <p>No projects are currently being worked on.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
@@ -5508,7 +5648,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
+          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from My Work? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -5529,7 +5669,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   const pending = useRef(false);
   const loaded = useRef(false);
   useEffect(() => {
-    // Loading Saved must not verify the entire sample-paper catalog.
+    // Loading My Work must not verify the entire sample-paper catalog.
     if (!active || loaded.current) return;
     const controller = new AbortController();
     void fetch('/api/projects/samples', { signal: controller.signal }).then(async response => {
@@ -5574,14 +5714,14 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
 
 function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; guest?: boolean }) {
   const savedTooltip = guest
-    ? 'Sign in to view your saved projects.'
-    : 'Show saved projects. Click again to collapse or expand all.';
+    ? 'Sign in to view My Work.'
+    : 'Show My Work. Click again to collapse or expand all.';
   const [tab, setTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
     if (guest) return 'samples';
     const saved = window.localStorage.getItem('sigma.homeCatalogTab');
     return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
   });
-  // Saved and Most Recent are two views of one list, not two independent fetches.
+  // My Work and Most Recent are two views of one list, not two independent fetches.
   const [savedProjects, setSavedProjects] = useState<RecentProject[]>([]);
   const [savedLoading, setSavedLoading] = useState(true);
   const recent = useRef<HTMLButtonElement>(null);
@@ -5610,7 +5750,7 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, op
     if (event.key === 'End') { event.preventDefault(); switchTab('most-recent'); }
   }}>
     <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Selecting a sample copies into a new project." onClick={() => switchTab('samples')}>Samples</button>
-    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>Saved</button>
+    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>My Work</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
     <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/>}</div>
@@ -6728,7 +6868,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         ? `${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`
         : 'No collaborator is currently running this project.'}
     </p>}
-    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
+    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setAnnouncement('Project settings saved.'); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
       onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
@@ -6927,7 +7067,11 @@ function cloudFundingFor(cloud: CloudIdentityState | null): CloudFunding | undef
 
 /** Match ConnectionStatus's connected state, including sponsored sessions.
  * Google authentication alone is not sufficient to show the model selector. */
-function ConnectedModelPill({ enabled }: { enabled: boolean }) {
+function ConnectedModelPill({ enabled, project, onProjectChange }: {
+  enabled: boolean;
+  project?: { model: string; thinking: string };
+  onProjectChange?: (model: string, thinking: string) => Promise<void>;
+}) {
   const ai = useAI();
   const cloud = useCloudIdentity();
   const funding = cloudFundingFor(cloud);
@@ -6942,7 +7086,7 @@ function ConnectedModelPill({ enabled }: { enabled: boolean }) {
     && ai.info?.status === 'connected';
   const visible = sponsoredPillVisible || (!sponsoredSelected && personalConnected);
   return enabled && visible && !googleRequired
-    ? <GlobalModelPill enabled/>
+    ? <GlobalModelPill enabled project={project} onProjectChange={onProjectChange}/>
     : null;
 }
 

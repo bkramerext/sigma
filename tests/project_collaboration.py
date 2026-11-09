@@ -340,10 +340,17 @@ class CollaborationTests(TestCase):
 
     def test_collaboration_email_uses_shared_transport_and_retries_failures(self) -> None:
         shared.save_settings(self.path, 0, ["new@example.net"], "gpt-6.1-sol", "high", "Study")
-        messages: list[tuple[str, str]] = []
+        messages: list[tuple[str, str, str | None]] = []
 
         def deliver(message, *, recipients):
-            messages.append((recipients[0], message.get_content()))
+            html_part = message.get_body(preferencelist=("html",))
+            messages.append(
+                (
+                    recipients[0],
+                    message.get_body(preferencelist=("plain",)).get_content(),
+                    html_part.get_content() if html_part is not None else None,
+                )
+            )
 
         with (
             patch(
@@ -376,11 +383,20 @@ class CollaborationTests(TestCase):
             self.assertEqual(shared.drain_notifications(), [])
             self.assertEqual(shared.drain_notifications(), [])
         self.assertEqual(
-            {recipient for recipient, _ in messages}, {"new@example.net", "other@example.org"}
+            {recipient for recipient, _, _ in messages},
+            {"new@example.net", "other@example.org"},
         )
-        self.assertIn(
-            "/project?path=", next(body for email, body in messages if email == "new@example.net")
+        added = next((plain, html) for email, plain, html in messages if email == "new@example.net")
+        removed = next(
+            (plain, html) for email, plain, html in messages if email == "other@example.org"
         )
+        self.assertIn("/project?path=", added[0])
+        self.assertIn(">Study</a>", added[1])
+        self.assertIn('href="https://sigma.example.org/project?path=', added[1])
+        self.assertNotIn("“Study”", added[0])
+        self.assertNotIn("“Study”", added[1])
+        self.assertIn("“Study”", removed[0])
+        self.assertIsNone(removed[1])
         with shared._db() as db:
             self.assertEqual(
                 db.execute("SELECT count(*) FROM shared_email_outbox WHERE sent_at>0").fetchone()[

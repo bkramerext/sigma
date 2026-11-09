@@ -80,7 +80,13 @@
 .home-page .about-feedback-form a, .home-page .about-privacy-link a { color: var(--sigma-copper-foreground); text-underline-offset: 3px; }
 .home-page .about-feedback-form [role="alert"] { color: #f1aaa0; }
 .home-page .about-feedback-form [role="status"] { color: #c7dfc7; }
-.privacy-notice-card { width: min(100%, 760px); max-height: calc(100dvh - 48px); overflow: auto; }
+.privacy-notice-card { position: relative; width: min(100%, 760px); max-height: calc(100dvh - 48px); overflow: auto; }
+/* Keep the Privacy Notice and Terms of Service X at the card edge. */
+.privacy-notice-card .privacy-notice-heading { position: static; }
+.privacy-notice-card .privacy-notice-heading .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 10px !important;
+  right: 10px !important;
+}
 .privacy-notice-card .privacy-return-button { margin-bottom: 12px; }
 .privacy-notice-card h1 { font-size: clamp(25px, 5vw, 34px); }
 .privacy-notice-card h2 { margin: 22px 0 6px; color: var(--sigma-copper-foreground); font: 400 20px/1.3 Georgia, serif; }

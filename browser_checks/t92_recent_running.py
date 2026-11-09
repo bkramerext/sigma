@@ -142,7 +142,7 @@ with sync_playwright() as playwright:
     project_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     project_id = json.loads(Path(project_path, "project.json").read_text())["id"]
     page.locator(".project-art-header .project-header-art").click()
-    recent = page.get_by_role("tabpanel", name="Saved")
+    recent = page.get_by_role("tabpanel", name="My Work")
     recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     if not recent_group.evaluate("group => group.open"):
         recent_group.locator("summary").click()
@@ -174,7 +174,7 @@ with sync_playwright() as playwright:
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
 
     page.reload()
-    recent = page.get_by_role("tabpanel", name="Saved")
+    recent = page.get_by_role("tabpanel", name="My Work")
     recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     if not recent_group.evaluate("group => group.open"):
         recent_group.locator("summary").click()
@@ -187,7 +187,7 @@ with sync_playwright() as playwright:
     # Unavailable records remain in storage but never reach the Saved UI.
     unavailable_fixture["enabled"] = True
     page.reload()
-    recent = page.get_by_role("tabpanel", name="Saved")
+    recent = page.get_by_role("tabpanel", name="My Work")
     expect(recent.get_by_text("Unfindable Ghost Project")).to_have_count(0)
     expect(recent.get_by_text("Valid Untyped Project")).to_have_count(0)
     expect(
@@ -201,7 +201,7 @@ with sync_playwright() as playwright:
     assert sibling_title != project_title
     siblings.update(enabled=True, project_id=project_id, sibling_title=sibling_title)
     page.reload()
-    recent = page.get_by_role("tabpanel", name="Saved")
+    recent = page.get_by_role("tabpanel", name="My Work")
     recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     if not recent_group.evaluate("group => group.open"):
         recent_group.locator("summary").click()

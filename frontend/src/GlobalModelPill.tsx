@@ -64,7 +64,11 @@ function ScrollingLabel({ value, direction, className, userCycleRevision }: {
 }
 
 /** Restores the historic model cycle pill, now persisted as a per-user default. */
-export default function GlobalModelPill({ enabled = true }: { enabled?: boolean }) {
+export default function GlobalModelPill({ enabled = true, project, onProjectChange }: {
+  enabled?: boolean;
+  project?: { model: string; thinking: string };
+  onProjectChange?: (model: string, thinking: string) => Promise<void>;
+}) {
   const [settings, setSettings] = useState<ResearchSettings | null>(null);
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [ready, setReady] = useState(false);
@@ -122,38 +126,48 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
       document.removeEventListener('keydown', keydown, true);
     };
   }, [pending]);
-  const selected = models.find(m => m.id === settings?.ai_model);
+  const effective = settings && project
+    ? { ...settings, ai_model: project.model, reasoning_effort: project.thinking }
+    : settings;
+  const selected = models.find(m => m.id === effective?.ai_model);
   const choices = models.filter(m => m.availability !== 'unavailable' && m.efforts?.length)
     .sort((a, b) => costTier(a.relative_cost) - costTier(b.relative_cost) || a.label.localeCompare(b.label));
-  const selectedIndex = choices.findIndex(m => m.id === settings?.ai_model);
+  const selectedIndex = choices.findIndex(m => m.id === effective?.ai_model);
   const next = choices.length > 1 ? choices[(selectedIndex - 1 + choices.length) % choices.length]
     : choices.length === 1 && selectedIndex < 0 ? choices[0] : undefined;
-  const nextEffort = next && settings ? suitableEffort(next, settings.reasoning_effort) : null;
+  const nextEffort = next && effective ? suitableEffort(next, effective.reasoning_effort) : null;
   const supportedEfforts = selected?.efforts.filter(effort => effortOrder.includes(effort))
     .sort((a, b) => effortOrder.indexOf(a) - effortOrder.indexOf(b)) ?? [];
-  const thinkingIndex = supportedEfforts.indexOf(settings?.reasoning_effort ?? '');
+  const thinkingIndex = supportedEfforts.indexOf(effective?.reasoning_effort ?? '');
   const nextThinking = supportedEfforts.length > 1
     ? supportedEfforts[(thinkingIndex + 1) % supportedEfforts.length] : null;
-  const selectedName = modelName(selected, settings?.ai_model ?? 'Unavailable');
-  const label = !enabled ? 'Sign in' : settings ? selectedName + (selected?.relative_cost ? ' ' + selected.relative_cost : '') : 'Unavailable';
-  const thinkingLabel = settings?.reasoning_effort
-    ? 'Thinking · ' + (settings.reasoning_effort === 'xhigh' ? 'Extra High'
-      : settings.reasoning_effort.charAt(0).toUpperCase() + settings.reasoning_effort.slice(1))
+  const selectedName = modelName(selected, effective?.ai_model ?? 'Unavailable');
+  const label = !enabled ? 'Sign in' : effective ? selectedName + (selected?.relative_cost ? ' ' + selected.relative_cost : '') : 'Unavailable';
+  const thinkingLabel = effective?.reasoning_effort
+    ? 'Thinking · ' + (effective.reasoning_effort === 'xhigh' ? 'Extra High'
+      : effective.reasoning_effort.charAt(0).toUpperCase() + effective.reasoning_effort.slice(1))
     : null;
-  const notice = nextEffort && settings && nextEffort !== settings.reasoning_effort
+  const notice = nextEffort && effective && nextEffort !== effective.reasoning_effort
     ? ' Switching to ' + modelName(next, '') + ' also changes Thinking to ' + nextEffort + '.' : '';
-  const tooltip = !enabled ? 'Sign in to view your default research model.' : settings
-    ? 'The selected default model is ' + selectedName + '. Relative published API token cost: ' +
+  const tooltip = !enabled ? 'Sign in to view the research model.' : effective
+    ? (project ? 'The project model is ' : 'The selected default model is ') + selectedName + '. Relative published API token cost: ' +
       (selected?.relative_cost ?? 'unknown') + '. Applies to the next AI call in running research and paper generation, and to new work. In-flight calls are unchanged. ' +
       (thinkingLabel ? ' ' + thinkingLabel + '.' : '') +
       ' Click the upper half to cycle models; click the lower half to cycle thinking levels.' + notice
     : error || 'Checking your model selection.';
   async function save(choice: ModelChoice, requestedEffort?: string, userCycle?: 'model' | 'thinking') {
-    if (!settings || busy) return;
-    const effort = requestedEffort ?? suitableEffort(choice, settings.reasoning_effort);
+    if (!effective || busy) return;
+    const effort = requestedEffort ?? suitableEffort(choice, effective.reasoning_effort);
     if (!effort) return;
     setBusy(true); setError('');
     try {
+      if (project && onProjectChange) {
+        await onProjectChange(choice.id, effort);
+        if (userCycle === 'model') setModelCycleRevision(revision => revision + 1);
+        if (userCycle === 'thinking') setThinkingCycleRevision(revision => revision + 1);
+        return;
+      }
+      if (!settings) throw new Error('Model defaults are unavailable.');
       const response = await fetch('/api/user-preferences/research-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
@@ -172,12 +186,12 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
     finally { setBusy(false); }
   }
   function cycle() {
-    if (!next || !settings || !nextEffort) return;
+    if (!next || !effective || !nextEffort) return;
     if (selected && costTier(next.relative_cost) > costTier(selected.relative_cost)) setPending(next);
     else void save(next, undefined, 'model');
   }
   function cycleThinking() {
-    if (!selected || !nextThinking || !settings) return;
+    if (!selected || !nextThinking || !effective) return;
     void save(selected, nextThinking, 'thinking');
   }
   const dismiss = () => { setPending(null); trigger.current?.focus(); };

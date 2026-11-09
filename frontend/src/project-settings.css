@@ -712,7 +712,7 @@
 .sigma-project-classification-dialog .settings-model-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
 .sigma-project-classification-dialog .settings-model-row select { width: 100%; min-width: 0; }
 .project-collaborators { margin-top: 20px; }
-.project-collaborators-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.project-collaborators-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 0; }
 .project-collaborators-heading h3 { margin: 0; font-size: 1rem; }
 .project-collaborators-heading button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; }
 .project-collaborators-heading .sigma-action-glyph { width: 20px; height: 20px; }
@@ -720,9 +720,8 @@
 .project-collaborator-owner { font-size: .8rem; opacity: .75; flex-shrink: 0; }
 .project-collaborator-remove { border: 0; background: transparent; color: inherit; padding: 4px 8px; font-size: 1.25rem; cursor: pointer; }
 .project-collaborator-remove:hover { text-decoration: underline; }
-.project-collaborator-add { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-.project-collaborator-add input { flex: 1 1 230px; min-width: 0; }
-.project-collaborator-add button { text-decoration: underline; }
+.project-collaborator-add { margin-top: 10px; }
+.project-collaborator-add input { display: block; width: 100%; min-width: 0; box-sizing: border-box; }
 .project-collaboration-activity { margin: 18px 0 8px; text-align: center; opacity: .8; font-size: .9rem; }
 @media (max-width: 500px) { .sigma-project-classification-dialog .settings-model-row { grid-template-columns: 1fr; } }
 
@@ -769,3 +768,79 @@
 
 .sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] { justify-content: flex-start; text-align: left; }
 .sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"] > span { text-align: left; margin-left: 0; }
+
+/* New Project uses the same Difficulty text insets as Project Settings. */
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker [role="combobox"] {
+  padding-left: 12px;
+}
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker [role="combobox"] > span {
+  text-align: left;
+  margin-left: 0;
+  padding-left: 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker .research-type-options {
+  padding: 4px 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker .research-type-options [role="option"] {
+  box-sizing: border-box;
+  padding: 6px 9px 6px 11px;
+  gap: 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-difficulty-picker .research-type-options [role="option"] > span {
+  margin-left: 0;
+  padding-left: 0;
+  text-align: left;
+}
+
+/* SIGMA dropdowns share the same text inset across the trigger and menu. */
+.sigma-project-classification-dialog .sigma-difficulty-picker [role="combobox"],
+.sigma-project-classification-dialog .sigma-choice-picker [role="combobox"] { padding-left: 12px; }
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options,
+.sigma-project-classification-dialog .sigma-choice-picker .research-type-options { padding: 4px 0; }
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"],
+.sigma-project-classification-dialog .sigma-choice-picker .research-type-options [role="option"] { padding-left: 11px; }
+.sigma-project-classification-dialog .settings-model-row .sigma-choice-picker { width: 100%; }
+/* Model and Thinking use exactly the same trigger and list text insets as Difficulty. */
+.sigma-project-classification-dialog .sigma-choice-picker [role="combobox"] > span {
+  text-align: left;
+  margin-left: 0;
+  padding-left: 0;
+}
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"],
+.sigma-project-classification-dialog .sigma-choice-picker .research-type-options [role="option"] {
+  box-sizing: border-box;
+  padding: 6px 9px 6px 11px;
+  gap: 0;
+}
+.sigma-project-classification-dialog .sigma-difficulty-picker .research-type-options [role="option"] > span,
+.sigma-project-classification-dialog .sigma-choice-picker .research-type-options [role="option"] > span {
+  margin-left: 0;
+  padding-left: 0;
+  text-align: left;
+}
+
+/* Match row columns: wider Model/Research category, narrower Thinking/Difficulty. */
+.sigma-project-classification-dialog .settings-classification-row,
+.sigma-project-classification-dialog .settings-model-row {
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+}
+.sigma-project-classification-dialog .settings-classification-row .research-type-picker,
+.sigma-project-classification-dialog .settings-body #sigma-project-difficulty,
+.sigma-project-classification-dialog .settings-model-row .sigma-choice-picker {
+  width: 100%;
+  max-width: none;
+}
+.sigma-project-classification-dialog .project-collaborators {
+  margin-top: 16px;
+}
+.sigma-project-classification-dialog .settings-model-row {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #35404a;
+}
+@media (max-width: 500px) {
+  .sigma-project-classification-dialog .settings-classification-row,
+  .sigma-project-classification-dialog .settings-model-row {
+    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  }
+}

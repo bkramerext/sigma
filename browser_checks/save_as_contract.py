@@ -108,7 +108,7 @@ with sync_playwright() as playwright:
 
     def row_for_v4():
         page.goto(UI_URL)
-        saved_tab = page.get_by_role("tab", name="Saved")
+        saved_tab = page.get_by_role("tab", name="My Work")
         expect(saved_tab).to_be_visible(timeout=15000)
         saved_tab.click()
         group = page.locator(".recent-type-group").first

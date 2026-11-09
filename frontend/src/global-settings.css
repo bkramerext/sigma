@@ -93,7 +93,7 @@
 }
 
 .sigma-global-settings .project-types-embedded:not([open]) { display: flex; }
-.sigma-project-classification-dialog { width: min(475px, calc(100vw - 32px)); }
+.sigma-project-classification-dialog { width: min(550px, calc(100vw - 32px)); }
 .sigma-project-classification-dialog .settings-body { padding: 12px 24px 25px; }
 .sigma-project-classification-dialog .settings-body fieldset > label:first-child { margin-top: 0; }
 .sigma-project-classification-dialog .settings-body fieldset { border: 0; margin: 0; padding: 0; }
@@ -105,7 +105,13 @@
   min-width: 0;
   justify-content: space-between;
 }
-.sigma-global-settings .settings-header .sigma-dialog-dismiss { margin-right: 12px; }
+/* Dismiss X is anchored to the dialog edge, not the padded heading. */
+.sigma-global-settings { position: relative; }
+.sigma-global-settings .settings-header { position: static; }
+.sigma-global-settings .settings-header .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 10px !important;
+  right: 10px !important;
+}
 .sigma-global-settings .settings-header .settings-actions > button:first-child {
   width: auto;
   flex: 0 0 auto;
@@ -113,7 +119,7 @@
 }
 /* Classification changes only, so the dialog is content-height, not viewport-height. */
 .project-settings-dialog.sigma-project-classification-dialog {
-  width: min(400px, calc(100vw - 32px));
+  width: min(550px, calc(100vw - 32px));
   height: fit-content;
   max-height: calc(100dvh - 32px);
 }
@@ -124,11 +130,10 @@
   flex: 0 0 auto;
   overflow: visible;
 }
-.sigma-project-classification-dialog .settings-body .research-type-picker {
-  width: min(100%, 265px);
-}
+.sigma-project-classification-dialog .settings-body .research-type-picker,
 .sigma-project-classification-dialog .settings-body #sigma-project-difficulty {
-  width: min(100%, 145px);
+  width: 100%;
+  max-width: none;
 }
 /* Place classification Save beside its title and keep Close at the far edge. */
 .sigma-project-classification-dialog .settings-header .settings-actions {
