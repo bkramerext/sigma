@@ -29,6 +29,7 @@ from sigma.recents import (
     pinned_projects,
     project_family,
     recent_projects,
+    record_access,
     set_project_pin,
     state_directory,
 )
@@ -112,13 +113,6 @@ def check_one_time_owner_migration(base: Path) -> None:
             role="admin",
         )
         config = SimpleNamespace(local=True)
-        with (
-            cloud_workspaces.bind_workspace(workspace) if False else patch.object(
-                cloud_workspaces, "current", return_value=workspace
-            ),
-            patch.object(cloud_workspaces, "local_projects_root", create=True),
-        ):
-            pass
         token = cloud_workspaces.bind_workspace(workspace)
         try:
             with (
