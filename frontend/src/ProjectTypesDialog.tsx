@@ -671,12 +671,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
             {urlError && <span className="pt-validation-error" id={errorId} role="alert">{urlError}</span>}
             {duplicate && <span className="pt-validation-error" id={errorId} role="alert">Duplicate reference URL</span>}
           </div>
-          {!editing && referenceToggle(owner, field, reference)}
           {!isBuiltIn && !editing && <>
             <button type="button" disabled={busy} onClick={() => {
               referenceEditOrigins.current.set(rowKey, reference);
               setEditingReferences(previous => new Set(previous).add(rowKey));
             }} aria-label="Edit reference" data-tooltip="Edit reference"><ReferenceActionIcon kind="edit"/></button>
+          {!editing && referenceToggle(owner, field, reference)}
             <button type="button" disabled={busy} onClick={() => {
               referenceEditOrigins.current.delete(rowKey);
               setEditingReferences(previous => { const next = new Set(previous); next.delete(rowKey); return next; });
