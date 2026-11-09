@@ -2012,7 +2012,7 @@ def strategy_enabled_view(body: StrategyEnabledRequest):
 class CreateProjectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
-    problem: str = ""
+    problem: str
     desired_outcomes: str = ""
     paper_requirements: str = ""
     investigation_type: str = Field(
