@@ -9,10 +9,10 @@ const reviewedNames: Record<string, string> = {
 
 export function modelDisplayName(model: PricedModel): string {
   return reviewedNames[model.id] ??
-    model.label.replace(/\\s*\\((?:\\3)\\)\\s*$/, '').replace(/\\s*[·-]\\s*\\3\\s*$/, '').trim();
+    model.label.replace(/\s*\(\${1,3}\)\s*$/, '').replace(/\s*·\s*\${1,3}\s*$/, '').trim();
 }
 
 export function modelDisplayLabel(model: PricedModel): string {
   const name = modelDisplayName(model);
-  return /^\\3$/.test(model.relative_cost) ? `${name} · ${model.relative_cost}` : name;
+  return /^\${1,3}$/.test(model.relative_cost) ? `${name} · ${model.relative_cost}` : name;
 }
