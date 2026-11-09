@@ -19,8 +19,9 @@ const windowId = existing && /^[a-f0-9]{32}$/.test(existing) && !copiedFromOpene
   return value;
 })();
 
-// Legacy sessions must keep working on upgrade. Window-scoped mode starts on
-// the first Google sign-in from this window and survives its OAuth redirect.
+// Legacy sessions must keep working on upgrade. New windows adopt an
+// independent session on entry; explicit Google sign-in also enables scoping
+// and survives its OAuth redirect.
 const ACTIVE_KEY = 'sigma.auth.windowScoped';
 let windowScoped = (() => {
   try { return window.sessionStorage.getItem(ACTIVE_KEY) === 'yes'; } catch { return false; }
