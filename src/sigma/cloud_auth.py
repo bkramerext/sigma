@@ -73,6 +73,29 @@ def _cookie_name(name: str, cfg: Config) -> str:
     return name.removeprefix("__Host-") if cfg.local else name
 
 
+_WINDOW_ID = re.compile(r"^[a-f0-9]{32}$")
+
+
+def _window_id(request: Request) -> str | None:
+    value = request.headers.get("x-sigma-window") or request.query_params.get("sigma_window")
+    return value if value and _WINDOW_ID.fullmatch(value) else None
+
+
+def _session_cookie_name(cfg: Config, window_id: str | None) -> str:
+    name = _cookie_name(SESSION_COOKIE, cfg)
+    return f"{name}_{window_id}" if window_id else name
+
+
+def _raw_session(request: Request, cfg: Config) -> str | None:
+    return request.cookies.get(_session_cookie_name(cfg, _window_id(request)))
+
+
+def _clear_window_session(response: Response, cfg: Config, window_id: str | None) -> None:
+    response.delete_cookie(
+        _session_cookie_name(cfg, window_id), **_cookie_options(cfg, SESSION_COOKIE)
+    )
+
+
 def _cookie_options(cfg: Config, name: str, *, max_age: int | None = None) -> dict[str, Any]:
     options: dict[str, Any] = {
         "path": "/",
@@ -1058,7 +1081,7 @@ async def middleware(request: Request, call_next):
     if public or demo_public:
         return await call_next(request)
     try:
-        principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+        principal = resolve_session(_raw_session(request, cfg))
     except (sqlite3.Error, OSError, RuntimeError):
         return JSONResponse(
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503
@@ -1279,7 +1302,7 @@ def mock_funding(request: Request):
     cfg = config()
     if not _mock_enabled(cfg):
         raise HTTPException(404, "Not found")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     _persist_user_state(cfg, principal)
@@ -1299,7 +1322,7 @@ def mock_allowance(request: Request, scenario: str):
         raise HTTPException(403, "Request origin is not authorized.")
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Mock authentication requires a loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     if scenario not in _MOCK_ALLOWANCES:
@@ -1345,7 +1368,7 @@ def mock_provider(request: Request, scenario: str):
         or request.client.host not in {"127.0.0.1", "::1", "localhost"}
     ):
         raise HTTPException(403, "Mock scenario changes require a same-origin loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     if scenario not in _MOCK_PROVIDERS:
@@ -1372,7 +1395,7 @@ def mock_model_access(request: Request, mode: str):
         raise HTTPException(403, "Request origin is not authorized.")
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Mock authentication requires a loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     if mode not in {"personal", "sponsored"}:
@@ -1398,7 +1421,7 @@ def mock_select(request: Request, identity: str):
     # Never accept mock identity changes through a remote-facing listener.
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Mock authentication requires a loopback client.")
-    old = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    old = _raw_session(request, cfg)
     previous_denied = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     with _db(cfg) as db:
         if old:
@@ -1482,7 +1505,7 @@ def status(request: Request):
         ]
     try:
         principal = (
-            resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+            resolve_session(_raw_session(request, cfg))
             if cfg.enabled and not cfg.error
             else None
         )
@@ -1552,7 +1575,7 @@ def local_sponsored_allowance(request: Request):
         raise HTTPException(404, "Not found")
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Local sponsored preview requires a loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(_raw_session(request, cfg))
     if principal is None:
         raise HTTPException(401, "Sign in with an eligible account to view its allowance.")
     account = _persist_user_state(cfg, principal)
@@ -1636,7 +1659,7 @@ def login(
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    session_cookie = _raw_session(request, cfg)
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
@@ -1741,7 +1764,7 @@ async def callback(
             return result
     flow_cookie = request.cookies.get(_cookie_name(FLOW_COOKIE, cfg))
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    session_cookie = _raw_session(request, cfg)
     if (
         error
         or not state
@@ -2312,7 +2335,7 @@ def request_invitation(
     denied_cookie: str | None = None
     authenticated: Principal | None = None
     if body.request_type == "reload":
-        raw_session = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+        raw_session = _raw_session(request, cfg)
         principal = resolve_session(raw_session)
         if principal is None:
             raise HTTPException(401, "Sign in with Google before requesting a reload.")
@@ -2329,7 +2352,7 @@ def request_invitation(
             raise HTTPException(403, "This account is not eligible for sponsored reload requests.")
         identity = {"email": principal.email, "subject": principal.subject}
     elif (
-        authenticated := resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+        authenticated := resolve_session(_raw_session(request, cfg))
     ) is not None and authenticated.role in {"guest", "member"}:
         identity = {"email": authenticated.email, "subject": authenticated.subject}
     else:
@@ -2573,7 +2596,7 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
 
-    raw_session = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    raw_session = _raw_session(request, cfg)
     try:
         principal = resolve_session(raw_session)
     except (sqlite3.Error, OSError, RuntimeError) as exc:
@@ -2709,7 +2732,7 @@ def remove_feedback(feedback_id: str, request: Request):
 @router.post("/logout")
 def logout(request: Request):
     cfg = config()
-    raw = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    raw = _raw_session(request, cfg)
     if raw and cfg.database:
         with _db(cfg) as db:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
