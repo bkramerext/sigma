@@ -8,7 +8,7 @@ import re
 import secrets
 import sqlite3
 from collections.abc import AsyncIterator
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from time import perf_counter
 from typing import Any, Literal
 from urllib.parse import quote, urlencode
@@ -1722,12 +1722,20 @@ class InitRequest(OpenRequest):
     difficulty: str = "medium"
 
 
+class ProjectOpenRequest(OpenRequest):
+    # The interactive project page never renders its historical event log.
+    # Keep the full API response as the default for exports and external clients.
+    compact: bool = False
+
+
 @app.post("/api/projects/open")
-def open_view(body: OpenRequest):
+def open_view(body: ProjectOpenRequest):
     from sigma import project_collaboration
 
     view = open_project(body.path)
     project_collaboration.register_owner(view)
+    if body.compact:
+        view = replace(view, project=replace(view.project, events=()))
     return asdict(view)
 
 
