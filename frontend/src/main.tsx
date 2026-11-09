@@ -4792,7 +4792,6 @@ function plausibleCollaboratorEmail(input: string): string | null {
   const match = /^([a-z0-9][a-z0-9._+%-]{0,63})@([a-z0-9][a-z0-9.-]*\.[a-z]{2,})$/.exec(email);
   if (!match || email.length > 254 || match[1].includes('..') || match[1].endsWith('.') || match[2].includes('..')) return null;
   if (match[2].split('.').some(part => !part || part.length > 63 || part.startsWith('-') || part.endsWith('-'))) return null;
-  if (['gmail.com', 'googlemail.com'].includes(match[2]) && (!/^[a-z0-9]+(\.[a-z0-9]+)*$/.test(match[1]) || match[1].length < 6 || match[1].length > 30)) return null;
   return email;
 }
 
@@ -4857,7 +4856,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       || JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators)));
   function addCollaborator() {
     const email = plausibleCollaboratorEmail(newEmail);
-    if (!email) { setError('Enter a plausible Google account email address.'); return; }
+    if (!email) { setError('Enter a Google account email address.'); return; }
     if (email === shared?.owner || collaborators.includes(email)) {
       setError('This account is already a collaborator.'); return;
     }

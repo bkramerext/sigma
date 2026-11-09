@@ -742,7 +742,7 @@
 .sigma-project-classification-dialog .settings-classification-row > div > label { margin-top: 8px; }
 .sigma-project-classification-dialog .research-type-picker [role="combobox"] { justify-content: flex-start; text-align: left; padding-left: 12px; }
 .sigma-project-classification-dialog .research-type-picker #project-mode-value { text-align: left; margin-left: 0; min-width: 0; }
-.sigma-project-classification-dialog .project-collaborators { margin-top: 22px; }
+.sigma-project-classification-dialog .project-collaborators { margin-top: 22px; padding-top: 16px; border-top: 1px solid #35404a; }
 .sigma-project-classification-dialog .project-collaborator-remove { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--sigma-copper-foreground); }
 .sigma-project-classification-dialog .project-collaborator-remove:hover { border-color: #ac7054; background: #3b3029; text-decoration: none; }
 .sigma-project-classification-dialog .project-collaborator-local-note { margin-top: 20px; color: #aab9c7; font-size: 12px; line-height: 1.6; }
