@@ -110,8 +110,12 @@ class CollaborationTests(TestCase):
 
         # Z saves N as collaborator; afterward no owner session is present.
         shared.save_settings(
-            self.path, self.revision(), [self.other.email],
-            "gpt-6.1-sol", "high", "Xenopus Tadpoles"
+            self.path,
+            self.revision(),
+            [self.other.email],
+            "gpt-6.1-sol",
+            "high",
+            "Xenopus Tadpoles",
         )
 
         @contextmanager
