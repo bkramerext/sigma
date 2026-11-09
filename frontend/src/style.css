@@ -551,9 +551,9 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 34px;
-  width: 34px;
-  min-width: 34px;
+  flex: 0 0 53px;
+  width: 53px;
+  min-width: 53px;
   height: 34px;
   min-height: 34px;
   padding: 4px;
