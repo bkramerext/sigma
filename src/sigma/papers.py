@@ -11797,6 +11797,11 @@ def preflight(
 
 
 def list_papers(path: str) -> list[dict[str, Any]]:
+    """List saved paper records without opening or verifying PDF contents.
+
+    PDF integrity is checked when a paper is retrieved or scored, not while
+    decorating Home or Most Recent with counts and scores.
+    """
     target = project_path(path)
     if target.suffix == ".json":
         names = sorted(
@@ -11844,7 +11849,14 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                                 "source_reference_map",
                             }
                         },
-                        "pdf_available": _valid_pdf_file(path, value),
+                        # Publication metadata is enough for a listing; integrity
+                        # remains checked by get_paper/get_pdf/score operations.
+                        "pdf_available": (
+                            isinstance(value.get("pdf_sha256"), str)
+                            and len(value["pdf_sha256"]) == 64
+                            and type(value.get("pdf_size_bytes")) is int
+                            and 0 < value["pdf_size_bytes"] <= 80_000_000
+                        ),
                         "pdf_sha256": value.get("pdf_sha256"),
                         "score": __import__(
                             "sigma.paper_scores", fromlist=["cached_score"]
