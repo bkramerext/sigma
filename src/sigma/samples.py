@@ -8,6 +8,7 @@ import shutil
 import stat
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -697,9 +698,72 @@ def sample_project_titles() -> set[str]:
     return {_sample_index_metadata(name, path)[1] for name, path in _projects()}
 
 
+def _sample_catalog_fingerprint(name: str, path: Path) -> tuple[tuple[str, int, int], ...]:
+    """Cheap invalidation key; don't decode projects or paper metadata on each listing."""
+    files = [path]
+    paper_dir = SAMPLES / name / SAMPLE_PAPERS
+    if paper_dir.is_dir() and not paper_dir.is_symlink():
+        files.extend(sorted(paper_dir.glob("*.json")))
+    return tuple((str(file), file.stat().st_mtime_ns, file.stat().st_size) for file in files)
+
+
+@lru_cache(maxsize=256)
+def _cached_sample_catalog_entry(
+    name: str, fingerprint: tuple[tuple[str, int, int], ...]
+) -> dict[str, Any]:
+    """Read only catalog fields; full project validation remains on sample opening."""
+    path = SAMPLES / name / STATE
+    try:
+        raw = json.loads(path.read_bytes())
+        if not isinstance(raw, dict):
+            raise TypeError("Invalid sample document")
+        project_id, title = raw["id"], raw["title"]
+        if (
+            not isinstance(project_id, str)
+            or str(UUID(project_id)) != project_id
+            or not isinstance(title, str)
+            or not title.strip()
+        ):
+            raise ValueError("Invalid sample identity")
+        problem = raw["problem"]
+        mode = raw.get("investigation_type", raw.get("research_mode", "default"))
+        difficulty = raw.get("difficulty")
+        active_order = raw.get("active_order", raw.get("strategies", []))
+        if (
+            not isinstance(problem, str)
+            or not isinstance(mode, str)
+            or (difficulty is not None and not isinstance(difficulty, str))
+            or not isinstance(active_order, list)
+            or not all(isinstance(item, str) for item in active_order)
+        ):
+            raise ValueError("Invalid sample catalog fields")
+        return asdict(
+            SampleProject(
+                name,
+                title,
+                problem,
+                mode,
+                difficulty,
+                len(active_order),
+                _best_sample_paper(name)[0],
+            )
+        )
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise ProjectError(f"Sample project {name} is unavailable: {exc}") from exc
+
+
 def sample_projects() -> dict[str, list[dict[str, Any]]]:
-    """The Sample list always describes the untouched templates, not working projects."""
-    return {"projects": [asdict(_load(name)[1]) for name, _ in _projects()]}
+    """Return immutable template summaries without decoding their event histories.
+
+    Entries are cached until the project or scored-paper JSON changes; opening a
+    sample still performs the full existing project and PDF verification.
+    """
+    return {
+        "projects": [
+            _cached_sample_catalog_entry(name, _sample_catalog_fingerprint(name, path))
+            for name, path in _projects()
+        ]
+    }
 
 
 def sample_project_ids() -> set[str]:
