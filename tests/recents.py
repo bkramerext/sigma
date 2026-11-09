@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -153,6 +154,33 @@ def check_compact_project_open() -> None:
     assert compact.json()["project"]["events"] == []
     assert full.json()["project"]["events"]
     assert inspect_project(created.path).project.events == created.project.events
+
+
+def check_existing_workspace_lookup_does_not_take_writer_lock(base: Path) -> None:
+    """Ordinary signed-in requests must not wait for unrelated SQLite writers."""
+    from sigma import cloud_workspaces
+
+    storage = base / "workspace-registry-test"
+    storage.mkdir(mode=0o700)
+    actual_connect = cloud_workspaces._connect
+
+    def short_timeout_connect(root: Path):
+        connection = actual_connect(root)
+        connection.execute("PRAGMA busy_timeout=100")
+        return connection
+
+    with (
+        patch.object(cloud_workspaces, "storage_root", return_value=storage),
+        patch.object(cloud_workspaces, "_connect", side_effect=short_timeout_connect),
+    ):
+        before = cloud_workspaces.workspace_for_subject("google:workspace-regression")
+        with sqlite3.connect(storage / "workspaces.sqlite3", isolation_level=None) as writer:
+            writer.execute("BEGIN IMMEDIATE")
+            try:
+                after = cloud_workspaces.workspace_for_subject("google:workspace-regression")
+            finally:
+                writer.execute("ROLLBACK")
+        assert before.path == after.path and before.workspace_id == after.workspace_id
 
 
 def check_title_collision_avoids_deep_metadata() -> None:
@@ -925,6 +953,7 @@ def check(root: Path, base: Path) -> None:
     check_index_sample_read_outside_lock()
     check_one_time_owner_migration(base)
     check_compact_project_open()
+    check_existing_workspace_lookup_does_not_take_writer_lock(base)
     check_title_collision_avoids_deep_metadata()
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
