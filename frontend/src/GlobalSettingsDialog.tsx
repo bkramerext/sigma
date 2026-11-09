@@ -177,26 +177,26 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const canSave = hasChanges && !busy && !typesSaveState.busy && !ethosBusy &&
     (!typesSaveState.dirty || typesSaveState.valid) &&
     (!hasOtherChanges || (loaded && validLimits));
-  async function save() {
-    if (!canSave) return;
+  async function save(): Promise<boolean> {
+    if (!canSave) return false;
     setBusy(true); setError(''); setSaved(false);
     const completed: string[] = [];
     try {
       if (typesSaveState.dirty) {
         const didSave = await typesSaveRef.current?.();
-        if (!didSave) return;
+        if (!didSave) return false;
         completed.push('Project Types');
       }
       if (!hasOtherChanges) {
         setSaved(true);
-        return;
+        return true;
       }
-      if (!config) return;
+      if (!config) return false;
     const limits = { ...config.limits };
     const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
     for (const field of whole) {
       const value = Number(limits[field]);
-      if (!Number.isInteger(value) || value < 1) { setError('Enter positive whole numbers for research limits.'); setTab('limits'); return; }
+      if (!Number.isInteger(value) || value < 1) { setError('Enter positive whole numbers for research limits.'); setTab('limits'); return false; }
       (limits as any)[field] = value;
     }
     limits.scheduler_version = 2;
@@ -231,6 +231,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       savedSnapshot.current = JSON.stringify({ config: next, prefs });
       setSaved(true);
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
+      return true;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       // Never claim atomicity across independent settings endpoints. The
@@ -238,6 +239,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       setError(completed.length
         ? message + '. Partially saved: ' + completed.join(', ') + '. Other edits remain unsaved; correct the setting to retry.'
         : message);
+      return false;
     }
     finally { setBusy(false); }
   }
@@ -288,8 +290,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     if (busy || typesSaveState.busy || ethosBusy) return;
     if (hasChanges) {
       if (!canSave) { setError('Finish or correct the current setting before closing.'); return; }
-      await save();
-      return; // Allow the committed state to settle; Close may then dismiss.
+      if (await save()) onClose();
+      return;
     }
     onClose();
   };
