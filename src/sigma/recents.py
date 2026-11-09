@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any
 from uuid import UUID
 
@@ -259,7 +260,16 @@ def _index():
             0o600,
         )
         _check_index_file(descriptor)
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        # A stuck index writer must not hold Saved or project creation forever.
+        deadline = monotonic() + 5
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if monotonic() >= deadline:
+                    raise ProjectError("Saved Projects index is busy. Retry or check backend logs.") from exc
+                sleep(0.05)
         path = directory / "recents.json"
         try:
             read_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
