@@ -641,6 +641,27 @@ def note_change(path: str) -> None:
         pass
 
 
+def shared_project_paths() -> set[str]:
+    """Paths with collaborators visible to their owner or a listed collaborator."""
+    try:
+        workspace, email = _identity()
+    except ValueError:
+        return set()
+    with _db() as db:
+        return {
+            row["path"]
+            for row in db.execute(
+                """SELECT p.path FROM shared_projects p
+                WHERE EXISTS (SELECT 1 FROM shared_collaborators c WHERE c.path=p.path)
+                AND (p.owner_hash=? OR EXISTS (
+                    SELECT 1 FROM shared_collaborators c
+                    WHERE c.path=p.path AND c.email=?
+                ))""",
+                (workspace.subject_hash, email),
+            )
+        }
+
+
 def shared_with_me() -> list[dict[str, str]]:
     workspace = cloud_workspaces.current()
     if workspace is None or workspace.guest:

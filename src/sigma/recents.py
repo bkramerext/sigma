@@ -400,6 +400,7 @@ class RecentProject:
     paper_count: int = 0
     best_paper_score: int | None = None
     paper_activity: str | None = None
+    shared: bool = False
 
 
 def recent_projects() -> dict:
@@ -409,6 +410,7 @@ def recent_projects() -> dict:
     if workspace is not None and workspace.guest:
         return {"projects": []}
     shared_rows = project_collaboration.shared_with_me() if workspace is not None else []
+    shared_paths = project_collaboration.shared_project_paths() if workspace is not None else set()
     shared_by_path = {row["path"]: row for row in shared_rows}
     with _index() as index:
         pins = _effective_pins(index)
@@ -470,6 +472,7 @@ def recent_projects() -> dict:
                         difficulty=view.project.difficulty,
                         research_running=has_active_session(view.path, project_id=view.project.id),
                         available=True,
+                        shared=view.path in shared_paths,
                         pinned=(view.project.id in pins.values()),
                         pin_state=(
                             "unpin"
