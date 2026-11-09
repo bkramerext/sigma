@@ -844,3 +844,34 @@
     grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
   }
 }
+
+/* New Project reuses the Project Settings model/thinking picker, not native selects. */
+.project-settings-dialog.new-project-dialog .settings-classification-row,
+.project-settings-dialog.new-project-dialog .settings-model-row {
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+}
+.project-settings-dialog.new-project-dialog .settings-model-row .sigma-choice-picker {
+  width: 100%;
+  max-width: none;
+}
+.project-settings-dialog.new-project-dialog .sigma-choice-picker [role="combobox"] {
+  padding-left: 12px;
+}
+.project-settings-dialog.new-project-dialog .sigma-choice-picker [role="combobox"] > span {
+  text-align: left;
+  margin-left: 0;
+  padding-left: 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-choice-picker .research-type-options {
+  padding: 4px 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-choice-picker .research-type-options [role="option"] {
+  box-sizing: border-box;
+  padding: 6px 9px 6px 11px;
+  gap: 0;
+}
+.project-settings-dialog.new-project-dialog .sigma-choice-picker .research-type-options [role="option"] > span {
+  margin-left: 0;
+  padding-left: 0;
+  text-align: left;
+}

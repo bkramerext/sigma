@@ -29,6 +29,7 @@ import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
 import GlobalModelPill from './GlobalModelPill';
+import { modelDisplayLabel } from './model-display';
 import ProjectDescriptionEditor, { type ProjectDescriptionDraft } from './ProjectDescriptionEditor';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
@@ -5082,7 +5083,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
                   disabled={modelLookupFailed || catalog.length === 0}
                   choices={[
                     ...(model && !selected ? [{ value: model, label: `${model} · unavailable` }] : []),
-                    ...catalog.map(option => ({ value: option.id, label: option.label })),
+                    ...catalog.map(option => ({ value: option.id, label: modelDisplayLabel(option) })),
                   ]}
                   onChange={next => {
                     setModel(next);
@@ -5333,20 +5334,38 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <label htmlFor="project-paper-requirements">Paper Requirements</label><p className="settings-hint">What should the finished publication contain?</p><textarea id="project-paper-requirements" maxLength={20000} rows={4} value={values.paper_requirements} onChange={event => change('paper_requirements', event.target.value)}/></>}
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
       <div><label id="sigma-project-difficulty-label">Difficulty</label><DifficultyPicker value={values.difficulty} onChange={value => change('difficulty', value)}/></div></div>
-      {initial && <div className="settings-model-row">
-      <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
-        {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
-        {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
-        {orderedCatalog.map(model => <option key={model.id} value={model.id}>{model.label.replace(/\s*\([^)]*\)$/, '').trim()} · {model.relative_cost}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
-      </select>
+      <div className="settings-model-row">
+      <div><label htmlFor="project-model">Model</label>
+        <SigmaChoicePicker id="project-model" label="Model" value={values.ai_model}
+          disabled={catalog.length === 0}
+          choices={[
+            ...(values.ai_model && !selected ? [{ value: values.ai_model, label: `${values.ai_model} · unavailable/unreviewed` }] : []),
+            ...(!values.ai_model ? [{ value: '', label: 'Loading reviewed choices…' }] : []),
+            ...orderedCatalog.map(model => ({
+              value: model.id,
+              label: modelDisplayLabel(model) + (model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'),
+            })),
+          ]}
+          onChange={nextModel => {
+            const nextChoice = catalog.find(option => option.id === nextModel);
+            setValues(previous => ({
+              ...previous, ai_model: nextModel,
+              reasoning_effort: nextChoice && !nextChoice.efforts.includes(previous.reasoning_effort)
+                ? nextChoice.efforts[0] ?? previous.reasoning_effort : previous.reasoning_effort,
+            }));
+          }}/>
       <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately.' : 'ChatGPT plan or credits.'}{catalogMessage}{selected?.availability === 'unavailable' ? ' Model unavailable; it will not be replaced.' : ''}</p></div>
-      <div><label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
-        {!selected?.efforts.includes(values.reasoning_effort) && <option value={values.reasoning_effort}>{thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · {selected ? 'unsupported' : 'preserved'}</option>}
-        {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
-      </select>
+      <div><label htmlFor="project-thinking">Thinking level</label>
+        <SigmaChoicePicker id="project-thinking" label="Thinking level" value={values.reasoning_effort}
+          disabled={!selected || !selected.efforts.length}
+          choices={[
+            ...(!selected?.efforts.includes(values.reasoning_effort) ? [{ value: values.reasoning_effort, label: `${thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · ${selected ? 'unsupported' : 'preserved'}` }] : []),
+            ...(selected?.efforts ?? []).map(effort => ({ value: effort, label: thinkingLabels[effort] ?? effort })),
+          ]}
+          onChange={next => change('reasoning_effort', next)}/>
       <p className="settings-hint">Used for future AI proposals. Higher levels use more time and usage.</p></div>
-      </div>}
-      {initial && pairError && <p className="error" role="alert">{pairError}</p>}
+      </div>
+      {pairError && <p className="error" role="alert">{pairError}</p>}
       {initial && <p className="project-destination"><span>Project location</span><code>{initial.path}</code><small>Editing the display name never renames or moves this directory.</small></p>}
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
@@ -5484,6 +5503,18 @@ function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
 
+/** Avoid flashing an hourglass/message for operations that finish quickly. */
+function useDelayedProjectProgress(operation: string): string {
+  const [visible, setVisible] = useState('');
+  useEffect(() => {
+    setVisible('');
+    if (!operation) return;
+    const timer = window.setTimeout(() => setVisible(operation), 1000);
+    return () => window.clearTimeout(timer);
+  }, [operation]);
+  return visible === operation ? visible : '';
+}
+
 function RecentProjects({ onOpen, flat = false, active = false, projects, setProjects, loading, setLoading }: {
   onOpen: (view: ProjectView, openSettings?: boolean) => void;
   flat?: boolean;
@@ -5495,6 +5526,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
 }) {
   const [opening, setOpening] = useState('');
   const [removing, setRemoving] = useState('');
+  const visibleProgress = useDelayedProjectProgress(opening ? `open:${opening}` : removing ? `remove:${removing}` : '');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [saveAsEntry, setSaveAsEntry] = useState<RecentProject | null>(null);
   const [confirmRemovePlacement, setConfirmRemovePlacement] = useState<'above' | 'below'>('below');
@@ -5635,7 +5667,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(opening === entry.id || removing === entry.id) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
             {entry.best_paper_score != null && entry.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
           </div>
@@ -5666,6 +5698,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [opening, setOpening] = useState('');
+  const visibleProgress = useDelayedProjectProgress(opening ? `open:${opening}` : '');
   const pending = useRef(false);
   const loaded = useRef(false);
   useEffect(() => {
@@ -5706,7 +5739,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
     {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
-      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{opening === sample.id && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{visibleProgress === `open:${sample.id}` && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;

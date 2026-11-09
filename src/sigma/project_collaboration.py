@@ -19,8 +19,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from email.message import EmailMessage
-from html import escape as html_escape
 from functools import wraps
+from html import escape as html_escape
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, TypeVar
