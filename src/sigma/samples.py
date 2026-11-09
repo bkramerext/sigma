@@ -704,10 +704,7 @@ def _sample_catalog_fingerprint(name: str, path: Path) -> tuple[tuple[str, int, 
     paper_dir = SAMPLES / name / SAMPLE_PAPERS
     if paper_dir.is_dir() and not paper_dir.is_symlink():
         files.extend(sorted(paper_dir.glob("*.json")))
-    return tuple(
-        (str(file), file.stat().st_mtime_ns, file.stat().st_size)
-        for file in files
-    )
+    return tuple((str(file), file.stat().st_mtime_ns, file.stat().st_size) for file in files)
 
 
 @lru_cache(maxsize=256)
@@ -740,10 +737,17 @@ def _cached_sample_catalog_entry(
             or not all(isinstance(item, str) for item in active_order)
         ):
             raise ValueError("Invalid sample catalog fields")
-        return asdict(SampleProject(
-            name, title, problem, mode, difficulty, len(active_order),
-            _best_sample_paper(name)[0],
-        ))
+        return asdict(
+            SampleProject(
+                name,
+                title,
+                problem,
+                mode,
+                difficulty,
+                len(active_order),
+                _best_sample_paper(name)[0],
+            )
+        )
     except (OSError, ValueError, TypeError, KeyError) as exc:
         raise ProjectError(f"Sample project {name} is unavailable: {exc}") from exc
 
@@ -754,10 +758,12 @@ def sample_projects() -> dict[str, list[dict[str, Any]]]:
     Entries are cached until the project or scored-paper JSON changes; opening a
     sample still performs the full existing project and PDF verification.
     """
-    return {"projects": [
-        _cached_sample_catalog_entry(name, _sample_catalog_fingerprint(name, path))
-        for name, path in _projects()
-    ]}
+    return {
+        "projects": [
+            _cached_sample_catalog_entry(name, _sample_catalog_fingerprint(name, path))
+            for name, path in _projects()
+        ]
+    }
 
 
 def sample_project_ids() -> set[str]:
