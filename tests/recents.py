@@ -85,7 +85,12 @@ def check_one_time_owner_migration(base: Path) -> None:
     """A verified owner gets one complete transfer, then never reopens old state."""
     from types import SimpleNamespace
 
-    from sigma import cloud_auth, cloud_workspaces, migrate_local_projects_once, project_collaboration
+    from sigma import (
+        cloud_auth,
+        cloud_workspaces,
+        migrate_local_projects_once,
+        project_collaboration,
+    )
     from sigma.projects import initialize_project
 
     root = base / "migration-original-projects"
