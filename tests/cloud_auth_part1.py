@@ -4,6 +4,51 @@ from cloud_auth_fixture import *
 
 
 class CloudAuthTests(CloudAuthFixture):
+    def test_local_project_invitation_admits_only_active_verified_collaborator(self):
+        from sigma import project_collaboration
+
+        email = "nontrivialzeeros@gmail.com"
+        raw = "local-collaborator-session"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            },
+        ):
+            cfg = cloud_auth.config()
+            with cloud_auth._db(cfg) as db:
+                db.execute(
+                    "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                    (cloud_auth._hash(raw), "verified-n", email, int(time.time()) + 3600),
+                )
+            self.assertEqual(cloud_auth.resolve_session(raw).role, "guest")
+            path = str(self.root / "workspaces" / "owner" / "tadpoles.json")
+            with project_collaboration._db() as db:
+                db.execute(
+                    "INSERT INTO shared_projects "
+                    "(path,project_id,owner_hash,owner_email,model,thinking,last_writer,updated_at) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (path, str(uuid4()), "z-owner", "zetacontinuation@gmail.com",
+                     "gpt-6.1-sol", "high", "zetacontinuation@gmail.com", time.time()),
+                )
+                db.execute(
+                    "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
+                    (path, email),
+                )
+            self.assertEqual(cloud_auth.resolve_session(raw).role, "member")
+            with cloud_auth._db(cfg) as db:
+                self.assertIsNone(
+                    db.execute(
+                        "SELECT role FROM grants WHERE kind='email' AND value=?", (email,)
+                    ).fetchone()
+                )
+            with project_collaboration._db() as db:
+                db.execute(
+                    "DELETE FROM shared_collaborators WHERE path=? AND email=?", (path, email)
+                )
+            self.assertEqual(cloud_auth.resolve_session(raw).role, "guest")
+
     def test_two_windows_keep_independent_accounts_after_sign_out(self):
         """Two browser windows share cookies but never share the active identity."""
         first, second = "a" * 32, "b" * 32
