@@ -563,12 +563,11 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   outline-offset: 2px;
 }
 
-/* Darker translucent catalog surface improves contrast over the home artwork.
-   Preserve the existing unboxed rows and copper typography. */
-.home-page #samples-panel > .home-samples,
-.home-page #recent-panel > .home-recents,
-.home-page #most-recent-panel > .home-recents {
-  background: #07111ee0;
+/* Individual project rows provide modest contrast without a solid panel.
+   Alpha 0x70 is half the previous 0xe0 panel opacity. */
+.home-page .home-recents .recent-entry,
+.home-page .home-samples .sample-type-group li {
+  background: #07111e70;
 }
 /* No separator rules between Saved/Sample category rows. */
 .home-page .home-catalog { border-top: 0; }
