@@ -5334,8 +5334,16 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <label htmlFor="project-paper-requirements">Paper Requirements</label><p className="settings-hint">What should the finished publication contain?</p><textarea id="project-paper-requirements" maxLength={20000} rows={4} value={values.paper_requirements} onChange={event => change('paper_requirements', event.target.value)}/></>}
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
       <div><label id="sigma-project-difficulty-label">Difficulty</label><DifficultyPicker value={values.difficulty} onChange={value => change('difficulty', value)}/></div></div>
-      {initial && <div className="settings-model-row">
-      <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
+      <div className="settings-model-row">
+      <div><label htmlFor="project-model">Model</label><select id="project-model" value={values.ai_model} onChange={event => {
+        const nextModel = event.target.value;
+        const nextChoice = catalog.find(option => option.id === nextModel);
+        setValues(previous => ({
+          ...previous, ai_model: nextModel,
+          reasoning_effort: nextChoice && !nextChoice.efforts.includes(previous.reasoning_effort)
+            ? nextChoice.efforts[0] ?? previous.reasoning_effort : previous.reasoning_effort,
+        }));
+      }} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
         {orderedCatalog.map(model => <option key={model.id} value={model.id}>{modelDisplayLabel(model)}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
@@ -5346,8 +5354,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
       </select>
       <p className="settings-hint">Used for future AI proposals. Higher levels use more time and usage.</p></div>
-      </div>}
-      {initial && pairError && <p className="error" role="alert">{pairError}</p>}
+      </div>
+      {pairError && <p className="error" role="alert">{pairError}</p>}
       {initial && <p className="project-destination"><span>Project location</span><code>{initial.path}</code><small>Editing the display name never renames or moves this directory.</small></p>}
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
