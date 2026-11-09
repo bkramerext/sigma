@@ -54,12 +54,8 @@ class CloudAuthTests(CloudAuthFixture):
             headers={"X-Sigma-Window": second, "Origin": ORIGIN},
         )
         self.assertEqual(signed_out.status_code, 204)
-        owner = self.client.get(
-            "/api/cloud-auth/status", headers={"X-Sigma-Window": first}
-        )
-        colleague = self.client.get(
-            "/api/cloud-auth/status", headers={"X-Sigma-Window": second}
-        )
+        owner = self.client.get("/api/cloud-auth/status", headers={"X-Sigma-Window": first})
+        colleague = self.client.get("/api/cloud-auth/status", headers={"X-Sigma-Window": second})
         self.assertEqual(owner.json()["user"]["email"], "admin@example.org")
         self.assertFalse(colleague.json()["authenticated"])
 
