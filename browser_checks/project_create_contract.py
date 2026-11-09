@@ -126,18 +126,31 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="New Project")
     expect(dialog).to_be_visible()
     expect(
-        dialog.get_by_text("You can edit these settings later in Project Settings.")
+        dialog.get_by_text(
+            "Project name and type required; you can edit these settings later in Project Settings."
+        )
     ).to_be_visible()
     assert dialog.locator("textarea").evaluate_all(
         "items => items.every(el => getComputedStyle(el).resize === 'none')"
     )
-    dialog.get_by_label("Project name").fill("Create Contract Regression")
-    # Only project name and research category are required.
+    create = dialog.get_by_role("button", name="Create", exact=True)
+    name = dialog.get_by_label("Project name")
+    expect(create).to_be_disabled()
+    name.fill("Create Contract Regression")
+    # A name alone is insufficient. Exactly name and type enable Create.
+    expect(create).to_be_disabled()
     expect(dialog.get_by_label("Research Subject")).to_have_value("")
     dialog.get_by_role("combobox", name="Research category").click()
     dialog.get_by_role("option", name="Mathematics").click()
+    expect(create).to_be_enabled()
+    # Clearing and restoring the same required field must be symmetric.
+    name.fill("")
+    expect(create).to_be_disabled()
+    name.fill("   ")
+    expect(create).to_be_disabled()
+    name.fill("Create Contract Regression")
+    expect(create).to_be_enabled()
     dialog.get_by_label("Difficulty").select_option("hard")
-    create = dialog.get_by_role("button", name="Create", exact=True)
     expect(create).to_be_enabled()
     create.click()
     assert len(create_payloads) == 1, create_payloads
