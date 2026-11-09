@@ -184,6 +184,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         opened_projects: list[dict] = []
         recent_responses: list[str] = []
         api_failures: list[str] = []
+        protected_guest_requests: list[str] = []
         paper_requests: list[str] = []
         mutation_requests: list[str] = []
         research_dispatch_requests: list[str] = []
@@ -207,6 +208,15 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         )
 
         def capture_request(request):
+            if any(
+                part in request.url
+                for part in (
+                    "/api/user-preferences/",
+                    "/api/projects/diagnostics",
+                    "/api/projects/research-qa",
+                )
+            ):
+                protected_guest_requests.append(request.url)
             if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
                 mutation_requests.append(request.url)
             if any(
@@ -390,6 +400,34 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible(timeout=15000)
         expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
+        # The disclosure tooltip describes the NEXT action, in both states.
+        # No native title attribute may be used as a tooltip fallback.
+        for label, pane in (
+            ("Project", ".project-pane"),
+            ("Strategies", ".strategies-pane"),
+            ("Sessions", ".sessions-pane"),
+            ("Papers", ".papers-pane"),
+        ):
+            disclosure = page.locator(f"{pane} .workspace-section-disclosure").first
+            initially_expanded = disclosure.get_attribute("aria-expanded") == "true"
+            expect(disclosure).to_have_attribute(
+                "data-tooltip",
+                f"{'Collapse' if initially_expanded else 'Expand'} {label} section",
+            )
+            assert disclosure.get_attribute("title") is None
+            disclosure.click()
+            expect(disclosure).to_have_attribute(
+                "data-tooltip",
+                f"{'Expand' if initially_expanded else 'Collapse'} {label} section",
+            )
+            disclosure.click()
+            expect(disclosure).to_have_attribute(
+                "data-tooltip",
+                f"{'Collapse' if initially_expanded else 'Expand'} {label} section",
+            )
+        assert page.locator("[title]").count() == 0, "Native browser tooltips are forbidden"
+        assert not protected_guest_requests, protected_guest_requests
+        assert not [failure for failure in api_failures if failure.startswith("403 ")], api_failures
         # Project field editing now uses the Project toolbar; Markdown toggles remain on strategies.
         # The three-field Project Description renders Markdown directly;
         # only strategies retain a plain/Markdown conversion button.
@@ -404,11 +442,9 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(page.get_by_role("heading", name="Paper Requirements")).to_be_visible()
         pencil_button = page.locator(".project-pane-actions .project-description-toolbar-edit")
         expect(pencil_button).to_be_visible()
-        icon_style = (
-            "element => { const s = getComputedStyle(element); "
-            "return [s.color, s.backgroundImage, s.borderTopColor, "
-            "s.borderTopLeftRadius, s.boxShadow, s.textShadow]; }"
-        )
+        expect(pencil_button).to_be_disabled()
+        expect(page.locator(".project-classification-settings-button")).to_be_disabled()
+        expect(page.locator(".project-download-button")).to_be_disabled()
         pencil_button.hover()
         expect(page.locator("#sigma-ui-tooltip")).to_have_text("Edit project fields")
         assert pencil_button.get_attribute("title") is None
@@ -430,15 +466,16 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             ".strategy-title-line .strategy-markdown-slot .sigma-render-toggle"
         ).first
         strategy_pencil = strategy_pencils.first
+        expect(strategy_pencil).to_be_disabled()
         expect(strategy_markdown).to_be_visible()
         assert strategy_markdown.get_attribute("title") is None
-        assert strategy_markdown.evaluate(icon_style) == strategy_pencil.evaluate(icon_style)
-        strategy_pencil.hover()
-        expect(strategy_pencil).to_have_css("color", "rgb(255, 242, 233)")
-        strategy_hover_style = strategy_pencil.evaluate(icon_style)
-        strategy_markdown.hover()
-        expect(strategy_markdown).to_have_css("color", "rgb(255, 242, 233)")
-        assert strategy_markdown.evaluate(icon_style) == strategy_hover_style
+        # In guest mode editing is disabled; cached Markdown remains readable.
+        # An uncached AI conversion control must also be disabled.
+        if strategy_markdown.is_enabled():
+            strategy_markdown.hover()
+            expect(strategy_markdown).to_have_css("color", "rgb(255, 242, 233)")
+        else:
+            expect(strategy_markdown).to_be_disabled()
         strategy_offset = strategy_markdown.locator("svg.markdown-logo").evaluate(
             """svg => {
               const bounds = svg.getBBox();

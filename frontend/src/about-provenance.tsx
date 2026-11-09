@@ -46,8 +46,7 @@ export default function AboutProvenanceVision() {
     <p><strong>The investigation is the enduring artifact.</strong> A research paper is one interpretation of it. SIGMA's long-term vision is to make the evidence, reasoning, questions, corrections, and decisions behind a result inspectable as a connected provenance graph.</p>
     <figure className="about-provenance-figure">
       <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Investigation provenance diagram; scroll horizontally on narrow screens">
-        <svg className="about-provenance-diagram" viewBox="0 0 910 625" role="img" aria-labelledby="about-provenance-title about-provenance-description" xmlns="http://www.w3.org/2000/svg">
-          <title id="about-provenance-title">Vision for Investigation Provenance</title>
+        <svg className="about-provenance-diagram" viewBox="0 0 910 625" role="img" aria-label="Vision for Investigation Provenance" aria-describedby="about-provenance-description" xmlns="http://www.w3.org/2000/svg">
           <desc id="about-provenance-description">Scientific papers contribute evidence, AI agents contribute analyses and hypotheses, and human investigators contribute observations and guidance to an evolving investigation graph. Evidence informs observations and hypotheses, contradictions trigger reassessment, and decisions guide further inquiry. Current Understanding and the Published TeX Document are two projections of that graph.</desc>
           <defs>
             {(['blue', 'green', 'gold', 'violet', 'coral'] as const).map(tone => <marker key={tone} id={`about-provenance-arrow-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">

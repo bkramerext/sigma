@@ -853,9 +853,9 @@ function ProviderInputAuditDisclosure({ audit }: { audit: NonNullable<ResearchSt
   </details>;
 }
 
-function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved, dismissedStatusNotice, onDismissStatusNotice }: {
+function ResearchSessionContents({ path, session, expanded, busy, guest, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved, dismissedStatusNotice, onDismissStatusNotice }: {
   path: string;
-  session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean;
+  session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean; guest: boolean;
   onEnableAdvancedOutcome: () => Promise<void>;
   onViewStrategy: (id: string) => void;
   onViewPriorSession: (id: string) => void;
@@ -979,7 +979,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const supportsIntervention = !!session.strategy_runs?.length;
   const interventionCount = session.interventions ?? [];
   const interventionWindowOpen = ['queued', 'running', 'paused', 'stopped'].includes(session.status);
-  const canIntervene = supportsIntervention && interventionWindowOpen
+  const canIntervene = !guest && supportsIntervention && interventionWindowOpen
     && interventionCount.filter(item => item.status !== 'rejected').length < 24
     && interventionCount.length < 32;
   async function submitIntervention(event: FormEvent<HTMLFormElement>) {
@@ -1076,7 +1076,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       if (conversionCurrent.current?.section === section) conversionAbort.current?.abort();
     } else {
       setMarkdownSections(current => [...current, section]);
-      enqueueConversions([section]);
+      if (!guest) enqueueConversions([section]);
     }
   }
   function toggleAllMarkdown() {
@@ -1087,7 +1087,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       conversionAbort.current?.abort();
     } else {
       setMarkdownSections(all);
-      enqueueConversions(all);
+      if (!guest) enqueueConversions(all);
     }
   }
   const markdownSymbol = <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>;
@@ -1238,7 +1238,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {!!session.steps.filter(step => ['failed', 'interrupted', 'running'].includes(step.status)).length && <section className="outcome-provider-attempts" aria-label="Incomplete provider attempts"><h4>Incomplete or failed attempts</h4><ul>{session.steps.filter(step => ['failed', 'interrupted', 'running'].includes(step.status)).map(step => <li key={step.id}><strong>{step.status} · {step.role}</strong><span>{researchPositionLabel(session, step.cycle)}, provider call {step.call_number}{step.provider_http_status ? (step.provider_response_channel === 'stream' ? ` · HTTP ${step.provider_http_status} transport, ${step.provider_stream_event ?? 'stream'} rejected` : ` · HTTP ${step.provider_http_status}`) : ''}{step.provider_error_code ? ` · Provider code: ${step.provider_error_code}` : ''}{step.failure_kind ? ` · ${step.failure_kind}` : ''}</span>{step.interruption_reason && <p>{step.interruption_reason}</p>}{step.failure_message && <p>{step.failure_message}</p>}{step.status === 'interrupted' && <p>The provider may have completed or charged usage; SIGMA did not repeat this ambiguous attempt automatically.</p>}</li>)}</ul></section>}
             {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && !session.steps.some(step => ['failed', 'interrupted', 'running'].includes(step.status)) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>{researchPositionLabel(session, lastStep.cycle)}, provider call {lastStep.call_number}. This attempt is not a completed research artifact.</p></section>}
             {!!session.current_question && <p><strong>Current focus:</strong> {session.current_question}</p>}
-            <div className="research-session-actions"><a className="text-view-link" title={`View strategy: ${session.strategy_title}`} href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a></div>
+            <div className="research-session-actions"><a className="text-view-link" data-tooltip={`View strategy: ${session.strategy_title}`} href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a></div>
           </div>
         </details>
           <details className="outcome-subsection has-markdown-control">
@@ -1266,8 +1266,8 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {session.artifacts.length > 0 && <div className="outcome-provenance-group"><h4>Saved artifact origins</h4><ul className="outcome-provenance-list">{session.artifacts.map(artifact => <li key={artifact.id}><div className="outcome-label-value"><dt>Artifact {artifact.sequence}</dt><dd>{artifact.id}</dd></div><p>{artifact.session_id ? `Session ${artifact.session_id}` : 'Source session unavailable'} · {artifact.strategy_id ? `Strategy ${artifact.strategy_id}` : 'Strategy unavailable'} · {researchArtifactPositionLabel(session, artifact)}</p></li>)}</ul></div>}
             {otherPriorFindings.length > 0 && <div className="outcome-provenance-group"><h4>Other prior session sources</h4><p>Available history; these sources are not implied to be researcher-approved transfers.</p><ul className="outcome-provenance-list">{otherPriorFindings.map(finding => <li key={`${finding.session_id}:${finding.id}`}><p><button type="button" className="text-view-link" onClick={() => onViewPriorSession(finding.session_id)}>Session {finding.session_number} · {finding.strategy_title} · Artifact {finding.sequence}</button></p><p>{finding.id} · {finding.claim_or_question}</p><p><strong>Method:</strong> {finding.method}</p>{!!finding.assumptions?.length && <p><strong>Assumption/domain scope:</strong> {finding.assumptions.join(' · ')}</p>}<p><strong>Evidence status:</strong> {finding.evidence_status} · <strong>Coordinator:</strong> {finding.coordinator_decision}</p>{!!finding.objections.length && <p><strong>Objections:</strong> {finding.objections.join(' · ')}</p>}{!!finding.open_obligations.length && <p><strong>Open obligations:</strong> {finding.open_obligations.join(' · ')}</p>}{!!finding.obligation_reviews?.length && <ul>{finding.obligation_reviews.map(review => <li key={review.obligation_id}><strong>Prior obligation disposition ({review.status}, {review.epistemic_status}):</strong> {review.rationale} · Basis artifacts: {review.basis_artifact_ids.join(', ') || 'none recorded'}</li>)}</ul>}{!!finding.next_question && <p><strong>Next question:</strong> {finding.next_question}</p>}</li>)}</ul></div>}
             {!!session.peer_handoffs_prompted?.length && <div className="outcome-provenance-group"><h4>Peer handoffs prompted</h4><ul className="outcome-provenance-list">{session.peer_handoffs_prompted.map((handoff, index) => <li key={index}><pre>{JSON.stringify(handoff, null, 2)}</pre></li>)}</ul></div>}
-            <div className="outcome-provenance-group"><h4>Session facts</h4><div className="outcome-label-value"><dt>Build at session start</dt><dd><code title={session.backend_build_commit || 'Older session without build provenance'}>{session.backend_build_commit || 'Not recorded'}</code></dd></div><div className="outcome-label-value"><dt>Elapsed wall time</dt><dd>{typeof session.elapsed_seconds === 'number' ? formatDuration(session.elapsed_seconds) : 'Unavailable'}</dd></div>{(session.duration_limit_minutes === null || typeof session.duration_limit_minutes === 'number') && <div className="outcome-label-value"><dt>Effective time ceiling</dt><dd>{session.duration_limit_minutes === null ? 'Unlimited' : `${session.duration_limit_minutes} minutes`}{typeof session.configured_duration_limit_minutes === 'number' && session.configured_duration_limit_minutes !== session.duration_limit_minutes ? ` (project setting: ${session.configured_duration_limit_minutes} minutes)` : ''}</dd></div>}<div className="outcome-label-value"><dt>Current action</dt><dd>{session.current_action || 'Unavailable'}</dd></div>{lastActivity && <div className="outcome-label-value"><dt>Last activity</dt><dd><time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time> · {lastActivity.message}</dd></div>}</div>
-            {!!session.events.length && <section className="research-activity" aria-label="Recent session activity"><h4><button type="button" title={`${activityExpanded ? 'Collapse' : 'Expand'} recent activity`} aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h4><ol id={`session-activity-${session.id}`} hidden={!activityExpanded}>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol></section>}
+            <div className="outcome-provenance-group"><h4>Session facts</h4><div className="outcome-label-value"><dt>Build at session start</dt><dd><code data-tooltip={session.backend_build_commit || 'Older session without build provenance'}>{session.backend_build_commit || 'Not recorded'}</code></dd></div><div className="outcome-label-value"><dt>Elapsed wall time</dt><dd>{typeof session.elapsed_seconds === 'number' ? formatDuration(session.elapsed_seconds) : 'Unavailable'}</dd></div>{(session.duration_limit_minutes === null || typeof session.duration_limit_minutes === 'number') && <div className="outcome-label-value"><dt>Effective time ceiling</dt><dd>{session.duration_limit_minutes === null ? 'Unlimited' : `${session.duration_limit_minutes} minutes`}{typeof session.configured_duration_limit_minutes === 'number' && session.configured_duration_limit_minutes !== session.duration_limit_minutes ? ` (project setting: ${session.configured_duration_limit_minutes} minutes)` : ''}</dd></div>}<div className="outcome-label-value"><dt>Current action</dt><dd>{session.current_action || 'Unavailable'}</dd></div>{lastActivity && <div className="outcome-label-value"><dt>Last activity</dt><dd><time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time> · {lastActivity.message}</dd></div>}</div>
+            {!!session.events.length && <section className="research-activity" aria-label="Recent session activity"><h4><button type="button" data-tooltip={`${activityExpanded ? 'Collapse' : 'Expand'} recent activity`} aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h4><ol id={`session-activity-${session.id}`} hidden={!activityExpanded}>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol></section>}
           </div>
         </details>
           {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <details className="human-interventions outcome-subsection" aria-label="Human research feedback">
@@ -1299,7 +1299,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   </div>;
 }
 
-function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInferred, onEvidence, onSession }: { state: CurrentUnderstanding; path: string; projectId: string; nextOrdinal: number; onInferred: (view: ProjectView, strategyId: string) => void; onEvidence: (source: EvidencePointer) => void; onSession: (id: string) => void }) {
+function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInferred, onEvidence, onSession, guest }: { state: CurrentUnderstanding; path: string; projectId: string; nextOrdinal: number; guest: boolean; onInferred: (view: ProjectView, strategyId: string) => void; onEvidence: (source: EvidencePointer) => void; onSession: (id: string) => void }) {
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.currentUnderstanding:${projectId}`) !== 'false');
   const [suggestionBusy, setSuggestionBusy] = useState(false);
   const [suggestionError, setSuggestionError] = useState('');
@@ -1417,7 +1417,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     setExpanded(isOpen);
     window.localStorage.setItem(`sigma.currentUnderstanding:${projectId}`, String(isOpen));
   }}>
-    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was saved." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
+    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was saved." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy || guest} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
     <p className="hint current-understanding-scope">{state.scope_note}</p>
     <div className="current-understanding-columns">
       <section><h3>Current findings</h3>{findings.length ? <><ol>{findings.slice(0, 2).map(findingRow)}</ol>{findings.length > 2 && <details><summary>{findings.length - 2} more local findings</summary><ol>{findings.slice(2).map(findingRow)}</ol></details>}</> : <p>No reviewed finding is saved. An empty or failed run establishes no answer.</p>}</section>
@@ -1528,8 +1528,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     const result = await response.json() as { diagnostics: ProjectDiagnostic[] };
     setProjectDiagnostics(result.diagnostics);
   }, [path]);
-  useEffect(() => { void reloadDiagnostics().catch(() => setDiagnosticStatus('Project diagnostics unavailable; previous errors may not be shown.')); }, [reloadDiagnostics]);
+  useEffect(() => { if (guest) return; void reloadDiagnostics().catch(() => setDiagnosticStatus('Project diagnostics unavailable; previous errors may not be shown.')); }, [guest, reloadDiagnostics]);
   const recordClientError = async (message: string, stage: string, sessionId?: string) => {
+    if (guest) return;
     const result = await reportProjectDiagnostic(path, message, stage, crypto.randomUUID());
     setDiagnosticStatus(result.status);
     if (result.recorded) {
@@ -1968,7 +1969,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
         </div>
     </dialog>
     <header className="workspace-pane-heading sessions-pane-heading">
-      <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
+      <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
       <div className="sessions-heading-actions strategy-heading-actions">
         {sessionControls.confirming ? <>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.start}>Start Session {sessionControls.nextSessionNumber}</button>
@@ -1980,7 +1981,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
     <div id="sessions-pane-content" hidden={!expanded}>
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
-    {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
+    {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} guest={guest} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
@@ -1992,11 +1993,11 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session {item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {sessionOffersResume(item) && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
-                  {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
-                  <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
-                  {!['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
-                  {!['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+                  {!guest && sessionOffersResume(item) && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
+                  {!guest && ['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                  {!guest && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
+                  {!guest && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
+                  {!guest && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {sessionControlFailures[item.id]
@@ -2018,7 +2019,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                 {strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
             </div>
-            {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={Boolean(sessionControlFailures[item.id]) || dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
+            {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} guest={guest} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={Boolean(sessionControlFailures[item.id]) || dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
           </li></SessionRenderBoundary>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
@@ -3273,7 +3274,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
   useEffect(() => { onQueuedChange(paperProgress?.status === 'queued'); return () => onQueuedChange(false); }, [paperProgress?.status, onQueuedChange]);
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
     <header className="workspace-pane-heading papers-pane-heading">
-      <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
+      <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
       {!guest && !showDraftPaper && <div className="papers-heading-actions strategy-heading-actions">
         {confirmNewPaper ? <>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); void generatePaper(); }}>Start Paper {draftVersion}</button>
@@ -3322,7 +3323,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={`Paper ${draftVersion}`} data-paper-version={draftVersion}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={`Paper ${draftVersion}`} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
-              badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} title={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'}/> : undefined}
+              badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'}/> : undefined}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
@@ -3407,7 +3408,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
                     <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link" title={`Confirm removal of Paper ${paper.paper_version}`} disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
+                      <button type="button" className="text-view-link" data-tooltip={`Confirm removal of Paper ${paper.paper_version}`} disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
                     </div>
                   </div></div>}
@@ -3550,14 +3551,6 @@ function FloatingTooltip() {
       ? target.closest<HTMLElement>('[data-tooltip]:not([data-tooltip-disabled]), button[aria-label]:not([data-tooltip-disabled])')
       : null;
     const onPointerOver = (event: PointerEvent) => {
-      // Native title bubbles duplicate SIGMA's own tooltip. Convert legacy
-      // titles lazily before the browser can show its default popup.
-      const nativeTitle = event.target instanceof Element ? event.target.closest<HTMLElement>('[title]') : null;
-      if (nativeTitle) {
-        const value = nativeTitle.getAttribute('title');
-        if (value && !nativeTitle.dataset.tooltip) nativeTitle.dataset.tooltip = value;
-        nativeTitle.removeAttribute('title');
-      }
       pointerPosition.current = { x: event.clientX, y: event.clientY };
       const element = targetFor(event.target);
       if (document.querySelector('.project-model-confirm-popover')) { clearHoverTimer(); hide(); return; }
@@ -3691,9 +3684,9 @@ function LazyViewport({ children, fallback, force = false }: {
   return <div ref={target}>{mounted ? children : fallback}</div>;
 }
 
-function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
+function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, guest = false, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
-  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; guest?: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
@@ -3754,7 +3747,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     } catch (cause) { reportRequestFailure(`Could not copy ${name}: ${errorMessage(cause)}`); }
   }
   function beginBodyEdit(fromRendered = false, alreadyInMode = false) {
-    if (!version?.current || busy || (modeDisabled && !alreadyInMode) || (!alreadyInMode && onEnterMode && !onEnterMode())) return;
+    if (guest || !version?.current || busy || (modeDisabled && !alreadyInMode) || (!alreadyInMode && onEnterMode && !onEnterMode())) return;
     setDraft(version.body); onCombinedDraftChange?.(version.body); setEditingFromRendered(fromRendered);
     if (fromRendered) chooseView('rendered');
     setEditing(true); setError('');
@@ -3812,7 +3805,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       aria-label={selected === 'rendered' ? `Show plain ${name}` : plainRecovery ? `Convert ${name} to Plain` : `Render ${name} as Markdown`}
       aria-pressed={selected === 'rendered' || rendering} data-tooltip={renderTooltip}
       aria-hidden={combinedEditMode || undefined} style={combinedEditMode ? { visibility: 'hidden' } : undefined}
-      disabled={editing || busy || combinedEditMode} onClick={() => {
+      disabled={editing || busy || combinedEditMode || (guest && selected !== 'rendered' && (plainRecovery || !data?.markdown?.current))} onClick={() => {
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
@@ -3826,11 +3819,11 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {!markdownSlotId && markdownControl}
 
     {editing ? combinedEditMode ? null : <>
-      <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" title={`Save ${name}`} disabled={busy || !draft.trim()}>Save</button>
-      <button type="button" className="text-view-link" title={`Cancel editing ${name}`} disabled={busy} onClick={() => cancelBodyEdit()}>Cancel</button>
-      </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
+      <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" data-tooltip={`Save ${name}`} disabled={busy || !draft.trim()}>Save</button>
+      <button type="button" className="text-view-link" data-tooltip={`Cancel editing ${name}`} disabled={busy} onClick={() => cancelBodyEdit()}>Cancel</button>
+      </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={guest || modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
 
-    {!hideProjectActions && scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-export-trigger workspace-icon-button" aria-label="Export project" title="Export project" data-tooltip="Export project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
+    {!hideProjectActions && scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-export-trigger workspace-icon-button" aria-label="Export project" data-tooltip="Export project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
     {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project Settings" data-tooltip="Project Settings" disabled={settingsDisabled} onClick={onSettings}><SlidersSettingsIcon/></button>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
@@ -3882,7 +3875,7 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
     {editing ? <form ref={form} className="project-title-edit-form" onSubmit={save}>
       <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
       <input ref={input} id="project-pane-title-input" aria-label="Project title" value={draft} size={Math.max(8, Math.min(50, draft.length + 1))} maxLength={200} required disabled={busy} onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
-      <button type="submit" className="text-view-link" title="Save project title" disabled={busy}>Save</button><button type="button" className="text-view-link" title="Cancel editing the project title" disabled={busy} onClick={() => cancel()}>Cancel</button>
+      <button type="submit" className="text-view-link" data-tooltip="Save project title" disabled={busy}>Save</button><button type="button" className="text-view-link" data-tooltip="Cancel editing the project title" disabled={busy} onClick={() => cancel()}>Cancel</button>
       {error && <p role="alert" className="project-title-error">{error}</p>}
     </form> : <><h3 className="current-project">{view.project.title}</h3>
       <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} data-tooltip="Edit text and description" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
@@ -4337,14 +4330,14 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
-        <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
-        <a href="#project-pane-heading" aria-label="Project" title={collapsed ? 'Project' : undefined} onClick={event => { event.preventDefault(); focusWorkspace('project-pane-heading'); }}><WorkspaceIcon name="Settings"/><span>Project</span></a>
-        <a href="#sessions-heading" aria-label="Sessions" title={collapsed ? 'Sessions' : undefined} onClick={event => { event.preventDefault(); focusWorkspace('sessions-heading'); }}><WorkspaceIcon name="Analysis"/><span>Sessions</span></a>
-        <a href="#pool-heading" aria-current="page" aria-label="Strategies" title={collapsed ? 'Strategies' : undefined} onClick={event => {
+        <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
+        <a href="#project-pane-heading" aria-label="Project" data-tooltip={collapsed ? 'Project' : undefined} onClick={event => { event.preventDefault(); focusWorkspace('project-pane-heading'); }}><WorkspaceIcon name="Settings"/><span>Project</span></a>
+        <a href="#sessions-heading" aria-label="Sessions" data-tooltip={collapsed ? 'Sessions' : undefined} onClick={event => { event.preventDefault(); focusWorkspace('sessions-heading'); }}><WorkspaceIcon name="Analysis"/><span>Sessions</span></a>
+        <a href="#pool-heading" aria-current="page" aria-label="Strategies" data-tooltip={collapsed ? 'Strategies' : undefined} onClick={event => {
           event.preventDefault(); focusWorkspace('pool-heading');
         }}><WorkspaceIcon name="Strategies"/><span>Strategies</span></a>
         {['Renders', 'Analysis', 'References', 'Notes', 'Settings'].map(name =>
-          <button key={name} disabled title={collapsed ? `${name} · later` : 'Not available yet'} aria-label={name} aria-describedby="workspace-nav-help">
+          <button key={name} disabled data-tooltip={collapsed ? `${name} · later` : 'Not available yet'} aria-label={name} aria-describedby="workspace-nav-help">
             <WorkspaceIcon name={name}/><span>{name}</span><small>Later</small>
           </button>)}
         <p id="workspace-nav-help">Other destinations are not available yet.</p>
@@ -4385,9 +4378,10 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       const saved = JSON.parse(window.localStorage.getItem(requestKey) ?? 'null') as { question?: string; id?: string } | null;
       if (saved?.question && saved.id) { setQuestion(saved.question); setRecovery({ question: saved.question, id: saved.id }); }
     } catch { window.localStorage.removeItem(requestKey); }
-    void refresh();
+    if (guest) setLoading(false);
+    else void refresh();
     return () => { request.current?.abort(); formattingRequest.current?.abort(); };
-  }, []);
+  }, [guest]);
   async function refresh(): Promise<{ answers: ResearchQARecord[]; archiveAvailable: boolean } | null> {
     setLoading(true);
     try {
@@ -4507,7 +4501,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
         <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
         {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <DialogDismissButton label="Dismiss error" onClick={() => setError('')}/></p>}
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
-          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} title={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : 'Convert to Markdown'} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
+          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
             <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-view-pdf-icon" aria-label="View answer in a new browser tab" data-tooltip="View answer in a new browser tab" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></button>
             <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label="Remove saved answer" data-tooltip="Remove saved answer" onClick={() => setRemoveId(record.qa_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
           </>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p></div></div></div>
@@ -5508,7 +5502,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             {entry.best_paper_score != null && entry.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" title={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{!flat && (familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}<button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small>{!flat && (familyCounts.get(recentProjectFamilyKey(entry)) ?? 0) > 1 && <button type="button" className="recent-pin" disabled={!!opening || !entry.available} aria-pressed={entry.pinned} aria-label={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} data-tooltip={entry.pinned ? 'Show all versions of this project' : 'Just show this version of the project'} onClick={() => void togglePin(entry)}>{entry.pinned ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g><path d="M3 3 21 21" strokeWidth="2.5"/></svg> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="m9 8-1 5h8l-1-5"/><path d="M12 13v8"/></g></svg>}</button>}<button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
             onClick={() => { setConfirmRemoveId(''); setSaveAsEntry(entry); }}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
@@ -5518,7 +5512,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}{!entry.pinned && confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
-          <span title={entry.path}>{entry.path}</span>
+          <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
       </li>)}</ul>
@@ -5828,10 +5822,10 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptio
       <label className="sr-only" htmlFor={`strategy-title-${strategy.id}`}>Strategy title</label>
       <input ref={input} id={`strategy-title-${strategy.id}`} aria-label="Strategy title" value={draft} size={Math.max(8, Math.min(50, draft.length + 1))} maxLength={200} disabled={busy}
         required onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
-      <button type="submit" className="text-view-link" title="Save strategy title" disabled={busy}>Save</button>
-      <button type="button" className="text-view-link" title="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
+      <button type="submit" className="text-view-link" data-tooltip="Save strategy title" disabled={busy}>Save</button>
+      <button type="button" className="text-view-link" data-tooltip="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
-      <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
+      <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} data-tooltip={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
       <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><span id={`strategy-markdown-slot-${strategy.id}-copy`} className="strategy-copy-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and approach: ${shownTitle}`} data-tooltip="Edit strategy title and approach" disabled={modeDisabled}
         onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
       {commands}
@@ -5920,17 +5914,17 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
         {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Effective session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
-        <button type="button" className="text-view-link session-start-link" title={`Start Session ${controls.nextSessionNumber}`} aria-label={`Start Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start Session {controls.nextSessionNumber}</button>
-        <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
+        <button type="button" className="text-view-link session-start-link" data-tooltip={`Start Session ${controls.nextSessionNumber}`} aria-label={`Start Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start Session {controls.nextSessionNumber}</button>
+        <button type="button" className="text-view-link session-start-link" data-tooltip="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
-      <button ref={playButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={disabled || controls.playDisabled} onClick={guest ? onGuestPlay : controls.play}>
+      <button ref={playButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} data-tooltip={controls.playLabel} disabled={disabled || controls.playDisabled} onClick={guest ? onGuestPlay : controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
       </button>
-      <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label="Stop research session" title="Stop research session" data-tooltip="Stop research session" disabled={controls.stopDisabled || disabled} onClick={controls.stop}>
+      <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label="Stop research session" data-tooltip="Stop research session" disabled={controls.stopDisabled || disabled} onClick={controls.stop}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
       </button>
       </>}
-      {running && <span className="research-running-indicator-frame" aria-label="Research running" title="Research running"><span className="research-running-indicator"/></span>}
+      {running && <span className="research-running-indicator-frame" aria-label="Research running" data-tooltip="Research running"><span className="research-running-indicator"/></span>}
   </span>;
 }
 
@@ -6172,14 +6166,16 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const guest = !!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest');
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [advancedOutcomeGlobal, setAdvancedOutcomeGlobal] = useState(false);
+  const [guestAdvancedOutcome, setGuestAdvancedOutcome] = useState(false);
   useEffect(() => {
+    if (guest) return;
     const controller = new AbortController();
     void fetch('/api/user-preferences/research-settings', { signal: controller.signal })
       .then(response => response.ok ? response.json() : Promise.reject(new Error('User research settings unavailable')))
       .then(data => { if (!controller.signal.aborted) setAdvancedOutcomeGlobal(data.show_advanced_outcome_details === true); })
       .catch(() => { /* Keep the compact default when disconnected. */ });
     return () => controller.abort();
-  }, []);
+  }, [guest]);
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
   const [researchRunning, setResearchRunning] = useState(false);
@@ -6565,17 +6561,17 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   const projectActionBar = <div className="project-primary-actions">
     <div className="project-pane-actions">
-      <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" title="Ask about saved research" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
-      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
+      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={guest || closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
-      <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" title="Email project with attachments" data-tooltip="Email project with attachments" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" data-tooltip="Email project with attachments" disabled={closing || ordering || !!dragId || guest} onClick={() => setEmailOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 5.5h13v11H3zM3.4 6l6.1 5 6.1-5"/>
           <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
         </svg>
       </button>
-      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={guest || closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
         <SlidersSettingsIcon/>
       </button>
       {descriptionEditing ? <>
@@ -6593,7 +6589,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </> : <button ref={editDescriptionButton} type="button"
         className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-description-toolbar-edit"
         aria-label="Edit project fields" data-tooltip="Edit project fields"
-        disabled={closing || ordering || !!dragId || activeMode !== null}
+        disabled={guest || closing || ordering || !!dragId || activeMode !== null}
         onClick={() => {
           if (!enterMode('project-title')) return;
           sectionOpen('project');
@@ -6613,14 +6609,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading">
         <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
-          <button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => { if (!projectExpanded) sectionOpen('project'); setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; }); }}>
+          <button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" data-tooltip={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => { if (!projectExpanded) sectionOpen('project'); setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; }); }}>
             <DisclosureChevron expanded={projectExpanded}/>Project
           </button>
         </h2>
         {projectActionBar}
       </header>
       <div id="project-pane-content" hidden={!projectExpanded}>
-      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
+      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. {guest ? 'Sign in to replace the project type.' : 'Choose a replacement in Project Settings to use a current type.'}</p>{!guest && <button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button>}</div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
       <ProjectDescriptionEditor view={view}
@@ -6649,9 +6645,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {error && <p role="alert" className="error">{error}</p>}
     <section className={`pool workspace-pane strategies-pane${strategiesExpanded ? '' : ' is-collapsed'}`} aria-labelledby="pool-heading">
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
-        <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
+        <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
-          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={() => { if (guest) setGuestAiNotice('AI features require a signed-in account. Your guest project remains available.'); else startGeneration(); }}/>
+          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={() => { if (guest) setGuestAiNotice('Sign in to edit strategies. Your guest project remains available.'); else startNewStrategy(); }} onAI={() => { if (guest) setGuestAiNotice('AI features require a signed-in account. Your guest project remains available.'); else startGeneration(); }}/>
           <p className="section-count">{headingStrategies.length} strateg{headingStrategies.length === 1 ? 'y' : 'ies'}{headingDisabledCount > 0 ? `, ${headingDisabledCount} disabled` : ''}</p>
         </div>
       </header>
@@ -6671,8 +6667,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${strategies.length === 1 ? ' is-only-strategy' : ''}${!strategy.enabled ? ' is-disabled' : ''}${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
-              if (ordering || dragId || activeMode !== null || processControls.confirming) return;
+            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={guest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={guest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
+              if (guest || ordering || dragId || activeMode !== null || processControls.confirming) return;
               if (mode === 'toggle') {
                 const owner = `strategy-toggle-${strategy.id}`;
                 if (!enterMode(owner)) return;
@@ -6698,10 +6694,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
                 .catch(cause => { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); })
                 .finally(() => exitMode(owner));
             }}/>} />
-            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
+            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews guest={guest} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={guest || (activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`)} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
           </div>
-          {strategies.length > 1 && <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
-            aria-label={`Reorder ${strategy.title}`} title={`Drag to reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
+          {strategies.length > 1 && <button id={`grip-${strategy.id}`} className="drag-grip" disabled={guest || ordering || closing}
+            aria-label={`Reorder ${strategy.title}`} data-tooltip={`Drag to reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
             onKeyDown={event => { if (event.key === 'Escape' && drag.current) { event.preventDefault(); cancelDrag(); }
               else if (event.key === ' ' && !drag.current) { event.preventDefault(); pickup(strategy.id, null); }
@@ -6720,7 +6716,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
+      if (guest) { setGuestAdvancedOutcome(true); return; }
       if (advancedOutcomeGlobal) return;
       const response = await fetch('/api/user-preferences/research-settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
@@ -7197,7 +7194,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   }
   return <>
     {cloud?.enabled && cloud.authenticated
-      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" title={signedInAccountTooltip} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
+      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
         <a className="project-google-signin" href={projectReturn} onClick={() => window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed')}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
