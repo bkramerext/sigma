@@ -65,7 +65,9 @@ def _project_digest(path: str) -> str | None:
     # Single-file .json projects are bundles whose session and paper members
     # change independently. Hash just their project.json member, matching
     # _update_project's published member bytes.
-    contents = read_file(project, "project.json") if project.suffix == ".json" else file.read_bytes()
+    contents = (
+        read_file(project, "project.json") if project.suffix == ".json" else file.read_bytes()
+    )
     return hashlib.sha256(contents).hexdigest()
 
 
@@ -303,7 +305,9 @@ def _db() -> Iterator[sqlite3.Connection]:
             last_writer TEXT NOT NULL,
             updated_at REAL NOT NULL
         )""")
-        project_columns = {column["name"] for column in db.execute("PRAGMA table_info(shared_projects)")}
+        project_columns = {
+            column["name"] for column in db.execute("PRAGMA table_info(shared_projects)")
+        }
         if "project_sha256" not in project_columns:
             db.execute("ALTER TABLE shared_projects ADD COLUMN project_sha256 TEXT")
         db.execute("""CREATE TABLE IF NOT EXISTS shared_collaborators (

@@ -561,8 +561,14 @@ class CollaborationTests(TestCase):
         token = shared.acquire_lease(self.path, "Research session")
         self.assertIsNotNone(token)
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current",
+                return_value=other_workspace,
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
         ):
             self.assertTrue(shared.authorized_shared_path(Path(self.path)))
             self.assertIn(
