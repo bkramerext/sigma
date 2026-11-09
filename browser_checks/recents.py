@@ -342,6 +342,12 @@ with sync_playwright() as playwright:
     )
     expect(second_copy).to_be_visible()
     expect(second_copy.locator("strong.is-most-recent-project")).to_be_visible()
+    # Saved and Most Recent share already-loaded projects. Switching the view
+    # must not display another loading placeholder or wait for a second fetch.
+    page.locator("#most-recent-tab").click()
+    expect(page.locator("#most-recent-panel .recent-open").first).to_be_visible(timeout=1000)
+    assert not page.get_by_text("Loading recent projects...", exact=True).count()
+    page.locator("#recent-tab").click()
     assert second_copy.locator("strong").evaluate("e => getComputedStyle(e).fontWeight") == "700"
     expect(first_copy.locator("strong")).to_have_count(0)
     normal_recent_type = first_copy.evaluate(
