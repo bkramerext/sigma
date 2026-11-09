@@ -4,6 +4,65 @@ from cloud_auth_fixture import *
 
 
 class CloudAuthTests(CloudAuthFixture):
+    def test_two_windows_keep_independent_accounts_after_sign_out(self):
+        """Two browser windows share cookies but never share the active identity."""
+        first, second = "a" * 32, "b" * 32
+        with cloud_auth._db(cloud_auth.config()) as db:
+            db.execute(
+                "INSERT INTO grants(kind,value,role,active,updated_at) "
+                "VALUES('email',?,'member',1,?)",
+                ("nontrivialzeeros@gmail.com", int(time.time())),
+            )
+
+        def sign_in(window_id, email, subject):
+            start = self.client.get(
+                "/api/cloud-auth/login",
+                params={"window_id": window_id},
+                follow_redirects=False,
+            )
+            self.assertEqual(start.status_code, 302, start.text)
+            state = parse_qs(urlsplit(start.headers["location"]).query)["state"][0]
+            with cloud_auth._db(cloud_auth.config()) as db:
+                flow = db.execute(
+                    "SELECT nonce,window_id FROM flows WHERE state_hash=?",
+                    (cloud_auth._hash(state),),
+                ).fetchone()
+            self.assertEqual(flow["window_id"], window_id)
+            GoogleClient.token = token(nonce=flow["nonce"], email=email, subject=subject)
+            with patch.object(cloud_auth.httpx, "AsyncClient", GoogleClient):
+                result = self.client.get(
+                    "/api/cloud-auth/callback",
+                    params={"state": state, "code": "fixture"},
+                    follow_redirects=False,
+                )
+            self.assertEqual(result.status_code, 303, result.text)
+
+        sign_in(first, "admin@example.org", "google-owner")
+        sign_in(second, "nontrivialzeeros@gmail.com", "google-colleague")
+        for window_id, email in (
+            (first, "admin@example.org"),
+            (second, "nontrivialzeeros@gmail.com"),
+        ):
+            result = self.client.get(
+                "/api/cloud-auth/status", headers={"X-Sigma-Window": window_id}
+            )
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json()["user"]["email"], email)
+
+        signed_out = self.client.post(
+            "/api/cloud-auth/logout",
+            headers={"X-Sigma-Window": second, "Origin": ORIGIN},
+        )
+        self.assertEqual(signed_out.status_code, 204)
+        owner = self.client.get(
+            "/api/cloud-auth/status", headers={"X-Sigma-Window": first}
+        )
+        colleague = self.client.get(
+            "/api/cloud-auth/status", headers={"X-Sigma-Window": second}
+        )
+        self.assertEqual(owner.json()["user"]["email"], "admin@example.org")
+        self.assertFalse(colleague.json()["authenticated"])
+
     def test_e003_local_readonly_build_preflight_without_workspace(self):
         """Local operator can check a stale process without granting workspace access."""
         environment = {
