@@ -5072,33 +5072,6 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             </div>
           </div>
           {!!shared?.owner && <>
-            <section className="project-collaborators" aria-label="Collaborators">
-              <div className="project-collaborators-heading">
-                <h3>Collaborators</h3>
-                <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add collaborator" data-tooltip="Add collaborator" onClick={() => { setAdding(true); setError(''); }}><CirclePlusIcon/></button>
-              </div>
-              <div className="project-collaborator-row">
-                <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
-              </div>
-              {collaborators.map(email => <div className="project-collaborator-row" key={email}>
-                <span>{email}</span>
-                {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
-                </button>}
-              </div>)}
-              {adding && <div className="project-collaborator-add">
-                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => { setNewEmail(event.target.value); if (error) setError(''); }}
-                  onBlur={event => finishCollaboratorEntry(event.currentTarget.value)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
-                    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setAdding(false); setNewEmail(''); setError(''); }
-                  }}/>
-              </div>}
-              {shared.failed_notifications > 0 && <p className="project-collaborator-mail-failed" role="status">
-                {shared.failed_notifications} collaboration {shared.failed_notifications === 1 ? 'email could' : 'emails could'} not be delivered.
-                <button type="button" disabled={retryingEmails} onClick={() => void retryEmails()}>{retryingEmails ? 'Retrying…' : 'Retry emails'}</button>
-              </p>}
-            </section>
             <div className="settings-model-row">
               <div>
                 <label htmlFor="shared-project-model">Model</label>
@@ -5126,6 +5099,33 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
               </div>
             </div>
             {modelLookupFailed && <p className="settings-hint" role="status">Model choices are unavailable. You can still edit collaborators and save their changes.</p>}
+            <section className="project-collaborators" aria-label="Collaborators">
+              <div className="project-collaborators-heading">
+                <h3>Collaborators</h3>
+                <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add collaborator" data-tooltip="Add collaborator" onClick={() => { setAdding(true); setError(''); }}><CirclePlusIcon/></button>
+              </div>
+              <div className="project-collaborator-row">
+                <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
+              </div>
+              {collaborators.map(email => <div className="project-collaborator-row" key={email}>
+                <span>{email}</span>
+                {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
+                </button>}
+              </div>)}
+              {adding && <div className="project-collaborator-add">
+                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => { setNewEmail(event.target.value); if (error) setError(''); }}
+                  onBlur={event => finishCollaboratorEntry(event.currentTarget.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setAdding(false); setNewEmail(''); setError(''); }
+                  }}/>
+              </div>}
+              {shared.failed_notifications > 0 && <p className="project-collaborator-mail-failed" role="status">
+                {shared.failed_notifications} collaboration {shared.failed_notifications === 1 ? 'email could' : 'emails could'} not be delivered.
+                <button type="button" disabled={retryingEmails} onClick={() => void retryEmails()}>{retryingEmails ? 'Retrying…' : 'Retry emails'}</button>
+              </p>}
+            </section>
           </>}
           {shared && !shared.owner && <p className="project-collaborator-local-note">
             Collaboration requires individual Google sign-ins, locally or hosted.

@@ -532,9 +532,10 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(play_dialog.get_by_role("button", name="Sign in with Google")).to_be_visible()
         expect(play_dialog.get_by_role("button", name="Close sign-in prompt")).to_be_visible()
         actions = play_dialog.locator(".settings-actions")
-        assert (
-            actions.evaluate("element => getComputedStyle(element).justifyContent") == "flex-start"
-        )
+        actions_box = actions.bounding_box()
+        signin_box = actions.get_by_role("button", name="Sign in with Google").bounding_box()
+        assert actions_box and signin_box
+        assert abs(signin_box["x"] - actions_box["x"]) < 2, (actions_box, signin_box)
         action_colors = actions.locator("button").evaluate_all(
             "buttons => buttons.map(button => getComputedStyle(button).color)"
         )
