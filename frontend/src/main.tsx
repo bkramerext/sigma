@@ -3204,7 +3204,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         ? result.generation?.layout_status === 'needs_review'
           ? 'Paper saved for review. Some PDF layout warnings remain after three TeX correction passes.'
           : 'Paper saved for review. TeX proofreading did not complete; inspect its archived diagnostics.'
-        : 'Paper saved in Saved versions. TeX proofreading completed; this does not certify independent scientific or visual review.');
+        : 'Paper saved in My Work versions. TeX proofreading completed; this does not certify independent scientific or visual review.');
     } catch (cause) {
       if (controller.signal.aborted) {
         // An abort may also mean the dialog was unmounted. The server task
@@ -3221,7 +3221,7 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
           : requestDispatched && providerCallsAttempted === 0
             ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
             : requestDispatched
-              ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
+              ? `${message} Check My Work versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
               : message);
       }
     } finally { finishProvider(); request.current = null; deliberatePaperStop.current = false; setBusy(false); }
@@ -5494,7 +5494,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
       setProjects(data.projects); setError(''); setLoading(false);
     } catch (cause) {
       if (controller.signal.aborted && !signal?.aborted) {
-        throw new Error('Saved Projects request timed out. Check the backend project-listing logs.');
+        throw new Error('My Work request timed out. Check the backend project-listing logs.');
       }
       throw cause;
     } finally {
@@ -5599,7 +5599,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
     return groups;
   }, []).sort((a, b) => flat ? 0 : researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents" data-opening={!!opening || !!removing}>
-    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading saved projects...'}</p> : !projects.length && <p>No recent projects yet. Upload a project or begin a new project.</p>}
+    {loading ? <p role="status">{flat ? 'Loading recent projects...' : 'Loading My Work projects...'}</p> : !projects.length && <p>No recent projects yet. Upload a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
       const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
@@ -5630,7 +5630,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
+          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from My Work? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -5651,7 +5651,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   const pending = useRef(false);
   const loaded = useRef(false);
   useEffect(() => {
-    // Loading Saved must not verify the entire sample-paper catalog.
+    // Loading My Work must not verify the entire sample-paper catalog.
     if (!active || loaded.current) return;
     const controller = new AbortController();
     void fetch('/api/projects/samples', { signal: controller.signal }).then(async response => {
@@ -5696,14 +5696,14 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
 
 function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; guest?: boolean }) {
   const savedTooltip = guest
-    ? 'Sign in to view your saved projects.'
-    : 'Show saved projects. Click again to collapse or expand all.';
+    ? 'Sign in to view My Work.'
+    : 'Show My Work. Click again to collapse or expand all.';
   const [tab, setTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
     if (guest) return 'samples';
     const saved = window.localStorage.getItem('sigma.homeCatalogTab');
     return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
   });
-  // Saved and Most Recent are two views of one list, not two independent fetches.
+  // My Work and Most Recent are two views of one list, not two independent fetches.
   const [savedProjects, setSavedProjects] = useState<RecentProject[]>([]);
   const [savedLoading, setSavedLoading] = useState(true);
   const recent = useRef<HTMLButtonElement>(null);
@@ -5732,7 +5732,7 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, op
     if (event.key === 'End') { event.preventDefault(); switchTab('most-recent'); }
   }}>
     <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Selecting a sample copies into a new project." onClick={() => switchTab('samples')}>Samples</button>
-    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>Saved</button>
+    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>My Work</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
     <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/>}</div>
