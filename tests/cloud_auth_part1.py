@@ -22,7 +22,9 @@ class CloudAuthTests(CloudAuthFixture):
                     "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
                     (cloud_auth._hash(raw), "verified-n", email, int(time.time()) + 3600),
                 )
-            self.assertEqual(cloud_auth.resolve_session(raw).role, "guest")
+            self.assertEqual(
+                cloud_auth.resolve_session(raw), cloud_auth.Principal("verified-n", email, "guest")
+            )
             path = str(self.root / "workspaces" / "owner" / "tadpoles.json")
             with project_collaboration._db() as db:
                 db.execute(
@@ -44,7 +46,9 @@ class CloudAuthTests(CloudAuthFixture):
                     "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
                     (path, email),
                 )
-            self.assertEqual(cloud_auth.resolve_session(raw).role, "member")
+            self.assertEqual(
+                cloud_auth.resolve_session(raw), cloud_auth.Principal("verified-n", email, "member")
+            )
             with cloud_auth._db(cfg) as db:
                 self.assertIsNone(
                     db.execute(
@@ -59,6 +63,8 @@ class CloudAuthTests(CloudAuthFixture):
 
     def test_two_windows_keep_independent_accounts_after_sign_out(self):
         """Two browser windows share cookies but never share the active identity."""
+        # Hosted Secure cookies require HTTPS even in the in-process test client.
+        self.client.base_url = ORIGIN
         first, second = "a" * 32, "b" * 32
         with cloud_auth._db(cloud_auth.config()) as db:
             db.execute(
@@ -75,7 +81,7 @@ class CloudAuthTests(CloudAuthFixture):
             )
             self.assertEqual(start.status_code, 302, start.text)
             flow_name = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cloud_auth.config())
-            self.client.cookies.set(flow_name, start.cookies[flow_name])
+            self.assertIn(flow_name, self.client.cookies)
             state = parse_qs(urlsplit(start.headers["location"]).query)["state"][0]
             with cloud_auth._db(cloud_auth.config()) as db:
                 flow = db.execute(
