@@ -126,12 +126,14 @@ def main() -> None:
                 return
             shared["revision"] += 1
             shared["collaborators"] = payload["collaborators"]
-            created["body"]["project"].update({
-                "ai_model": payload["ai_model"],
-                "reasoning_effort": payload["reasoning_effort"],
-                "difficulty": payload["difficulty"],
-                "investigation_type": payload["investigation_type"],
-            })
+            created["body"]["project"].update(
+                {
+                    "ai_model": payload["ai_model"],
+                    "reasoning_effort": payload["reasoning_effort"],
+                    "difficulty": payload["difficulty"],
+                    "investigation_type": payload["investigation_type"],
+                }
+            )
             route.fulfill(status=200, json=created["body"])
 
         page.route("**/api/projects/update", update)

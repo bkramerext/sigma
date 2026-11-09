@@ -350,8 +350,12 @@ class CollaborationTests(TestCase):
             self.assertIsNone(legacy["added_by"])
 
         shared.save_settings(
-            self.path, self.revision(), [self.other.email, owner_invited],
-            "gpt-6.1-sol", "high", "Study",
+            self.path,
+            self.revision(),
+            [self.other.email, owner_invited],
+            "gpt-6.1-sol",
+            "high",
+            "Study",
         )
         self.assertEqual(
             shared.summary(self.path)["removable_collaborators"],
@@ -374,17 +378,23 @@ class CollaborationTests(TestCase):
         ):
             # A collaborator may invite someone and subsequently remove that invitee.
             shared.save_settings(
-                self.path, self.revision(),
+                self.path,
+                self.revision(),
                 [self.other.email, owner_invited, other_invited],
-                "gpt-6.1-sol", "high", "Study",
+                "gpt-6.1-sol",
+                "high",
+                "Study",
             )
             self.assertEqual(shared.summary(self.path)["removable_collaborators"], [other_invited])
             revision = self.revision()
             with self.assertRaisesRegex(ProjectError, "Only the project owner"):
                 shared.save_settings(
-                    self.path, revision,
+                    self.path,
+                    revision,
                     [self.other.email, other_invited, "unrelated@example.org"],
-                    "gpt-6.1-sol", "high", "Study",
+                    "gpt-6.1-sol",
+                    "high",
+                    "Study",
                 )
             self.assertEqual(self.revision(), revision)
             with shared._db() as db:
@@ -396,9 +406,12 @@ class CollaborationTests(TestCase):
                 )
             # Editing model/thinking must not silently replace inviter provenance.
             shared.save_settings(
-                self.path, revision,
+                self.path,
+                revision,
                 [self.other.email, owner_invited, other_invited],
-                "gpt-6.1-sol", "medium", "Study",
+                "gpt-6.1-sol",
+                "medium",
+                "Study",
             )
             with shared._db() as db:
                 inviter = db.execute(
@@ -407,8 +420,12 @@ class CollaborationTests(TestCase):
                 ).fetchone()
                 self.assertEqual(inviter["added_by"], self.other.email)
             shared.save_settings(
-                self.path, self.revision(), [self.other.email, owner_invited],
-                "gpt-6.1-sol", "medium", "Study",
+                self.path,
+                self.revision(),
+                [self.other.email, owner_invited],
+                "gpt-6.1-sol",
+                "medium",
+                "Study",
             )
 
         # Owner can override an inviter's choice and remove any invitee.
@@ -420,9 +437,7 @@ class CollaborationTests(TestCase):
                 )
             }
         self.assertEqual(members, {self.other.email: None, owner_invited: self.owner.email})
-        shared.save_settings(
-            self.path, self.revision(), [], "gpt-6.1-sol", "medium", "Study"
-        )
+        shared.save_settings(self.path, self.revision(), [], "gpt-6.1-sol", "medium", "Study")
         self.assertEqual(shared.summary(self.path)["collaborators"], [])
 
     def test_owner_can_remove_invitee_added_by_another_collaborator(self) -> None:
@@ -441,8 +456,12 @@ class CollaborationTests(TestCase):
             ),
         ):
             shared.save_settings(
-                self.path, self.revision(), ["invitee@example.org", self.other.email],
-                "gpt-6.1-sol", "high", "Study",
+                self.path,
+                self.revision(),
+                ["invitee@example.org", self.other.email],
+                "gpt-6.1-sol",
+                "high",
+                "Study",
             )
         self.assertEqual(
             shared.summary(self.path)["removable_collaborators"],
@@ -541,7 +560,9 @@ class CollaborationTests(TestCase):
         ):
             self.assertEqual(shared.drain_notifications(), [])
 
-        message = next(message for recipient, message in delivered if recipient == "new@example.net")
+        message = next(
+            message for recipient, message in delivered if recipient == "new@example.net"
+        )
         plain = message.get_body(preferencelist=("plain",)).get_content()
         html = message.get_body(preferencelist=("html",)).get_content()
         self.assertIn(f"SIGMA project {title}.", plain)

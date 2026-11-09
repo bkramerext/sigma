@@ -19,8 +19,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from email.message import EmailMessage
-from html import escape as html_escape
 from functools import wraps
+from html import escape as html_escape
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, TypeVar
@@ -518,9 +518,7 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
         members = [record["email"] for record in membership]
         is_owner = row["owner_hash"] == _identity()[0].subject_hash
         removable = [
-            record["email"]
-            for record in membership
-            if is_owner or record["added_by"] == email
+            record["email"] for record in membership if is_owner or record["added_by"] == email
         ]
         if verify_revision:
             db.commit()
@@ -684,7 +682,9 @@ def save_settings(
         is_owner = row["owner_hash"] == _identity()[0].subject_hash
         for member in removed:
             if not is_owner and membership[member] != actor:
-                raise ProjectError("Only the project owner or the collaborator who added this account can remove it.")
+                raise ProjectError(
+                    "Only the project owner or the collaborator who added this account can remove it."
+                )
         changed = new_members != previous or row["model"] != model or row["thinking"] != thinking
         if changed:
             db.executemany(
