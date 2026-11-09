@@ -141,6 +141,22 @@ def check_one_time_owner_migration(base: Path) -> None:
                 session_dir = Path(original.path) / "research-sessions"
                 session_dir.mkdir()
                 (session_dir / f"{session_id}.json").write_bytes(payload)
+        # Old Saved may reference temporary worktrees removed after a test.
+        # Only those missing paths are skipped; surviving projects still move.
+        from sigma import recents
+
+        missing_id = str(uuid4())
+        missing_path = base / "deleted-pr-worktree" / "projects" / "missing.sigma"
+        with recents._index() as index:
+            index["entries"].append(
+                {
+                    "id": missing_id,
+                    "path": str(missing_path),
+                    "accessed_at": "2026-11-08T00:00:00+00:00",
+                    "included_example": False,
+                }
+            )
+            index["pins"]["missing test"] = missing_id
         index_before = (state / "recents.json").read_bytes()
         workspace = cloud_workspaces.Workspace(
             "a" * 32,
@@ -169,7 +185,16 @@ def check_one_time_owner_migration(base: Path) -> None:
                     ).fetchall()
                 assert len(owners) == 2
                 assert all(row["owner_hash"] == workspace.subject_hash for row in owners)
-                assert (workspace_path / ".sigma-state/local-projects-migrated-v1.json").is_file()
+                marker_path = workspace_path / ".sigma-state/local-projects-migrated-v1.json"
+                assert marker_path.is_file()
+                marker_data = json.loads(marker_path.read_text())
+                assert marker_data["project_count"] == 2
+                assert marker_data["skipped_missing"] == [
+                    {"id": missing_id, "path": str(missing_path)}
+                ]
+                with recents._index() as index:
+                    assert missing_id not in {entry["id"] for entry in index["entries"]}
+                    assert missing_id not in index["pins"].values()
                 imported = {row["id"]: row for row in recent_projects(lightweight=True)["projects"]}
                 assert set(imported) == {saved.project.id, unlisted.project.id}
                 for original in (saved, unlisted):
