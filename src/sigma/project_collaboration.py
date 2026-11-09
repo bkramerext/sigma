@@ -697,6 +697,26 @@ def note_change(path: str) -> None:
         pass
 
 
+def has_invited_collaborator(email: str) -> bool:
+    """Check a verified Google email's invitation independently of owner login.
+
+    Used only by local Google authentication to admit a project-only invitee
+    as a member. Individual project access still requires the exact ACL.
+    """
+    try:
+        normalized = normalize_collaborator(email)
+    except (TypeError, ValueError):
+        return False
+    with _db() as db:
+        return (
+            db.execute(
+                "SELECT 1 FROM shared_collaborators WHERE email=? LIMIT 1",
+                (normalized,),
+            ).fetchone()
+            is not None
+        )
+
+
 def shared_listing() -> tuple[list[dict[str, str]], set[str]]:
     """Read collaborator membership and shared-owner paths in one DB snapshot.
 
