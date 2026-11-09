@@ -1274,10 +1274,12 @@ def _title_key(title: str) -> str:
 def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
     """Include sample, recent (even outside the root), and local saved projects."""
     from sigma.recents import recent_projects
-    from sigma.samples import sample_projects
+    from sigma.samples import sample_project_titles
 
-    names = {_title_key(item["title"]) for item in sample_projects()["projects"]}
-    for item in recent_projects()["projects"]:
+    # Name collision checking needs titles, not paper scores or active execution
+    # status. The full Saved/Recent listing is too expensive inside .names.lock.
+    names = {_title_key(title) for title in sample_project_titles()}
+    for item in recent_projects(lightweight=True)["projects"]:
         if item["available"] and item["id"] != exclude_id:
             names.add(_title_key(item["title"]))
     for directory in root.iterdir():
