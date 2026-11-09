@@ -355,7 +355,7 @@ class CollaborationTests(TestCase):
         )
         self.assertEqual(
             shared.summary(self.path)["removable_collaborators"],
-            [owner_invited, self.other.email],
+            [self.other.email, owner_invited],
         )
 
         workspace = Workspace(
@@ -441,7 +441,7 @@ class CollaborationTests(TestCase):
             ),
         ):
             shared.save_settings(
-                self.path, self.revision(), [self.other.email, "invitee@example.org"],
+                self.path, self.revision(), ["invitee@example.org", self.other.email],
                 "gpt-6.1-sol", "high", "Study",
             )
         self.assertEqual(
