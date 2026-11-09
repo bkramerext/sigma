@@ -198,7 +198,11 @@ def main() -> None:
         dialog.get_by_role("button", name="Remove alice@example.net").click()
         expect(dialog.get_by_text("alice@example.net")).to_have_count(0)
         expect(dialog.get_by_role("button", name="Save", exact=True)).to_have_count(0)
-        expect.poll(lambda: len(updates)).to_be(1)
+        for _ in range(50):
+            if len(updates) >= 1:
+                break
+            page.wait_for_timeout(100)
+        assert len(updates) == 1, updates
         assert updates[0]["collaborators"] == ["brian@gmail.com"], updates
         assert updates[0]["expected_revision"] == 7, updates
         expect(dialog).to_be_visible()
