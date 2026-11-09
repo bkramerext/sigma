@@ -29,6 +29,7 @@ import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
 import GlobalModelPill from './GlobalModelPill';
+import { modelDisplayLabel } from './model-display';
 import ProjectDescriptionEditor, { type ProjectDescriptionDraft } from './ProjectDescriptionEditor';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
@@ -5082,7 +5083,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
                   disabled={modelLookupFailed || catalog.length === 0}
                   choices={[
                     ...(model && !selected ? [{ value: model, label: `${model} · unavailable` }] : []),
-                    ...catalog.map(option => ({ value: option.id, label: option.label })),
+                    ...catalog.map(option => ({ value: option.id, label: modelDisplayLabel(option) })),
                   ]}
                   onChange={next => {
                     setModel(next);
@@ -5337,7 +5338,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
-        {orderedCatalog.map(model => <option key={model.id} value={model.id}>{model.label.replace(/\s*\([^)]*\)$/, '').trim()} · {model.relative_cost}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
+        {orderedCatalog.map(model => <option key={model.id} value={model.id}>{modelDisplayLabel(model)}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
       </select>
       <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately.' : 'ChatGPT plan or credits.'}{catalogMessage}{selected?.availability === 'unavailable' ? ' Model unavailable; it will not be replaced.' : ''}</p></div>
       <div><label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
