@@ -23,7 +23,6 @@ from functools import wraps
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, TypeVar
-from urllib.parse import quote
 from uuid import uuid4
 
 from sigma import cloud_auth, cloud_workspaces
@@ -919,22 +918,14 @@ def drain_notifications() -> list[str]:
                 if added
                 else f"SIGMA: Removed from {event['project_title']}"
             )
-            origin = (cloud_auth.config().origin or "").rstrip("/")
-            project_link = (
-                f"{origin}/project?path={quote(event['project_path'], safe='')}"
-                if origin.startswith(("https://", "http://localhost"))
-                else ""
-            )
+            # Collaboration changes generate notices, not invitations.
+            # Never embed a project path or URL in these emails.
             body = (
-                f"You have been added as a collaborator on SIGMA project "
+                f"You have been added as a collaborator to the SIGMA project "
                 f"“{event['project_title']}”.\n\n"
-                + (
-                    f"Open project: {project_link}\n\n"
-                    if project_link
-                    else "Sign in to SIGMA with this Google account to find the shared project.\n\n"
-                )
+                "Sign in to SIGMA with this Google account to access the shared project.\n"
                 if added
-                else f"You have been removed as a collaborator on SIGMA project "
+                else f"You have been removed as a collaborator from the SIGMA project "
                 f"“{event['project_title']}”.\n"
             )
             message.set_content(body)
