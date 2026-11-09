@@ -17,7 +17,7 @@ function ReferenceActionIcon({ kind }: { kind: 'checked' | 'unchecked' | 'edit' 
     </> : kind === 'edit' ? <>
       <path d="M12 20H4a1 1 0 0 1-1-1v-7"/>
       <path d="m8 16 9.7-9.7 3 3L11 19l-4 1zM16.7 7.3l2-2a2.1 2.1 0 0 1 3 3l-1 1"/>
-    </> : <path d="M5 5 19 19M19 5 5 19"/>}
+    </> : <path d="M8 8 16 16M16 8 8 16" strokeWidth="4"/>}
   </svg>;
 }
 

@@ -4780,11 +4780,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
   const [shared, setShared] = useState<SharedProjectInfo | null>(null);
-  const [model, setModel] = useState(initial.project.ai_model);
-  const [thinking, setThinking] = useState(initial.project.reasoning_effort);
   const [collaborators, setCollaborators] = useState<string[]>([]);
-  const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
-  const [modelLookupFailed, setModelLookupFailed] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [retryingEmails, setRetryingEmails] = useState(false);
@@ -4805,40 +4801,27 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       .then((saved: SharedProjectInfo) => {
         if (controller.signal.aborted) return;
         setShared(saved);
-        setModel(saved.model);
-        setThinking(saved.thinking);
         setCollaborators(saved.collaborators);
         setLoading(false);
       }).catch(cause => {
         if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
       });
-    void json('/api/ai/models')
-      .then((available: { models: CatalogChoice[] }) => {
-        if (!controller.signal.aborted) {
-          setCatalog(available.models);
-          setModelLookupFailed(false);
-        }
-      }).catch(() => {
-        if (!controller.signal.aborted) setModelLookupFailed(true);
-      });
     return () => controller.abort();
   }, [initial.path]);
-  const selected = catalog.find(choice => choice.id === model);
-  const validPair = !shared?.owner
-    || (model === shared.model && thinking === shared.thinking)
-    || !!selected?.efforts.includes(thinking);
   const changed = projectType !== initial.project.investigation_type
     || difficulty !== initial.project.difficulty
-    || (!!shared?.owner && (model !== shared.model || thinking !== shared.thinking
-      || JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators)));
-  function addCollaborator() {
-    const email = plausibleCollaboratorEmail(newEmail);
+    || (!!shared?.owner && JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators));
+  function finishAddingCollaborator(raw: string) {
+    setAdding(false);
+    setNewEmail('');
+    if (!raw.trim()) return;
+    const email = plausibleCollaboratorEmail(raw);
     if (!email) { setError('Enter a plausible Google account email address.'); return; }
     if (email === shared?.owner || collaborators.includes(email)) {
       setError('This account is already a collaborator.'); return;
     }
     setCollaborators(previous => [...previous, email].sort());
-    setNewEmail(''); setAdding(false); setError('');
+    setError('');
   }
   async function retryEmails() {
     if (retryingEmails || !shared?.owner) return;
@@ -4851,14 +4834,14 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (busy || loading || !changed || !validPair || !shared) return;
+    if (busy || loading || !changed || !shared) return;
     setBusy(true); setError('');
     try {
       const previous = settingsOf(initial);
       const next = await post<ProjectView>('update', {
         path: initial.path, ...previous,
         investigation_type: projectType, difficulty,
-        ai_model: model, reasoning_effort: thinking,
+        ai_model: shared.model, reasoning_effort: shared.thinking,
         expected: previous,
         ...(shared.owner ? { expected_revision: shared.revision, collaborators } : {}),
       });
@@ -4873,7 +4856,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       <header className="settings-header">
         <h2 id="sigma-project-classification-title">Project Settings</h2>
         <div className="settings-actions">
-          <button type="submit" disabled={busy || loading || !changed || !validPair}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="submit" disabled={busy || loading || !changed}>{busy ? 'Saving…' : 'Save'}</button>
           <DialogDismissButton label="Close Project Settings" disabled={busy} onClick={onCancel}/>
         </div>
       </header>
@@ -4893,7 +4876,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             <section className="project-collaborators" aria-label="Collaborators">
               <div className="project-collaborators-heading">
                 <h3>Collaborators</h3>
-                <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add collaborator" data-tooltip="Add collaborator" onClick={() => { setAdding(true); setError(''); }}><CirclePlusIcon/></button>
+                <button type="button" className="project-collaborator-new" aria-label="Add collaborator" data-tooltip="Add collaborator" onClick={() => { setAdding(true); setError(''); }}><CirclePlusIcon/></button>
               </div>
               <div className="project-collaborator-row">
                 <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
@@ -4905,38 +4888,19 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
                 </button>
               </div>)}
               {adding && <div className="project-collaborator-add">
-                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email" onChange={event => setNewEmail(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCollaborator(); } if (event.key === 'Escape') { event.stopPropagation(); setAdding(false); setNewEmail(''); } }}/>
-                <button type="button" onClick={addCollaborator}>Add</button>
-                <button type="button" onClick={() => { setAdding(false); setNewEmail(''); }}>Cancel</button>
+                <input type="email" autoFocus value={newEmail} placeholder="Google account email" aria-label="New collaborator email"
+                  onChange={event => setNewEmail(event.target.value)}
+                  onBlur={event => finishAddingCollaborator(event.currentTarget.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setAdding(false); setNewEmail(''); }
+                  }}/>
               </div>}
               {shared.failed_notifications > 0 && <p className="project-collaborator-mail-failed" role="status">
                 {shared.failed_notifications} collaboration {shared.failed_notifications === 1 ? 'email could' : 'emails could'} not be delivered.
                 <button type="button" disabled={retryingEmails} onClick={() => void retryEmails()}>{retryingEmails ? 'Retrying…' : 'Retry emails'}</button>
               </p>}
             </section>
-            <div className="settings-model-row">
-              <div>
-                <label htmlFor="shared-project-model">Model</label>
-                <select id="shared-project-model" value={model} disabled={modelLookupFailed || catalog.length === 0} onChange={event => {
-                  const next = event.target.value;
-                  setModel(next);
-                  const option = catalog.find(item => item.id === next);
-                  if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
-                }}>
-                  {model && !selected && <option value={model}>{model} · unavailable</option>}
-                  {catalog.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="shared-project-thinking">Thinking</label>
-                <select id="shared-project-thinking" value={thinking} disabled={modelLookupFailed || catalog.length === 0} onChange={event => setThinking(event.target.value)}>
-                  {!selected?.efforts.includes(thinking) && <option value={thinking}>{thinkingLabels[thinking] ?? thinking} · unavailable</option>}
-                  {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
-                </select>
-              </div>
-            </div>
-            {modelLookupFailed && <p className="settings-hint" role="status">Model choices are unavailable. You can still edit collaborators and save their changes.</p>}
           </>}
           {shared && !shared.owner && <p className="project-collaborator-local-note">
             Collaboration requires individual Google sign-ins, locally or hosted.
@@ -4944,7 +4908,6 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
           </p>}
         </fieldset>
         {loading && <p className="settings-hint">Loading shared settings…</p>}
-        {!validPair && <p role="alert" className="error">Choose a compatible model and Thinking level.</p>}
         {error && <p role="alert" className="error">{error}</p>}
       </div>
     </form>
