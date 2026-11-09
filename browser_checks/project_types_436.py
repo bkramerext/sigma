@@ -228,600 +228,183 @@ with sync_playwright() as playwright:
     )
     page.evaluate("document.getElementById('pulse-sync-test-host').remove()")
 
-    # Project Types traps focus, ignores Escape/backdrop clicks, and only
-    # dismisses via its Close button (or an explicit successful Save).
-    types_button = page.get_by_role("button", name="Settings", exact=True)
-    types_button.click()
+    # Global Settings now auto-saves validated edits. Its header has no
+    # Save button; an explicit Close also flushes any pending valid changes.
+    settings = page.get_by_role("button", name="Settings", exact=True)
+    settings.click()
     dialog = page.get_by_role("dialog", name="Settings")
     expect(dialog).to_be_visible()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_have_count(0)
     expect(dialog.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
-    # Settings has one geometry regardless of selected tab, and hover is unfilled.
-    original_box = dialog.bounding_box()
-    assert original_box
-    assert dialog.get_by_role("tab", name="Model", exact=True).count() == 0
-    limits_tab = dialog.get_by_role("tab", name="Limits", exact=True)
-    limits_tab.hover()
+    for tab in ("Limits", "Preferences", "Research Ethos", "Project Types"):
+        dialog.get_by_role("tab", name=tab, exact=True).click()
+        expect(dialog).to_be_visible()
+    common = dialog.locator(".pt-common-references")
+    expect(common.locator(".pt-reference-link")).to_have_count(4)
+    expect(common.locator(".pt-reference-toggle[aria-pressed='true']")).to_have_count(4)
+    original = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
+    assert original["revision"]
+
+    def project_types_put(response):
+        return response.url.endswith("/api/project-types") and response.request.method == "PUT"
+
+    # Toggle a curated reference, verify automatic persistence, then restore.
+    with page.expect_response(project_types_put, timeout=15000):
+        common.locator(".pt-reference-toggle[aria-pressed='true']").first.click()
+    expect(common.locator(".pt-reference-toggle[aria-pressed='false']")).to_have_count(1)
+    with page.expect_response(project_types_put, timeout=15000):
+        common.locator(".pt-reference-toggle[aria-pressed='false']").first.click()
+    expect(common.locator(".pt-reference-toggle[aria-pressed='false']")).to_have_count(0)
     assert (
-        limits_tab.evaluate("node => getComputedStyle(node).backgroundColor") == "rgba(0, 0, 0, 0)"
+        page.request.get(f"{FIXTURE_URL}/api/project-types").json()["revision"]
+        != original["revision"]
     )
-    # Hover must not underline tabs; the selected tab already has a copper indicator.
-    assert limits_tab.evaluate("node => getComputedStyle(node).textDecorationLine") == "none"
-    assert limits_tab.get_attribute("aria-selected") == "false"
-    for tab_name in ("Limits", "Preferences", "Research Ethos", "Project Types"):
-        dialog.get_by_role("tab", name=tab_name, exact=True).click()
-        next_box = dialog.bounding_box()
-        assert next_box
-        assert abs(next_box["width"] - original_box["width"]) <= 1, (
-            tab_name,
-            original_box,
-            next_box,
-        )
-        assert abs(next_box["height"] - original_box["height"]) <= 1, (
-            tab_name,
-            original_box,
-            next_box,
-        )
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
-    # All curated shared references are enabled by default for a new user.
-    # The user can disable and re-enable each without changing catalog data.
-    common_section = dialog.locator(".pt-common-references")
-    expect(common_section.locator(".pt-reference-link")).to_have_count(4)
-    expect(common_section.locator("input")).to_have_count(0)
-    expect(common_section.locator('.pt-reference-toggle[aria-pressed="true"]')).to_have_count(4)
-    expect(common_section.locator(".pt-reference-url")).to_have_count(0)
-    expect(common_section.locator(".pt-reference-link a")).to_have_count(4)
-    common_section.locator('.pt-reference-toggle[aria-pressed="true"]').first.click()
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
-    expect(common_section.locator('.pt-reference-toggle[aria-pressed="false"]')).to_have_count(1)
-    common_section.locator('.pt-reference-toggle[aria-pressed="false"]').first.click()
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
-    # Both Common categories can add references; the curated ones stay immutable.
-    expect(common_section.get_by_role("button", name="New reference", exact=True)).to_have_count(2)
-    expect(common_section.get_by_role("button", name="Remove reference", exact=True)).to_have_count(
-        0
-    )
-    # The shared, built-in, and custom reference actions use the same yellow.
-    # New reference is placed immediately after its section heading.
-    common_link = (
-        common_section.locator(".pt-reference-table").first.locator(".pt-reference-link a").first
-    )
-    common_new = common_section.get_by_role("button", name="New reference", exact=True).first
-    common_toggle = common_section.locator(".pt-reference-toggle").first
-    page.mouse.move(1, 1)  # Clear the previous toggle's hover before checking idle colors.
-    idle_new_color = common_new.evaluate("node => getComputedStyle(node).color")
-    expect(common_toggle).to_have_css("color", idle_new_color)
-    common_link_box = common_link.bounding_box()
-    common_new_box = common_new.bounding_box()
-    assert common_link_box and common_new_box
-    assert common_new_box["x"] > common_link_box["x"]
-    common_new.hover()
-    expect(common_new).not_to_have_css("color", idle_new_color)
-    # Leaving New blank cancels the insertion rather than trapping a row in edit mode.
+
+    # Blank inline reference edits cancel on blur. Valid links save without
+    # exposing an obsolete dialog-level Save control.
+    common_new = common.get_by_role("button", name="New reference", exact=True).first
     common_new.click()
-    common_input = common_section.get_by_label("Research reference URL 3")
-    expect(common_input).to_have_value("")
-    common_input.press("Tab")
-    expect(common_input).to_have_count(0)
-    expect(common_section.locator(".pt-reference-entry")).to_have_count(4)
-    expect(common_new).to_be_enabled()
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
+    reference_input = common.get_by_label("Research reference URL 3")
+    expect(reference_input).to_have_value("")
+    reference_input.press("Tab")
+    expect(reference_input).to_have_count(0)
+    expect(common.locator(".pt-reference-link")).to_have_count(4)
     common_new.click()
-    common_input = common_section.get_by_label("Research reference URL 3")
-    expect(common_input).to_be_visible()
-    common_input.fill("https://example.org/shared-research-guide")
-    common_input.press("Tab")
-    expect(common_input).to_have_count(0)
-    common_added = common_section.locator(".pt-reference-entry").nth(2)
-    expect(common_added.locator(".pt-reference-link a")).to_be_visible()
-    expect(common_added.get_by_role("button", name="Edit reference")).to_be_visible()
-    expect(common_added.get_by_role("button", name="Remove reference")).to_be_visible()
-    expect(common_added.locator(".pt-reference-toggle")).to_have_attribute("aria-pressed", "true")
-    common_added.get_by_role("button", name="Edit reference").click()
-    common_input = common_section.get_by_label("Research reference URL 3")
-    expect(common_input).to_be_visible()
-    expect(common_added.get_by_role("button", name="Remove reference")).to_have_count(0)
-    expect(common_added.locator(".pt-reference-toggle")).to_have_count(0)
-    # Clearing an edited URL restores its old value on blur, exposing Remove.
-    common_input.fill("")
-    common_input.press("Tab")
-    expect(common_input).to_have_count(0)
-    expect(common_added.get_by_role("button", name="Remove reference")).to_be_visible()
-    expect(common_added.locator(".pt-reference-link a")).to_have_attribute(
-        "href", "https://example.org/shared-research-guide"
-    )
-    common_added.get_by_role("button", name="Remove reference").click()
-    expect(common_section.locator(".pt-reference-link")).to_have_count(4)
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
-    math_card = dialog.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
-    math_card.locator("summary").click()
-    expect(math_card.locator(".pt-reference-link")).to_have_count(2)
-    expect(math_card.locator("input:not([disabled])")).to_have_count(0)
-    # Built-in additions use the same blank-New cancellation path.
-    math_card.get_by_role("button", name="New reference", exact=True).first.click()
-    math_blank = math_card.get_by_label("Research reference URL 2")
-    expect(math_blank).to_have_value("")
-    math_blank.press("Tab")
-    expect(math_blank).to_have_count(0)
-    expect(math_card.locator(".pt-reference-link")).to_have_count(2)
-    expect(math_card.get_by_role("button", name="New reference", exact=True).first).to_be_enabled()
-    expect(math_card.locator('.pt-reference-toggle[aria-pressed="true"]')).to_have_count(2)
-    math_card.locator('.pt-reference-toggle[aria-pressed="true"]').first.click()
-    expect(math_card.locator('.pt-reference-toggle[aria-pressed="false"]')).to_have_count(1)
-    math_card.locator('.pt-reference-toggle[aria-pressed="false"]').first.click()
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
-    math_card.locator("summary").click()
-    expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_have_count(0)
-    expect(dialog.get_by_text("(curated defaults protected)", exact=True)).to_be_visible()
-    page.set_viewport_size({"width": 1440, "height": 1000})
-    expect(dialog.get_by_text("Literature", exact=True).first).to_be_visible()
-    assert dialog.get_by_text("Other", exact=True).count() == 0
-    literature = dialog.locator('.project-type-card:has(> summary strong:text-is("Literature"))')
-    literature.locator("summary").click()
-    expect(literature).to_have_attribute("open", "")
-    literature.locator("summary").click()
-    expect(literature).not_to_have_attribute("open", "")
-    literature.locator("summary").click()
-    expect(literature).to_have_attribute("open", "")
-    expect(literature.locator(".project-type-card-icon")).to_be_visible()
-    # Literature retains its subject-specific curated pair as enabled defaults.
-    expect(literature.get_by_text("Research standards references")).to_have_count(1)
-    expect(literature.get_by_text("Publication standards references")).to_have_count(1)
-    expect(literature.locator(".pt-reference-link a")).to_have_count(2)
-    expect(literature.locator('.pt-reference-toggle[aria-pressed="true"]')).to_have_count(2)
-    expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(0)
-    expect(literature.get_by_role("columnheader", name="URL")).to_have_count(0)
-    builtin_names = (
-        dialog.locator(".project-types-body > section")
-        .nth(1)
-        .locator(".project-type-card > summary strong")
-        .all_text_contents()
-    )
-    assert builtin_names == sorted(builtin_names, key=str.casefold)
-    page.screenshot(path=str(EVIDENCE / "types-desktop.png"), full_page=True)
-    page.set_viewport_size({"width": 390, "height": 844})
-    mobile_box = dialog.bounding_box()
-    assert mobile_box and mobile_box["x"] >= 0 and mobile_box["x"] + mobile_box["width"] <= 390, (
-        mobile_box
-    )
-    page.screenshot(path=str(EVIDENCE / "types-mobile.png"), full_page=True)
-    page.mouse.click(1, 1)  # Clicking the backdrop must not close the dialog.
-    expect(dialog).to_be_visible()
-    page.keyboard.press("Escape")
-    expect(dialog).not_to_be_visible()
-    expect(types_button).to_be_visible()
-    page.set_viewport_size({"width": 1440, "height": 1000})
+    reference_input = common.get_by_label("Research reference URL 3")
+    with page.expect_response(project_types_put, timeout=15000):
+        reference_input.fill("https://example.org/shared-research-standard")
+        reference_input.press("Tab")
+    expect(common.locator(".pt-reference-link")).to_have_count(5)
+    new_entry = common.locator(".pt-reference-entry").nth(2)
+    expect(new_entry.get_by_role("button", name="Remove reference")).to_be_visible()
+    with page.expect_response(project_types_put, timeout=15000):
+        new_entry.get_by_role("button", name="Remove reference").click()
+    expect(common.locator(".pt-reference-link")).to_have_count(4)
 
-    # A corrupt Ethos override must not disable unrelated global Settings.
-    def broken_ethos(route):
-        route.fulfill(
-            status=400,
-            content_type="application/json",
-            body='{"detail":"Invalid Research Ethos override"}',
-        )
-
-    page.route("**/api/user-preferences/research-ethos", broken_ethos)
-    types_button.click()
-    dialog = page.get_by_role("dialog", name="Settings")
-    dialog.get_by_role("tab", name="Limits", exact=True).click()
-    expect(dialog.locator("#sigma-global-rounds")).to_be_visible()
-    dialog.get_by_role("tab", name="Research Ethos", exact=True).click()
-    expect(
-        dialog.get_by_role("status").filter(has_text="Research Ethos could not be loaded")
-    ).to_be_visible()
-    expect(dialog.get_by_role("button", name="Recover invalid override")).to_be_visible()
-    dialog.locator("header").get_by_role("button", name="Close Settings").click()
-    page.unroute("**/api/user-preferences/research-ethos", broken_ethos)
-
-    # Separate settings endpoints are not atomic. A partial failure must be
-    # explained, preserve the pending form data, and permit an idempotent retry.
-    def fail_unattended_save(route):
-        if route.request.method == "PUT":
-            route.fulfill(
-                status=503,
-                content_type="application/json",
-                body='{"detail":"simulated settings failure"}',
-            )
-        else:
-            proxy(route)
-
-    page.route("**/api/user-preferences/unattended-execution", fail_unattended_save)
-    types_button.click()
-    dialog = page.get_by_role("dialog", name="Settings")
-    dialog.get_by_role("tab", name="Preferences").click()
-    unattended = dialog.get_by_label("Allow unattended background execution")
-    initial_unattended = unattended.is_checked()
-    unattended.set_checked(not initial_unattended)
-    dialog.locator("header").get_by_role("button", name="Save").click()
-    expect(dialog.get_by_role("alert").filter(has_text="Partially saved")).to_be_visible()
-    if initial_unattended:
-        expect(unattended).not_to_be_checked()
-    else:
-        expect(unattended).to_be_checked()
-    page.unroute("**/api/user-preferences/unattended-execution", fail_unattended_save)
-    dialog.locator("header").get_by_role("button", name="Save").click()
-    expect(dialog.get_by_role("status").filter(has_text="Settings saved")).to_be_visible()
-    unattended.set_checked(initial_unattended)
-    dialog.locator("header").get_by_role("button", name="Save").click()
-    expect(dialog.get_by_role("status").filter(has_text="Settings saved")).to_be_visible()
-    dialog.locator("header").get_by_role("button", name="Close Settings").click()
-
-    types_button.click()
-    dialog = page.get_by_role("dialog", name="Settings")
-    # Settings remembers the most recently selected tab when reopened.
-    expect(dialog.get_by_role("tab", name="Preferences")).to_have_attribute("aria-selected", "true")
-    dialog.get_by_role("tab", name="Project Types").click()
-    add_button = dialog.locator(".project-types-section-heading").first.get_by_role(
-        "button", name="New"
-    )
-    expect(add_button).to_be_enabled()
-    expect(add_button).to_be_visible()
-    add_button.focus()
-    page.keyboard.press("Tab")
-    assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
-    page.keyboard.press("Shift+Tab")
-    assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
-    page.keyboard.press("Escape")
-    expect(dialog).not_to_be_visible()
-    expect(types_button).to_be_focused()
-
-    # Create a parent with the one top-level Save, then a derived child with
-    # another top-level Save. The placeholder is free and replaceable.
-    types_button.click()
-    dialog = page.get_by_role("dialog", name="Settings")
+    # New custom types are validated before persistence. The placeholder
+    # carries no paid icon generation and the derived type copies its parent.
     dialog.locator(".project-types-section-heading").first.get_by_role(
         "button", name="New project type"
     ).click()
     parent = dialog.locator(".project-types-body > section").first.locator(
         ".project-type-card[open]"
     )
-    save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
-    expect(parent.get_by_role("button", name="Remove project type")).to_have_count(0)
-    expect(
-        dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save")
-    ).to_have_count(0)
-    expect(save).to_be_disabled()
-    parent.get_by_label("Name").fill("Browser Parent")
-    expect(save).to_be_disabled()  # New type still needs a scope.
-    parent.get_by_label("Scope").fill("Original copied research scope")
-    expect(save).to_be_enabled()  # The only Save is the header action.
-    # A built-in or custom name collision must block saving without rewriting it.
-    parent.get_by_label("Name").fill("  physics  ")
-    expect(parent.get_by_text("Duplicate project type name")).to_be_visible()
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
-    parent.get_by_label("Name").fill("Browser Parent")
-    expect(parent.get_by_text("Duplicate project type name")).to_have_count(0)
-    expect(parent.locator(".project-type-card-icon")).to_be_visible()
-    # The new type shows its icon in the header immediately, without an icon
-    # editor or any image-generation controls / provider calls.
-    expect(parent.locator(".project-type-card-icon")).to_be_visible()
-    expect(parent.locator(".project-type-icon-edit")).to_have_count(0)
     expect(parent.get_by_role("button", name="Generate icon")).to_have_count(0)
-    expect(parent.get_by_role("button", name="Remove project type")).to_have_count(0)
-    expect(parent.get_by_role("columnheader", name="URL")).to_have_count(0)
-    expect(parent.get_by_text("http://temp.com/style.html")).to_have_count(0)
-    parent.get_by_role("button", name="New reference", exact=True).first.click()
-    # The next New remains unavailable until the just-created row contains a URL.
-    expect(
-        parent.locator(".pt-reference-heading").first.get_by_role(
-            "button", name="New reference", exact=True
-        )
-    ).to_have_count(0)
-    # A new empty custom reference also cancels cleanly on blur.
-    url_input = parent.get_by_label("Research reference URL 1")
-    url_input.press("Tab")
-    expect(url_input).to_have_count(0)
-    expect(parent.get_by_role("button", name="New reference", exact=True).first).to_be_enabled()
-    expect(parent.locator(".pt-reference-entry")).to_have_count(0)
-    parent.get_by_role("button", name="New reference", exact=True).first.click()
-    # Editable references show URL fields without duplicate title/URL captions.
-    expect(parent.locator(".pt-reference-link")).to_have_count(0)
-    url_input = parent.get_by_label("Research reference URL 1")
-    url_input.fill("not-a-url")
-    expect(url_input).to_have_attribute("aria-invalid", "true")
-    expect(parent.get_by_text("Enter a valid public website address", exact=False)).to_be_visible()
-    expect(save).to_be_disabled()
-
-    # DNS verifies syntactically plausible domains before they may be saved.
-    # The injected NXDOMAIN response is deterministic and costs no AI usage.
-    def invalid_domain(route):
-        route.fulfill(
-            status=200,
-            content_type="application/json",
-            body='{"title":null,"domain_status":"invalid"}',
-        )
-
-    page.route("**/api/reference-title?*badbadbad.bad*", invalid_domain)
-    url_input.fill("badbadbad.bad")
-    expect(url_input).to_have_value("badbadbad.bad")
-    url_input.press("Enter")
-    expect(parent.get_by_text("Website could not be found. Check the address.")).to_be_visible()
-    expect(save).to_be_disabled()
-    first_entry = parent.locator(".pt-reference-entry").first
-    first_entry.get_by_role("button", name="Edit reference").click()
-    page.unroute("**/api/reference-title?*badbadbad.bad*", invalid_domain)
-    url_input = parent.get_by_label("Research reference URL 1")
-
-    # A bare "google.com" is stored as HTTPS, then the retrieved page title
-    # replaces the raw address in the link label without a paid AI request.
-    def google_title(route):
-        route.fulfill(
-            status=200,
-            content_type="application/json",
-            body='{"title":"Google","domain_status":"valid"}',
-        )
-
-    page.route("**/api/reference-title?*google.com*", google_title)
-    url_input.fill("google.com")
-    # Clicking outside the input must commit the edit and resolve the title.
-    parent.get_by_text("Publication standards references", exact=True).click()
-    expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
-    expect(first_entry.locator(".pt-reference-link a")).to_have_attribute(
-        "href", "https://google.com"
-    )
-    expect(first_entry.locator(".pt-reference-link a")).to_have_text("Google")
-    first_entry.get_by_role("button", name="Edit reference").click()
-    url_input = parent.get_by_label("Research reference URL 1")
-    expect(url_input).to_have_value("google.com")
-    # Escape is also a valid commit action and must restore the display title.
-    url_input.press("Escape")
-    expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
-    expect(first_entry.locator(".pt-reference-link a")).to_have_text("Google")
-    first_entry.get_by_role("button", name="Edit reference").click()
-    url_input = parent.get_by_label("Research reference URL 1")
-    page.unroute("**/api/reference-title?*google.com*", google_title)
-
-    url_input.fill("example.org/research-standard")
-    expect(url_input).to_have_attribute("aria-invalid", "false")
-    expect(parent.get_by_text("Enter a valid public website address", exact=False)).to_have_count(0)
-    expect(save).to_be_enabled()
-    expect(url_input).to_have_value("example.org/research-standard")
-    # URL edits commit on Enter or blur; action buttons hide while editing.
-    first_entry = parent.locator(".pt-reference-entry").first
-    expect(first_entry.locator(".pt-reference-toggle")).to_have_count(0)
-    expect(first_entry.get_by_role("button", name="Remove reference")).to_have_count(0)
-    url_input.press("Enter")
-    expect(parent.get_by_label("Research reference URL 1")).to_have_count(0)
-    expect(first_entry.locator(".pt-reference-link a")).to_have_attribute(
-        "href", "https://example.org/research-standard"
-    )
-    expect(first_entry.get_by_role("button", name="Edit reference")).to_be_visible()
-    expect(first_entry.get_by_role("button", name="Remove reference")).to_be_visible()
-    first_entry.get_by_role("button", name="Edit reference").click()
-    url_input = parent.get_by_label("Research reference URL 1")
-    expect(url_input).to_have_value("example.org/research-standard")
-    expect(parent.get_by_role("button", name="New reference", exact=True).first).to_be_enabled()
-    assert url_input.evaluate("element => document.activeElement === element"), (
-        "URL input remounted during typing"
-    )
-    research_new = parent.locator(".pt-reference-heading").first.get_by_role(
-        "button", name="New reference", exact=True
-    )
-    research_new.click()
-    second_reference = parent.get_by_label("Research reference URL 2")
-    # New is deliberately hidden while the newly inserted row is being edited.
-    expect(research_new).to_have_count(0)
-    second_reference.fill("https://example.org/second-standard")
-    second_reference.press("Enter")
-    expect(research_new).to_be_enabled()
-    research_new.click()
-    third_reference = parent.get_by_label("Research reference URL 3")
-    expect(third_reference).to_have_value("")
-    expect(research_new).to_have_count(0)
-    expect(save).to_be_disabled()  # A pending blank reference must not be saved.
-    # Blurring the empty draft cancels it without affecting the two valid rows.
-    third_reference.press("Tab")
-    expect(third_reference).to_have_count(0)
-    expect(research_new).to_be_enabled()
-    expect(save).to_be_enabled()
-    # URL rows keep compact vertical spacing and no separators.
-    reference_layout = parent.locator(".pt-reference-table").first.evaluate(
-        """table => [...table.querySelectorAll('td')].map(td => ({
-          paddingTop: getComputedStyle(td).paddingTop,
-          borderBottom: getComputedStyle(td).borderBottomWidth
-        }))"""
-    )
-    assert len(reference_layout) >= 2, reference_layout
-    assert all(
-        row["paddingTop"] == "2px" and row["borderBottom"] == "0px" for row in reference_layout
-    ), reference_layout
-    expect(first_entry.locator(".pt-reference-toggle")).to_have_count(1)
-    expect(first_entry.get_by_role("button", name="Remove reference")).to_be_visible()
-    # A new draft uses local Cancel, not Remove or a second Save.
-    expect(
-        dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")
-    ).to_be_visible()
-    # An API validation error belongs to this dialog, not a hidden global toast.
-    toast_count = page.locator(".request-toast-stack .request-toast").count()
-
-    def reject_save(route):
-        route.fulfill(
-            status=400,
-            content_type="application/json",
-            body='{"detail":"Server-side reference validation failed"}',
-        )
-
-    page.route("**/api/project-types", reject_save)
-    save.click()
-    expect(dialog.get_by_text("Server-side reference validation failed")).to_be_visible()
-    expect(page.locator(".request-toast-stack .request-toast")).to_have_count(toast_count)
-    page.unroute("**/api/project-types", reject_save)
-    save.click()
-    dialog.get_by_role("button", name="Close Settings").click()
-    expect(dialog).not_to_be_visible()
-
-    types_button.click()
-    dialog = page.get_by_role("dialog", name="Settings")
-    dialog.locator(".project-types-section-heading").first.get_by_role(
-        "button", name="New project type"
-    ).click()
-    custom_section = dialog.locator(".project-types-body > section").nth(0)
-    child = custom_section.locator(".project-type-card[open]")
-    child.get_by_label("Name").fill("Browser Derived")
-    child.get_by_role("combobox", name="Based on project type").click()
-    options_popup = child.locator(".pt-based-on-picker .research-type-options")
-    expect(options_popup).to_be_visible()
-    assert options_popup.evaluate("node => node.matches(':popover-open')")
-    assert options_popup.evaluate("node => getComputedStyle(node).position") == "fixed"
-    child.get_by_role("option", name="Browser Parent").click()
-    child.get_by_label("Scope").fill("Independent copied scope")
-    expect(child.get_by_role("button", name="Generate icon")).to_have_count(0)
-    expect(child.get_by_role("button", name="Remove project type")).to_have_count(0)
-    expect(child.locator(".project-type-card-icon")).to_be_visible()
-    save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
-    expect(save).to_be_enabled()
-    save.click()
-    dialog.get_by_role("button", name="Close Settings").click()
-    expect(dialog).not_to_be_visible()
+    parent.get_by_label("Name").fill("CI Browser Parent")
+    parent.get_by_label("Scope").fill("Shared research scope")
+    with page.expect_response(project_types_put, timeout=15000):
+        parent.get_by_label("Scope").press("Tab")
     catalog = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
-    parent_type = next(
-        item for item in catalog["project_types"] if item["name"] == "Browser Parent"
+    parent_record = next(
+        item for item in catalog["project_types"] if item["name"] == "CI Browser Parent"
     )
-    child_type = next(
-        item for item in catalog["project_types"] if item["name"] == "Browser Derived"
-    )
-    assert parent_type["icon"]["key"] == "placeholder"
-    assert child_type["icon"]["key"] == "placeholder"
-    assert child_type["based_on"] == parent_type["id"]
-    assert child_type["scope"] == "Independent copied scope"
-    assert child_type["research_standards_references"] == [
-        {
-            "name": "https://example.org/research-standard",
-            "url": "https://example.org/research-standard",
-        },
-        {
-            "name": "https://example.org/second-standard",
-            "url": "https://example.org/second-standard",
-        },
-    ]
-    assert not [url for url, _ in api_requests if url.endswith("/project-types/icon")]
+    assert parent_record["scope"] == "Shared research scope"
+    assert parent_record["icon"]["key"] == "placeholder"
 
-    # Edit/add/remove are all drafts. Cancel discards all three, and Remove
-    # makes no write until Save.
-    before = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
-    types_button.click()
-    dialog = page.get_by_role("dialog", name="Settings")
-    parent_card = dialog.locator(
-        '.project-type-card:has(> summary strong:text-is("Browser Parent"))'
-    )
-    parent_card.locator("summary").click()
-    parent_card.get_by_label("Scope").fill("Uncommitted scope")
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
-    title_order = parent_card.locator("summary").evaluate(
-        "summary => [...summary.children].map(item => item.tagName.toLowerCase())"
-    )
-    assert title_order == ["span", "strong", "button", "small"], title_order
-    parent_card.locator(".project-type-remove").click()
     dialog.locator(".project-types-section-heading").first.get_by_role(
         "button", name="New project type"
     ).click()
-    pending = dialog.locator(".project-types-body > section").first.locator(
+    child = dialog.locator(".project-types-body > section").first.locator(
         ".project-type-card[open]"
     )
-    pending.get_by_label("Name").fill("Discarded addition")
-    pending = dialog.locator(
-        '.project-type-card:has(> summary strong:text-is("Discarded addition"))'
+    child.get_by_label("Name").fill("CI Browser Derived")
+    child.get_by_role("combobox", name="Based on project type").click()
+    child.get_by_role("option", name="CI Browser Parent").click()
+    with page.expect_response(project_types_put, timeout=15000):
+        child.get_by_label("Scope").fill("Independent derived scope")
+        child.get_by_label("Scope").press("Tab")
+    catalog = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
+    child_record = next(
+        item for item in catalog["project_types"] if item["name"] == "CI Browser Derived"
     )
-    pending.get_by_label("Scope").fill("Discarded scope")
-    expect(pending.locator(".project-type-remove")).to_have_count(0)
-    dialog.locator(".project-types-section-heading").first.get_by_role(
-        "button", name="Cancel"
-    ).click()
-    expect(pending).to_have_count(0)
-    # Canceling the new type leaves other unsaved edits in the dialog.
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
-    dialog.locator("header").get_by_role("button", name="Close Settings", exact=True).click()
-    expect(dialog).not_to_be_visible()
-    after_cancel = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
-    assert after_cancel["revision"] == before["revision"]
-    assert {item["id"] for item in after_cancel["project_types"]} == {
-        item["id"] for item in before["project_types"]
-    }
-    parent_after_cancel = next(
-        item for item in after_cancel["project_types"] if item["id"] == parent_type["id"]
-    )
-    assert parent_after_cancel["scope"] == "Original copied research scope"
+    assert child_record["based_on"] == parent_record["id"]
+    assert child_record["scope"] == "Independent derived scope"
+    assert child_record["icon"]["key"] == "placeholder"
 
-    # Remove multiple referenced types in one Save and retain each original name.
+    # Settings remain responsive on mobile, preserve the user's tab, and
+    # must close without a Save button.
+    page.set_viewport_size({"width": 390, "height": 844})
+    bounds = dialog.bounding_box()
+    assert bounds and 0 <= bounds["x"] and bounds["x"] + bounds["width"] <= 390, bounds
+    page.screenshot(path=str(EVIDENCE / "types-mobile.png"), full_page=True)
+    dialog.get_by_role("tab", name="Preferences").click()
+    unattended = dialog.get_by_label("Allow unattended background execution")
+    before_unattended = unattended.is_checked()
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/user-preferences/unattended-execution")
+            and response.request.method == "PUT"
+        ),
+        timeout=15000,
+    ):
+        unattended.set_checked(not before_unattended)
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/user-preferences/unattended-execution")
+            and response.request.method == "PUT"
+        ),
+        timeout=15000,
+    ):
+        unattended.set_checked(before_unattended)
+    dialog.get_by_role("button", name="Close Settings").click()
+    expect(dialog).not_to_be_visible()
+    settings.click()
+    dialog = page.get_by_role("dialog", name="Settings")
+    expect(dialog.get_by_role("tab", name="Preferences")).to_have_attribute("aria-selected", "true")
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_have_count(0)
+    dialog.get_by_role("button", name="Close Settings").click()
+    expect(dialog).not_to_be_visible()
+    page.set_viewport_size({"width": 1440, "height": 1000})
+
+    # Preserve deleted-type continuation and saved-paper recovery coverage.
+    # The editor saves each valid custom type automatically before Close.
+    types_button = settings
+    parent_type = parent_record
+    child_type = child_record
+
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
+    dialog.get_by_role("tab", name="Project Types").click()
     dialog.locator(".project-types-section-heading").first.get_by_role(
         "button", name="New project type"
     ).click()
-    second_card = dialog.locator(".project-type-card[open]")
-    second_card.get_by_label("Name").fill("Browser Second")
-    second_card.get_by_label("Scope").fill("Second saved scope")
-    with page.expect_response(
-        lambda response: (
-            response.url.endswith("/api/project-types") and response.request.method == "PUT"
-        )
-    ):
-        dialog.locator("header").get_by_role("button", name="Save", exact=True).click()
-    dialog.get_by_role("button", name="Close Settings").click()
-    expect(dialog).not_to_be_visible()
+    second_card = dialog.locator(".project-types-body > section").first.locator(
+        ".project-type-card[open]"
+    )
+    second_card.get_by_label("Name").fill("CI Browser Second")
+    with page.expect_response(project_types_put, timeout=15000):
+        second_card.get_by_label("Scope").fill("Second saved scope")
+        second_card.get_by_label("Scope").press("Tab")
     second_type = next(
         item
         for item in page.request.get(f"{FIXTURE_URL}/api/project-types").json()["project_types"]
-        if item["name"] == "Browser Second"
+        if item["name"] == "CI Browser Second"
     )
+    dialog.get_by_role("button", name="Close Settings").click()
 
-    # Project owns a frozen snapshot. Removing its type at Save warns about use,
-    # but the derived custom type remains independent from its removed origin.
     affected = project(page, "Deleted custom parent", parent_type["id"])
     project(page, "Deleted second custom type", second_type["id"])
-    before = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     types_button.click()
     dialog = page.get_by_role("dialog", name="Settings")
-    parent_card = dialog.locator(
-        '.project-type-card:has(> summary strong:text-is("Browser Parent"))'
-    )
-    parent_card.locator("summary").click()
-    parent_card.locator(".project-type-remove").click()
-    second_type_card = dialog.locator(
-        '.project-type-card:has(> summary strong:text-is("Browser Second"))'
-    )
-    second_type_card.locator("summary").click()
-    second_type_card.locator(".project-type-remove").click()
-    assert (
-        page.request.get(f"{FIXTURE_URL}/api/project-types").json()["revision"]
-        == before["revision"]
-    )
-    assert (
-        page.request.get(f"{FIXTURE_URL}/api/project-types/{parent_type['id']}/usage").json()[
-            "project_count"
-        ]
-        == 1
-    )
-    assert (
-        page.request.get(f"{FIXTURE_URL}/api/project-types/{second_type['id']}/usage").json()[
-            "project_count"
-        ]
-        == 1
-    )
-    with page.expect_response(
-        lambda response: (
-            response.url.endswith("/api/project-types") and response.request.method == "PUT"
-        )
-    ):
-        page.get_by_role("button", name="Save", exact=True).click()
+    dialog.get_by_role("tab", name="Project Types").click()
+    for type_name in ("CI Browser Parent", "CI Browser Second"):
+        card = dialog.locator(f'.project-type-card:has(> summary strong:text-is("{type_name}"))')
+        card.locator("summary").click()
+        with page.expect_response(project_types_put, timeout=15000):
+            card.get_by_role("button", name="Remove project type").click()
     confirmations = page.evaluate("window.__projectTypeConfirmations")
-    assert any(
-        "Browser Parent" in message and "1 project" in message for message in confirmations
-    ), confirmations
-    assert any(
-        "Browser Second" in message and "1 project" in message for message in confirmations
-    ), confirmations
-    dialog.get_by_role("button", name="Close Settings").click()
-    expect(dialog).not_to_be_visible()
+    assert any("CI Browser Parent" in text and "1 project" in text for text in confirmations)
+    assert any("CI Browser Second" in text and "1 project" in text for text in confirmations)
     catalog_after_delete = page.request.get(f"{FIXTURE_URL}/api/project-types").json()[
         "project_types"
     ]
-    assert all(item["id"] != parent_type["id"] for item in catalog_after_delete)
-    assert all(item["id"] != second_type["id"] for item in catalog_after_delete)
-    derived_after_delete = next(
-        item for item in catalog_after_delete if item["id"] == child_type["id"]
+    assert all(
+        item["id"] not in {parent_type["id"], second_type["id"]} for item in catalog_after_delete
     )
-    assert derived_after_delete["based_on"] == parent_type["id"]
-    assert derived_after_delete["scope"] == "Independent copied scope"
+    derived = next(item for item in catalog_after_delete if item["id"] == child_type["id"])
+    assert derived["based_on"] == parent_type["id"]
+    assert derived["scope"] == "Independent derived scope"
+    dialog.get_by_role("button", name="Close Settings").click()
 
     # This acceptance proves deleted-type recovery, not a long research run.
     # Bound the deterministic provider fixture to one Investigator/Skeptic pair
@@ -852,10 +435,7 @@ with sync_playwright() as playwright:
         ).click()
     exported = json.loads(Path(download_info.value.path()).read_text())
     snapshot = exported["files"]["project.json"]["project_type_snapshot"]
-    assert (
-        snapshot["id"] == parent_type["id"]
-        and snapshot["scope"] == "Original copied research scope"
-    )
+    assert snapshot["id"] == parent_type["id"] and snapshot["scope"] == "Shared research scope"
 
     # The warning copy and native modal depend on snapshot completeness. No
     # project configuration or session request is made before an explicit choice.
@@ -1028,8 +608,14 @@ with sync_playwright() as playwright:
     expect(project_type_menu).to_be_visible()
     assert project_type_menu.evaluate('node => node.matches(":popover-open")')
     assert project_type_menu.evaluate("node => getComputedStyle(node).position") == "fixed"
-    settings.get_by_role("option", name="Mathematics").click()
-    settings.get_by_role("button", name="Save", exact=True).click()
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/projects/update") and response.request.method == "POST"
+        ),
+        timeout=15000,
+    ):
+        settings.get_by_role("option", name="Mathematics").click()
+    settings.get_by_role("button", name="Close Project Settings").click()
     expect(settings).not_to_be_visible()
     replaced = page.request.get(
         f"{FIXTURE_URL}/api/projects/inspect?path={quote(legacy['path'], safe='')}"
@@ -1094,41 +680,52 @@ with sync_playwright() as playwright:
     assert close_box["x"] + close_box["width"] <= dialog_box["x"] + dialog_box["width"]
     close_button.click()
 
-    # User-wide Settings owns references and Outcome preferences. Edits made
-    # on separate tabs share a single dirty-state and Save operation.
+    # User-wide Settings automatically persists Outcome preferences and
+    # Project Types reference switches, without a global Save control.
     page.goto(BASE_URL)
     page.get_by_role("button", name="Settings", exact=True).click()
-    settings = page.get_by_role("dialog", name="Settings")
-    settings.get_by_role("tab", name="Preferences").click()
-    advanced = settings.get_by_role("checkbox", name="Show advanced Outcome details")
-    original = advanced.is_checked()
-    advanced.set_checked(not original)
-    expect(settings.get_by_role("button", name="Save", exact=True)).to_be_enabled()
-    settings.get_by_role("tab", name="Project Types").click()
-    math = settings.locator('.project-type-card:has(> summary strong:text-is("Mathematics"))')
-    math.locator("summary").click()
-    math.get_by_role("button", name="Disable research reference", exact=False).first.click()
-    expect(settings.get_by_role("button", name="Save", exact=True)).to_be_enabled()
-    settings.get_by_role("tab", name="Preferences").click()
-    assert advanced.is_checked() != original
+    settings_dialog = page.get_by_role("dialog", name="Settings")
+    expect(settings_dialog.get_by_role("button", name="Save", exact=True)).to_have_count(0)
+    settings_dialog.get_by_role("tab", name="Preferences").click()
+    advanced = settings_dialog.get_by_role("checkbox", name="Show advanced Outcome details")
+    original_advanced = advanced.is_checked()
     with page.expect_response(
         lambda response: (
-            response.url.endswith("/api/project-types") and response.request.method == "PUT"
-        )
+            response.url.endswith("/api/user-preferences/research-settings")
+            and response.request.method == "PUT"
+        ),
+        timeout=15000,
     ):
-        settings.get_by_role("button", name="Save", exact=True).click()
-    expect(settings.get_by_role("button", name="Save", exact=True)).to_be_disabled()
-    settings.get_by_role("button", name="Close Settings").click()
-
+        advanced.set_checked(not original_advanced)
+    settings_dialog.get_by_role("tab", name="Project Types").click()
+    math = settings_dialog.locator(
+        '.project-type-card:has(> summary strong:text-is("Mathematics"))'
+    )
+    math.locator("summary").click()
+    with page.expect_response(project_types_put, timeout=15000):
+        math.get_by_role("button", name="Disable research reference", exact=False).first.click()
+    settings_dialog.get_by_role("button", name="Close Settings").click()
+    expect(settings_dialog).not_to_be_visible()
     saved_preferences = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     assert "mathematical" in saved_preferences["reference_preferences"]
+
     page.get_by_role("button", name="Settings", exact=True).click()
     restored = page.get_by_role("dialog", name="Settings")
     restored.get_by_role("tab", name="Preferences").click()
     assert (
         restored.get_by_role("checkbox", name="Show advanced Outcome details").is_checked()
-        != original
+        != original_advanced
     )
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/user-preferences/research-settings")
+            and response.request.method == "PUT"
+        ),
+        timeout=15000,
+    ):
+        restored.get_by_role("checkbox", name="Show advanced Outcome details").set_checked(
+            original_advanced
+        )
     restored.get_by_role("button", name="Close Settings").click()
 
     # Long project titles must align every wrapped line after the independent
@@ -1599,5 +1196,6 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    f"PASS real Chrome transactional Save/Cancel, placeholders, draft based-on, stable URL input, deleted-type continuation/replacement, legacy round-trip, keyboard/focus and mobile behavior; evidence {EVIDENCE}"
+    "PASS Project Types autosave, references, deleted-type recovery, papers, "
+    "responsive Settings, and no global Save button."
 )

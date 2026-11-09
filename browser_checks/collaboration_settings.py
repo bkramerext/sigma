@@ -39,6 +39,11 @@ def main() -> None:
             )
 
         page.route("**/api/**", proxy)
+        # Presence is a long-lived stream; it is not relevant to this UI fixture.
+        page.route(
+            "**/api/projects/research-presence?*",
+            lambda route: route.fulfill(status=204, body=""),
+        )
         page.goto(BASE)
         created = page.evaluate(
             """async title => {
@@ -76,6 +81,7 @@ def main() -> None:
         shared = {
             "owner": "owner@example.org",
             "collaborators": ["alice@example.net"],
+            "removable_collaborators": ["alice@example.net"],
             "revision": 7,
             "model": "gpt-6.1-sol",
             "thinking": "high",
@@ -126,6 +132,7 @@ def main() -> None:
                 return
             shared["revision"] += 1
             shared["collaborators"] = payload["collaborators"]
+            shared["removable_collaborators"] = payload["collaborators"]
             created["body"]["project"].update(
                 {
                     "ai_model": payload["ai_model"],

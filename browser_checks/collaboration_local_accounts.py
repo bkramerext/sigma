@@ -121,10 +121,11 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(owner_dialog.get_by_text(OWNER)).to_be_visible()
         assert owner_dialog.get_by_role("button", name=f"Remove {OWNER}").count() == 0
         owner_dialog.get_by_role("button", name="Add collaborator").click()
-        owner_dialog.get_by_label("New collaborator email").fill(COLLABORATOR)
-        owner_dialog.get_by_role("button", name="Add", exact=True).click()
+        invite_input = owner_dialog.get_by_label("New collaborator email")
+        invite_input.fill(COLLABORATOR)
+        invite_input.press("Tab")
         expect(owner_dialog.get_by_text(COLLABORATOR)).to_be_visible()
-        owner_dialog.get_by_role("button", name="Save", exact=True).click()
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
 
         shared_response = owner_context.request.get(
@@ -147,7 +148,7 @@ def exercise(ui: str, workspaces: Path) -> None:
 
         # N's own Saved tab must show the owner's project and group icon.
         member.goto(ui)
-        member.get_by_role("tab", name="Saved").click()
+        member.get_by_role("tab", name="My Work").click()
         expand_saved_group(member)
         expect(
             member.get_by_role("button", name=f"Manage collaborators for {title}")
@@ -155,7 +156,7 @@ def exercise(ui: str, workspaces: Path) -> None:
 
         # The Users Round shortcut opens the owner's original project in Settings.
         owner.goto(ui)
-        owner.get_by_role("tab", name="Saved").click()
+        owner.get_by_role("tab", name="My Work").click()
         expand_saved_group(owner)
         shortcut = owner.get_by_role("button", name=f"Manage collaborators for {title}")
         expect(shortcut).to_be_visible()
@@ -165,6 +166,54 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
 
+        # An email deep link opens immediately only for the invited account.
+        invitation_url = url + "&invited_email=" + quote(COLLABORATOR, safe="")
+        member.goto(invitation_url)
+        expect(member.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
+        expect(
+            member.get_by_role("dialog", name="You've been invited to collaborate!")
+        ).to_have_count(0)
+
+        # A different signed-in account is guided Home instead of getting
+        # the raw Project unavailable/access-denied error.
+        wrong_account = owner_context.new_page()
+        wrong_account.goto(invitation_url)
+        expect(wrong_account).to_have_url(ui + "/")
+        welcome = wrong_account.get_by_role("dialog", name="You've been invited to collaborate!")
+        expect(welcome).to_be_visible()
+        expect(welcome.get_by_text(COLLABORATOR)).to_be_visible()
+        expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_attribute(
+            "href", "/api/cloud-auth/login"
+        )
+        expect(wrong_account.get_by_text("Project unavailable")).to_have_count(0)
+        welcome.get_by_role("button", name="Explore SIGMA").click()
+        expect(welcome).not_to_be_visible()
+        wrong_account.close()
+
+        # A signed-out visitor should see the same welcome, with an existing
+        # sign-in/invitation route, before any project API request is made.
+        guest_context = browser.new_context(viewport={"width": 1440, "height": 930})
+        guest = guest_context.new_page()
+        guest.goto(invitation_url)
+        expect(guest).to_have_url(ui + "/")
+        guest_welcome = guest.get_by_role("dialog", name="You've been invited to collaborate!")
+        expect(guest_welcome).to_be_visible()
+        expect(guest_welcome.get_by_text(COLLABORATOR)).to_be_visible()
+        expect(guest_welcome.get_by_role("link", name="Request invitation")).to_be_visible()
+
+        # Simulate successful Google sign-in to the invited account without
+        # leaving this browser context: its pending link should reopen itself.
+        selected = guest_context.request.post(
+            ui + "/api/cloud-auth/mock/select?identity=member-b",
+            headers={"Origin": ui},
+        )
+        assert selected.status == 204, selected.text()
+        guest.reload()
+        expect(guest).to_have_url(url)
+        expect(guest.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
+        guest_context.close()
+
+        # Preserve the original owner's staged settings for conflict testing.
         # Concurrent settings: a collaborator can edit the same file, while
         # the owner's stale draft must fail revision CAS, not overwrite it.
         member.goto(url)
@@ -172,7 +221,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         member_dialog = member.get_by_role("dialog", name="Project Settings")
         expect(member_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
         choose_difficulty(member_dialog, "Hard")
-        member_dialog.get_by_role("button", name="Save", exact=True).click()
+        member_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(member_dialog).not_to_be_visible()
         updated = get_json(
             owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
@@ -180,10 +229,11 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert updated["project"]["difficulty"] == "hard", updated
 
         choose_difficulty(owner_dialog, "Easy")
-        owner_dialog.get_by_role("button", name="Save", exact=True).click()
         expect(owner_dialog.locator(".error")).to_contain_text("saved by")
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Easy")
-        owner.keyboard.press("Escape")
+        # A stale draft remains visible for review, but cannot overwrite the
+        # collaborator's newer change. Reopen the original for a clean editor.
+        owner.goto(url)
         expect(owner_dialog).not_to_be_visible()
 
         # The Shared shortcut leaves ?settings=collaborators in the URL.
@@ -194,7 +244,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Hard")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()
-        owner_dialog.get_by_role("button", name="Save", exact=True).click()
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
 
         # Revocation must be enforced by the server, not just by a hidden icon.
@@ -203,7 +253,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         recent = get_json(member_context.request.get(ui + "/api/projects/recent"))
         assert all(row["path"] != path for row in recent["projects"])
         owner.goto(ui)
-        owner.get_by_role("tab", name="Saved").click()
+        owner.get_by_role("tab", name="My Work").click()
         expand_saved_group(owner)
         expect(owner.get_by_role("button", name=f"Manage collaborators for {title}")).to_have_count(
             0

@@ -24,7 +24,7 @@ from html import escape as html_escape
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, TypeVar
-from urllib.parse import quote
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from sigma import cloud_auth, cloud_workspaces
@@ -325,6 +325,14 @@ def _db() -> Iterator[sqlite3.Connection]:
             PRIMARY KEY(path, email),
             FOREIGN KEY(path) REFERENCES shared_projects(path)
         )""")
+        # Historical collaborators predate inviter tracking. Keep their author
+        # unknown rather than assigning a possibly incorrect collaborator.
+        # Such legacy entries remain removable by the owner.
+        member_columns = {
+            column["name"] for column in db.execute("PRAGMA table_info(shared_collaborators)")
+        }
+        if "added_by" not in member_columns:
+            db.execute("ALTER TABLE shared_collaborators ADD COLUMN added_by TEXT")
         db.execute("""CREATE TABLE IF NOT EXISTS shared_leases (
             path TEXT PRIMARY KEY,
             token TEXT NOT NULL,
@@ -502,17 +510,23 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
         if verify_revision:
             _reconcile_project_digest(db, view.path)
             row = _row(db, view.path)
-        members = [
-            record["email"]
-            for record in db.execute(
-                "SELECT email FROM shared_collaborators WHERE path=? ORDER BY email", (view.path,)
+        membership = list(
+            db.execute(
+                "SELECT email,added_by FROM shared_collaborators WHERE path=? ORDER BY email",
+                (view.path,),
             )
+        )
+        members = [record["email"] for record in membership]
+        is_owner = row["owner_hash"] == _identity()[0].subject_hash
+        removable = [
+            record["email"] for record in membership if is_owner or record["added_by"] == email
         ]
         if verify_revision:
             db.commit()
         return {
             "owner": row["owner_email"],
             "collaborators": members,
+            "removable_collaborators": removable,
             "revision": row["revision"],
             "model": row["model"],
             "thinking": row["thinking"],
@@ -657,17 +671,30 @@ def save_settings(
         row, actor = _membership(db, path)
         if row["owner_email"] in emails:
             raise ProjectError("The project owner is already included automatically.")
-        previous = {
-            member["email"]
-            for member in db.execute("SELECT email FROM shared_collaborators WHERE path=?", (path,))
+        membership = {
+            member["email"]: member["added_by"]
+            for member in db.execute(
+                "SELECT email,added_by FROM shared_collaborators WHERE path=?", (path,)
+            )
         }
+        previous = set(membership)
         new_members = set(emails)
+        removed = previous - new_members
+        is_owner = row["owner_hash"] == _identity()[0].subject_hash
+        for member in removed:
+            if not is_owner and membership[member] != actor:
+                raise ProjectError(
+                    "Only the project owner or the collaborator who added this account can remove it."
+                )
         changed = new_members != previous or row["model"] != model or row["thinking"] != thinking
         if changed:
-            db.execute("DELETE FROM shared_collaborators WHERE path=?", (path,))
             db.executemany(
-                "INSERT INTO shared_collaborators (path,email) VALUES (?,?)",
-                [(path, member) for member in sorted(new_members)],
+                "DELETE FROM shared_collaborators WHERE path=? AND email=?",
+                [(path, member) for member in sorted(removed)],
+            )
+            db.executemany(
+                "INSERT INTO shared_collaborators (path,email,added_by) VALUES (?,?,?)",
+                [(path, member, actor) for member in sorted(new_members - previous)],
             )
             db.execute(
                 """UPDATE shared_projects SET model=?,thinking=?,last_writer=? WHERE path=?""",
@@ -994,6 +1021,7 @@ def drain_notifications() -> list[str]:
     if not cloud_workspaces.account_scoping_enabled():
         return []
     from sigma.mail_transport import send_message
+    from sigma.progress_notifications import deep_link
 
     warnings: list[str] = []
     for _ in range(20):
@@ -1029,12 +1057,14 @@ def drain_notifications() -> list[str]:
                 if added
                 else f"SIGMA: Removed from {event['project_title']}"
             )
-            origin = (cloud_auth.config().origin or "").rstrip("/")
-            project_link = (
-                f"{origin}/project?path={quote(event['project_path'], safe='')}"
-                if origin.startswith(("https://", "http://localhost"))
-                else ""
-            )
+            origin = cloud_auth.config().origin
+            try:
+                project_link = deep_link(origin, event["project_path"]) if origin else ""
+                if project_link and added:
+                    project_link += "&" + urlencode({"invited_email": event["recipient"]})
+            except ValueError:
+                # Malformed origins are never embedded as clickable links.
+                project_link = ""
             if added:
                 # The title itself is the link in HTML-capable mail clients.
                 # Keep a usable plain-text alternative for text-only mail.
