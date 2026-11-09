@@ -5,9 +5,9 @@ import hashlib
 import json
 import os
 import sqlite3
-import zlib
 import subprocess
 import sys
+import zlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -164,11 +164,13 @@ def check_one_time_owner_migration(base: Path) -> None:
                     original_record = source_sessions[original.project.id]
                     if original.path.endswith(".json"):
                         raw = read_file(
-                            original.path, f'research-sessions/{original_record["id"]}.json'
+                            original.path, f"research-sessions/{original_record['id']}.json"
                         )
                     else:
                         raw = (
-                            Path(original.path) / "research-sessions" / f'{original_record["id"]}.json'
+                            Path(original.path)
+                            / "research-sessions"
+                            / f"{original_record['id']}.json"
                         ).read_bytes()
                     assert json.loads(raw)["project_path"] == original.path
                 # Second sign-in does not scan or copy the old library.
