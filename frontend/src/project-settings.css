@@ -461,11 +461,12 @@
 ):focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon svg { display: block; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
-/* Explaining is a temporary full-width label that replaces the balloon.
-   It must not inherit the 28px icon-slot width or use absolute positioning. */
+/* The explanation replaces the balloon inside the same action button.
+   Collapse the former 28px balloon slot so the hourglass begins at its
+   position, rather than appearing shifted to the right of an empty icon. */
 .project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-tools button.ai-paper-eli5-balloon.is-explaining:disabled {
   display: inline-flex; flex: 0 0 auto; width: auto; min-width: max-content;
-  height: 28px; padding: 0 4px; opacity: 1;
+  height: 28px; margin-left: -28px; padding: 0 4px; opacity: 1;
   border-color: transparent; background: transparent; box-shadow: none;
   cursor: progress;
 }
@@ -524,6 +525,37 @@
 }
 .project-settings-dialog .project-references-usage .project-reference-adjust-link:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; }
 .project-settings-dialog .project-references-usage .project-reference-adjust-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+
+/* Q/A itself can be resized from its lower-right corner. Keep the header
+   visible and let the content scroll within the chosen dialog dimensions. */
+.project-settings-dialog.ai-paper-dialog.research-qa-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(850px, calc(100vw - 40px));
+  height: min(75dvh, 740px);
+  min-width: min(420px, calc(100vw - 32px));
+  min-height: 280px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+  resize: both;
+}
+.project-settings-dialog.ai-paper-dialog.research-qa-dialog > .settings-body.ai-paper-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Each expanded answer has its own vertical resize handle and independent
+   scrolling. The former 280px maximum prevented the user from enlarging it. */
+.project-settings-dialog.ai-paper-dialog.research-qa-dialog .saved-paper-card .ai-paper-preview {
+  box-sizing: border-box;
+  height: min(30dvh, 280px);
+  min-height: 120px;
+  max-height: none;
+  overflow: auto;
+  resize: vertical;
+}
 
 /* Q/A has two independent scrollports: the dialog and each expanded answer.
    Keep 40px of real blank space at the bottom of both so the last line is readable. */
