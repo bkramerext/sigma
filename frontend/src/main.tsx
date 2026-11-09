@@ -5330,9 +5330,23 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pending = useRef(false);
   const load = useCallback(async (signal?: AbortSignal, lightweight = false) => {
-    const response = await fetch(lightweight ? '/api/projects/recent?lightweight=true' : '/api/projects/recent', { signal });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
-    setProjects(data.projects); setError(''); setLoading(false);
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    const timeout = window.setTimeout(abort, 15000);
+    try {
+      const response = await fetch(lightweight ? '/api/projects/recent?lightweight=true' : '/api/projects/recent', { signal: controller.signal });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
+      setProjects(data.projects); setError(''); setLoading(false);
+    } catch (cause) {
+      if (controller.signal.aborted && !signal?.aborted) {
+        throw new Error('Saved Projects request timed out. Check the backend project-listing logs.');
+      }
+      throw cause;
+    } finally {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener('abort', abort);
+    }
   }, []);
   useEffect(() => {
     if (!active) return;
