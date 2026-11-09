@@ -26,7 +26,6 @@ from sigma.projects import (
     open_project,
 )
 from sigma.recents import (
-    forget_recent,
     home_projects,
     pinned_projects,
     project_family,
