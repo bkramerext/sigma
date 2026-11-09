@@ -217,7 +217,9 @@ def _source_rank(path: Path, title: str) -> tuple[tuple[int, ...], int, str]:
     """Prefer the highest explicit vN; otherwise the newest project document."""
     version = None
     for label in (path.stem, title):
-        match = re.search(r"(?:^|[\\s._-])v(?:ersion)?[\\s._-]*(\\d+(?:\\.\\d+)*)$", label, re.I)
+        match = re.search(
+            r"(?:^|[\s._-])v(?:ersion)?[\s._-]*(\d+(?:\.\d+)*)$", label, re.I
+        )
         if match is not None:
             version = tuple(int(part) for part in match.group(1).split("."))
             break

@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -144,8 +145,6 @@ def check_one_time_owner_migration(base: Path) -> None:
         # A newer-version directory copy wins, even when its project.json
         # timestamp is older than the original. For unversioned copies, use
         # the most recently modified project document.
-        import shutil
-
         versioned = root / "previous-v2.sigma"
         shutil.copytree(saved.path, versioned)
         os.utime(versioned / "project.json", ns=(1_000_000_000, 1_000_000_000))
@@ -213,7 +212,9 @@ def check_one_time_owner_migration(base: Path) -> None:
                     row = imported[original.project.id]
                     assert Path(row["path"]).is_relative_to(workspace_path)
                     assert Path(row["path"]).name == (
-                        "previous-v2.sigma" if original.project.id == saved.project.id else "other-copy.json"
+                        "previous-v2.sigma"
+                        if original.project.id == saved.project.id
+                        else "other-copy.json"
                     )
                     assert inspect_project(row["path"]).project.id == original.project.id
                     records, unavailable = read_session_snapshot(row["path"])
