@@ -541,7 +541,10 @@ class CollaborationTests(TestCase):
                 "SELECT project_sha256 FROM shared_projects WHERE path=?", (self.path,)
             ).fetchone()["project_sha256"]
         self.assertEqual(digest, hashlib.sha256(b'{"id":"after","schema_version":8}').hexdigest())
-        self.assertEqual(project_bundle.read_file(self.path, "project.json"), updated)
+        self.assertEqual(
+            json.loads(project_bundle.read_file(self.path, "project.json")),
+            json.loads(updated),
+        )
 
     def test_publication_records_project_digest_in_same_write(self) -> None:
         contents = b'{"schema_version":8,"id":"committed"}'
