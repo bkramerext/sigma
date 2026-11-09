@@ -112,15 +112,64 @@ class CloudAuthTests(CloudAuthFixture):
             self.assertEqual(result.status_code, 200)
             self.assertEqual(result.json()["user"]["email"], email)
 
+        # The most recently completed Google sign-in becomes the default for
+        # newly opened windows, without changing either already-scoped window.
+        latest = self.client.get("/api/cloud-auth/status")
+        self.assertEqual(latest.json()["user"]["email"], "nontrivialzeeros@gmail.com")
+        third = "c" * 32
+        adopted = self.client.post(
+            "/api/cloud-auth/window/adopt",
+            headers={"X-Sigma-Window": third, "Origin": ORIGIN},
+        )
+        self.assertEqual(adopted.status_code, 200, adopted.text)
+        self.assertEqual(adopted.json(), {"scoped": True, "adopted": True})
+        pinned = self.client.get("/api/cloud-auth/status", headers={"X-Sigma-Window": third})
+        self.assertEqual(pinned.json()["user"]["email"], "nontrivialzeeros@gmail.com")
+
+        # A newer Google login changes the default, not an existing window.
+        sign_in(first, "admin@example.org", "google-owner")
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/status").json()["user"]["email"],
+            "admin@example.org",
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/cloud-auth/status", headers={"X-Sigma-Window": third}
+            ).json()["user"]["email"],
+            "nontrivialzeeros@gmail.com",
+        )
+
+        # Signing out the newest window clears only its default; a previously
+        # adopted session and a different signed-in window remain usable.
         signed_out = self.client.post(
             "/api/cloud-auth/logout",
-            headers={"X-Sigma-Window": second, "Origin": ORIGIN},
+            headers={"X-Sigma-Window": first, "Origin": ORIGIN},
         )
         self.assertEqual(signed_out.status_code, 204)
         owner = self.client.get("/api/cloud-auth/status", headers={"X-Sigma-Window": first})
         colleague = self.client.get("/api/cloud-auth/status", headers={"X-Sigma-Window": second})
-        self.assertEqual(owner.json()["user"]["email"], "admin@example.org")
-        self.assertFalse(colleague.json()["authenticated"])
+        still_pinned = self.client.get(
+            "/api/cloud-auth/status", headers={"X-Sigma-Window": third}
+        )
+        self.assertFalse(owner.json()["authenticated"])
+        self.assertFalse(self.client.get("/api/cloud-auth/status").json()["authenticated"])
+        self.assertEqual(colleague.json()["user"]["email"], "nontrivialzeeros@gmail.com")
+        self.assertEqual(still_pinned.json()["user"]["email"], "nontrivialzeeros@gmail.com")
+
+        # A brand-new guest window is scoped even without an existing default;
+        # another window's future sign-in must not silently sign it in.
+        guest_window = "d" * 32
+        guest_claim = self.client.post(
+            "/api/cloud-auth/window/adopt",
+            headers={"X-Sigma-Window": guest_window, "Origin": ORIGIN},
+        )
+        self.assertEqual(guest_claim.json(), {"scoped": True, "adopted": False})
+        sign_in(second, "nontrivialzeeros@gmail.com", "google-colleague")
+        self.assertFalse(
+            self.client.get(
+                "/api/cloud-auth/status", headers={"X-Sigma-Window": guest_window}
+            ).json()["authenticated"]
+        )
 
     def test_e003_local_readonly_build_preflight_without_workspace(self):
         """Local operator can check a stale process without granting workspace access."""

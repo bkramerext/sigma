@@ -1,7 +1,7 @@
 import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
-import { windowAuthUrl } from './window-auth';
+import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
 import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
@@ -7849,6 +7849,7 @@ function CloudAuthGate() {
   const sponsoredMockSelected = useRef(false);
   const refresh = useCallback(async () => {
     try {
+      await adoptLatestWindowSignIn();
       const response = await fetch('/api/cloud-auth/status', { credentials: 'same-origin', cache: 'no-store' });
       if (!response.ok) throw new Error('Google sign-in could not be checked.');
       let current = await response.json() as CloudStatus;

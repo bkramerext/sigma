@@ -1051,6 +1051,9 @@ async def middleware(request: Request, call_next):
     )
     public = public or (request.method == "GET" and path.startswith("/api/ai/auth/callback/"))
     public = public or (path == "/api/cloud-auth/mock/select" and _mock_enabled(cfg))
+    public = public or (
+        path == "/api/cloud-auth/window/adopt" and request.method == "POST"
+    )
     public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
     public = public or (path == "/api/cloud-auth/feedback" and request.method == "POST")
     demo_public = path in {"/api/cloud-demo/", "/api/cloud-demo/report"} and request.method in {
@@ -1446,6 +1449,8 @@ def mock_select(request: Request, identity: str):
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(previous_denied),))
         response = Response(status_code=204)
         _clear_window_session(response, cfg, window_id)
+        if window_id and old and request.cookies.get(_session_cookie_name(cfg, None)) == old:
+            _clear_window_session(response, cfg, None)
         _clear_cookie(response, cfg, DENIED_COOKIE)
         if identity != "guest":
             email, role = _MOCK_IDENTITIES[identity]
@@ -1502,7 +1507,60 @@ def mock_select(request: Request, identity: str):
                     raw,
                     **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
                 )
+                if window_id:
+                    # A fresh browser window starts from the last successful
+                    # sign-in, not from an arbitrary account's scoped cookie.
+                    response.set_cookie(
+                        _session_cookie_name(cfg, None),
+                        raw,
+                        **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+                    )
     return response
+
+
+@router.post("/window/adopt")
+def adopt_window_session(request: Request):
+    """Pin a new browser window to the latest login without sharing later switches.
+
+    The same-origin POST consumes only HttpOnly cookies. It never accepts an
+    identity, subject, token, or email from frontend JavaScript.
+    """
+    cfg = config()
+    if not cfg.enabled or cfg.error:
+        return JSONResponse({"scoped": False, "adopted": False})
+    window_id = request.headers.get("x-sigma-window", "")
+    if not _WINDOW_ID.fullmatch(window_id):
+        raise HTTPException(400, "Invalid window identity.")
+    response = JSONResponse({"scoped": True, "adopted": False})
+    response.headers["Cache-Control"] = "no-store"
+    scoped = request.cookies.get(_session_cookie_name(cfg, window_id))
+    if scoped and resolve_session(scoped) is not None:
+        return response
+    latest = request.cookies.get(_session_cookie_name(cfg, None))
+    if not latest or resolve_session(latest) is None:
+        return response
+    now = _now()
+    with _db(cfg) as db:
+        source = db.execute(
+            "SELECT subject,email,expires_at FROM sessions WHERE token_hash=?",
+            (_hash(latest),),
+        ).fetchone()
+        if source is None or source["expires_at"] <= now:
+            return response
+        raw = secrets.token_urlsafe(32)
+        db.execute(
+            "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+            (_hash(raw), source["subject"], source["email"], source["expires_at"]),
+        )
+    ttl = max(1, source["expires_at"] - now)
+    adopted = JSONResponse({"scoped": True, "adopted": True})
+    adopted.headers["Cache-Control"] = "no-store"
+    adopted.set_cookie(
+        _session_cookie_name(cfg, window_id),
+        raw,
+        **_cookie_options(cfg, SESSION_COOKIE, max_age=ttl),
+    )
+    return adopted
 
 
 @router.get("/status")
@@ -1895,10 +1953,16 @@ async def callback(
                 )
             response = RedirectResponse("/", status_code=303)
             response.set_cookie(
-                _cookie_name(SESSION_COOKIE, cfg),
+                _session_cookie_name(cfg, flow["window_id"]),
                 raw,
                 **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
             )
+            if flow["window_id"]:
+                response.set_cookie(
+                    _session_cookie_name(cfg, None),
+                    raw,
+                    **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+                )
             _clear_cookie(response, cfg, FLOW_COOKIE)
             _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
             _clear_cookie(response, cfg, DENIED_COOKIE)
@@ -2049,6 +2113,14 @@ async def callback(
         raw,
         **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
     )
+    if flow["window_id"]:
+        # This is the last completed Google sign-in for this browser profile.
+        # Existing windows continue using their independent scoped cookies.
+        response.set_cookie(
+            _session_cookie_name(cfg, None),
+            raw,
+            **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+        )
     _clear_cookie(response, cfg, FLOW_COOKIE)
     _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
@@ -2758,6 +2830,10 @@ def logout(request: Request):
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
     response = Response(status_code=204)
     _clear_window_session(response, cfg, window_id)
+    if window_id and raw and request.cookies.get(_session_cookie_name(cfg, None)) == raw:
+        # Do not leave a signed-out account available to newly opened windows.
+        # Another window's newer sign-in remains untouched.
+        _clear_window_session(response, cfg, None)
     return response
 
 
