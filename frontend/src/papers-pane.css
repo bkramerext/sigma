@@ -44,7 +44,7 @@
 .workspace-page .papers-pane .paper-stage-list li span { color: #d4e0eb; }
 .workspace-page .papers-pane .paper-progress-error { color: #efa89a; }
 .workspace-page .papers-pane .paper-progress-substep { display: block; color: #c5d3df; font-size: 12px; line-height: 1.45; }
-.workspace-page .papers-pane .paper-title-activity { margin: 0 0 0 10px; vertical-align: middle; }
+.workspace-page .papers-pane .paper-title-activity { margin: 0; vertical-align: middle; }
 .workspace-page .papers-pane .paper-title-activity.paper-queued-indicator {
   border-color: #eac16a; background: #e3b74d;
   --pulse-shadow-rest: #e3b74d40; --pulse-shadow-peak: #e3b74d80;
@@ -436,4 +436,12 @@
 .workspace-page .papers-pane .paper-stage-list li[data-paper-step='Planning'] > .paper-activity-line {
   position: absolute; top: calc(100% + 3px); left: 15px; display: block; white-space: nowrap;
   max-width: none; overflow: visible; text-overflow: clip; pointer-events: none; z-index: 1;
+}
+
+/* Keep the activity substep at the exact left edge of its stage name. */
+.workspace-page .papers-pane .paper-stage-list li.is-active:has(> .paper-activity-line) > :is(strong, .paper-activity-line) {
+  justify-self: start;
+  text-align: left;
+  margin-left: 0;
+  padding-left: 0;
 }
