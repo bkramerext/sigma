@@ -666,6 +666,37 @@ def _discard_partial_copy(destination: Path) -> None:
         pass
 
 
+def _sample_index_metadata(name: str, path: Path) -> tuple[str, str]:
+    """Read only the ID/title used by Saved lists and name collision checks.
+
+    Sample opening still uses _load and the full project decoder. Checking a
+    sample's ID for every Saved poll must not load type catalogs or full event
+    histories.
+    """
+    try:
+        if path.is_symlink():
+            raise ValueError("Symbolic-link sample")
+        raw = json.loads(path.read_bytes())
+        if not isinstance(raw, dict):
+            raise TypeError("Invalid sample document")
+        project_id, title = raw["id"], raw["title"]
+        if (
+            not isinstance(project_id, str)
+            or str(UUID(project_id)) != project_id
+            or not isinstance(title, str)
+            or not title.strip()
+        ):
+            raise ValueError("Invalid sample identity")
+        return project_id, title
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise ProjectError(f"Sample project {name} is unavailable: {exc}") from exc
+
+
+def sample_project_titles() -> set[str]:
+    """Only the template titles needed for name uniqueness; no paper reads."""
+    return {_sample_index_metadata(name, path)[1] for name, path in _projects()}
+
+
 def sample_projects() -> dict[str, list[dict[str, Any]]]:
     """The Sample list always describes the untouched templates, not working projects."""
     return {"projects": [asdict(_load(name)[1]) for name, _ in _projects()]}
@@ -678,16 +709,7 @@ def sample_project_ids() -> set[str]:
     examples. The full Samples catalog and sample-opening paths still verify
     sample papers and their checksums as before.
     """
-    identifiers: set[str] = set()
-    for name, path in _projects():
-        if path.is_symlink():
-            raise ProjectError(f"Sample project {name} is unavailable.")
-        try:
-            project = _decode(json.loads(path.read_bytes()))
-        except (OSError, ValueError, TypeError, KeyError) as exc:
-            raise ProjectError(f"Sample project {name} is unavailable: {exc}") from exc
-        identifiers.add(project.id)
-    return identifiers
+    return {_sample_index_metadata(name, path)[0] for name, path in _projects()}
 
 
 def open_sample_project(identifier: str) -> ProjectView:

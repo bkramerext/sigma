@@ -2780,7 +2780,11 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         );
         }
       }
-      const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
+      // The cards render from summaries. Only fetch the full paper text when
+      // its card is expanded, a deep link opens it, or an explicit operation
+      // requests a particular saved paper. This avoids large paper payloads
+      // during ordinary project navigation.
+      const nextId = keepId ?? (expandedPaperId || undefined);
       if (nextId) {
         const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
@@ -3662,6 +3666,31 @@ function UploadProjectIcon() {
   return <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V3m-4.5 4.5L12 3l4.5 4.5M3 16v4.5h18V16"/></svg>;
 }
 
+function LazyViewport({ children, fallback, force = false }: {
+  children: ReactNode; fallback: ReactNode; force?: boolean;
+}) {
+  const target = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(force);
+  useEffect(() => {
+    if (mounted) return;
+    if (force || typeof IntersectionObserver === 'undefined') {
+      setMounted(true);
+      return;
+    }
+    const node = target.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setMounted(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '600px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [mounted, force]);
+  return <div ref={target}>{mounted ? children : fallback}</div>;
+}
+
 function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
   contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
@@ -4536,7 +4565,7 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current) return; submitting.current = true; setBusy(true); setError('');
-    try { onOpen(await post<ProjectView>('open', { path })); }
+    try { onOpen(await post<ProjectView>('open', { path, compact: true })); }
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -5330,9 +5359,23 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pending = useRef(false);
   const load = useCallback(async (signal?: AbortSignal, lightweight = false) => {
-    const response = await fetch(lightweight ? '/api/projects/recent?lightweight=true' : '/api/projects/recent', { signal });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
-    setProjects(data.projects); setError(''); setLoading(false);
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    const timeout = window.setTimeout(abort, 15000);
+    try {
+      const response = await fetch(lightweight ? '/api/projects/recent?lightweight=true' : '/api/projects/recent', { signal: controller.signal });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
+      setProjects(data.projects); setError(''); setLoading(false);
+    } catch (cause) {
+      if (controller.signal.aborted && !signal?.aborted) {
+        throw new Error('Saved Projects request timed out. Check the backend project-listing logs.');
+      }
+      throw cause;
+    } finally {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener('abort', abort);
+    }
   }, []);
   useEffect(() => {
     if (!active) return;
@@ -5377,7 +5420,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   }, [load, active]);
   async function open(entry: RecentProject, openSettings = false) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
-    try { onOpen(await post<ProjectView>('open', { path: entry.path }), openSettings); }
+    try { onOpen(await post<ProjectView>('open', { path: entry.path, compact: true }), openSettings); }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
@@ -6145,18 +6188,32 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
   useEffect(() => {
     if (guest) return;
-    let active = true;
-    const poll = () => {
-      void fetch(`/api/projects/collaboration?${new URLSearchParams({ path })}`, {
-        headers: { 'X-Sigma-Error-Handled': 'true' },
-        cache: 'no-store',
-      }).then(response => response.ok ? response.json() : Promise.reject())
-        .then((value: SharedProjectInfo) => { if (active) setSharedActivity(value); })
-        .catch(() => { if (active) setSharedActivity(null); });
+    const controller = new AbortController();
+    let pending = false;
+    const poll = async () => {
+      if (controller.signal.aborted || pending || document.visibilityState !== 'visible') return;
+      pending = true;
+      try {
+        const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path })}`, {
+          headers: { 'X-Sigma-Error-Handled': 'true' },
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('Collaboration state unavailable');
+        const value = await response.json() as SharedProjectInfo;
+        if (!controller.signal.aborted) setSharedActivity(value);
+      } catch {
+        if (!controller.signal.aborted) setSharedActivity(null);
+      } finally { pending = false; }
     };
-    poll();
-    const interval = window.setInterval(poll, 5000);
-    return () => { active = false; window.clearInterval(interval); };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 5000);
+    document.addEventListener('visibilitychange', poll);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', poll);
+    };
   }, [path, guest]);
   const [initialResearchActivity, setInitialResearchActivity] = useState<'running' | 'queued' | null>();
   const [initialPaperActivity, setInitialPaperActivity] = useState<'active' | 'queued' | null>();
@@ -6317,7 +6374,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   useEffect(() => {
     if (initialView) return;
     const controller = new AbortController();
-    post<ProjectView>('open', { path }, controller.signal).then(setView).catch(error => {
+    post<ProjectView>('open', { path, compact: true }, controller.signal).then(setView).catch(error => {
       if (!controller.signal.aborted) setError(errorMessage(error));
     });
     return () => controller.abort();
@@ -6641,7 +6698,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
                 .catch(cause => { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); })
                 .finally(() => exitMode(owner));
             }}/>} />
-            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
+            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
           </div>
           {strategies.length > 1 && <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
             aria-label={`Reorder ${strategy.title}`} title={`Drag to reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
