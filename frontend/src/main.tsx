@@ -2080,7 +2080,7 @@ async function sha256Text(value: string): Promise<string> {
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 // A recipient hint affects navigation only; it never grants access to projects.
 const SHARED_INVITE_KEY = 'sigma.pendingSharedCollaboratorWelcome';
-type SharedInviteIntent = { path: string; email: string };
+type SharedInviteIntent = { path: string; email: string; title?: string };
 function getPendingSharedInvite(): SharedInviteIntent | null {
   try {
     const raw = window.sessionStorage.getItem(SHARED_INVITE_KEY);
@@ -2091,7 +2091,7 @@ function getPendingSharedInvite(): SharedInviteIntent | null {
       if (typeof value.path === 'string' && value.path.length > 0 && value.path.length <= 2048
         && typeof value.email === 'string' && value.email.length <= 254
         && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email))
-        return { path: value.path, email: value.email.toLowerCase() };
+        return { path: value.path, email: value.email.toLowerCase(), title: typeof value.title === 'string' ? value.title.slice(0, 200) : undefined };
     }
     window.sessionStorage.removeItem(SHARED_INVITE_KEY);
   } catch { /* Storage may be unavailable in private browsing. */ }
@@ -4946,6 +4946,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
 }) {
   useDocumentScrollLock();
   const dialog = useRef<HTMLDialogElement>(null);
+  const cloudIdentity = useCloudIdentity();
   const [baseline, setBaseline] = useState(initial);
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
@@ -5032,6 +5033,12 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
         expected: previous,
         ...(shared.owner ? { expected_revision: shared.revision, collaborators } : {}),
       });
+      const selfEmail = cloudIdentity?.user?.email?.toLowerCase();
+      if (selfEmail && shared.collaborators.includes(selfEmail) && !collaborators.includes(selfEmail)) {
+        // The saved change revoked our own membership; do not request inaccessible project state.
+        window.location.assign('/');
+        return true;
+      }
       if (shared.owner) {
         const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`, {
           headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
@@ -5852,6 +5859,7 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
     onCancel={event => { event.preventDefault(); onDismiss(); }}
     onClick={event => { if (event.target === event.currentTarget) onDismiss(); }}>
     <h2 id="shared-project-invitation-heading">Open shared project</h2>
+    {invite.title && <p className="invitation-welcome-intro"><strong>{invite.title}</strong></p>}
     <p className="invitation-welcome-intro">Sign in with Google as <strong>{invite.email}</strong> to open the project.</p>
     {currentEmail && currentEmail.toLowerCase() !== invite.email &&
       <p className="invitation-welcome-current-account">Currently signed in as {currentEmail}.</p>}
@@ -8057,6 +8065,7 @@ function CloudAuthGate() {
   const inviteeEmail = window.location.pathname === '/project'
     ? (sharedInviteParams.get('invited_email') ?? '').trim().toLowerCase() : '';
   const inviteePath = sharedInviteParams.get('path') ?? '';
+  const inviteeTitle = (sharedInviteParams.get('project_title') ?? '').slice(0, 200);
   const redirectSharedInvite = !!status?.enabled && !!inviteePath && inviteePath.length <= 2048
     && inviteeEmail.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteeEmail)
     && (!status.authenticated || status.user?.role === 'guest'
@@ -8064,11 +8073,11 @@ function CloudAuthGate() {
   useEffect(() => {
     if (!redirectSharedInvite) return;
     try {
-      window.sessionStorage.setItem(SHARED_INVITE_KEY, JSON.stringify({ path: inviteePath, email: inviteeEmail }));
+      window.sessionStorage.setItem(SHARED_INVITE_KEY, JSON.stringify({ path: inviteePath, email: inviteeEmail, title: inviteeTitle }));
     } catch { /* Continue to Home even when storage is restricted. */ }
     // Never mount the inaccessible project screen for the wrong Google account.
     window.location.replace('/');
-  }, [redirectSharedInvite, inviteePath, inviteeEmail]);
+  }, [redirectSharedInvite, inviteePath, inviteeEmail, inviteeTitle]);
   const pendingSharedInvite = redirectSharedInvite || !!getPendingSharedInvite();
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = !!status?.account?.invitation_welcome_pending
