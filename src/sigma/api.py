@@ -2003,7 +2003,9 @@ class CreateStrategyRequest(StrategyRequest):
 def create_strategy_view(body: CreateStrategyRequest):
     provenance = accepted_provenance(body.receipt, body.path) if body.receipt else None
     view = create_strategy(body.path, body.title, body.approach, body.summary, provenance)
-    project_collaboration.note_artifact_author(body.path, "strategy", view.project.strategies[-1].id)
+    project_collaboration.note_artifact_author(
+        body.path, "strategy", view.project.strategies[-1].id
+    )
     return asdict(view)
 
 
