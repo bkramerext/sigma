@@ -145,6 +145,12 @@ def exercise(ui: str, workspaces: Path) -> None:
         member_root = workspaces / status["account"]["workspace"]["id"]
         assert not (member_root / Path(path).name).exists(), "No collaborator project copy"
 
+        # N's own Saved tab must show the owner's project and group icon.
+        member.goto(ui)
+        member.get_by_role("tab", name="Saved").click()
+        expand_saved_group(member)
+        expect(member.get_by_role("button", name=f"Manage collaborators for {title}")).to_be_visible()
+
         # The Users Round shortcut opens the owner's original project in Settings.
         owner.goto(ui)
         owner.get_by_role("tab", name="Saved").click()
