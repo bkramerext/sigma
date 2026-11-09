@@ -2411,6 +2411,7 @@ async def _delete_project_unleased(body: DeleteProjectRequest):
     """Stop project executions before removing the saved project data."""
     import shutil
 
+    from sigma import project_collaboration
     from sigma.projects import project_path, projects_root
 
     authorized = project_path(body.path)
@@ -2444,12 +2445,15 @@ async def _delete_project_unleased(body: DeleteProjectRequest):
                 await asyncio.to_thread(
                     session_log.delete_project, body.expected_project_id, authorized
                 )
-                if authorized.suffix == ".json":
-                    authorized.unlink()
-                elif authorized.suffix == ".sigma" and authorized.is_dir():
-                    shutil.rmtree(authorized)
-                else:
-                    raise ProjectError("Unsupported project storage format")
+                with project_collaboration.finalize_deletion(
+                    str(authorized), view.project.title
+                ):
+                    if authorized.suffix == ".json":
+                        authorized.unlink()
+                    elif authorized.suffix == ".sigma" and authorized.is_dir():
+                        shutil.rmtree(authorized)
+                    else:
+                        raise ProjectError("Unsupported project storage format")
         from sigma.recents import forget_recent
 
         forget_recent(body.expected_project_id, str(authorized))
@@ -2472,16 +2476,15 @@ async def delete_project_view(body: DeleteProjectRequest):
     root = projects_root().resolve(strict=True)
     if authorized == root or not authorized.is_relative_to(root):
         raise ProjectError("Project is outside the permitted projects directory")
-    view = inspect_project(str(authorized))
     lease = project_collaboration.acquire_lease(str(authorized), "Project deletion")
     try:
-        with project_collaboration.bind_lease(str(authorized), lease):
-            result = await _delete_project_unleased(body)
-            project_collaboration.forget_project(str(authorized), view.project.title)
+        with (
+            project_collaboration.bind_lease(str(authorized), lease),
+            project_collaboration.keep_lease(str(authorized), lease),
+        ):
+            return await _delete_project_unleased(body)
     finally:
         project_collaboration.release_lease(str(authorized), lease)
-    project_collaboration.drain_notifications()
-    return result
 
 
 @app.post("/api/projects/update")
@@ -2512,10 +2515,8 @@ def update_project_view(body: UpdateProjectRequest):
         expected_revision=body.expected_revision,
         collaborators=body.collaborators,
     )
-    if body.collaborators is not None:
-        # Durable outbox delivery is best effort; a mail outage cannot roll
-        # back a successful project save or its optimistic revision.
-        project_collaboration.drain_notifications()
+    # Collaboration notices were committed to the durable outbox by Save.
+    # The mail worker sends them without blocking or invalidating this response.
     return asdict(view)
 
 

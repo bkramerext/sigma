@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from email.message import EmailMessage
 from functools import wraps
+from threading import Event, Thread
 from pathlib import Path
 from typing import Any, TypeVar
 from urllib.parse import quote
@@ -27,6 +28,7 @@ from sigma import cloud_auth, cloud_workspaces
 from sigma.model_catalog import validate_pair
 
 LEASE_SECONDS = 120
+MAX_NOTIFICATION_ATTEMPTS = 3
 EMAIL = re.compile(r"^[a-z0-9][a-z0-9._+%-]{0,63}@[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$")
 LOGGER = logging.getLogger("sigma.collaboration")
 _LEASE_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
@@ -98,13 +100,20 @@ def write_guard(
         yield db
         return
     workspace = cloud_workspaces.current()
+    binding = _LEASE_CONTEXT.get()
+    bound_worker = binding is not None and binding[0] == path
     if workspace is None or workspace.guest:
+        if bound_worker:
+            raise ProjectError("Project execution context was lost; checkpoint refused.")
         yield None
         return
     with _db() as db:
         if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
-            # Registration happens on open/create and at execution admission.
-            # Unregistered, private or newly initialized projects are unchanged.
+            # Unregistered projects may still be new private projects. A worker
+            # carrying an old lease, however, must never fall through this
+            # path after project deletion or ACL cleanup.
+            if bound_worker:
+                raise ProjectError("Project was deleted or its execution lease was lost.")
             yield None
             return
         db.execute("BEGIN IMMEDIATE")
@@ -256,8 +265,21 @@ def _db() -> Iterator[sqlite3.Connection]:
             project_title TEXT NOT NULL,
             event TEXT NOT NULL,
             created_at REAL NOT NULL,
-            sent_at REAL
+            sent_at REAL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            retry_after REAL NOT NULL DEFAULT 0,
+            failed_at REAL
         )""")
+        # Existing hosted databases have the earlier outbox schema.
+        fields = {row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")}
+        if "attempts" not in fields:
+            db.execute("ALTER TABLE shared_email_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+        if "retry_after" not in fields:
+            db.execute(
+                "ALTER TABLE shared_email_outbox ADD COLUMN retry_after REAL NOT NULL DEFAULT 0"
+            )
+        if "failed_at" not in fields:
+            db.execute("ALTER TABLE shared_email_outbox ADD COLUMN failed_at REAL")
         yield db
     finally:
         db.close()
@@ -558,7 +580,11 @@ def acquire_lease(path: str, activity: str) -> str | None:
         if registered is None:
             db.commit()
             return None
-        _row, actor = _membership(db, path)
+        row, actor = _membership(db, path)
+        if activity == "Project deletion":
+            workspace, _ = _identity()
+            if row["owner_hash"] != workspace.subject_hash:
+                raise ProjectError("Only the project owner may delete a shared project.")
         shared = db.execute(
             "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
         ).fetchone()
@@ -611,6 +637,36 @@ def release_lease(path: str, token: str | None) -> None:
         db.commit()
 
 
+@contextmanager
+def keep_lease(path: str, token: str | None) -> Iterator[None]:
+    """Renew a long-running deletion lease even when the event loop is blocked.
+
+    The final deletion transaction independently verifies the token before
+    publishing removal; a failed heartbeat cannot authorize a stale delete.
+    """
+    if token is None:
+        yield
+        return
+    stopped = Event()
+
+    def heartbeat() -> None:
+        while not stopped.wait(LEASE_SECONDS / 3):
+            try:
+                if not renew_lease(path, token):
+                    return
+            except (OSError, RuntimeError, sqlite3.Error) as exc:
+                LOGGER.warning("Project deletion lease renewal failed: %s", type(exc).__name__)
+                return
+
+    worker = Thread(target=heartbeat, name="sigma-deletion-lease", daemon=True)
+    worker.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        worker.join(timeout=1)
+
+
 def require_not_leased(path: str) -> None:
     if cloud_workspaces.current() is None:
         return
@@ -626,8 +682,32 @@ def require_not_leased(path: str) -> None:
             )
 
 
+def _forget_project_locked(
+    db: sqlite3.Connection, path: str, row: sqlite3.Row, title: str | None
+) -> None:
+    members = [
+        item["email"]
+        for item in db.execute("SELECT email FROM shared_collaborators WHERE path=?", (path,))
+    ]
+    # A successful deletion supersedes queued additions and unsent updates.
+    db.execute("DELETE FROM shared_email_outbox WHERE project_path=?", (path,))
+    db.execute("DELETE FROM shared_leases WHERE path=?", (path,))
+    db.execute("DELETE FROM shared_collaborators WHERE path=?", (path,))
+    db.execute("DELETE FROM shared_projects WHERE path=?", (path,))
+    now = time.time()
+    db.executemany(
+        """INSERT INTO shared_email_outbox
+           (id,recipient,project_path,project_title,event,created_at)
+           VALUES (?,?,?,?,?,?)""",
+        [
+            (uuid4().hex, member, path, title or row["project_id"], "removed", now)
+            for member in members
+        ],
+    )
+
+
 def forget_project(path: str, title: str | None = None) -> None:
-    """Revoke a deleted project's ACL and notify its former collaborators."""
+    """Revoke the owner's deleted project and queue removal notices."""
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return
     from sigma.projects import ProjectError
@@ -638,34 +718,43 @@ def forget_project(path: str, title: str | None = None) -> None:
         workspace, _ = _identity()
         if row["owner_hash"] != workspace.subject_hash:
             raise ProjectError("Only the project owner may delete a shared project.")
-        members = [
-            record["email"]
-            for record in db.execute("SELECT email FROM shared_collaborators WHERE path=?", (path,))
-        ]
-        # Once the project is gone, queued additions must not invite access.
-        db.execute("DELETE FROM shared_email_outbox WHERE project_path=?", (path,))
-        db.execute("DELETE FROM shared_leases WHERE path=?", (path,))
-        db.execute("DELETE FROM shared_collaborators WHERE path=?", (path,))
-        db.execute("DELETE FROM shared_projects WHERE path=?", (path,))
-        now = time.time()
-        db.executemany(
-            """INSERT INTO shared_email_outbox
-               (id,recipient,project_path,project_title,event,created_at)
-               VALUES (?,?,?,?,?,?)""",
-            [
-                (uuid4().hex, member, path, title or row["project_id"], "removed", now)
-                for member in members
-            ],
-        )
+        _forget_project_locked(db, path, row, title)
         db.commit()
 
 
-def drain_notifications() -> list[str]:
-    """Deliver collaborator notices using the standard transport and a durable claim.
+@contextmanager
+def finalize_deletion(path: str, title: str) -> Iterator[None]:
+    """Fence the physical deletion and ACL cleanup in the same write admission.
 
-    Only one process owns a pending row at a time. A crashed claim may be
-    reclaimed after ten minutes; rare duplicates after ambiguous delivery are
-    preferable to silently dropping an invitation.
+    Session shutdown happens before entry. Nobody can acquire a new lease
+    between the final token check, filesystem removal, and ACL revocation.
+    """
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        yield
+        return
+    from sigma.projects import ProjectError
+
+    with _db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            row, actor = _membership(db, path)
+            workspace, _ = _identity()
+            if row["owner_hash"] != workspace.subject_hash:
+                raise ProjectError("Only the project owner may delete a shared project.")
+            _verify_fence(db, path, actor)
+            yield
+            _forget_project_locked(db, path, row, title)
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+
+
+def drain_notifications() -> list[str]:
+    """Send pending notices with bounded retries, backoff and crash-safe claims.
+
+    Claims are serialized in SQLite. A stale claim can be replayed after
+    a crash, so delivery is at least once in ambiguous transport failures.
     """
     if not cloud_workspaces.enabled():
         return []
@@ -676,20 +765,23 @@ def drain_notifications() -> list[str]:
         with _db() as db:
             db.execute("BEGIN IMMEDIATE")
             now = time.time()
-            # Negative sent_at values are in-flight claims. A reclaimed claim
-            # is intentionally at-least-once following a worker crash.
             event = db.execute(
                 """SELECT * FROM shared_email_outbox
-                   WHERE sent_at IS NULL OR (sent_at < 0 AND sent_at >= ?)
+                   WHERE failed_at IS NULL AND attempts < ?
+                   AND (
+                       (sent_at IS NULL AND retry_after <= ?)
+                       OR (sent_at < 0 AND sent_at >= ?)
+                   )
                    ORDER BY created_at, id LIMIT 1""",
-                (-(now - 600),),
+                (MAX_NOTIFICATION_ATTEMPTS, now, -(now - 600)),
             ).fetchone()
             if event is None:
                 db.commit()
                 return warnings
             claim = -now
             db.execute(
-                "UPDATE shared_email_outbox SET sent_at=? WHERE id=?",
+                """UPDATE shared_email_outbox
+                   SET sent_at=?,attempts=attempts+1 WHERE id=?""",
                 (claim, event["id"]),
             )
             db.commit()
@@ -701,36 +793,50 @@ def drain_notifications() -> list[str]:
             if added
             else f"SIGMA: Removed from {event['project_title']}"
         )
-        origin = (cloud_auth.config().origin or "").rstrip("/")
-        project_link = (
-            f"{origin}/project?path={quote(event['project_path'], safe='')}"
-            if origin.startswith(("https://", "http://localhost"))
-            else ""
-        )
-        body = (
-            f"You have been added as a collaborator on SIGMA project "
-            f"“{event['project_title']}”.\n\n"
-            + (
-                f"Open project: {project_link}\n\n"
-                if project_link
-                else "Sign in to SIGMA with this Google account to find the shared project.\n\n"
-            )
-            if added
-            else f"You have been removed as a collaborator on SIGMA project "
-            f"“{event['project_title']}”.\n"
-        )
-        message.set_content(body)
         try:
+            origin = (cloud_auth.config().origin or "").rstrip("/")
+            project_link = (
+                f"{origin}/project?path={quote(event['project_path'], safe='')}"
+                if origin.startswith(("https://", "http://localhost"))
+                else ""
+            )
+            body = (
+                f"You have been added as a collaborator on SIGMA project "
+                f"“{event['project_title']}”.\n\n"
+                + (
+                    f"Open project: {project_link}\n\n"
+                    if project_link
+                    else "Sign in to SIGMA with this Google account to find the shared project.\n\n"
+                )
+                if added
+                else f"You have been removed as a collaborator on SIGMA project "
+                f"“{event['project_title']}”.\n"
+            )
+            message.set_content(body)
             send_message(message, recipients=[event["recipient"]])
         except (cloud_auth.SMTPDeliveryError, RuntimeError, OSError, ValueError) as exc:
-            LOGGER.warning("Collaboration notification queued: %s", type(exc).__name__)
+            attempts = int(event["attempts"]) + 1
+            exhausted = attempts >= MAX_NOTIFICATION_ATTEMPTS
+            LOGGER.warning(
+                "Collaboration notice failed: %s attempt=%s exhausted=%s",
+                type(exc).__name__,
+                attempts,
+                exhausted,
+            )
             with _db() as db:
                 db.execute(
-                    "UPDATE shared_email_outbox SET sent_at=NULL WHERE id=? AND sent_at=?",
-                    (event["id"], claim),
+                    """UPDATE shared_email_outbox
+                       SET sent_at=NULL,failed_at=?,retry_after=?
+                       WHERE id=? AND sent_at=?""",
+                    (
+                        time.time() if exhausted else None,
+                        0 if exhausted else time.time() + min(3600, 60 * 2 ** (attempts - 1)),
+                        event["id"],
+                        claim,
+                    ),
                 )
             warnings.append("Some collaboration notification emails are queued for retry.")
-            break
+            continue
         with _db() as db:
             db.execute(
                 "UPDATE shared_email_outbox SET sent_at=? WHERE id=? AND sent_at=?",
