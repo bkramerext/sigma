@@ -1973,7 +1973,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
         {sessionControls.confirming ? <>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.start}>Start Session {sessionControls.nextSessionNumber}</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
-        </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || sessionControls.playDisabled} aria-label="New session" data-tooltip="New session" onClick={guest ? onGuestPlay : sessionControls.play}><CirclePlusIcon/></button>}
+        </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={guest ? onGuestPlay : sessionControls.play}><CirclePlusIcon/></button>}
       </div>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>

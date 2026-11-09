@@ -2037,20 +2037,20 @@ def create_project_view(body: CreateProjectRequest):
     # Only type and difficulty are project configuration. Legacy model/Outcome
     # columns remain for schema compatibility but are never taken from imports
     # or from the previous project's settings when creating new projects.
-    from sigma import global_research_settings
+    from sigma import global_research_settings, project_collaboration
 
     user = global_research_settings.load_config()
-    return asdict(
-        create_project(
-            body.title,
-            body.problem,
-            body.investigation_type,
-            user["ai_model"],
-            user["reasoning_effort"],
-            body.difficulty,
-            user["show_advanced_outcome_details"],
-        )
+    view = create_project(
+        body.title,
+        body.problem,
+        body.investigation_type,
+        user["ai_model"],
+        user["reasoning_effort"],
+        body.difficulty,
+        user["show_advanced_outcome_details"],
     )
+    project_collaboration.register_owner(view)
+    return asdict(view)
 
 
 class SaveProjectAsRequest(OpenRequest):

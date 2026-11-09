@@ -60,10 +60,14 @@ def enabled() -> bool:
     from sigma.storage import persistent_disk_enabled
 
     enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     }
     local_auth = os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().casefold() in {
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     }
     mock_auth = os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
     mock_local = mock_auth and local_auth and cloud_auth._mock_enabled(cloud_auth.config())
@@ -77,7 +81,9 @@ def account_scoping_enabled() -> bool:
     request-scope dependency; it keeps the legacy single-user filesystem.
     """
     return os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     }
 
 
@@ -112,17 +118,16 @@ def local_legacy_owner_access(path: Path | None = None) -> bool:
     candidate = Path(path)
     try:
         from sigma.projects import local_projects_root
+
         if candidate.is_relative_to(local_projects_root()):
             return True
     except (OSError, ValueError):
         pass
     try:
         from sigma import recents
+
         with without_workspace(), recents._index() as index:
-            return any(
-                entry["path"] == str(candidate)
-                for entry in index["entries"]
-            )
+            return any(entry["path"] == str(candidate) for entry in index["entries"])
     except (OSError, ValueError):
         return False
 

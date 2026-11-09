@@ -222,9 +222,7 @@ def _store_path() -> Path:
     # an upgrade cannot silently reset types, references or research limits.
     # Hosted and loopback mock identities keep workspace-based storage.
     if workspace is not None and (
-        not cloud_auth.config().local
-        or principal is None
-        or principal.subject.startswith("mock:")
+        not cloud_auth.config().local or principal is None or principal.subject.startswith("mock:")
     ):
         return workspace.path / ".sigma-project-types.json"
 

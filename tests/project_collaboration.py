@@ -201,7 +201,7 @@ class CollaborationTests(TestCase):
             messages.append((recipients[0], message.get_content()))
 
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.enabled", return_value=True),
+            patch("sigma.project_collaboration.cloud_workspaces.account_scoping_enabled", return_value=True),
             patch(
                 "sigma.project_collaboration.cloud_auth.config",
                 return_value=SimpleNamespace(origin="https://sigma.example.org"),
@@ -215,7 +215,7 @@ class CollaborationTests(TestCase):
             self.assertEqual(mail.call_count, 2)
         self.clock[0] += 61
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.enabled", return_value=True),
+            patch("sigma.project_collaboration.cloud_workspaces.account_scoping_enabled", return_value=True),
             patch(
                 "sigma.project_collaboration.cloud_auth.config",
                 return_value=SimpleNamespace(origin="https://sigma.example.org"),
@@ -285,7 +285,7 @@ class CollaborationTests(TestCase):
             time.sleep(0.04)
 
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.enabled", return_value=True),
+            patch("sigma.project_collaboration.cloud_workspaces.account_scoping_enabled", return_value=True),
             patch(
                 "sigma.project_collaboration.cloud_auth.config",
                 return_value=SimpleNamespace(origin="https://sigma.example.org"),
@@ -398,7 +398,7 @@ class CollaborationTests(TestCase):
             delivered.append(recipients[0])
 
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.enabled", return_value=True),
+            patch("sigma.project_collaboration.cloud_workspaces.account_scoping_enabled", return_value=True),
             patch(
                 "sigma.project_collaboration.cloud_auth.config",
                 return_value=SimpleNamespace(origin="https://sigma.example.org"),

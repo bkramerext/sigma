@@ -1820,7 +1820,8 @@ class CloudAuthTests(CloudAuthFixture):
             )
             refreshed = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(refreshed["account"]["model_access"]["connection"], "unconfigured")
-            self.assertFalse((self.root / "workspaces" / "workspaces.sqlite3").exists())
+            # Local Google authentication now provisions per-user workspaces.
+            self.assertTrue((self.root / "workspaces" / "workspaces.sqlite3").exists())
             self.assertEqual(self.client.get("/api/projects/recent").status_code, 200)
         with patch.dict(
             os.environ,

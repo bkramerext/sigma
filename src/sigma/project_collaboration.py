@@ -379,7 +379,9 @@ def register_owner(view: Any) -> None:
     ):
         return
     path = Path(view.path)
-    if not path.is_relative_to(workspace.path) and not cloud_workspaces.local_legacy_owner_access(path):
+    if not path.is_relative_to(workspace.path) and not cloud_workspaces.local_legacy_owner_access(
+        path
+    ):
         return
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -515,6 +517,10 @@ def model_settings(path: str) -> dict[str, str] | None:
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return None
     with _db() as db:
+        # Unregistered private projects have no shared model configuration.
+        # Their research must not fail due to missing collaboration metadata.
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
+            return None
         row, _email = _membership(db, path)
         shared = db.execute(
             "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)

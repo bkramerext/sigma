@@ -1836,7 +1836,7 @@ class CloudAuthTests(CloudAuthFixture):
         projects_root = Path(self.temp.name) / "projects"
         workspaces_root = Path(self.temp.name) / "workspaces"
         projects_root.mkdir()
-        workspaces_root.mkdir()
+        workspaces_root.mkdir(mode=0o700)
         with patch.dict(
             os.environ,
             {
