@@ -259,9 +259,91 @@ def exercise(ui: str, workspaces: Path) -> None:
             0
         )
         assert Path(path).is_file(), "Revocation must not move or delete the owner's project"
+        verify_new_windows_inherit_latest_google_account(browser, ui)
         owner_context.close()
         member_context.close()
         browser.close()
+
+
+
+def verify_new_windows_inherit_latest_google_account(browser, ui: str) -> None:
+    """One browser profile: each existing window stays put, a new one gets latest."""
+    context = browser.new_context(viewport={"width": 1440, "height": 930})
+    try:
+        def open_window():
+            page = context.new_page()
+            page.goto(ui)
+            page.wait_for_function(
+                "window.sessionStorage.getItem('sigma.auth.windowScoped') === 'yes'"
+            )
+            return page
+
+        def account(page):
+            return page.evaluate(
+                """async () => {
+                  const response = await fetch('/api/cloud-auth/status', {cache: 'no-store'});
+                  const status = await response.json();
+                  return status.user?.email ?? null;
+                }"""
+            )
+
+        def sign_in(page, identity):
+            code = page.evaluate(
+                """async identity => {
+                  const response = await fetch('/api/cloud-auth/mock/select?identity='
+                    + encodeURIComponent(identity), {method: 'POST'});
+                  return response.status;
+                }""",
+                identity,
+            )
+            assert code == 204, code
+            page.reload()
+
+        first = open_window()
+        assert account(first) is None
+        sign_in(first, "member-a")
+        assert account(first) == OWNER
+
+        # New windows pin the most recent sign-in, but existing windows
+        # retain their identities when another one switches accounts.
+        second = open_window()
+        assert account(second) == OWNER
+        first_id = first.evaluate("sessionStorage.getItem('sigma.auth.window')")
+        second_id = second.evaluate("sessionStorage.getItem('sigma.auth.window')")
+        assert first_id != second_id
+        sign_in(second, "member-b")
+        assert account(second) == COLLABORATOR
+        assert account(first) == OWNER
+
+        third = open_window()
+        assert account(third) == COLLABORATOR
+
+        # window.open can copy sessionStorage. The child must get its own ID.
+        with first.expect_popup() as popup_info:
+            first.evaluate("window.open('/', '_blank')")
+        popup = popup_info.value
+        popup.wait_for_function(
+            "window.sessionStorage.getItem('sigma.auth.windowScoped') === 'yes'"
+        )
+        assert popup.evaluate("sessionStorage.getItem('sigma.auth.window')") != first_id
+        assert account(popup) == COLLABORATOR
+        assert account(first) == OWNER
+
+        # Signing out the most recent login leaves existing pinned sessions
+        # untouched but means a future new window starts signed out.
+        code = second.evaluate(
+            """async () => (await fetch('/api/cloud-auth/logout', {method: 'POST'})).status"""
+        )
+        assert code == 204
+        second.reload()
+        assert account(second) is None
+        assert account(first) == OWNER
+        assert account(third) == COLLABORATOR
+        assert account(popup) == COLLABORATOR
+        fourth = open_window()
+        assert account(fourth) is None
+    finally:
+        context.close()
 
 
 def main() -> None:

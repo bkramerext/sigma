@@ -3,9 +3,19 @@ const WINDOW_KEY = 'sigma.auth.window';
 const existing = (() => {
   try { return window.sessionStorage.getItem(WINDOW_KEY); } catch { return null; }
 })();
-const windowId = existing && /^[a-f0-9]{32}$/.test(existing) ? existing : (() => {
+// window.open() can clone sessionStorage into a new top-level window. Detect
+// the copied identity and assign a new one before issuing any API requests.
+const copiedFromOpener = (() => {
+  if (!existing || !window.opener) return false;
+  try { return window.opener.sessionStorage.getItem(WINDOW_KEY) === existing; }
+  catch { return false; }
+})();
+const windowId = existing && /^[a-f0-9]{32}$/.test(existing) && !copiedFromOpener ? existing : (() => {
   const value = crypto.randomUUID().replaceAll('-', '');
-  try { window.sessionStorage.setItem(WINDOW_KEY, value); } catch { return ''; }
+  try {
+    window.sessionStorage.setItem(WINDOW_KEY, value);
+    if (copiedFromOpener) window.sessionStorage.removeItem('sigma.auth.windowScoped');
+  } catch { return ''; }
   return value;
 })();
 
@@ -18,6 +28,27 @@ let windowScoped = (() => {
 function activateWindowSession() {
   try { window.sessionStorage.setItem(ACTIVE_KEY, 'yes'); } catch { /* legacy fallback */ }
   windowScoped = true;
+}
+
+// The first request from a new window clones the most recently authenticated
+// browser-profile cookie into a separate HttpOnly per-window session. Once
+// scoped, subsequent Google logins in other windows cannot change this one.
+let adoption: Promise<void> | null = null;
+export function adoptLatestWindowSignIn(): Promise<void> {
+  if (!windowId || windowScoped) return Promise.resolve();
+  if (!adoption) adoption = (async () => {
+    try {
+      const response = await window.fetch('/api/cloud-auth/window/adopt', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-Sigma-Window': windowId, 'X-Sigma-Error-Handled': 'true' },
+      });
+      if (!response.ok) return;
+      const result = await response.json() as { scoped?: boolean };
+      if (result.scoped) activateWindowSession();
+    } catch { /* An unavailable auth service keeps its normal sign-in UI. */ }
+  })();
+  return adoption;
 }
 
 export function windowAuthUrl(path: string): string {
