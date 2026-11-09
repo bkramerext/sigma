@@ -492,7 +492,7 @@ def recent_projects() -> dict:
 
             try:
                 paper_metadata = paper_scores.project_metadata(view.path)
-            except (OSError, ValueError, TypeError, KeyError):
+            except Exception:  # noqa: BLE001 - paper decoration must never block project access
                 # Broken paper decoration must never make the project unavailable.
                 paper_metadata = {"paper_count": 0, "best_paper_score": None}
             recent.append(
