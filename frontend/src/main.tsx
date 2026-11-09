@@ -2780,7 +2780,11 @@ function PapersPane({ path, projectId, guest = false, onRunningChange, onQueuedC
         );
         }
       }
-      const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
+      // The cards render from summaries. Only fetch the full paper text when
+      // its card is expanded, a deep link opens it, or an explicit operation
+      // requests a particular saved paper. This avoids large paper payloads
+      // during ordinary project navigation.
+      const nextId = keepId ?? (expandedPaperId || undefined);
       if (nextId) {
         const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
