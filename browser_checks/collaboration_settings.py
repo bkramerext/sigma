@@ -168,8 +168,12 @@ def main() -> None:
         assert len(retries) == 1
 
         dialog.get_by_role("button", name="Add collaborator").click()
-        dialog.get_by_label("New collaborator email").fill("brian@gmail.com")
-        dialog.get_by_role("button", name="Add", exact=True).click()
+        editor = dialog.get_by_label("New collaborator email")
+        editor.fill("brian@gmail.com")
+        editor.press("Tab")
+        assert editor.count() == 0, "Blur should finish a valid collaborator entry"
+        assert dialog.get_by_role("button", name="Add", exact=True).count() == 0
+        assert dialog.get_by_role("button", name="Cancel", exact=True).count() == 0
         expect(dialog.get_by_text("brian@gmail.com")).to_be_visible()
         dialog.get_by_role("button", name="Remove alice@example.net").click()
         expect(dialog.get_by_text("alice@example.net")).to_have_count(0)
