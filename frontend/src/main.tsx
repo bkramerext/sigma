@@ -5858,14 +5858,14 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
     aria-labelledby="shared-project-invitation-heading"
     onCancel={event => { event.preventDefault(); onDismiss(); }}
     onClick={event => { if (event.target === event.currentTarget) onDismiss(); }}>
-    <h2 id="shared-project-invitation-heading">Open shared project</h2>
+    <h2 id="shared-project-invitation-heading" style={{ fontSize: 25, lineHeight: 1.25 }}>Open shared project</h2>
     {invite.title && <p className="invitation-welcome-intro"><strong>{invite.title}</strong></p>}
     <p className="invitation-welcome-intro">Sign in with Google as <strong>{invite.email}</strong> to open the project.</p>
     {currentEmail && currentEmail.toLowerCase() !== invite.email &&
       <p className="invitation-welcome-current-account">Currently signed in as {currentEmail}.</p>}
-    <div className="invitation-welcome-actions">
-      <a className="invitation-welcome-link" href="/api/cloud-auth/login">Sign in with Google</a>
-      <button type="button" className="invitation-welcome-link" onClick={onDismiss}>Not now</button>
+    <div className="invitation-welcome-actions" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 40 }}>
+      <a className="invitation-welcome-link" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, minHeight: 32, lineHeight: "32px" }} href="/api/cloud-auth/login">Sign in with Google</a>
+      <button type="button" className="invitation-welcome-link" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, minHeight: 32, lineHeight: "32px" }} onClick={onDismiss}>Not now</button>
     </div>
   </dialog>;
 }
