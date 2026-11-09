@@ -95,6 +95,9 @@ jobs:
           uv run --with playwright python browser_checks/project_types_436.py
           uv run --with playwright python browser_checks/project_email.py
           uv run --with playwright python browser_checks/collaboration_settings.py
+          # Two separate authenticated local browser profiles, real project ACL
+          # and revision endpoints (no mocked project or collaboration responses).
+          uv run --with playwright python browser_checks/collaboration_local_accounts.py
       - name: Research Q/A browser acceptance
         # Validate the exact Q/A toolbar, scroll and source navigation in real Chrome.
         if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}

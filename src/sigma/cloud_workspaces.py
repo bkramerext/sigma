@@ -52,7 +52,11 @@ GUEST_TTL_SECONDS = 8 * 60 * 60
 
 
 def enabled() -> bool:
-    """Cloud auth is an explicit opt-in; local SIGMA does not need cloud config."""
+    """Preserve the existing hosted execution-mode decision.
+
+    Other components use this to select hosted AI and billing behavior.
+    Do not use it to decide whether local Google users need private storage.
+    """
     from sigma.storage import persistent_disk_enabled
 
     enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
@@ -70,8 +74,72 @@ def enabled() -> bool:
     return enabled and (persistent_disk_enabled() or not local_auth or mock_local)
 
 
+def account_scoping_enabled() -> bool:
+    """Use identity-bound workspaces for both local and hosted Google accounts.
+
+    A request using the explicit local auto-admin shortcut is exempted by the
+    request-scope dependency; it keeps the legacy single-user filesystem.
+    """
+    return os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 def current() -> Workspace | None:
     return _CURRENT.get()
+
+
+def local_legacy_owner_access(path: Path | None = None) -> bool:
+    """Limit legacy local-project adoption to the designated Google administrator.
+
+    Hosted and mock accounts never enter this compatibility path. A project
+    outside the administrator's own workspace must belong to the original
+    local project root or have been explicitly saved in the old local index.
+    This cannot authorize paths inside another user's workspace partition.
+    """
+    cfg = cloud_auth.config()
+    principal = cloud_auth.current_principal()
+    if not (
+        cfg.enabled
+        and cfg.local
+        and not cfg.error
+        and cfg.admin_contact_email
+        and principal is not None
+        and principal.role == "admin"
+        and principal.email.casefold() == cfg.admin_contact_email.casefold()
+        and not principal.subject.startswith(("mock:", "local-admin:"))
+        and current() is not None
+    ):
+        return False
+    if path is None:
+        return True
+    candidate = Path(path)
+    try:
+        from sigma.projects import local_projects_root
+
+        if candidate.is_relative_to(local_projects_root()):
+            return True
+    except (OSError, ValueError):
+        pass
+    try:
+        from sigma import recents
+
+        with without_workspace(), recents._index() as index:
+            return any(entry["path"] == str(candidate) for entry in index["entries"])
+    except (OSError, ValueError):
+        return False
+
+
+@contextmanager
+def without_workspace() -> Iterator[None]:
+    """Read the original local Recent index without changing the request identity."""
+    token = _CURRENT.set(None)
+    try:
+        yield
+    finally:
+        _CURRENT.reset(token)
 
 
 def bind(principal: Principal) -> Token[Workspace | None]:
@@ -311,7 +379,10 @@ def assert_project_path(value: str | Path, resolved: Path) -> None:
         if not resolved.is_relative_to(workspace.path):
             from sigma import project_collaboration
 
-            if not project_collaboration.authorized_shared_path(resolved):
+            if not (
+                local_legacy_owner_access(resolved)
+                or project_collaboration.authorized_shared_path(resolved)
+            ):
                 raise ValueError("owner")
     except (OSError, RuntimeError, ValueError) as exc:
         raise ValueError("Project not found or access denied.") from exc

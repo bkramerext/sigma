@@ -583,11 +583,17 @@ def force_sponsored_mode_enabled() -> bool:
 def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     """Return the persistent account model, refreshing revocable access fields."""
     workspace_id: str | None = None
-    # Mock users need distinct workspace identities even though the local
-    # development server otherwise follows the local-storage path.
-    if not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:")):
-        from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
+    # All account-scoped SIGMA deployments, including real local Google
+    # sign-ins, expose their per-user workspace in account status.
+    from sigma.cloud_workspaces import (
+        WorkspaceUnavailable,
+        account_scoping_enabled,
+        workspace_for_subject,
+    )
 
+    if account_scoping_enabled() and not (
+        cfg.local and principal.subject.startswith("local-admin:")
+    ):
         try:
             workspace_id = workspace_for_subject(principal.subject).workspace_id
         except WorkspaceUnavailable as exc:
@@ -820,6 +826,11 @@ def resolve_session(raw: str | None) -> Principal | None:
         and not _mock_enabled(cfg)
         and os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
         and cfg.admin_contact_email
+        # A configured Google sign-in makes this a multi-user server:
+        # never give an unauthenticated browser the local administrator.
+        and not cfg.client_id
+        and not cfg.client_secret
+        and not raw
     ):
         return Principal("local-admin:" + cfg.admin_contact_email, cfg.admin_contact_email, "admin")
     if not cfg.enabled or cfg.error or not raw or len(raw) > 128:
@@ -1882,7 +1893,9 @@ async def callback(
     # identity/provider concerns out of project path handling.
     workspace_id = None
     authenticated_workspace = None
-    if not cfg.local:
+    from sigma import cloud_workspaces
+
+    if cloud_workspaces.account_scoping_enabled():
         from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
         try:

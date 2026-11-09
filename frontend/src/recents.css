@@ -24,6 +24,8 @@
 }
 .home-page .home-recents .recent-title-pin { display: block; }
 .home-page .home-recents .recent-title-star { color: var(--sigma-copper-foreground); font-size: 16px; }
+.home-page .home-recents .recent-title-shared { margin-left: -2px; color: var(--sigma-copper-foreground); }
+.home-page .home-recents .recent-title-shared svg { display: block; width: 17px; height: 17px; }
 .home-page .home-recents .recent-title-annotation:disabled { opacity: .6; cursor: wait; }
 .home-page .home-recents .recent-pin,
 .home-page .home-recents .recent-save-as,
@@ -58,7 +60,7 @@
 
 /* All project glyphs share the scored-star hover treatment, including
    keyboard focus. Keep the background clear rather than showing a button box. */
-.home-page .home-recents :is(.recent-title-star, .recent-pin, .recent-save-as, .recent-forget):is(:hover:not(:disabled), :focus-visible),
+.home-page .home-recents :is(.recent-title-star, .recent-title-shared, .recent-pin, .recent-save-as, .recent-forget):is(:hover:not(:disabled), :focus-visible),
 .home-page .home-samples .recent-title-star:is(:hover, :focus-visible),
 .workspace-page .papers-pane .paper-title-star:is(:hover, :focus-visible) {
   color: var(--sigma-copper-foreground); background: transparent; box-shadow: none; text-decoration: none;

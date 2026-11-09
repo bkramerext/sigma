@@ -87,7 +87,7 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
             cloud_workspaces.reset(token)
         return
     if (
-        not cloud_workspaces.enabled()
+        not cloud_workspaces.account_scoping_enabled()
         or request.url.path == "/api/ui-instance"
         or (
             request.url.path == "/api/local-runtime/build"
@@ -111,6 +111,11 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
         return
     if not isinstance(principal, cloud_auth.Principal):
         raise HTTPException(status_code=401, detail="Authentication required.")
+    if cloud_auth.config().local and principal.subject.startswith("local-admin:"):
+        # Preserve the old unpartitioned developer shortcut. A real OAuth
+        # session is bound below to its own workspace, even on this server.
+        yield
+        return
     try:
         token = cloud_workspaces.bind(principal)
     except cloud_workspaces.WorkspaceUnavailable as exc:
@@ -308,7 +313,9 @@ async def require_cloud_inference_binding(
 ) -> None:
     """Require explicit project/account intent before admitting sponsored inference."""
     memory_guard.require_capacity()
-    if not cloud_workspaces.enabled():
+    # Local inference uses the user's personal ChatGPT connection even when
+    # Google authentication supplies per-user collaboration workspaces.
+    if not cloud_workspaces.enabled() or cloud_auth.config().local:
         return
     view = inspect_project(path)
     if expected_project_id is not None and expected_project_id != view.project.id:
@@ -2030,20 +2037,20 @@ def create_project_view(body: CreateProjectRequest):
     # Only type and difficulty are project configuration. Legacy model/Outcome
     # columns remain for schema compatibility but are never taken from imports
     # or from the previous project's settings when creating new projects.
-    from sigma import global_research_settings
+    from sigma import global_research_settings, project_collaboration
 
     user = global_research_settings.load_config()
-    return asdict(
-        create_project(
-            body.title,
-            body.problem,
-            body.investigation_type,
-            user["ai_model"],
-            user["reasoning_effort"],
-            body.difficulty,
-            user["show_advanced_outcome_details"],
-        )
+    view = create_project(
+        body.title,
+        body.problem,
+        body.investigation_type,
+        user["ai_model"],
+        user["reasoning_effort"],
+        body.difficulty,
+        user["show_advanced_outcome_details"],
     )
+    project_collaboration.register_owner(view)
+    return asdict(view)
 
 
 class SaveProjectAsRequest(OpenRequest):
@@ -2593,7 +2600,7 @@ async def auth_begin(body: AuthBeginRequest):
 @app.get("/api/ai/auth/callback/{identifier}")
 async def hosted_chatgpt_callback(identifier: str, request: Request):
     """Public OAuth return; validation and credential exchange stay server-side."""
-    if not cloud_workspaces.enabled():
+    if cloud_auth.config().local or not cloud_workspaces.enabled():
         raise HTTPException(404, "Hosted callback unavailable.")
     try:
         await chatgpt_auth.hosted_callback(identifier, request.url.query)

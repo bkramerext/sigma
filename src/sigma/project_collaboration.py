@@ -379,7 +379,9 @@ def register_owner(view: Any) -> None:
     ):
         return
     path = Path(view.path)
-    if not path.is_relative_to(workspace.path):
+    if not path.is_relative_to(workspace.path) and not cloud_workspaces.local_legacy_owner_access(
+        path
+    ):
         return
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -515,6 +517,10 @@ def model_settings(path: str) -> dict[str, str] | None:
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return None
     with _db() as db:
+        # Unregistered private projects have no shared model configuration.
+        # Their research must not fail due to missing collaboration metadata.
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
+            return None
         row, _email = _membership(db, path)
         shared = db.execute(
             "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
@@ -639,6 +645,27 @@ def note_change(path: str) -> None:
     """Record a validated mutation (or join an enclosing write transaction)."""
     with write_guard(path):
         pass
+
+
+def shared_project_paths() -> set[str]:
+    """Paths with collaborators visible to their owner or a listed collaborator."""
+    try:
+        workspace, email = _identity()
+    except ValueError:
+        return set()
+    with _db() as db:
+        return {
+            row["path"]
+            for row in db.execute(
+                """SELECT p.path FROM shared_projects p
+                WHERE EXISTS (SELECT 1 FROM shared_collaborators c WHERE c.path=p.path)
+                AND (p.owner_hash=? OR EXISTS (
+                    SELECT 1 FROM shared_collaborators c
+                    WHERE c.path=p.path AND c.email=?
+                ))""",
+                (workspace.subject_hash, email),
+            )
+        }
 
 
 def shared_with_me() -> list[dict[str, str]]:
@@ -854,7 +881,7 @@ def drain_notifications() -> list[str]:
     Claims are serialized in SQLite. A stale claim can be replayed after
     a crash, so delivery is at least once in ambiguous transport failures.
     """
-    if not cloud_workspaces.enabled():
+    if not cloud_workspaces.account_scoping_enabled():
         return []
     from sigma.mail_transport import send_message
 
