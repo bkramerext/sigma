@@ -142,7 +142,7 @@ def check_one_time_owner_migration(base: Path) -> None:
             email=migrate_local_projects_once.TARGET_EMAIL,
             role="admin",
         )
-        config = SimpleNamespace(local=True)
+        config = SimpleNamespace(local=True, enabled=True)
         token = cloud_workspaces.bind_workspace(workspace)
         try:
             with (
