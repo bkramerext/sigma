@@ -140,6 +140,21 @@ def check_one_time_owner_migration(base: Path) -> None:
         assert (state / "recents.json").read_bytes() == index_before
 
 
+def check_compact_project_open() -> None:
+    """Interactive opens omit the hidden event history; default reads retain it."""
+    created = create_project("Compact opening contract", "Keep research history intact")
+    with TestClient(app) as client:
+        compact = client.post(
+            "/api/projects/open", json={"path": created.path, "compact": True}
+        )
+        full = client.post("/api/projects/open", json={"path": created.path})
+    assert compact.status_code == 200, compact.text
+    assert full.status_code == 200, full.text
+    assert compact.json()["project"]["events"] == []
+    assert full.json()["project"]["events"]
+    assert inspect_project(created.path).project.events == created.project.events
+
+
 def check_title_collision_avoids_deep_metadata() -> None:
     """Creating a project must not hydrate Saved status or sample paper scores."""
     with (
@@ -909,6 +924,7 @@ def check(root: Path, base: Path) -> None:
     assert recent_projects()["projects"]
     check_index_sample_read_outside_lock()
     check_one_time_owner_migration(base)
+    check_compact_project_open()
     check_title_collision_avoids_deep_metadata()
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
