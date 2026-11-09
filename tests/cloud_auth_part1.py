@@ -59,12 +59,14 @@ class CloudAuthTests(CloudAuthFixture):
                 db.execute(
                     "DELETE FROM shared_collaborators WHERE path=? AND email=?", (path, email)
                 )
-            self.assertEqual(cloud_auth.resolve_session(raw).role, "guest")
+            self.assertEqual(
+                cloud_auth.resolve_session(raw), cloud_auth.Principal("verified-n", email, "guest")
+            )
 
     def test_two_windows_keep_independent_accounts_after_sign_out(self):
         """Two browser windows share cookies but never share the active identity."""
         # Hosted Secure cookies require HTTPS even in the in-process test client.
-        self.client.base_url = ORIGIN
+        self.client.base_url = "https://127.0.0.1"
         first, second = "a" * 32, "b" * 32
         with cloud_auth._db(cloud_auth.config()) as db:
             db.execute(
