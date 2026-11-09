@@ -232,10 +232,10 @@ with sync_playwright() as playwright:
     # Save button; an explicit Close also flushes any pending valid changes.
     settings = page.get_by_role("button", name="Settings", exact=True)
     settings.click()
-    dialog = page.get_by_role("dialog", name="Settings")
+    dialog = page.get_by_role("dialog", name="User Settings")
     expect(dialog).to_be_visible()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_have_count(0)
-    expect(dialog.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
+    expect(dialog.get_by_role("heading", name="User Settings", exact=True)).to_be_visible()
     for tab in ("Limits", "Preferences", "Research Ethos", "Project Types"):
         dialog.get_by_role("tab", name=tab, exact=True).click()
         expect(dialog).to_be_visible()
@@ -349,7 +349,7 @@ with sync_playwright() as playwright:
     dialog.get_by_role("button", name="Close Settings").click()
     expect(dialog).not_to_be_visible()
     settings.click()
-    dialog = page.get_by_role("dialog", name="Settings")
+    dialog = page.get_by_role("dialog", name="User Settings")
     expect(dialog.get_by_role("tab", name="Preferences")).to_have_attribute("aria-selected", "true")
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_have_count(0)
     dialog.get_by_role("button", name="Close Settings").click()
@@ -363,7 +363,7 @@ with sync_playwright() as playwright:
     child_type = child_record
 
     types_button.click()
-    dialog = page.get_by_role("dialog", name="Settings")
+    dialog = page.get_by_role("dialog", name="User Settings")
     dialog.get_by_role("tab", name="Project Types").click()
     dialog.locator(".project-types-section-heading").first.get_by_role(
         "button", name="New project type"
@@ -385,7 +385,7 @@ with sync_playwright() as playwright:
     affected = project(page, "Deleted custom parent", parent_type["id"])
     project(page, "Deleted second custom type", second_type["id"])
     types_button.click()
-    dialog = page.get_by_role("dialog", name="Settings")
+    dialog = page.get_by_role("dialog", name="User Settings")
     dialog.get_by_role("tab", name="Project Types").click()
     for type_name in ("CI Browser Parent", "CI Browser Second"):
         card = dialog.locator(f'.project-type-card:has(> summary strong:text-is("{type_name}"))')
@@ -684,7 +684,7 @@ with sync_playwright() as playwright:
     # Project Types reference switches, without a global Save control.
     page.goto(BASE_URL)
     page.get_by_role("button", name="Settings", exact=True).click()
-    settings_dialog = page.get_by_role("dialog", name="Settings")
+    settings_dialog = page.get_by_role("dialog", name="User Settings")
     expect(settings_dialog.get_by_role("button", name="Save", exact=True)).to_have_count(0)
     settings_dialog.get_by_role("tab", name="Preferences").click()
     advanced = settings_dialog.get_by_role("checkbox", name="Show advanced Outcome details")
@@ -710,7 +710,7 @@ with sync_playwright() as playwright:
     assert "mathematical" in saved_preferences["reference_preferences"]
 
     page.get_by_role("button", name="Settings", exact=True).click()
-    restored = page.get_by_role("dialog", name="Settings")
+    restored = page.get_by_role("dialog", name="User Settings")
     restored.get_by_role("tab", name="Preferences").click()
     assert (
         restored.get_by_role("checkbox", name="Show advanced Outcome details").is_checked()
