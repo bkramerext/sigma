@@ -169,7 +169,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         invitation_url = url + "&invited_email=" + quote(COLLABORATOR, safe="")
         member.goto(invitation_url)
         expect(member.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
-        expect(member.get_by_role("dialog", name="You've been invited to collaborate!")).to_have_count(0)
+        expect(
+            member.get_by_role("dialog", name="You've been invited to collaborate!")
+        ).to_have_count(0)
 
         # A different signed-in account is guided Home instead of getting
         # the raw Project unavailable/access-denied error.
@@ -197,6 +199,17 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(guest_welcome).to_be_visible()
         expect(guest_welcome.get_by_text(COLLABORATOR)).to_be_visible()
         expect(guest_welcome.get_by_role("link", name="Request invitation")).to_be_visible()
+
+        # Simulate successful Google sign-in to the invited account without
+        # leaving this browser context: its pending link should reopen itself.
+        selected = guest_context.request.post(
+            ui + "/api/cloud-auth/mock/select?identity=member-b",
+            headers={"Origin": ui},
+        )
+        assert selected.status == 204, selected.text()
+        guest.reload()
+        expect(guest).to_have_url(url)
+        expect(guest.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
         guest_context.close()
 
         # Preserve the original owner's staged settings for conflict testing.
