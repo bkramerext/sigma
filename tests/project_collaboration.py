@@ -93,6 +93,59 @@ class CollaborationTests(TestCase):
                 (self.path, self.other.email),
             )
 
+    def test_collaborator_alone_sees_shared_project_in_saved(self) -> None:
+        """An invitation is durable and does not depend on owner's login session."""
+        from contextlib import contextmanager
+        from uuid import uuid4
+
+        from sigma import recents
+
+        project_id = str(uuid4())
+        with shared._db() as db:
+            db.execute(
+                "UPDATE shared_projects SET project_id=? WHERE path=?",
+                (project_id, self.path),
+            )
+
+        @contextmanager
+        def empty_saved_index():
+            yield {"version": 2, "entries": [], "pins": {}, "bootstrapped_roots": {}}
+
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root / "colleague",
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        project = SimpleNamespace(
+            id=project_id,
+            title="Xenopus Tadpoles",
+            investigation_type="biology",
+            project_type_snapshot=None,
+            active_order=(),
+            difficulty="hard",
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch("sigma.recents.cloud_workspaces.current", return_value=colleague),
+            patch("sigma.recents._index", empty_saved_index),
+            patch(
+                "sigma.recents.inspect_project",
+                return_value=SimpleNamespace(path=self.path, project=project),
+            ),
+        ):
+            invited, visible = shared.shared_listing()
+            self.assertEqual(invited, [{"path": self.path, "id": project_id}])
+            self.assertIn(self.path, visible)
+            self.assertTrue(shared.authorized_shared_path(Path(self.path)))
+            result = recents.recent_projects(lightweight=True)["projects"]
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["title"], "Xenopus Tadpoles")
+        self.assertTrue(result[0]["available"])
+        self.assertTrue(result[0]["shared"])
+
     def test_saved_listing_uses_single_db_snapshot_for_owner_and_collaborator(self) -> None:
         with patch.object(shared, "_db", wraps=shared._db) as db_calls:
             invited, shared_paths = shared.shared_listing()
