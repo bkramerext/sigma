@@ -5335,24 +5335,34 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
       <div><label id="sigma-project-difficulty-label">Difficulty</label><DifficultyPicker value={values.difficulty} onChange={value => change('difficulty', value)}/></div></div>
       <div className="settings-model-row">
-      <div><label htmlFor="project-model">Model</label><select id="project-model" value={values.ai_model} onChange={event => {
-        const nextModel = event.target.value;
-        const nextChoice = catalog.find(option => option.id === nextModel);
-        setValues(previous => ({
-          ...previous, ai_model: nextModel,
-          reasoning_effort: nextChoice && !nextChoice.efforts.includes(previous.reasoning_effort)
-            ? nextChoice.efforts[0] ?? previous.reasoning_effort : previous.reasoning_effort,
-        }));
-      }} aria-describedby="project-model-help">
-        {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
-        {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
-        {orderedCatalog.map(model => <option key={model.id} value={model.id}>{modelDisplayLabel(model)}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
-      </select>
+      <div><label htmlFor="project-model">Model</label>
+        <SigmaChoicePicker id="project-model" label="Model" value={values.ai_model}
+          disabled={catalog.length === 0}
+          choices={[
+            ...(values.ai_model && !selected ? [{ value: values.ai_model, label: `${values.ai_model} · unavailable/unreviewed` }] : []),
+            ...(!values.ai_model ? [{ value: '', label: 'Loading reviewed choices…' }] : []),
+            ...orderedCatalog.map(model => ({
+              value: model.id,
+              label: modelDisplayLabel(model) + (model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'),
+            })),
+          ]}
+          onChange={nextModel => {
+            const nextChoice = catalog.find(option => option.id === nextModel);
+            setValues(previous => ({
+              ...previous, ai_model: nextModel,
+              reasoning_effort: nextChoice && !nextChoice.efforts.includes(previous.reasoning_effort)
+                ? nextChoice.efforts[0] ?? previous.reasoning_effort : previous.reasoning_effort,
+            }));
+          }}/>
       <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately.' : 'ChatGPT plan or credits.'}{catalogMessage}{selected?.availability === 'unavailable' ? ' Model unavailable; it will not be replaced.' : ''}</p></div>
-      <div><label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
-        {!selected?.efforts.includes(values.reasoning_effort) && <option value={values.reasoning_effort}>{thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · {selected ? 'unsupported' : 'preserved'}</option>}
-        {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
-      </select>
+      <div><label htmlFor="project-thinking">Thinking level</label>
+        <SigmaChoicePicker id="project-thinking" label="Thinking level" value={values.reasoning_effort}
+          disabled={!selected || !selected.efforts.length}
+          choices={[
+            ...(!selected?.efforts.includes(values.reasoning_effort) ? [{ value: values.reasoning_effort, label: `${thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · ${selected ? 'unsupported' : 'preserved'}` }] : []),
+            ...(selected?.efforts ?? []).map(effort => ({ value: effort, label: thinkingLabels[effort] ?? effort })),
+          ]}
+          onChange={next => change('reasoning_effort', next)}/>
       <p className="settings-hint">Used for future AI proposals. Higher levels use more time and usage.</p></div>
       </div>
       {pairError && <p className="error" role="alert">{pairError}</p>}
