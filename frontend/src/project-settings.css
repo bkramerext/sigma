@@ -716,6 +716,7 @@
 .project-collaborators-heading .sigma-action-glyph { width: 20px; height: 20px; }
 .project-collaborator-row { display: flex; align-items: center; justify-content: space-between; min-height: 36px; gap: 12px; border-bottom: 1px solid var(--border-color, #6664); overflow-wrap: anywhere; }
 .project-collaborator-owner { font-size: .8rem; opacity: .75; flex-shrink: 0; }
+.project-collaborator-row:not(:has(.project-collaborator-owner)) { justify-content: flex-start; gap: 8px; }
 .project-collaborator-remove { border: 0; background: transparent; color: inherit; padding: 4px 8px; font-size: 1.25rem; cursor: pointer; }
 .project-collaborator-remove:hover { text-decoration: underline; }
 .project-collaborator-add { margin-top: 8px; }
