@@ -519,7 +519,8 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
         members = [record["email"] for record in membership]
         is_owner = row["owner_hash"] == _identity()[0].subject_hash
         removable = [
-            record["email"] for record in membership
+            record["email"]
+            for record in membership
             if is_owner or record["added_by"] == email or record["email"] == email
         ]
         if verify_revision:
@@ -1062,7 +1063,12 @@ def drain_notifications() -> list[str]:
             try:
                 project_link = deep_link(origin, event["project_path"]) if origin else ""
                 if project_link and added:
-                    project_link += "&" + urlencode({"invited_email": event["recipient"], "project_title": event["project_title"]})
+                    project_link += "&" + urlencode(
+                        {
+                            "invited_email": event["recipient"],
+                            "project_title": event["project_title"],
+                        }
+                    )
             except ValueError:
                 # Malformed origins are never embedded as clickable links.
                 project_link = ""
