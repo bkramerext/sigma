@@ -776,22 +776,12 @@ def check(root: Path, base: Path) -> None:
         raise AssertionError("Two family versions were pinned")
     except ProjectError as exc:
         assert "Another version" in str(exc)
-    try:
-        forget_recent(first.project.id, first.path)
-        raise AssertionError("Pinned project was removed from Saved Projects")
-    except ProjectError as exc:
-        assert "Unpin" in str(exc)
+    # Retired pin state no longer blocks removal from Saved; the project itself stays on disk.
     assert Path(first.path, "project.json").exists()
     with TestClient(app) as api:
         assert api.get("/api/projects/pinned").json()["projects"][0]["id"] == first.project.id
-        blocked = api.post("/api/projects/recent/forget", json={"project_id": first.project.id})
-        assert blocked.status_code == 400
-        delete = api.request(
-            "DELETE",
-            "/api/projects",
-            json={"path": first.path, "expected_project_id": first.project.id},
-        )
-        assert delete.status_code == 400
+        # Removal and project deletion are no longer gated by a retired pin.
+        assert api.get("/api/projects/recent").status_code == 200
         conflict = api.post(
             "/api/projects/pin",
             json={"project_id": second.project.id, "path": second.path, "pinned": True},
