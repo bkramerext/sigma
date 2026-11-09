@@ -5051,32 +5051,6 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             </div>
           </div>
           {!!shared?.owner && <>
-            <div className="settings-model-row">
-              <div>
-                <label htmlFor="shared-project-model">Model</label>
-                <SigmaChoicePicker id="shared-project-model" label="Model" value={model}
-                  disabled={modelLookupFailed || catalog.length === 0}
-                  choices={[
-                    ...(model && !selected ? [{ value: model, label: `${model} · unavailable` }] : []),
-                    ...catalog.map(option => ({ value: option.id, label: option.label })),
-                  ]}
-                  onChange={next => {
-                    setModel(next);
-                    const option = catalog.find(item => item.id === next);
-                    if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
-                  }}/>
-              </div>
-              <div>
-                <label htmlFor="shared-project-thinking">Thinking</label>
-                <SigmaChoicePicker id="shared-project-thinking" label="Thinking" value={thinking}
-                  disabled={modelLookupFailed || catalog.length === 0}
-                  choices={[
-                    ...(!selected?.efforts.includes(thinking) ? [{ value: thinking, label: `${thinkingLabels[thinking] ?? thinking} · unavailable` }] : []),
-                    ...(selected?.efforts ?? []).map(effort => ({ value: effort, label: thinkingLabels[effort] ?? effort })),
-                  ]}
-                  onChange={setThinking}/>
-              </div>
-            </div>
             <section className="project-collaborators" aria-label="Collaborators">
               <div className="project-collaborators-heading">
                 <h3>Collaborators</h3>
@@ -5104,6 +5078,32 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
                 <button type="button" disabled={retryingEmails} onClick={() => void retryEmails()}>{retryingEmails ? 'Retrying…' : 'Retry emails'}</button>
               </p>}
             </section>
+            <div className="settings-model-row">
+              <div>
+                <label htmlFor="shared-project-model">Model</label>
+                <SigmaChoicePicker id="shared-project-model" label="Model" value={model}
+                  disabled={modelLookupFailed || catalog.length === 0}
+                  choices={[
+                    ...(model && !selected ? [{ value: model, label: `${model} · unavailable` }] : []),
+                    ...catalog.map(option => ({ value: option.id, label: option.label })),
+                  ]}
+                  onChange={next => {
+                    setModel(next);
+                    const option = catalog.find(item => item.id === next);
+                    if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
+                  }}/>
+              </div>
+              <div>
+                <label htmlFor="shared-project-thinking">Thinking</label>
+                <SigmaChoicePicker id="shared-project-thinking" label="Thinking" value={thinking}
+                  disabled={modelLookupFailed || catalog.length === 0}
+                  choices={[
+                    ...(!selected?.efforts.includes(thinking) ? [{ value: thinking, label: `${thinkingLabels[thinking] ?? thinking} · unavailable` }] : []),
+                    ...(selected?.efforts ?? []).map(effort => ({ value: effort, label: thinkingLabels[effort] ?? effort })),
+                  ]}
+                  onChange={setThinking}/>
+              </div>
+            </div>
             {modelLookupFailed && <p className="settings-hint" role="status">Model choices are unavailable. You can still edit collaborators and save their changes.</p>}
           </>}
           {shared && !shared.owner && <p className="project-collaborator-local-note">
