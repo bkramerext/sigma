@@ -382,6 +382,16 @@ def register_owner(view: Any) -> None:
     if not path.is_relative_to(workspace.path):
         return
     with _db() as db:
+        row = db.execute(
+            "SELECT project_id, owner_hash FROM shared_projects WHERE path=?", (view.path,)
+        ).fetchone()
+        if row is not None:
+            if row["project_id"] != view.project.id or row["owner_hash"] != workspace.subject_hash:
+                raise ValueError(
+                    "Project identity has changed; collaboration access is unavailable."
+                )
+            return  # Opening and polling an existing project must not take a writer lock.
+        digest = _project_digest(view.path)
         db.execute("BEGIN IMMEDIATE")
         row = db.execute(
             "SELECT project_id, owner_hash FROM shared_projects WHERE path=?", (view.path,)
@@ -397,7 +407,7 @@ def register_owner(view: Any) -> None:
                     view.project.id,
                     workspace.subject_hash,
                     principal.email.casefold(),
-                    _project_digest(view.path),
+                    digest,
                     view.project.ai_model,
                     view.project.reasoning_effort,
                     principal.email.casefold(),
