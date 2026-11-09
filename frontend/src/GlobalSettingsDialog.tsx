@@ -310,7 +310,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelAndClose(); } }}>
     <div className="sigma-global-settings-content">
       <header className="settings-header">
-        <h2 id="sigma-global-settings-title">Settings</h2>
+        <h2 id="sigma-global-settings-title">User Settings</h2>
         <div className="settings-actions">
           <DialogDismissButton label="Close Settings" disabled={busy || typesSaveState.busy || ethosBusy} onClick={() => void cancelAndClose()}/>
         </div>
