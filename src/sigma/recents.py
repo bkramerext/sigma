@@ -298,7 +298,10 @@ def _index(*, blocking: bool = True):
             0o600,
         )
         _check_index_file(descriptor)
-        fcntl.flock(descriptor, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        fcntl.flock(
+            descriptor,
+            fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB),
+        )
         path = directory / "recents.json"
         try:
             read_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -362,9 +365,18 @@ def _snapshot() -> dict:
     directory = state_directory()
     try:
         try:
-            fd = os.open(directory / "recents.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            fd = os.open(
+                directory / "recents.json",
+                os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+            )
         except FileNotFoundError:
-            return {"version": 2, "entries": [], "bootstrapped_roots": {}, "pins": {}, "dismissed_default_pins": []}
+            return {
+                "version": 2,
+                "entries": [],
+                "bootstrapped_roots": {},
+                "pins": {},
+                "dismissed_default_pins": [],
+            }
         with os.fdopen(fd, encoding="utf-8") as stream:
             _check_index_file(stream.fileno())
             raw = stream.read(1000001)
@@ -380,7 +392,9 @@ def _snapshot() -> dict:
     except ProjectError:
         raise
     except (OSError, ValueError, TypeError, KeyError):
-        raise ProjectError("Saved Projects index is unavailable; original data was preserved.") from None
+        raise ProjectError(
+            "Saved Projects index is unavailable; original data was preserved."
+        ) from None
 
 
 def record_access(view: ProjectView) -> None:
