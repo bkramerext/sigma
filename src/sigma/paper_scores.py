@@ -149,14 +149,20 @@ def project_metadata(path: str) -> ProjectPaperMetadata:
     Every unchanged list poll used to re-read every paper JSON and hash entire
     PDFs. Stat signatures include ctime and inode, so edits, replacements,
     score updates, and PDF deletion invalidate the cached verification.
-    Bundled projects retain their original verification path.
+    Single-file bundles use the same stat-invalidated cache, keyed by the
+    bundle's inode, size, mtime and ctime.
     """
     from sigma import papers
 
     target = project_path(path)
     if target.suffix == ".json":
-        available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
-        return {"paper_count": len(available), "best_paper_score": best_score(available)}
+        try:
+            info = target.stat()
+            signature = ((str(target), info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns),)
+        except OSError:
+            available = [item for item in papers.list_papers(path) if item.get("pdf_available")]
+            return {"paper_count": len(available), "best_paper_score": best_score(available)}
+        return _project_metadata_cached(str(target), signature)
     directory = papers._paper_dir(path, create=False)
     state = target / "project.json"
     try:

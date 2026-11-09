@@ -1273,13 +1273,13 @@ def _title_key(title: str) -> str:
 
 def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
     """Include sample, recent (even outside the root), and local saved projects."""
-    from sigma.recents import recent_projects
+    from sigma.recents import recent_project_titles
     from sigma.samples import sample_projects
 
     names = {_title_key(item["title"]) for item in sample_projects()["projects"]}
-    for item in recent_projects()["projects"]:
-        if item["available"] and item["id"] != exclude_id:
-            names.add(_title_key(item["title"]))
+    # Naming must not scan session state, papers or PDF content for every
+    # project. Inspect only the titles, outside the Recent-index file lock.
+    names.update(recent_project_titles(exclude_id=exclude_id))
     for directory in root.iterdir():
         if directory.is_symlink() or not (
             (directory.suffix == ".sigma" and directory.is_dir())

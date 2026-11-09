@@ -35,6 +35,82 @@ from sigma.recents import (
 from sigma.samples import open_sample_project, sample_projects
 
 
+def check_recents_lock_scope(root: Path) -> None:
+    """Sample/project inspection cannot run with recents.lock held."""
+    from sigma import recents, samples
+
+    lock_path = state_directory() / "recents.lock"
+    real_ids = samples.sample_project_ids
+    inspected: list[bool] = []
+
+    def unlocked_sample_ids() -> set[str]:
+        with lock_path.open("a+b") as f:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise AssertionError("Sample parsing happened while recents.lock was held") from exc
+            finally:
+                # No lock file is deleted or force-unlocked.
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        inspected.append(True)
+        return real_ids()
+
+    with patch.object(samples, "sample_project_ids", unlocked_sample_ids):
+        with recents._index() as index:
+            assert isinstance(index["entries"], list)
+            try:
+                with recents._index():
+                    raise AssertionError("Recursive index entry was accepted")
+            except ProjectError as exc:
+                assert "cannot be reopened" in str(exc)
+    assert inspected
+
+    # Legacy v1 pin metadata is inspected only before taking the index lock.
+    view = initialize_project(
+        root / "v1-lock-scope-test.sigma",
+        "Old pinned project",
+        "Ensure legacy migration never holds recents.lock while inspecting files.",
+    )
+    with recents._index() as index:
+        index["entries"] = [
+            {
+                "id": view.project.id,
+                "path": view.path,
+                "accessed_at": "2026-01-01T00:00:00+00:00",
+                "included_example": False,
+            }
+        ]
+    # The Recent index is advisory. A valid project must still open even
+    # when updating its Recent entry would re-enter the active index lock.
+    with recents._index():
+        assert open_project(view.path).project.id == view.project.id
+
+    state_path = state_directory() / "recents.json"
+    legacy = json.loads(state_path.read_text(encoding="utf-8"))
+    legacy["version"] = 1
+    legacy.pop("pins")
+    legacy.pop("dismissed_default_pins", None)
+    for entry in legacy["entries"]:
+        entry["pinned"] = True
+    state_path.write_text(json.dumps(legacy), encoding="utf-8")
+    original_inspect = recents.inspect_project
+
+    def unlocked_inspect(path: str):
+        with lock_path.open("a+b") as f:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise AssertionError("Legacy project opened while recents.lock held") from exc
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        return original_inspect(path)
+
+    with patch.object(recents, "inspect_project", unlocked_inspect):
+        with recents._index() as index:
+            assert index["version"] == 2
+            assert index["pins"][project_family(view.project.title)] == view.project.id
+
+
 def check_recent_list_does_not_validate_sample_pdfs(root: Path) -> None:
     """Saved listing and opening need sample IDs, never sample PDF contents."""
     from sigma import samples
@@ -689,6 +765,7 @@ def check(root: Path, base: Path) -> None:
         index_path.unlink(missing_ok=True)
         backup.rename(index_path)
     assert recent_projects()["projects"]
+    check_recents_lock_scope(root)
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
     check_home_session_status_cache(root)

@@ -6,6 +6,7 @@ import os
 import re
 import stat
 import sys
+import threading
 import unicodedata
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -22,6 +23,9 @@ from sigma.projects import (
     inspect_project,
 )
 from sigma.ui_instance import private_directory
+
+# Only guard same-thread recursion; other workers still serialize with flock.
+_INDEX_STACK = threading.local()
 
 
 def _tighten_owned_state_directory(path: Path) -> None:
@@ -239,11 +243,63 @@ def _validate(value: Any) -> dict:
     return value
 
 
+def _legacy_pins_before_lock(directory: Path) -> tuple[str, dict[str, str]] | None:
+    """Resolve v1 pin titles before taking the Recent-index file lock.
+
+    Modern v2 indexes need no project reads. Check the exact source text again
+    under the lock before publishing a migration, since another process may
+    have upgraded or edited the file in between.
+    """
+    path = directory / "recents.json"
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, encoding="utf-8") as stream:
+        _check_index_file(stream.fileno())
+        raw = stream.read(1000001)
+    if len(raw) > 1000000:
+        raise ValueError("Saved Projects index is too large")
+    value = _validate(json.loads(raw))
+    if value["version"] != 1:
+        return None
+    pins: dict[str, str] = {}
+    for entry in value["entries"]:
+        if not entry.get("pinned", False):
+            continue
+        view = inspect_project(entry["path"])
+        if view.project.id != entry["id"]:
+            raise ValueError("Legacy pin project identity changed")
+        family = project_family(view.project.title)
+        if family in pins and pins[family] != entry["id"]:
+            raise ValueError("Conflicting legacy project pins")
+        pins[family] = entry["id"]
+    return raw, pins
+
+
 @contextmanager
 def _index():
     descriptor = None
+    directory = state_directory()
+    lock_path = directory / "recents.lock"
+    held = getattr(_INDEX_STACK, "paths", None)
+    if held is None:
+        held = set()
+        _INDEX_STACK.paths = held
+    if lock_path in held:
+        raise ProjectError("Recent Projects index cannot be reopened during an index transaction.")
+    held.add(lock_path)
     try:
-        directory = state_directory()
+        # Parsing shipped samples or inspecting pinned projects while holding
+        # recents.lock can block every project listing and sample operation.
+        # Do all unrelated I/O before acquiring the file lock.
+        from sigma.samples import sample_project_ids
+
+        try:
+            sample_ids = sample_project_ids()
+        except (ProjectError, OSError, ValueError, TypeError, KeyError):
+            sample_ids = set()
+        v1_pins = _legacy_pins_before_lock(directory)
         descriptor = os.open(
             directory / "recents.lock",
             os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK,
@@ -271,33 +327,17 @@ def _index():
                 value = _validate(json.loads(raw))
         original = json.dumps(value, sort_keys=True)
         if value["version"] == 1:
-            legacy_pins: dict[str, str] = {}
-            for entry in value["entries"]:
-                if not entry.get("pinned", False):
-                    continue
-                view = inspect_project(entry["path"])
-                if view.project.id != entry["id"]:
-                    raise ValueError("Legacy pin project identity changed")
-                family = project_family(view.project.title)
-                if family in legacy_pins and legacy_pins[family] != entry["id"]:
-                    raise ValueError("Conflicting legacy project pins")
-                legacy_pins[family] = entry["id"]
+            if v1_pins is None or v1_pins[0] != raw:
+                raise ProjectError("Legacy Saved Projects index changed during upgrade; retry.")
             value["entries"] = [
                 {key: item for key, item in entry.items() if key != "pinned"}
                 for entry in value["entries"]
             ]
             value["version"] = 2
-            value["pins"] = legacy_pins
+            value["pins"] = v1_pins[1]
         if "dismissed_default_pins" not in value:
             value["dismissed_default_pins"] = []
-        # Older releases inserted canonical sample examples in Recents. Keep
-        # their directories but show only independent user work here.
-        from sigma.samples import sample_project_ids
-
-        try:
-            sample_ids = sample_project_ids()
-        except (ProjectError, OSError, ValueError, TypeError, KeyError):
-            sample_ids = set()
+        # Built-in sample IDs were loaded before the file lock.
         value["entries"] = [
             entry
             for entry in value["entries"]
@@ -328,6 +368,7 @@ def _index():
     finally:
         if descriptor is not None:
             os.close(descriptor)
+        held.remove(lock_path)
 
 
 def record_access(view: ProjectView) -> None:
@@ -380,8 +421,8 @@ def forget_recent(project_id: str, path: str | None = None) -> None:
         ]
 
 
-def _import_local_admin_recents() -> None:
-    """Copy the existing local Saved index once, without moving project files.
+def _import_local_admin_recents() -> set[str]:
+    """Copy the original local index and return its authorized project paths.
 
     The original local index and its pin choices are preserved. A signed-in
     administrator then manages its own copy under the verified workspace.
@@ -389,7 +430,7 @@ def _import_local_admin_recents() -> None:
     from sigma import cloud_workspaces
 
     if not cloud_workspaces.local_legacy_owner_access():
-        return
+        return set()
     with cloud_workspaces.without_workspace():
         legacy_directory = state_directory()
         with _index() as legacy:
@@ -398,16 +439,18 @@ def _import_local_admin_recents() -> None:
             dismissed = list(legacy.get("dismissed_default_pins", []))
     with _index() as index:
         marker = str(legacy_directory)
-        if marker in index["bootstrapped_roots"]:
-            return
-        existing_ids = {entry["id"] for entry in index["entries"]}
-        index["entries"].extend(entry for entry in entries if entry["id"] not in existing_ids)
-        for family, project_id in pins.items():
-            index["pins"].setdefault(family, project_id)
-        index["dismissed_default_pins"] = sorted(
-            set(index.get("dismissed_default_pins", [])) | set(dismissed)
-        )
-        index["bootstrapped_roots"][marker] = "Imported original local Saved Projects index"
+        if marker not in index["bootstrapped_roots"]:
+            existing_ids = {entry["id"] for entry in index["entries"]}
+            index["entries"].extend(entry for entry in entries if entry["id"] not in existing_ids)
+            for family, project_id in pins.items():
+                index["pins"].setdefault(family, project_id)
+            index["dismissed_default_pins"] = sorted(
+                set(index.get("dismissed_default_pins", [])) | set(dismissed)
+            )
+            index["bootstrapped_roots"][marker] = "Imported original local Saved Projects index"
+    # Return this snapshot after releasing both file locks. The caller must
+    # never re-open the legacy index while holding its own recents.lock.
+    return {entry["path"] for entry in entries}
 
 
 @dataclass(frozen=True)
@@ -433,14 +476,56 @@ class RecentProject:
     shared: bool = False
 
 
+def recent_project_titles(*, exclude_id: str | None = None) -> set[str]:
+    """Accessible saved titles for name allocation; never load paper metadata.
+
+    Snapshot paths under the index lock, then release it before inspecting a
+    project. This prevents the naming lock from waiting on a full Home scan
+    and avoids re-entering the Recent index through legacy authorization.
+    """
+    from sigma import cloud_workspaces, project_collaboration
+    from sigma.projects import _title_key
+
+    workspace = cloud_workspaces.current()
+    if workspace is not None and workspace.guest:
+        return set()
+    if workspace is not None:
+        _import_local_admin_recents()
+    shared = project_collaboration.shared_with_me() if workspace is not None else []
+    with _index() as index:
+        paths = {
+            entry["path"]
+            for entry in index["entries"]
+            if entry["id"] != exclude_id
+        }
+    paths.update(
+        row["path"] for row in shared if row["id"] != exclude_id
+    )
+    titles: set[str] = set()
+    for path in paths:
+        try:
+            view = inspect_project(path)
+            if view.project.id != exclude_id:
+                titles.add(_title_key(view.project.title))
+        except (ProjectError, OSError):
+            continue
+    return titles
+
+
 def recent_projects() -> dict:
     from sigma import cloud_workspaces, project_collaboration
 
     workspace = cloud_workspaces.current()
     if workspace is not None and workspace.guest:
         return {"projects": []}
-    if workspace is not None:
-        _import_local_admin_recents()
+    # Resolve legacy ownership once, before acquiring the current index lock.
+    # A path-specific local_legacy_owner_access() lookup can acquire the legacy
+    # recents.lock, which is the *same file* in unpartitioned local mode.
+    legacy_owner = workspace is not None and cloud_workspaces.local_legacy_owner_access()
+    legacy_paths = _import_local_admin_recents() if legacy_owner else set()
+    from sigma.projects import local_projects_root
+
+    legacy_root = local_projects_root() if legacy_owner else None
     shared_rows = project_collaboration.shared_with_me() if workspace is not None else []
     shared_paths = project_collaboration.shared_project_paths() if workspace is not None else set()
     shared_by_path = {row["path"]: row for row in shared_rows}
@@ -465,7 +550,13 @@ def recent_projects() -> dict:
                 workspace is not None
                 and not Path(copied["path"]).is_relative_to(workspace.path)
                 and copied["path"] not in shared_by_path
-                and not cloud_workspaces.local_legacy_owner_access(Path(copied["path"]))
+                and not (
+                    legacy_root is not None
+                    and (
+                        Path(copied["path"]).is_relative_to(legacy_root)
+                        or copied["path"] in legacy_paths
+                    )
+                )
             ):
                 continue
             entries.append(copied)
@@ -568,6 +659,12 @@ def set_project_pin(project_id: str, path: str, pinned: bool) -> None:
     """Atomically select at most one Saved Project per version family."""
     if type(pinned) is not bool:
         raise ProjectError("Pin state must be true or false.")
+    # Project validation can consult the legacy access index; never call it
+    # from inside the active recents.lock transaction.
+    view = inspect_project(path) if pinned else None
+    if view is not None and view.project.id != project_id:
+        raise ProjectError("Project identity changed. Reopen it before pinning.")
+    family = project_family(view.project.title) if view is not None else None
     with _index() as index:
         entry = next(
             (row for row in index["entries"] if row["id"] == project_id and row["path"] == path),
@@ -585,10 +682,7 @@ def set_project_pin(project_id: str, path: str, pinned: bool) -> None:
             if family not in index["dismissed_default_pins"]:
                 index["dismissed_default_pins"].append(family)
             return
-        view = inspect_project(path)
-        if view.project.id != project_id:
-            raise ProjectError("Project identity changed. Reopen it before pinning.")
-        family = project_family(view.project.title)
+        assert family is not None
         if active.get(family) == project_id:
             return
         if family in active:
