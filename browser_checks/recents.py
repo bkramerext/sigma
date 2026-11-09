@@ -136,6 +136,24 @@ with sync_playwright() as playwright:
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
     type_groups = samples_panel.locator(".sample-type-group")
+
+    def assert_counts_follow_category_names(groups):
+        layout = groups.locator("summary").evaluate_all(
+            """summaries => summaries.map(summary => {
+                const name = summary.querySelector(':scope > span').getBoundingClientRect();
+                const count = summary.querySelector(':scope > small').getBoundingClientRect();
+                return {nameLeft: name.left, nameRight: name.right, countLeft: count.left};
+            })"""
+        )
+        assert layout
+        assert all(row["countLeft"] >= row["nameRight"] + 4 for row in layout), layout
+        assert (
+            max(row["nameLeft"] for row in layout) - min(row["nameLeft"] for row in layout) < 2
+        ), layout
+
+    # The built-in diamond is the fallback when project-type metadata is unavailable.
+    assert type_groups.locator("summary > .research-type-icon").count() == type_groups.count()
+    assert_counts_follow_category_names(type_groups)
     type_labels = type_groups.locator("summary > span").all_text_contents()
     assert type_labels == sorted(type_labels, key=str.casefold), type_labels
     group_controls = type_groups.locator("summary").evaluate_all(
@@ -298,6 +316,8 @@ with sync_playwright() as playwright:
     running_project_ids.clear()
     expect(recent_meta).to_have_text(idle_metadata, timeout=10000)
     recent_groups = recent_panel.locator(".recent-type-group")
+    assert recent_groups.locator("summary > .research-type-icon").count() == recent_groups.count()
+    assert_counts_follow_category_names(recent_groups)
     recent_labels = recent_groups.locator("summary > span").all_text_contents()
     assert recent_labels == sorted(recent_labels, key=str.casefold), recent_labels
     recent_tab.hover()

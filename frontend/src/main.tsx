@@ -4580,7 +4580,8 @@ function ResearchTypeIcon({ type, snapshot }: { type: ResearchMode; snapshot?: P
   const definition = snapshot?.id === type ? snapshot : projectTypeCache.find(item => item.id === type);
   const icon = definition?.icon;
   if (icon?.kind === 'data' && icon.data_uri) return <img className="research-type-icon research-type-icon-custom" src={icon.data_uri} alt=""/>;
-  if (icon?.kind !== 'builtin' || !Array.isArray(icon.elements)) return null;
+  // Match the placeholder icon in builtin_project_types.json even before type metadata loads.
+  if (icon?.kind !== 'builtin' || !Array.isArray(icon.elements)) return <svg className={`research-type-icon research-type-icon-${type}`} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.8 19.9 7.4v9.2L12 21.2 4.1 16.6V7.4L12 2.8Z"/></svg>;
   type IconNode = NonNullable<ProjectTypeRecord['icon']['elements']>[number];
   const render = (node: IconNode, key: string): ReactNode => {
     if (!['path', 'circle', 'ellipse', 'text', 'g'].includes(node.tag)) return null;
