@@ -306,6 +306,21 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .admin-collapsible-section > summary::before { content: '▸'; flex: 0 0 24px; color: var(--sigma-copper-foreground); font-size: 27px; line-height: 1; }
 .admin-collapsible-section[open] > summary::before { content: '▾'; }
 .admin-collapsible-section > summary h3 { margin: 0; color: inherit; font: 400 20px/1.25 Georgia, serif; }
+/* Match the inline Collaborators heading control in Project Settings. */
+.admin-authorized-users-section > summary { gap: 8px; }
+.cloud-access-dialog .admin-authorized-users-section > summary .admin-authorized-add.admin-authorized-add {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+  flex: 0 0 auto;
+}
+.cloud-access-dialog .admin-authorized-users-section > summary .admin-authorized-add svg {
+  width: 24px;
+  height: 24px;
+}
+
 .admin-feedback-table { width: 100%; min-width: 930px; table-layout: fixed; }
 .admin-feedback-table th, .admin-feedback-table td { vertical-align: top; }
 .admin-feedback-table .admin-feedback-message { min-width: 0; }

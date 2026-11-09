@@ -2080,7 +2080,7 @@ async function sha256Text(value: string): Promise<string> {
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 // A recipient hint affects navigation only; it never grants access to projects.
 const SHARED_INVITE_KEY = 'sigma.pendingSharedCollaboratorWelcome';
-type SharedInviteIntent = { path: string; email: string };
+type SharedInviteIntent = { path: string; email: string; title?: string };
 function getPendingSharedInvite(): SharedInviteIntent | null {
   try {
     const raw = window.sessionStorage.getItem(SHARED_INVITE_KEY);
@@ -2091,7 +2091,7 @@ function getPendingSharedInvite(): SharedInviteIntent | null {
       if (typeof value.path === 'string' && value.path.length > 0 && value.path.length <= 2048
         && typeof value.email === 'string' && value.email.length <= 254
         && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email))
-        return { path: value.path, email: value.email.toLowerCase() };
+        return { path: value.path, email: value.email.toLowerCase(), title: typeof value.title === 'string' ? value.title.slice(0, 200) : undefined };
     }
     window.sessionStorage.removeItem(SHARED_INVITE_KEY);
   } catch { /* Storage may be unavailable in private browsing. */ }
@@ -4946,6 +4946,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
 }) {
   useDocumentScrollLock();
   const dialog = useRef<HTMLDialogElement>(null);
+  const cloudIdentity = useCloudIdentity();
   const [baseline, setBaseline] = useState(initial);
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
@@ -5032,6 +5033,12 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
         expected: previous,
         ...(shared.owner ? { expected_revision: shared.revision, collaborators } : {}),
       });
+      const selfEmail = cloudIdentity?.user?.email?.toLowerCase();
+      if (selfEmail && shared.collaborators.includes(selfEmail) && !collaborators.includes(selfEmail)) {
+        // The saved change revoked our own membership; do not request inaccessible project state.
+        window.location.assign('/');
+        return true;
+      }
       if (shared.owner) {
         const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`, {
           headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
@@ -5842,34 +5849,24 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   invite: SharedInviteIntent; cloud: CloudIdentityState | null; onDismiss: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [error, setError] = useState('');
-  const [requested, setRequested] = useState(false);
   const currentEmail = cloud?.authenticated ? cloud.user?.email : null;
-  const canRequestDirectly = cloud?.user?.role === 'guest' || !!cloud?.deniedIdentityAvailable;
-  const invitationStatus = cloud?.user?.role === 'guest' ? cloud.account?.invitation_status : cloud?.deniedInvitationStatus;
-  const requestPending = requested || hasOpenInvitationRequest(invitationStatus);
   useEffect(() => {
-    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+    if (dialog.current && !dialog.current.open) { dialog.current.showModal(); dialog.current.focus(); }
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, []);
-  return <dialog ref={dialog} className="google-account-dialog invitation-welcome-dialog"
+  return <dialog ref={dialog} tabIndex={-1} className="google-account-dialog invitation-welcome-dialog shared-collaborator-welcome"
     aria-labelledby="shared-project-invitation-heading"
     onCancel={event => { event.preventDefault(); onDismiss(); }}
     onClick={event => { if (event.target === event.currentTarget) onDismiss(); }}>
-    <h2 id="shared-project-invitation-heading">You've been invited to collaborate!</h2>
-    <p className="invitation-welcome-intro">To open this shared project, sign in with Google as <strong>{invite.email}</strong>.</p>
+    <h2 id="shared-project-invitation-heading" style={{ fontSize: 25, lineHeight: 1.25 }}>Open shared project</h2>
+    {invite.title && <p className="invitation-welcome-intro"><strong>{invite.title}</strong></p>}
+    <p className="invitation-welcome-intro">Sign in with Google as <strong>{invite.email}</strong> to open the project.</p>
     {currentEmail && currentEmail.toLowerCase() !== invite.email &&
-      <p className="invitation-welcome-intro">You're currently signed in as {currentEmail}. Choose the invited account instead.</p>}
-    <div className="invitation-welcome-actions">
-      <a className="invitation-welcome-link" href="/api/cloud-auth/login">Sign in with Google</a>
-      {requestPending ? <p role="status">Your SIGMA invitation request is awaiting review.</p>
-        : canRequestDirectly ? <InvitationRequestControls error={error} onError={setError}
-            onRecorded={() => { setRequested(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); }}
-            buttonLabel="Request invitation" buttonClassName="invitation-welcome-link"/>
-        : <a className="invitation-welcome-link" href="/api/cloud-auth/login?invite=1">Request invitation</a>}
-      <button type="button" className="invitation-welcome-link" onClick={onDismiss}>Explore SIGMA</button>
+      <p className="invitation-welcome-current-account">Currently signed in as {currentEmail}.</p>}
+    <div className="invitation-welcome-actions" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 40 }}>
+      <a className="invitation-welcome-link" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, minHeight: 32, lineHeight: "32px" }} href="/api/cloud-auth/login">Sign in with Google</a>
+      <button type="button" className="invitation-welcome-link" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, minHeight: 32, lineHeight: "32px" }} onClick={onDismiss}>Not now</button>
     </div>
-    <p className="invitation-welcome-about-hint">A SIGMA invitation request is for membership. To share this particular project with a different account, ask the project owner.</p>
   </dialog>;
 }
 
@@ -7597,6 +7594,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   const dialog = useRef<HTMLDialogElement>(null);
   const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
   const [addOpen, setAddOpen] = useState(false);
+  const [authorizedUsersExpanded, setAuthorizedUsersExpanded] = useState(true);
   const [newKind, setNewKind] = useState<'email' | 'domain'>('email');
   const [newValue, setNewValue] = useState('');
   const [newRole, setNewRole] = useState<'member' | 'admin'>('member');
@@ -7721,6 +7719,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     try {
       await onAdd({ kind: newKind, value, role: newKind === 'domain' ? 'member' : newRole, allowance_usd: newKind === 'email' && newRole === 'admin' ? null : newAllowance.trim() ? Number(newAllowance) : null });
       setNewValue(''); setNewAllowance(''); setAddOpen(false); setMessage('');
+      setAuthorizedUsersExpanded(true);
       requestAnimationFrame(() => addButton.current?.focus());
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
   }
@@ -7757,6 +7756,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       );
       await onAdd({ kind: 'email', value: item.email, role: 'member', allowance_usd: policy?.allowance_usd ?? null });
       await onUpdateInvitation(item, 'reviewed');
+      setAuthorizedUsersExpanded(true);
       setMessage(`Added ${item.email} as an authorized member.`);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
   }
@@ -7790,7 +7790,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       <details className="admin-collapsible-section admin-feedback-section" open><summary><h3>Product feedback</h3></summary>
       {feedbackRequests.length ? <div className="admin-table-scroll admin-feedback-scroll"><table className="admin-grants-table admin-feedback-table"><colgroup><col style={{ width: '33%' }}/><col style={{ width: '22%' }}/><col style={{ width: '15%' }}/><col style={{ width: '9%' }}/><col style={{ width: '21%' }}/></colgroup><thead><tr><th scope="col">Feedback</th><th scope="col">Google account</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}</th><td className="admin-feedback-account">{item.account_email || 'Not signed in'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td><div className="admin-feedback-actions"><button type="button" className="admin-text-action admin-icon-action" disabled={busy || item.status === 'closed'} aria-pressed={item.status === 'reviewed'} aria-label={item.status === 'reviewed' ? 'Mark feedback unreviewed' : 'Mark feedback reviewed'} data-tooltip={item.status === 'reviewed' ? 'Mark unreviewed' : 'Mark reviewed'} onClick={() => void onUpdateFeedback(item, item.status === 'reviewed' ? 'new' : 'reviewed')}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/>{item.status === 'reviewed' && <path d="m8 12 3 3 5-6" strokeWidth="2.3"/>}</svg></button><button type="button" className="admin-text-action admin-remove admin-icon-action" disabled={busy} aria-label="Remove feedback" data-tooltip="Remove feedback" onClick={() => void onRemoveFeedback(item)}><AdminActionIcon kind="remove"/></button></div></td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
       </details>
-      <details className="admin-collapsible-section admin-authorized-users-section" open><summary><h3>Authorized users</h3></summary>
+      <details className="admin-collapsible-section admin-authorized-users-section" open={authorizedUsersExpanded} onToggle={event => setAuthorizedUsersExpanded(event.currentTarget.open)}><summary><h3>Authorized users</h3><button ref={addButton} type="button" className="admin-text-action admin-icon-action admin-authorized-add" aria-label="Add authorized user or domain" data-tooltip="Add authorized user or domain" aria-expanded={addOpen} onClick={event => { event.preventDefault(); event.stopPropagation(); setAuthorizedUsersExpanded(true); setAddOpen(true); }}><CirclePlusIcon/></button></summary>
       <div className="admin-table-scroll admin-authorized-table-scroll"><table className="admin-grants-table admin-authorized-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col" className="admin-allowance-heading">Sponsorship allowance</th><th scope="col">Actions</th></tr></thead><tbody>
         {ordered.map(grant => {
           const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
@@ -7806,7 +7806,6 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
           </tr>;
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
-        <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action admin-icon-action" aria-label="New access rule" data-tooltip="New access rule" aria-expanded={addOpen} onClick={() => setAddOpen(true)}><AdminActionIcon kind="new"/></button></td></tr>
       </tbody></table></div></details>
       {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p></div>}
       {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
@@ -8068,6 +8067,7 @@ function CloudAuthGate() {
   const inviteeEmail = window.location.pathname === '/project'
     ? (sharedInviteParams.get('invited_email') ?? '').trim().toLowerCase() : '';
   const inviteePath = sharedInviteParams.get('path') ?? '';
+  const inviteeTitle = (sharedInviteParams.get('project_title') ?? '').slice(0, 200);
   const redirectSharedInvite = !!status?.enabled && !!inviteePath && inviteePath.length <= 2048
     && inviteeEmail.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteeEmail)
     && (!status.authenticated || status.user?.role === 'guest'
@@ -8075,11 +8075,11 @@ function CloudAuthGate() {
   useEffect(() => {
     if (!redirectSharedInvite) return;
     try {
-      window.sessionStorage.setItem(SHARED_INVITE_KEY, JSON.stringify({ path: inviteePath, email: inviteeEmail }));
+      window.sessionStorage.setItem(SHARED_INVITE_KEY, JSON.stringify({ path: inviteePath, email: inviteeEmail, title: inviteeTitle }));
     } catch { /* Continue to Home even when storage is restricted. */ }
     // Never mount the inaccessible project screen for the wrong Google account.
     window.location.replace('/');
-  }, [redirectSharedInvite, inviteePath, inviteeEmail]);
+  }, [redirectSharedInvite, inviteePath, inviteeEmail, inviteeTitle]);
   const pendingSharedInvite = redirectSharedInvite || !!getPendingSharedInvite();
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = !!status?.account?.invitation_welcome_pending

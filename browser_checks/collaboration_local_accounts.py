@@ -167,26 +167,31 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
 
         # An email deep link opens immediately only for the invited account.
-        invitation_url = url + "&invited_email=" + quote(COLLABORATOR, safe="")
+        invitation_url = (
+            url
+            + "&invited_email="
+            + quote(COLLABORATOR, safe="")
+            + "&project_title="
+            + quote(title, safe="")
+        )
         member.goto(invitation_url)
         expect(member.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
-        expect(
-            member.get_by_role("dialog", name="You've been invited to collaborate!")
-        ).to_have_count(0)
+        expect(member.get_by_role("dialog", name="Open shared project")).to_have_count(0)
 
         # A different signed-in account is guided Home instead of getting
         # the raw Project unavailable/access-denied error.
         wrong_account = owner_context.new_page()
         wrong_account.goto(invitation_url)
         expect(wrong_account).to_have_url(ui + "/")
-        welcome = wrong_account.get_by_role("dialog", name="You've been invited to collaborate!")
+        welcome = wrong_account.get_by_role("dialog", name="Open shared project")
         expect(welcome).to_be_visible()
         expect(welcome.get_by_text(COLLABORATOR)).to_be_visible()
+        expect(welcome.get_by_text(title, exact=True)).to_be_visible()
         expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_attribute(
             "href", "/api/cloud-auth/login"
         )
         expect(wrong_account.get_by_text("Project unavailable")).to_have_count(0)
-        welcome.get_by_role("button", name="Explore SIGMA").click()
+        welcome.get_by_role("button", name="Not now").click()
         expect(welcome).not_to_be_visible()
         wrong_account.close()
 
@@ -196,10 +201,11 @@ def exercise(ui: str, workspaces: Path) -> None:
         guest = guest_context.new_page()
         guest.goto(invitation_url)
         expect(guest).to_have_url(ui + "/")
-        guest_welcome = guest.get_by_role("dialog", name="You've been invited to collaborate!")
+        guest_welcome = guest.get_by_role("dialog", name="Open shared project")
         expect(guest_welcome).to_be_visible()
         expect(guest_welcome.get_by_text(COLLABORATOR)).to_be_visible()
-        expect(guest_welcome.get_by_role("link", name="Request invitation")).to_be_visible()
+        expect(guest_welcome.get_by_role("link", name="Sign in with Google")).to_be_visible()
+        expect(guest_welcome.get_by_text("Request invitation")).to_have_count(0)
 
         # Simulate successful Google sign-in to the invited account without
         # leaving this browser context: its pending link should reopen itself.
