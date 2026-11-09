@@ -93,6 +93,27 @@ class CollaborationTests(TestCase):
                 (self.path, self.other.email),
             )
 
+    def test_saved_listing_uses_single_db_snapshot_for_owner_and_collaborator(self) -> None:
+        with patch.object(shared, "_db", wraps=shared._db) as db_calls:
+            invited, shared_paths = shared.shared_listing()
+        self.assertEqual(invited, [])
+        self.assertEqual(shared_paths, {self.path})
+        self.assertEqual(db_calls.call_count, 1)
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+        ):
+            invited, shared_paths = shared.shared_listing()
+        self.assertEqual(invited, [{"path": self.path, "id": "saved-project"}])
+        self.assertEqual(shared_paths, {self.path})
+
     def revision(self) -> int:
         with shared._db() as db:
             return int(
