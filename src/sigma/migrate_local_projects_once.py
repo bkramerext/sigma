@@ -134,6 +134,8 @@ def migrate_if_needed(principal: cloud_auth.Principal) -> None:
         workspace is None
         or workspace.guest
         or not config.local
+        or principal.role == "guest"
+        or principal.subject.startswith(("mock:", "local-admin:"))
         or principal.email.casefold() != TARGET_EMAIL
         or principal.subject != workspace.verified_subject
     ):

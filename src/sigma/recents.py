@@ -420,7 +420,8 @@ class RecentProject:
 
 def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
     """Render project identity first; expensive status and paper details are optional."""
-    from sigma import cloud_workspaces, project_collaboration
+    from sigma import cloud_workspaces, papers, project_collaboration
+    from sigma.research_sessions import has_active_session
 
     workspace = cloud_workspaces.current()
     if workspace is not None and workspace.guest:
@@ -465,9 +466,6 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
             for entry in entries
             if Path(entry["path"]).is_relative_to(workspace.path) or entry["path"] in shared_by_path
         ]
-    if not lightweight:
-        from sigma import papers
-        from sigma.research_sessions import has_active_session
 
     recent = []
     for entry in entries:
