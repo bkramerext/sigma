@@ -6738,7 +6738,7 @@ async def start_session(
                 _event(
                     record,
                     "references.compilation.queued",
-                    "Preparing one-time AI compilation of verified research references.",
+                    "Preparing one-time AI compilation of verified research standards.",
                 )
             # _outcome was initialized before all session metadata existed.
             record["outcome"] = _outcome(record)
@@ -14969,7 +14969,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 compilation["reason"] = (
                     "Compiler retry could not be funded; using original frozen references."
                     if compilation.get("attempts")
-                    else "Compiling references would exceed the frozen research budget."
+                    else "Compiling research standards would exceed the frozen research budget."
                 )
                 compilation["failure_type"] = "budget_exhausted"
                 compilation.setdefault("attempts", []).append(
@@ -15025,9 +15025,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 float(record.get("estimated_cost_reserved_usd", 0.0)) + quote
             )
         record["status"] = "running"
-        record["current_action"] = "Compiling research references"
+        record["current_action"] = "Compiling research standards"
         record["message"] = (
-            f"Compiling selected references (attempt {attempt_number} of "
+            f"Compiling selected research standards (attempt {attempt_number} of "
             f"{research_reference_compiler.MAX_COMPILATION_ATTEMPTS})."
         )
         _event(record, "references.compilation.started", record["message"])
@@ -15086,7 +15086,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 compilation["token_reservation"] = 0
                 compilation["cost_reserve"] = 0.0
                 record["status"] = "queued"
-                record["current_action"] = "References ready"
+                record["current_action"] = "Research standards ready"
                 record["message"] = "Compilation not funded; using frozen original references."
                 _event(
                     record,
@@ -15437,14 +15437,14 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 else:
                     latest["status"] = "queued"
                     latest["current_action"] = (
-                        "Compiling research references"
+                        "Compiling research standards"
                         if stage["status"] == "pending"
-                        else "References ready"
+                        else "Research standards ready"
                     )
                     latest["message"] = (
                         stage["reason"]
                         if stage["status"] == "pending"
-                        else "Reference preparation finished. Research may proceed."
+                        else "Research standards preparation finished. Research may proceed."
                     )
             latest["updated_at"] = _now()
             _save(path, latest)
@@ -15467,7 +15467,7 @@ def _strict_compilation_block_reason(compilation: Any) -> str | None:
     ]
     return (
         f"Research is paused: required reference compilation is {status}. "
-        f"{reason} Review Outcome → Research References and resolve the cause "
+        f"{reason} Review Outcome → Research Standards and resolve the cause "
         "before clicking Resume. No Investigator or Skeptic call was dispatched."
     )
 
@@ -15532,7 +15532,7 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
             source = inputs[len(saved)]
             stage["status"] = "running"
             record["status"] = "running"
-            record["current_action"] = "Compiling supplied evidence"
+            record["current_action"] = "Compiling source material"
             record["message"] = f"Reading supplied evidence {len(saved) + 1} of {len(inputs)}."
             _save(path, record)
         # External HTTP and PDF extraction run outside session state locks.
