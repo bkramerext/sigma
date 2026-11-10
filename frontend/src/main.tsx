@@ -5117,7 +5117,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
               <div className="project-collaborator-row">
                 <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
               </div>
-              {collaborators.length > 0 && <p className="project-collaborator-standards-note">Research and publication standards are determined by the project owner and apply to all collaborators.</p>}
+              {collaborators.length > 0 && <p className="project-collaborator-standards-note">The project title, research category, difficulty, and research and publication standards are determined by the project owner and apply to all collaborators.</p>}
               {collaborators.map(email => <div className="project-collaborator-row" key={email}>
                 <span>{email}</span>
                 {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
