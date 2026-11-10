@@ -2749,11 +2749,21 @@ def _paper_dir(path: str, create: bool = True) -> Path:
             "Paper generation is unavailable for immutable sample sources; open a project copy"
         )
     if target.suffix == ".json":
-        # Mutable generation checkpoints live beside the project; finalized
-        # paper records and PDFs are embedded in the portable project bundle.
+        # Transitional legacy projects. New projects always use directory storage.
         directory = target.with_name("." + target.name + ".papers")
     else:
-        directory = target / "papers"
+        canonical = target / "artifacts" / "generated_papers"
+        legacy = target / "papers"
+        if legacy.is_symlink() or canonical.is_symlink():
+            raise ProjectError("Paper storage must not be a symbolic link")
+        # Preserve existing local paper versions until migration; all new
+        # directory projects use the canonical location.
+        directory = legacy if legacy.is_dir() and not canonical.exists() else canonical
+        if create and directory == canonical:
+            parent = directory.parent
+            if parent.is_symlink():
+                raise ProjectError("Paper artifact storage must not be a symbolic link")
+            parent.mkdir(mode=0o700, exist_ok=True)
     if directory.is_symlink():
         raise ProjectError("Paper storage directory must not be a symbolic link")
     if not directory.exists() and not directory.is_symlink():
