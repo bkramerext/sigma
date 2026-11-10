@@ -15454,6 +15454,83 @@ def _strict_compilation_block_reason(compilation: Any) -> str | None:
     )
 
 
+def _bounded_supplied_evidence(sources: list[dict], limit: int = 6000) -> list[dict]:
+    """Keep every source identity/status while bounding agent-visible extracts."""
+    if not sources:
+        return []
+    remaining = limit
+    output = []
+    for index, source in enumerate(sources):
+        allowance = remaining // (len(sources) - index)
+        full = str(source.get("excerpt") or "")
+        excerpt = full[:allowance]
+        remaining -= len(excerpt)
+        output.append({
+            **source,
+            "excerpt": excerpt,
+            "incomplete_extract": bool(source.get("incomplete_extract"))
+            or len(excerpt) < len(full),
+        })
+    return output
+
+
+async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> bool:
+    """Checkpoint each actual document read before Investigator/Skeptic dispatch."""
+    from sigma import research_supplied_evidence
+
+    while True:
+        async with _session_state_lock(session_id):
+            record = _read(path, session_id)
+            if record["status"] in {"stopped", "paused", "ended", "completed", "failed"}:
+                return False
+            if _pause_for_stop_advisory(record, path):
+                _save(path, record)
+                return False
+            inputs = record.get("uploaded_project_evidence")
+            if not inputs:
+                return True  # No change to existing evidence-free session semantics.
+            stage = record.setdefault(
+                "supplied_evidence_compilation",
+                {"status": "pending", "sources": [], "total": len(inputs)},
+            )
+            if stage.get("status") == "completed":
+                return True
+            saved = stage.setdefault("sources", [])
+            if len(saved) >= len(inputs):
+                stage["status"] = "completed"
+                stage["finished_at"] = _now()
+                record["uploaded_project_evidence"] = _bounded_supplied_evidence(saved)
+                record["status"] = "queued"
+                record["current_action"] = "Supplied evidence ready"
+                record["message"] = (
+                    f"Read {sum(row.get('status') == 'retrieved' for row in saved)} of "
+                    f"{len(saved)} supplied evidence sources."
+                )
+                _event(record, "evidence.compilation.completed", record["message"])
+                _save(path, record)
+                return True
+            source = inputs[len(saved)]
+            stage["status"] = "running"
+            record["status"] = "running"
+            record["current_action"] = "Compiling supplied evidence"
+            record["message"] = (
+                f"Reading supplied evidence {len(saved) + 1} of {len(inputs)}."
+            )
+            _save(path, record)
+        # External HTTP and PDF extraction run outside session state locks.
+        compiled = await asyncio.to_thread(research_supplied_evidence.compile_entry, source)
+        async with _session_state_lock(session_id):
+            latest = _read(path, session_id)
+            stage = latest["supplied_evidence_compilation"]
+            saved = stage["sources"]
+            if len(saved) < len(inputs) and inputs[len(saved)]["id"] == source["id"]:
+                saved.append(compiled)
+                stage["completed_count"] = len(saved)
+                _save(path, latest)
+            if latest["status"] in {"stopped", "paused", "ended", "failed"}:
+                return False
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -15516,6 +15593,8 @@ async def _worker(session_id: str, path: str) -> None:
                         _event(latest, "references.compilation.acceptance_blocked", blocked)
                         _save(path, latest)
                     return
+            if not await _ensure_supplied_evidence_compilation(session_id, path):
+                return
             await _portfolio_worker(session_id, path)
             return
         while True:
