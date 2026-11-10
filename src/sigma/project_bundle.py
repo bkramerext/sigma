@@ -607,6 +607,8 @@ def _publish_members(path: Path, members: dict[str, bytes], prefix: str) -> None
 def list_files(bundle_path: str | Path) -> tuple[str, ...]:
     """Enumerate all persisted members of a single-file project."""
     path = Path(bundle_path)
+    if path.suffix == ".sigma" and path.is_dir() and not path.is_symlink():
+        return tuple(sorted(_files(path)))
     if path.is_symlink() or not path.is_file():
         raise BundleError("Project JSON must be a regular file")
     try:
