@@ -213,7 +213,84 @@ class CollaborationTests(TestCase):
         with shared._db() as db:
             db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
         self.assertFalse(shared.summary(self.path)["shared"])
-        self.assertEqual(shared.summary(self.path)["artifact_authors"], {})
+        self.assertEqual(
+            shared.summary(self.path)["artifact_authors"]["paper"]["paper-one"],
+            self.owner.email,
+        )
+        self.assertEqual(shared.collaborator_identity(self.path), self.owner.email)
+
+    def test_original_creator_and_owner_terminal_deletion_fence(self) -> None:
+        """Creator remains stable; owner may delete only completed other-user work."""
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            shared.note_artifact_author(self.path, "session", "other-session", created_only=True)
+            shared.note_artifact_author(self.path, "paper", "other-paper", created_only=True)
+            shared.reserve_paper_draft(self.path, "saved-project", resuming=False)
+            shared.require_execution_operator(
+                self.path, "session", "other-session", "Research session"
+            )
+            shared.require_artifact_manager(
+                self.path, "session", "other-session", owner_terminal=False
+            )
+        # An unrelated collaborator cannot control or delete the other run.
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.owner,
+            ),
+        ):
+            self.assertRaisesRegex(
+                ProjectError,
+                "Only the original execution creator",
+                shared.require_execution_operator,
+                self.path,
+                "session",
+                "other-session",
+                "Research session",
+            )
+            self.assertRaisesRegex(
+                ProjectError,
+                "Only the creator",
+                shared.require_artifact_manager,
+                self.path,
+                "session",
+                "other-session",
+                owner_terminal=False,
+            )
+            # Completed or ended work may be removed by the project owner.
+            shared.require_artifact_manager(
+                self.path, "session", "other-session", owner_terminal=True
+            )
+            shared.require_artifact_manager(self.path, "paper", "other-paper")
+            self.assertRaisesRegex(
+                ProjectError,
+                "Only the original paper creator",
+                shared.reserve_paper_draft,
+                self.path,
+                "saved-project",
+                resuming=True,
+            )
+            # A score or post-processing action cannot replace the author.
+            shared.note_artifact_author(self.path, "session", "other-session")
+            shared.note_artifact_author(self.path, "paper", "other-paper")
+            authors = shared.summary(self.path)["artifact_authors"]
+            self.assertEqual(authors["session"]["other-session"], self.other.email)
+            self.assertEqual(authors["paper"]["other-paper"], self.other.email)
+            self.assertEqual(
+                authors["paper_draft"]["saved-project"], self.other.email
+            )
 
     def revision(self) -> int:
         with shared._db() as db:
