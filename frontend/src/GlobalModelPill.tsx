@@ -60,11 +60,7 @@ function ScrollingLabel({ value, direction, className, userCycleRevision }: {
 }
 
 /** Restores the historic model cycle pill, now persisted as a per-user default. */
-export default function GlobalModelPill({ enabled = true, project, onProjectChange }: {
-  enabled?: boolean;
-  project?: { model: string; thinking: string };
-  onProjectChange?: (model: string, thinking: string) => Promise<void>;
-}) {
+export default function GlobalModelPill({ enabled = true }: { enabled?: boolean }) {
   const [settings, setSettings] = useState<ResearchSettings | null>(null);
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [ready, setReady] = useState(false);
@@ -122,9 +118,7 @@ export default function GlobalModelPill({ enabled = true, project, onProjectChan
       document.removeEventListener('keydown', keydown, true);
     };
   }, [pending]);
-  const effective = settings && project
-    ? { ...settings, ai_model: project.model, reasoning_effort: project.thinking }
-    : settings;
+  const effective = settings;
   const selected = models.find(m => m.id === effective?.ai_model);
   const choices = models.filter(m => m.availability !== 'unavailable' && m.efforts?.length)
     .sort((a, b) => costTier(a.relative_cost) - costTier(b.relative_cost) || a.label.localeCompare(b.label));
@@ -146,7 +140,7 @@ export default function GlobalModelPill({ enabled = true, project, onProjectChan
   const notice = nextEffort && effective && nextEffort !== effective.reasoning_effort
     ? ' Switching to ' + modelName(next, '') + ' also changes Thinking to ' + nextEffort + '.' : '';
   const tooltip = !enabled ? 'Sign in to view the research model.' : effective
-    ? (project ? 'The project model is ' : 'The selected default model is ') + selectedName + '. Relative published API token cost: ' +
+    ? 'Your selected model is ' + selectedName + '. Relative published API token cost: ' +
       (selected?.relative_cost ?? 'unknown') + '. Applies to the next AI call in running research and paper generation, and to new work. In-flight calls are unchanged. ' +
       (thinkingLabel ? ' ' + thinkingLabel + '.' : '') +
       ' Click the upper half to cycle models; click the lower half to cycle thinking levels.' + notice
@@ -157,12 +151,6 @@ export default function GlobalModelPill({ enabled = true, project, onProjectChan
     if (!effort) return;
     setBusy(true); setError('');
     try {
-      if (project && onProjectChange) {
-        await onProjectChange(choice.id, effort);
-        if (userCycle === 'model') setModelCycleRevision(revision => revision + 1);
-        if (userCycle === 'thinking') setThinkingCycleRevision(revision => revision + 1);
-        return;
-      }
       if (!settings) throw new Error('Model defaults are unavailable.');
       const response = await fetch('/api/user-preferences/research-settings', {
         method: 'PUT',

@@ -29,7 +29,6 @@ import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
 import GlobalModelPill from './GlobalModelPill';
-import { modelDisplayLabel } from './model-display';
 import ProjectDescriptionEditor, { type ProjectDescriptionDraft } from './ProjectDescriptionEditor';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
@@ -4327,22 +4326,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
             <button type="button" className="about-action" aria-label="About SIGMA" data-tooltip-disabled onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
             {onProjectUpdated && showConnectionStatus && <button type="button" className="project-control-pill project-difficulty-badge project-global-settings-pill" aria-label="Settings" data-tooltip="SIGMA Settings" aria-haspopup="dialog" aria-expanded={globalSettingsOpen} onClick={() => setGlobalSettingsOpen(true)}><SlidersSettingsIcon/></button>}
           </div>
-          <ConnectedModelPill enabled={showConnectionStatus}
-            project={projectView ? { model: projectView.project.ai_model, thinking: projectView.project.reasoning_effort } : undefined}
-            onProjectChange={onProjectUpdated && projectView ? async (model, thinking) => {
-              const previous = settingsOf(projectView);
-              const collaborationResponse = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: projectView.path, verify_revision: 'true' })}`, {
-                headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
-              });
-              if (!collaborationResponse.ok) throw new Error('Could not read current project revision.');
-              const shared = await collaborationResponse.json() as SharedProjectInfo;
-              const next = await post<ProjectView>('update', {
-                path: projectView.path, ...previous, ai_model: model, reasoning_effort: thinking,
-                expected: previous,
-                ...(shared.owner ? { expected_revision: shared.revision, collaborators: shared.collaborators } : {}),
-              });
-              onProjectUpdated(next);
-            } : undefined}/>
+          <ConnectedModelPill enabled={showConnectionStatus}/>
         </div>
       </div>
     </div>}
@@ -4637,7 +4621,6 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
 }
 
 type Settings = { title: string; problem: string; desired_outcomes: string; paper_requirements: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null; show_advanced_outcome_details: boolean };
-type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; relative_cost: '$' | '$$' | '$$$'; availability: 'available' | 'unavailable' | 'unverified' };
 // Keep preference controls usable when account access cannot be checked.
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
 const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, desired_outcomes: view.project.desired_outcomes ?? '', paper_requirements: view.project.paper_requirements ?? '', investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty, show_advanced_outcome_details: view.project.show_advanced_outcome_details });
@@ -4969,11 +4952,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
   const [shared, setShared] = useState<SharedProjectInfo | null>(null);
-  const [model, setModel] = useState(initial.project.ai_model);
-  const [thinking, setThinking] = useState(initial.project.reasoning_effort);
   const [collaborators, setCollaborators] = useState<string[]>([]);
-  const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
-  const [modelLookupFailed, setModelLookupFailed] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [retryingEmails, setRetryingEmails] = useState(false);
@@ -4994,32 +4973,16 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       .then((saved: SharedProjectInfo) => {
         if (controller.signal.aborted) return;
         setShared(saved);
-        setModel(saved.model);
-        setThinking(saved.thinking);
         setCollaborators(saved.collaborators);
         setLoading(false);
       }).catch(cause => {
         if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
       });
-    void json('/api/ai/models')
-      .then((available: { models: CatalogChoice[] }) => {
-        if (!controller.signal.aborted) {
-          setCatalog(available.models);
-          setModelLookupFailed(false);
-        }
-      }).catch(() => {
-        if (!controller.signal.aborted) setModelLookupFailed(true);
-      });
     return () => controller.abort();
   }, [initial.path]);
-  const selected = catalog.find(choice => choice.id === model);
-  const validPair = !shared?.owner
-    || (model === shared.model && thinking === shared.thinking)
-    || !!selected?.efforts.includes(thinking);
   const changed = projectType !== baseline.project.investigation_type
     || difficulty !== baseline.project.difficulty
-    || (!!shared?.owner && (model !== shared.model || thinking !== shared.thinking
-      || JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators)));
+    || (!!shared?.owner && JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators));
   function finishCollaboratorEntry(value: string) {
     if (!value.trim()) { setAdding(false); setNewEmail(''); setError(''); return; }
     const email = plausibleCollaboratorEmail(value);
@@ -5040,14 +5003,14 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
     finally { setRetryingEmails(false); }
   }
   async function save(): Promise<boolean> {
-    if (busy || loading || !changed || !validPair || !shared) return false;
+    if (busy || loading || !changed || !shared) return false;
     setBusy(true); setError('');
     try {
       const previous = settingsOf(baseline);
       const next = await post<ProjectView>('update', {
         path: initial.path, ...previous,
         investigation_type: projectType, difficulty,
-        ai_model: model, reasoning_effort: thinking,
+        ai_model: baseline.project.ai_model, reasoning_effort: baseline.project.reasoning_effort,
         expected: previous,
         ...(shared.owner ? { expected_revision: shared.revision, collaborators } : {}),
       });
@@ -5071,14 +5034,13 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
     finally { setBusy(false); }
   }
   useEffect(() => {
-    if (loading || busy || !changed || !validPair || !shared || error) return;
+    if (loading || busy || !changed || !shared || error) return;
     const timer = window.setTimeout(() => { void save(); }, 350);
     return () => window.clearTimeout(timer);
-  }, [loading, busy, changed, validPair, shared, projectType, difficulty, model, thinking, collaborators, error]);
+  }, [loading, busy, changed, shared, projectType, difficulty, collaborators, error]);
   async function close() {
     if (busy || loading) return;
     if (changed) {
-      if (!validPair) { setError('Choose a compatible model and Thinking level.'); return; }
       if (!await save()) return;
     }
     onCancel();
@@ -5106,33 +5068,6 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             </div>
           </div>
           {!!shared?.owner && <>
-            <div className="settings-model-row">
-              <div>
-                <label htmlFor="shared-project-model">Model</label>
-                <SigmaChoicePicker id="shared-project-model" label="Model" value={model}
-                  disabled={modelLookupFailed || catalog.length === 0}
-                  choices={[
-                    ...(model && !selected ? [{ value: model, label: `${model} · unavailable` }] : []),
-                    ...[...catalog].sort((a, b) => a.relative_cost.length - b.relative_cost.length || a.label.localeCompare(b.label)).map(option => ({ value: option.id, label: modelDisplayLabel(option) })),
-                  ]}
-                  onChange={next => {
-                    setModel(next);
-                    const option = catalog.find(item => item.id === next);
-                    if (option && !option.efforts.includes(thinking)) setThinking(option.efforts[0] ?? 'high');
-                  }}/>
-              </div>
-              <div>
-                <label htmlFor="shared-project-thinking">Thinking</label>
-                <SigmaChoicePicker id="shared-project-thinking" label="Thinking" value={thinking}
-                  disabled={modelLookupFailed || catalog.length === 0}
-                  choices={[
-                    ...(!selected?.efforts.includes(thinking) ? [{ value: thinking, label: `${thinkingLabels[thinking] ?? thinking} · unavailable` }] : []),
-                    ...(selected?.efforts ?? []).map(effort => ({ value: effort, label: thinkingLabels[effort] ?? effort })),
-                  ]}
-                  onChange={setThinking}/>
-              </div>
-            </div>
-            {modelLookupFailed && <p className="settings-hint" role="status">Model choices are unavailable. You can still edit collaborators and save their changes.</p>}
             <section className="project-collaborators" aria-label="Collaborators">
               <div className="project-collaborators-heading">
                 <h3>Collaborators</h3>
@@ -5167,7 +5102,6 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
           </p>}
         </fieldset>
         {loading && <p className="settings-hint">Loading shared settings…</p>}
-        {!validPair && <p role="alert" className="error">Choose a compatible model and Thinking level.</p>}
         {error && <p role="alert" className="error">{error}</p>}
       </div>
     </form>
@@ -5176,8 +5110,6 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
 
 function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
   useDocumentScrollLock();
-  const ai = useAI();
-  const cloud = useCloudIdentity();
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -5193,8 +5125,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [exclusiveSectionsLoaded, setExclusiveSectionsLoaded] = useState(false);
   const [sectionLayoutWarning, setSectionLayoutWarning] = useState('');
   const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', desired_outcomes: '', paper_requirements: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
-  const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
-  const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
   const [locationError, setLocationError] = useState('');
   const [previewBusy, setPreviewBusy] = useState(!initial);
@@ -5283,18 +5213,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     return () => controller.abort();
   }, [initial?.path]);
   useEffect(() => {
-    const controller = new AbortController();
-    if (cloud?.enabled && !cloud.authenticated) {
-      setCatalog([]); setCatalogMessage('Model availability is unavailable in Guest mode.');
-      return () => controller.abort();
-    }
-    fetch('/api/ai/models', { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Model catalog unavailable. Check the local server; existing settings are retained.'); return response.json(); }).then(data => {
-      setCatalog(data.models); setCatalogMessage(data.message);
-      if (!initial) setValues(previous => previous.ai_model ? previous : { ...previous, ai_model: data.default_model, reasoning_effort: data.default_effort });
-    }).catch(error => { if (!controller.signal.aborted) setCatalogMessage(errorMessage(error)); });
-    return () => controller.abort();
-  }, [ai.info?.mode, ai.info?.active_account, cloud?.enabled, cloud?.authenticated]);
-  useEffect(() => {
     if (initial) return;
     const controller = new AbortController(); setPreviewBusy(true); setDestination(null); setLocationError('');
     const timer = window.setTimeout(async () => {
@@ -5308,15 +5226,9 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     return () => { clearTimeout(timer); controller.abort(); };
   }, [values.title]);
   function change<K extends keyof Settings,>(key: K, value: Settings[K]) { setValues(previous => ({ ...previous, [key]: value })); }
-  const selected = catalog.find(model => model.id === values.ai_model);
-  const costOrder: Record<CatalogChoice['relative_cost'], number> = { '$': 1, '$$': 2, '$$$': 3 };
-  const orderedCatalog = [...catalog].sort((a, b) => costOrder[a.relative_cost] - costOrder[b.relative_cost] || a.label.localeCompare(b.label));
-  const samePair = !!initial && values.ai_model === initial.project.ai_model && values.reasoning_effort === initial.project.reasoning_effort;
-  const compatible = selected?.efforts.includes(values.reasoning_effort) || samePair;
-  const pairError = selected && !selected.efforts.includes(values.reasoning_effort) && !samePair ? 'This model does not support the selected Thinking level. Choose a supported level explicitly.' : '';
   const canCreate = !!values.title.trim() && !!values.investigation_type.trim();
   async function save(event: FormEvent) {
-    event.preventDefault(); if (submitting.current || (initial && (!compatible || !limitValidation.value)) || (!initial && !canCreate)) return;
+    event.preventDefault(); if (submitting.current || (initial && !limitValidation.value) || (!initial && !canCreate)) return;
     submitting.current = true; setBusy(true); setError('');
     try {
       const createValues = {
@@ -5375,7 +5287,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby={initial ? "project-settings-help" : undefined} onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !canCreate}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !canCreate}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
       {!initial && <p className="settings-hint new-project-edit-note">Project name and type required; you can edit these settings later in Project Settings.</p>}
       {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their saved research configuration; some limits can be adjusted when resuming.</p>}
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
@@ -5383,7 +5295,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => changeSettingsTab('limits')}>Limits</button>
         <button type="button" role="tab" data-settings-tab="preferences" id="settings-tab-preferences" aria-selected={activeTab === 'preferences'} aria-controls="settings-panel-preferences" tabIndex={activeTab === 'preferences' ? 0 : -1} onClick={() => changeSettingsTab('preferences')}>Preferences</button>
       </div>}
-      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}>{initial && <p id="project-settings-help">Set this project’s research type and AI options.</p>}
+      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}>{initial && <p id="project-settings-help">Set this project’s research type and difficulty.</p>}
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research Subject</label><p className="settings-hint">What are we investigating?</p><textarea id="project-problem" maxLength={20000} rows={3} value={values.problem} onChange={event => change('problem', event.target.value)}/>
@@ -5391,38 +5303,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <label htmlFor="project-paper-requirements">Paper Requirements</label><p className="settings-hint">What should the finished publication contain?</p><textarea id="project-paper-requirements" maxLength={20000} rows={4} value={values.paper_requirements} onChange={event => change('paper_requirements', event.target.value)}/></>}
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
       <div><label id="sigma-project-difficulty-label">Difficulty</label><DifficultyPicker value={values.difficulty} onChange={value => change('difficulty', value)}/></div></div>
-      <div className="settings-model-row">
-      <div><label htmlFor="project-model">Model</label>
-        <SigmaChoicePicker id="project-model" label="Model" value={values.ai_model}
-          disabled={catalog.length === 0}
-          choices={[
-            ...(values.ai_model && !selected ? [{ value: values.ai_model, label: `${values.ai_model} · unavailable/unreviewed` }] : []),
-            ...(!values.ai_model ? [{ value: '', label: 'Loading reviewed choices…' }] : []),
-            ...orderedCatalog.map(model => ({
-              value: model.id,
-              label: modelDisplayLabel(model) + (model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'),
-            })),
-          ]}
-          onChange={nextModel => {
-            const nextChoice = catalog.find(option => option.id === nextModel);
-            setValues(previous => ({
-              ...previous, ai_model: nextModel,
-              reasoning_effort: nextChoice && !nextChoice.efforts.includes(previous.reasoning_effort)
-                ? nextChoice.efforts[0] ?? previous.reasoning_effort : previous.reasoning_effort,
-            }));
-          }}/>
-      <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately.' : 'ChatGPT plan or credits.'}{catalogMessage}{selected?.availability === 'unavailable' ? ' Model unavailable; it will not be replaced.' : ''}</p></div>
-      <div><label htmlFor="project-thinking">Thinking level</label>
-        <SigmaChoicePicker id="project-thinking" label="Thinking level" value={values.reasoning_effort}
-          disabled={!selected || !selected.efforts.length}
-          choices={[
-            ...(!selected?.efforts.includes(values.reasoning_effort) ? [{ value: values.reasoning_effort, label: `${thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · ${selected ? 'unsupported' : 'preserved'}` }] : []),
-            ...(selected?.efforts ?? []).map(effort => ({ value: effort, label: thinkingLabels[effort] ?? effort })),
-          ]}
-          onChange={next => change('reasoning_effort', next)}/>
-      <p className="settings-hint">Used for future AI proposals. Higher levels use more time and usage.</p></div>
-      </div>
-      {pairError && <p className="error" role="alert">{pairError}</p>}
       {initial && <p className="project-destination"><span>Project location</span><code>{initial.path}</code><small>Editing the display name never renames or moves this directory.</small></p>}
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
@@ -7202,11 +7082,7 @@ function cloudFundingFor(cloud: CloudIdentityState | null): CloudFunding | undef
 
 /** Match ConnectionStatus's connected state, including sponsored sessions.
  * Google authentication alone is not sufficient to show the model selector. */
-function ConnectedModelPill({ enabled, project, onProjectChange }: {
-  enabled: boolean;
-  project?: { model: string; thinking: string };
-  onProjectChange?: (model: string, thinking: string) => Promise<void>;
-}) {
+function ConnectedModelPill({ enabled }: { enabled: boolean }) {
   const ai = useAI();
   const cloud = useCloudIdentity();
   const funding = cloudFundingFor(cloud);
@@ -7221,7 +7097,7 @@ function ConnectedModelPill({ enabled, project, onProjectChange }: {
     && ai.info?.status === 'connected';
   const visible = sponsoredPillVisible || (!sponsoredSelected && personalConnected);
   return enabled && visible && !googleRequired
-    ? <GlobalModelPill enabled project={project} onProjectChange={onProjectChange}/>
+    ? <GlobalModelPill enabled/>
     : null;
 }
 

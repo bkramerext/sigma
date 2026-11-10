@@ -3,9 +3,12 @@ import DialogDismissButton from './DialogDismissButton';
 import ProjectTypesDialog, { type ProjectTypeRecord, type ProjectTypesSaveState } from './ProjectTypesDialog';
 import RenderedMarkdown from './RenderedMarkdown';
 import SigmaSelect from './SigmaSelect';
+import { modelDisplayLabel } from './model-display';
 import './global-settings.css';
 
-type Tab = 'types' | 'limits' | 'preferences' | 'ethos';
+type Tab = 'types' | 'model' | 'limits' | 'preferences' | 'ethos';
+type ModelOption = { id: string; label: string; efforts: string[]; relative_cost: string; availability?: string };
+const effortTitles: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra High' };
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
 const unitMinutes: Record<Exclude<DurationUnit, 'unlimited'>, number> = { minutes: 1, hours: 60, days: 1440 };
 type LimitSettings = {
@@ -29,6 +32,7 @@ type EthosConfig = { markdown: string; is_override: boolean; version: string; sh
 type Preference = { allow_unattended_background_execution: boolean; expand_one_project_section_at_a_time: boolean; progress_email: boolean };
 const tabs: { id: Tab; title: string }[] = [
   { id: 'types', title: 'Project Types' },
+  { id: 'model', title: 'Model/Thinking' },
   { id: 'limits', title: 'Limits' },
   { id: 'preferences', title: 'Preferences' },
   { id: 'ethos', title: 'Research Ethos' },
@@ -82,6 +86,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>(initialSettingsTab);
   const [config, setConfig] = useState<ResearchConfig | null>(null);
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [modelsUnavailable, setModelsUnavailable] = useState(false);
   const [durationUnit, setDurationUnit] = useState<DurationUnit>('minutes');
   const [prefs, setPrefs] = useState<Preference>({
     allow_unattended_background_execution: false,
@@ -142,6 +148,10 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       } });
       setLoaded(true);
     }).catch(cause => { if (!controller.signal.aborted) setError(String(cause)); });
+    void readJson('/api/ai/models')
+      .then((value: { models?: ModelOption[] }) => {
+        if (!controller.signal.aborted) { setModels(Array.isArray(value.models) ? value.models : []); setModelsUnavailable(false); }
+      }).catch(() => { if (!controller.signal.aborted) setModelsUnavailable(true); });
     // Ethos is optional to the other tabs. Its read failure must not make
     // unrelated model/limits/preferences unavailable.
     void readJson('/api/user-preferences/research-ethos')
@@ -163,6 +173,9 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     setConfig(current => current ? { ...current, ...patch } : current);
   };
   const setPref = (patch: Partial<Preference>) => { setError(''); setSaved(false); setPrefs(current => ({ ...current, ...patch })); };
+  const selectedModel = models.find(item => item.id === config?.ai_model);
+  const modelEfforts = selectedModel?.efforts ?? [];
+  const modelPairValid = !selectedModel || modelEfforts.includes(config?.reasoning_effort ?? '');
   const hasOtherChanges = loaded && !!config && savedSnapshot.current !== JSON.stringify({ config, prefs });
   const hasChanges = typesSaveState.dirty || hasOtherChanges;
   const validLimits = !!config && (['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const)
@@ -176,7 +189,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   // is unavailable: never strand changes behind an unrelated Settings fetch.
   const canSave = hasChanges && !busy && !typesSaveState.busy && !ethosBusy &&
     (!typesSaveState.dirty || typesSaveState.valid) &&
-    (!hasOtherChanges || (loaded && validLimits));
+    (!hasOtherChanges || (loaded && validLimits && modelPairValid));
   async function save(): Promise<boolean> {
     if (!canSave) return false;
     setBusy(true); setError(''); setSaved(false);
@@ -325,6 +338,42 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       </section>
       {tab !== 'types' && <div className="settings-body">
         {!loaded && !error && <p role="status">Loading your settings…</p>}
+        {config && tab === 'model' && <fieldset disabled={busy} className="sigma-global-model-thinking">
+          <div className="settings-model-row">
+            <div>
+              <label htmlFor="sigma-user-model">Model</label>
+              <SigmaSelect id="sigma-user-model" ariaLabel="Model" className="sigma-model-select"
+                value={config.ai_model} disabled={!models.length || modelsUnavailable}
+                options={[
+                  ...(!models.some(item => item.id === config.ai_model)
+                    ? [{ value: config.ai_model, label: config.ai_model + ' · previously selected' }] : []),
+                  ...[...models].filter(item => item.availability !== 'unavailable' && item.efforts.length)
+                    .sort((a, b) => a.relative_cost.length - b.relative_cost.length || a.label.localeCompare(b.label))
+                    .map(item => ({ value: item.id, label: modelDisplayLabel(item) })),
+                ]}
+                onChange={model => {
+                  const option = models.find(item => item.id === model);
+                  const effort = option?.efforts.includes(config.reasoning_effort)
+                    ? config.reasoning_effort : option?.efforts[0] ?? config.reasoning_effort;
+                  setResearch({ ai_model: model, reasoning_effort: effort });
+                }}/>
+            </div>
+            <div>
+              <label htmlFor="sigma-user-thinking">Thinking</label>
+              <SigmaSelect id="sigma-user-thinking" ariaLabel="Thinking" className="sigma-effort-select"
+                value={config.reasoning_effort} disabled={!selectedModel || !modelEfforts.length}
+                options={[
+                  ...(!modelEfforts.includes(config.reasoning_effort)
+                    ? [{ value: config.reasoning_effort, label: (effortTitles[config.reasoning_effort] ?? config.reasoning_effort) + ' · previously selected' }] : []),
+                  ...modelEfforts.map(effort => ({ value: effort, label: effortTitles[effort] ?? effort })),
+                ]}
+                onChange={reasoning_effort => setResearch({ reasoning_effort })}/>
+            </div>
+          </div>
+          {!modelPairValid && <p role="alert" className="error">This model does not support the selected Thinking level.</p>}
+          {modelsUnavailable && <p className="settings-hint">Model choices are unavailable; your saved settings remain unchanged.</p>}
+          <p className="settings-hint">Your choices apply to your AI calls in all projects. Existing research and papers retain their recorded models.</p>
+        </fieldset>}
         {config && tab === 'limits' && <fieldset disabled={busy} className="sigma-global-limits">
           <div className="sigma-global-limit-row">
             <div className="sigma-global-limit-field">

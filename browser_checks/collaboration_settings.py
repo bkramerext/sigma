@@ -151,23 +151,13 @@ def main() -> None:
         expect(dialog.get_by_text("Owner", exact=True)).to_be_visible()
         assert dialog.get_by_role("button", name="Remove owner@example.org").count() == 0
 
-        # Classification, aligned model/thinking pair, then collaborators.
+        # Only project-wide classification and collaborators belong here.
         classification = dialog.locator(".settings-classification-row")
         category = dialog.get_by_role("combobox", name="Research category")
         difficulty = dialog.get_by_label("Difficulty")
         collaborators = dialog.get_by_role("region", name="Collaborators")
-        model_row = dialog.locator(".settings-model-row")
-        assert model_row.locator("select").count() == 0, "Model/Thinking must use SIGMA dropdowns"
-        model_picker = model_row.get_by_role("combobox", name="Model")
-        thinking_picker = model_row.get_by_role("combobox", name="Thinking")
-        expect(model_picker).to_be_visible()
-        expect(thinking_picker).to_be_visible()
-        model_picker.click()
-        expect(dialog.get_by_role("listbox", name="Model")).to_be_visible()
-        page.keyboard.press("Escape")
-        thinking_picker.click()
-        expect(dialog.get_by_role("listbox", name="Thinking")).to_be_visible()
-        page.keyboard.press("Escape")
+        assert dialog.locator(".settings-model-row").count() == 0
+        assert dialog.get_by_role("combobox", name="Model").count() == 0
         for width in (1440, 390):
             page.set_viewport_size({"width": width, "height": 930 if width == 1440 else 844})
             cat_box = category.bounding_box()
@@ -177,14 +167,12 @@ def main() -> None:
                 collaborators.evaluate("element => getComputedStyle(element).borderTopWidth")
                 == "1px"
             )
-            model_box = model_row.bounding_box()
-            assert cat_box and diff_box and collab_box and model_box
+            assert cat_box and diff_box and collab_box
             assert abs(cat_box["y"] - diff_box["y"]) < 4, (width, cat_box, diff_box)
             assert cat_box["x"] + cat_box["width"] <= diff_box["x"] + 1
-            assert model_box["y"] >= (
-                classification.bounding_box()["y"] + category.bounding_box()["height"]
-            )
-            assert collab_box["y"] >= model_box["y"] + model_box["height"] - 1
+            class_box = classification.bounding_box()
+            assert class_box
+            assert collab_box["y"] >= class_box["y"] + class_box["height"] - 1
             assert dialog.evaluate("element => element.scrollWidth <= element.clientWidth")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=f"/tmp/sigma-collaboration-settings-{width}.png")

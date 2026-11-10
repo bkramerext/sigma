@@ -28,7 +28,6 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 from sigma import cloud_auth, cloud_workspaces
-from sigma.model_catalog import validate_pair
 
 LEASE_SECONDS = 120
 MAX_NOTIFICATION_ATTEMPTS = 3
@@ -931,7 +930,6 @@ def save_settings(
         raise ProjectError("A project supports at most 50 collaborators.")
     try:
         emails = [normalize_collaborator(item) for item in collaborators]
-        validate_pair(model, thinking)
     except (TypeError, ValueError) as exc:
         raise ProjectError(str(exc)) from exc
     if len(set(emails)) != len(emails):
@@ -957,7 +955,8 @@ def save_settings(
                 raise ProjectError(
                     "Only the owner, the inviter, or the account itself can remove a collaborator."
                 )
-        changed = new_members != previous or row["model"] != model or row["thinking"] != thinking
+        # User-specific model preferences must never be written by shared settings.
+        changed = new_members != previous
         if changed:
             db.executemany(
                 "DELETE FROM shared_collaborators WHERE path=? AND email=?",
@@ -968,8 +967,8 @@ def save_settings(
                 [(path, member, actor) for member in sorted(new_members - previous)],
             )
             db.execute(
-                """UPDATE shared_projects SET model=?,thinking=?,last_writer=? WHERE path=?""",
-                (model, thinking, actor, path),
+                "UPDATE shared_projects SET last_writer=? WHERE path=?",
+                (actor, path),
             )
             for member in previous - new_members:
                 db.execute("DELETE FROM shared_leases WHERE path=? AND email=?", (path, member))
