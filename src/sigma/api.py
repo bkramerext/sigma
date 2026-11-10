@@ -772,13 +772,14 @@ class EvidenceLinkEditRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str
     url: str
+    expected_url: str | None = None
 
 
 @app.put("/api/projects/evidence/{evidence_id}/link")
 def project_evidence_edit_link(evidence_id: str, body: EvidenceLinkEditRequest):
     from sigma import project_evidence
 
-    return project_evidence.edit_link(body.path, evidence_id, body.url)
+    return project_evidence.edit_link(body.path, evidence_id, body.url, expected_url=body.expected_url)
 
 
 class EvidenceEnabledRequest(BaseModel):
