@@ -87,3 +87,64 @@ def decompress(frame: bytes, expected_size: int) -> bytes:
     if library.ZSTD_isError(written) or written != expected_size:
         raise ZstdCodecError("Invalid Zstandard project member or length")
     return output.raw[:written]
+
+
+def compress_archive(data: bytes, frame_bytes: int = MAX_MEMBER_BYTES) -> bytes:
+    """Compress a bounded archive as consecutive complete Zstandard frames.
+
+    Individual runtime members retain the strict 256 MiB limit. A v4 TAR
+    archive may contain several such members and therefore needs more than
+    one frame. Concatenated Zstandard frames remain one valid zstd stream.
+    """
+    if (
+        not isinstance(data, bytes)
+        or len(data) > MAX_BUNDLE_BYTES
+        or type(frame_bytes) is not int
+        or not 1 <= frame_bytes <= MAX_MEMBER_BYTES
+    ):
+        raise ZstdCodecError("Invalid or oversized project artifact archive")
+    if not data:
+        return compress(b"")
+    return b"".join(
+        compress(data[offset : offset + frame_bytes])
+        for offset in range(0, len(data), frame_bytes)
+    )
+
+
+def decompress_archive(
+    encoded: bytes, expected_size: int, frame_bytes: int = MAX_MEMBER_BYTES
+) -> bytes:
+    """Decode a bounded sequence of frames without accepting trailing data.
+
+    The exact chunk sizes are deterministic from the declared total length.
+    Each frame is decoded through the existing bounded single-frame decoder,
+    so malformed frames, overlong chunks and injected suffixes fail closed.
+    """
+    if (
+        not isinstance(encoded, bytes)
+        or type(expected_size) is not int
+        or not 0 <= expected_size <= MAX_BUNDLE_BYTES
+        or type(frame_bytes) is not int
+        or not 1 <= frame_bytes <= MAX_MEMBER_BYTES
+    ):
+        raise ZstdCodecError("Invalid project artifact archive size")
+    frames = max(1, (expected_size + frame_bytes - 1) // frame_bytes)
+    if not encoded or len(encoded) > frames * MAX_COMPRESSED_MEMBER_BYTES:
+        raise ZstdCodecError("Compressed artifact archive exceeds the allowed size")
+    library = _library()
+    chunks: list[bytes] = []
+    offset = 0
+    decoded_size = 0
+    for _ in range(frames):
+        remaining = encoded[offset:]
+        frame_size = library.ZSTD_findFrameCompressedSize(remaining, len(remaining))
+        if library.ZSTD_isError(frame_size) or not 0 < frame_size <= len(remaining):
+            raise ZstdCodecError("Invalid compressed archive frame")
+        length = min(frame_bytes, expected_size - decoded_size)
+        decoded = decompress(encoded[offset : offset + frame_size], length)
+        chunks.append(decoded)
+        decoded_size += len(decoded)
+        offset += frame_size
+    if offset != len(encoded) or decoded_size != expected_size:
+        raise ZstdCodecError("Unexpected trailing or missing artifact archive frames")
+    return b"".join(chunks)
