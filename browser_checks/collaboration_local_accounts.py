@@ -280,8 +280,11 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner.get_by_role("button", name="Edit project fields").click()
         # Editing keeps other Project actions visible but unmistakably gray.
         for action in (
-            "Research Q/A", "Lean proof verification", "Export project",
-            "Email project", "Project settings",
+            "Research Q/A",
+            "Lean proof verification",
+            "Export project",
+            "Email project",
+            "Project settings",
         ):
             button = owner.get_by_role("button", name=action, exact=True)
             expect(button).to_be_disabled()
