@@ -145,11 +145,12 @@
   gap: 9px;
   min-height: 28px;
   margin-top: 3px;
+  padding-left: 24px;
 }
 .sigma-evidence-item {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
 }
 .sigma-evidence-item.is-disabled { opacity: .52; }
@@ -165,12 +166,20 @@
   text-underline-offset: 3px;
 }
 .sigma-evidence-row .sigma-evidence-attachment {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   text-decoration: none;
 }
-.sigma-evidence-attachment svg { display: block; flex: 0 0 17px; width: 17px; height: 17px; }
+.sigma-evidence-attachment svg {
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: block;
+  width: 17px;
+  height: 17px;
+}
 .sigma-evidence-row-actions {
   display: inline-flex;
   align-items: center;
