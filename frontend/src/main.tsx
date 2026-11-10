@@ -2912,6 +2912,32 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     const timer = window.setInterval(() => void poll(), 1000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [path, paperProgress?.status]);
+  // A collaborator can start Paper generation while this pane is idle.
+  // Poll that idle-to-active transition as well: collaboration revisions are
+  // not emitted for every progress update and cannot replace progress polling.
+  // Once active, the existing one-second progress poll takes over.
+  useEffect(() => {
+    if (guest || collaborationRevision === undefined ||
+        paperProgress?.status === 'active' || paperProgress?.status === 'queued') return;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`,
+          { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+        if (!response.ok || stopped) return;
+        const body = await response.json();
+        if (stopped) return;
+        const next = (body.progress ?? null) as PaperProgress | null;
+        if (next?.status === 'active' || next?.status === 'queued') {
+          setPaperProgress(next);
+          setDraftPaperExpanded(true);
+        }
+      } catch { /* Preserve the last known state during transient connectivity loss. */ }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 2000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [guest, collaborationRevision, path, paperProgress?.status]);
   // Notification deep links expand the exact saved paper (or the paused
   // draft) after initial hydration. Do not repeat this scroll on polling.
   const paperDeepLinkHandled = useRef(false);
