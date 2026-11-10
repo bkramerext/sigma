@@ -5106,7 +5106,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             </div>
           </div>
           {nonOwnerCollaborator && <p className="project-classification-readonly-note">
-            Project category, difficulty, and title are read-only for non-owner collaborators.
+            Note that title, category, difficulty, and user settings are owner-specified.
           </p>}
           {!!shared?.owner && <>
             <section className="project-collaborators" aria-label="Collaborators">
@@ -5117,7 +5117,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
               <div className="project-collaborator-row">
                 <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
               </div>
-              {collaborators.length > 0 && <p className="project-collaborator-standards-note">Research and publication standards are determined by the project owner and apply to all collaborators.</p>}
+              {collaborators.length > 0 && <p className="project-collaborator-standards-note">Note that title, category, difficulty, and user settings are owner-specified.</p>}
               {collaborators.map(email => <div className="project-collaborator-row" key={email}>
                 <span>{email}</span>
                 {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
@@ -6381,6 +6381,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [paperRunning, setPaperRunning] = useState(false);
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
+  const lastLoadedSharedRevision = useRef<number | null>(null);
   // A verified execution lease identifies the collaborator responsible for
   // green/yellow activity across nested UI elements and CSS-generated dots.
   const pulseAuthor = sharedActivity?.shared && sharedActivity.collaborators.length > 0
@@ -6503,6 +6504,33 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [guestAiNotice, setGuestAiNotice] = useState('');
+  // Collaborators keep an open project fresh without losing local drafts or focus.
+  // The existing lightweight collaboration poll supplies the revision; only a
+  // changed revision triggers the more expensive project-open request.
+  useEffect(() => {
+    if (!sharedActivity?.shared || !view || guest) return;
+    const revision = sharedActivity.revision;
+    if (lastLoadedSharedRevision.current === null) {
+      lastLoadedSharedRevision.current = revision;
+      return;
+    }
+    if (revision === lastLoadedSharedRevision.current) return;
+    if (activeMode !== null || editing || generating || projectEditing ||
+        descriptionEditing || descriptionDirty || ordering || dragId || manualDraft ||
+        closing) return;
+    const controller = new AbortController();
+    void post<ProjectView>('open', { path, compact: true }, controller.signal)
+      .then(next => {
+        if (controller.signal.aborted) return;
+        setView(next);
+        lastLoadedSharedRevision.current = revision;
+      })
+      .catch(() => { /* Retain the current view and retry on the next poll. */ });
+    return () => controller.abort();
+  }, [sharedActivity?.revision, sharedActivity?.shared, view?.project.id, guest,
+      activeMode, editing, generating, projectEditing, descriptionEditing,
+      descriptionDirty, ordering, dragId, manualDraft, closing, path]);
+
   const [focusStrategy, setFocusStrategy] = useState('');
   const citationRevealHandled = useRef(false);
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
