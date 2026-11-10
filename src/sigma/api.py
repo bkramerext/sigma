@@ -886,6 +886,7 @@ def research_qa_get(qa_id: str, path: str):
 
 @app.delete("/api/projects/research-qa/{qa_id}")
 def research_qa_delete(qa_id: str, path: str):
+    project_collaboration.require_artifact_manager(path, "answer", qa_id)
     research_qa.delete_answer(path, qa_id)
     return {"deleted": qa_id}
 
@@ -955,6 +956,9 @@ async def paper_cancel_view(body: PaperCancelRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
+    project_collaboration.require_paper_draft_operator(
+        body.path, body.expected_project_id, controlling_active=True
+    )
     return {"cancelled": await papers.cancel_generation(body.path)}
 
 
@@ -963,11 +967,13 @@ async def papers_discard_view(body: PaperDiscardRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
+    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
     return await papers.discard_work(body.path, body.expected_project_id)
 
 
 @app.post("/api/projects/papers/restart")
 async def papers_restart_view(body: PaperRestartRequest):
+    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
     return await papers.restart_work(
         body.path,
         body.expected_project_id,
@@ -1092,6 +1098,7 @@ def paper_tex_view(paper_id: str, path: str):
 
 @app.delete("/api/projects/papers/{paper_id}")
 def paper_delete_view(paper_id: str, path: str):
+    project_collaboration.require_artifact_manager(path, "paper", paper_id)
     papers.delete_paper(path, paper_id)
     return {"deleted": paper_id}
 
@@ -1121,6 +1128,15 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     from sigma import project_collaboration
 
     lease = project_collaboration.acquire_lease(body.path, "Paper generation")
+    try:
+        project_collaboration.reserve_paper_draft(
+            body.path,
+            body.expected_project_id,
+            resuming=papers._load_work(body.path) is not None,
+        )
+    except BaseException:
+        project_collaboration.release_lease(body.path, lease)
+        raise
     with project_collaboration.bind_lease(body.path, lease):
         task = asyncio.create_task(
             papers.generate(
@@ -1722,6 +1738,9 @@ async def research_start_view(body: ResearchStartRequest):
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
 async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):
+    project_collaboration.require_execution_operator(
+        body.path, "session", session_id, "Research session"
+    )
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
     if (
@@ -1773,6 +1792,9 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
 
 @app.post("/api/projects/research-sessions/{session_id}/interventions")
 async def research_intervention_view(session_id: str, body: ResearchInterventionRequest):
+    project_collaboration.require_execution_operator(
+        body.path, "session", session_id, "Research session"
+    )
     return await research_sessions.submit_intervention(
         body.path,
         session_id,
@@ -1786,6 +1808,13 @@ async def research_intervention_view(session_id: str, body: ResearchIntervention
 
 @app.delete("/api/projects/research-sessions/{session_id}")
 async def research_session_remove_view(session_id: str, body: ResearchSessionRemoveRequest):
+    session = research_sessions.get_session(body.path, session_id)
+    project_collaboration.require_artifact_manager(
+        body.path,
+        "session",
+        session_id,
+        owner_terminal=session["status"] in {"completed", "ended"},
+    )
     return await research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
 
 
