@@ -950,9 +950,10 @@ def require_artifact_permission(
         return
     with _db() as db:
         # Unregistered private projects retain their existing endpoint ACLs.
-        if db.execute(
-            "SELECT 1 FROM shared_projects WHERE path=?", (str(path),)
-        ).fetchone() is None:
+        if (
+            db.execute("SELECT 1 FROM shared_projects WHERE path=?", (str(path),)).fetchone()
+            is None
+        ):
             return
         row, actor = _membership(db, str(path))
         creator = db.execute(
@@ -988,9 +989,10 @@ def bind_execution_control_lease(path: str, activity: str) -> Iterator[None]:
         return
     token: str | None = None
     with _db() as db:
-        registered = db.execute(
-            "SELECT 1 FROM shared_projects WHERE path=?", (str(path),)
-        ).fetchone() is not None
+        registered = (
+            db.execute("SELECT 1 FROM shared_projects WHERE path=?", (str(path),)).fetchone()
+            is not None
+        )
         if registered:
             _row, actor = _membership(db, str(path))
             lease = db.execute(

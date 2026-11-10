@@ -298,7 +298,14 @@ def exercise(ui: str, workspaces: Path) -> None:
         exit_button = project_entry.get_by_role("button", name="Stop collaborating on this project")
         expect(exit_button).to_have_attribute("data-tooltip", "Stop collaborating on this project")
         exit_button.click()
-        project_entry.get_by_role("button", name="Confirm", exact=True).click()
+        with member.expect_response(
+            lambda response: response.url.endswith("/api/projects/collaboration/leave")
+            and response.request.method == "POST"
+        ) as departure:
+            project_entry.get_by_role("button", name="Confirm", exact=True).click()
+        assert departure.value.status == 200, (
+            departure.value.status, departure.value.text()
+        )
         expect(
             member.get_by_role("button", name=f"Manage collaborators for {title}")
         ).to_have_count(0)

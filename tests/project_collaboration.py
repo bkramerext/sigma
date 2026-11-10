@@ -252,7 +252,14 @@ class CollaborationTests(TestCase):
                 api.research_control_view(
                     session,
                     api.ResearchControlRequest(path=self.path, action="stop"),
-                    Request({"type": "http", "method": "POST", "path": "/api/projects/research-sessions/test/control", "headers": []}),
+                    Request(
+                        {
+                            "type": "http",
+                            "method": "POST",
+                            "path": "/api/projects/research-sessions/test/control",
+                            "headers": [],
+                        }
+                    ),
                 )
             )
             self.assertEqual(result["status"], "stopped")
