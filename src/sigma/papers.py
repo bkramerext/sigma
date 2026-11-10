@@ -1722,7 +1722,9 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
         sources.append(
             {
                 "id": source_id,
-                "kind": "uploaded_link" if source_id.startswith("uploaded-link:") else "uploaded_pdf",
+                "kind": "uploaded_link"
+                if source_id.startswith("uploaded-link:")
+                else "uploaded_pdf",
                 "data": contents,
             }
         )
@@ -1735,7 +1737,9 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
         sources.append(
             {
                 "id": source_id,
-                "kind": "uploaded_link" if source_id.startswith("uploaded-link:") else "uploaded_pdf",
+                "kind": "uploaded_link"
+                if source_id.startswith("uploaded-link:")
+                else "uploaded_pdf",
                 "data": contents,
             }
         )
