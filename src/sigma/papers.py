@@ -1693,6 +1693,15 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
                     "data": step,
                 }
             )
+    # Preserve uploaded document provenance in the paper evidence snapshot.
+    # The snapshot freezes extracts and their hashes so later removal or edits
+    # cannot silently rewrite an already-started paper's cited evidence.
+    from sigma import project_evidence
+
+    for entry in project_evidence.evidence_context(path, limit=48000):
+        sources.append(
+            {"id": entry["id"], "kind": "uploaded_pdf", "data": entry}
+        )
     from sigma import research_ethos
 
     package = {
