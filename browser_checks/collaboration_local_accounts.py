@@ -166,9 +166,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
         # Shared-project settings is a one-shot deep link, not persistent on refresh.
-        assert owner.evaluate(
-            "new URL(location.href).searchParams.get('settings')"
-        ) is None
+        assert owner.evaluate("new URL(location.href).searchParams.get('settings')") is None
 
         # An email deep link opens immediately only for the invited account.
         invitation_url = (
@@ -292,7 +290,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         confirm = member.get_by_role("group", name=f"Confirm remove {title}")
         confirm.get_by_role("button", name="Confirm").click()
         expect(leave).to_have_count(0)
-        after_leave = member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        after_leave = member_context.request.get(
+            ui + "/api/projects/inspect", params={"path": path}
+        )
         assert after_leave.status in {400, 401, 403, 404}, after_leave.text()
         owner_membership = get_json(
             owner_context.request.get(ui + "/api/projects/collaboration", params={"path": path})

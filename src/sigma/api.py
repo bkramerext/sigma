@@ -912,9 +912,7 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
             force=body.force,
         )
         papers.mark_scored_progress(body.path, paper_id)
-        project_collaboration.note_artifact_author(
-            body.path, "paper", paper_id, created_only=True
-        )
+        project_collaboration.note_artifact_author(body.path, "paper", paper_id, created_only=True)
         return {"score": score}
     except asyncio.CancelledError:
         if memory_guard.is_critical():

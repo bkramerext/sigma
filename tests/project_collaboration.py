@@ -216,7 +216,6 @@ class CollaborationTests(TestCase):
         self.assertFalse(shared.summary(self.path)["shared"])
         self.assertEqual(shared.summary(self.path)["artifact_authors"], {})
 
-
     def test_creator_metadata_is_preserved_and_only_creator_or_owner_can_remove(self) -> None:
         shared.note_artifact_author(self.path, "session", "session-one", created_only=True)
         shared.note_artifact_author(self.path, "paper", "paper-one", created_only=True)
@@ -228,8 +227,12 @@ class CollaborationTests(TestCase):
             verified_subject=self.other.subject,
         )
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
         ):
             for kind, artifact_id in (
                 ("session", "session-one"),
@@ -238,9 +241,7 @@ class CollaborationTests(TestCase):
             ):
                 with self.assertRaisesRegex(ProjectError, "artifact creator"):
                     shared.require_artifact_manager(self.path, kind, artifact_id)
-                shared.note_artifact_author(
-                    self.path, kind, artifact_id, created_only=True
-                )
+                shared.note_artifact_author(self.path, kind, artifact_id, created_only=True)
             shared.note_artifact_author(self.path, "session", "session-other", created_only=True)
             shared.require_artifact_manager(self.path, "session", "session-other")
             shared.require_artifact_manager(self.path, "session", "session-other")
@@ -297,8 +298,12 @@ class CollaborationTests(TestCase):
             verified_subject=self.other.subject,
         )
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
         ):
             self.assertEqual(shared.collaborator_identity(self.path), self.other.email)
             shared.leave_project(self.path, "saved-project")
@@ -307,13 +312,15 @@ class CollaborationTests(TestCase):
                 shared.summary(self.path)
         self.assertEqual(shared.summary(self.path)["collaborators"], [])
         with shared._db() as db:
-            self.assertIsNotNone(db.execute(
-                "SELECT 1 FROM shared_projects WHERE path=?", (self.path,)
-            ).fetchone())
-            self.assertIsNotNone(db.execute(
-                "SELECT 1 FROM shared_email_outbox WHERE event='removed' AND recipient=?",
-                (self.other.email,),
-            ).fetchone())
+            self.assertIsNotNone(
+                db.execute("SELECT 1 FROM shared_projects WHERE path=?", (self.path,)).fetchone()
+            )
+            self.assertIsNotNone(
+                db.execute(
+                    "SELECT 1 FROM shared_email_outbox WHERE event='removed' AND recipient=?",
+                    (self.other.email,),
+                ).fetchone()
+            )
 
     def revision(self) -> int:
         with shared._db() as db:

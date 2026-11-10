@@ -580,7 +580,6 @@ def note_artifact_author(
         db.commit()
 
 
-
 def collaborator_identity(path: str) -> str | None:
     """Verified collaborator email for durable, human-authored output metadata."""
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
@@ -610,8 +609,7 @@ def require_artifact_manager(path: str, kind: str, artifact_id: str) -> None:
         if row["owner_hash"] == _identity()[0].subject_hash:
             return
         creator = db.execute(
-            "SELECT email FROM shared_artifact_authors "
-            "WHERE path=? AND kind=? AND artifact_id=?",
+            "SELECT email FROM shared_artifact_authors WHERE path=? AND kind=? AND artifact_id=?",
             (path, kind, artifact_id),
         ).fetchone()
         if creator is None or creator["email"] != actor:
@@ -649,7 +647,8 @@ def bind_session_control_lease(path: str, activity: str) -> Iterator[None]:
     """
     from sigma.projects import ProjectError
 
-    if cloud_workspaces.current() is None:
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        # Non-cloud/local test mode has no authenticated collaboration lease.
         yield
         return
     lease_token: str | None = None

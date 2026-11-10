@@ -216,6 +216,11 @@ def _validate_record(record: Any, project_id: str) -> None:
         or not isinstance(record.get("created_at"), str)
     ):
         raise ProjectError("Q/A archive contains a malformed answer")
+    creator = record.get("created_by")
+    if creator is not None and (
+        not isinstance(creator, str) or not 1 <= len(creator) <= 254
+    ):
+        raise ProjectError("Q/A archive contains invalid creator attribution")
     author_email = record.get("author_email")
     if author_email is not None and (
         not isinstance(author_email, str)
@@ -693,6 +698,7 @@ async def _answer_locked(
         "snapshot_sha256": snapshot_hash,
         "evidence_snapshot": selected,
         "created_at": created_at,
+        "created_by": collaborator or "Local user",
         **({"author_email": collaborator} if collaborator else {}),
         "generation": {
             "model": config.get("model", ""),
