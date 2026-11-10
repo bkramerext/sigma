@@ -342,19 +342,12 @@ def get_pdf(path: str, identifier: str) -> tuple[dict, bytes]:
 
 
 def remove_evidence(path: str, identifier: str) -> None:
-    from sigma import cloud_auth, project_collaboration
     from sigma.projects import _update_project
 
-    principal = cloud_auth.current_principal()
-
-    def can_remove(row: dict) -> None:
-        if principal is None:
-            return
-        owner = project_collaboration.summary(path)["owner"]
-        if principal.role == "guest" or (
-            principal.email != owner and principal.email != row.get("uploaded_by")
-        ):
-            raise ProjectError("Only the uploader or project owner can remove Source Material.")
+    # Authorized collaborators edit shared project Source Material together.
+    # Project path resolution and the write guard enforce membership; guest
+    # accounts remain read-only even for entries they previously uploaded.
+    _require_source_editor()
 
     if any(
         item["id"] == identifier for item in inspect_project(path).project.source_material_links
@@ -367,7 +360,6 @@ def remove_evidence(path: str, identifier: str) -> None:
             )
             if entry is None:
                 raise ProjectError("Source Material link not found.")
-            can_remove(entry)
             return replace(
                 project,
                 source_material_links=tuple(
@@ -383,7 +375,6 @@ def remove_evidence(path: str, identifier: str) -> None:
         entry = next((row for row in rows if row["id"] == identifier), None)
         if entry is None:
             raise ProjectError("Source Material file not found.")
-        can_remove(entry)
         _write(
             path,
             {

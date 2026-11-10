@@ -212,10 +212,17 @@ function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; e
       <EvidenceChevron expanded={expanded}/>Source Material
     </button></h4>{!guest && <div className="sigma-evidence-actions">
       <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add link" data-tooltip="Add link"
-        disabled={busy || adding || !!editingId || rows.length >= 20}
-        onClick={() => { cancelled.current = false; setError(''); setUrl(''); setAdding(true); }}><EvidencePlusIcon/></button>
+        disabled={busy || rows.length >= 20}
+        onClick={() => {
+          if (!expanded) onToggle();
+          cancelled.current = false;
+          setError('');
+          if (editingId) setEditingId(null);
+          if (!adding) { setUrl(''); setAdding(true); }
+          else linkInput.current?.focus();
+        }}><EvidencePlusIcon/></button>
       <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Attach a file" data-tooltip="Attach a file"
-        disabled={busy || rows.length >= 20} onClick={() => uploadInput.current?.click()}><EvidenceClipIcon/></button>
+        disabled={busy || rows.length >= 20} onClick={() => { if (!expanded) onToggle(); uploadInput.current?.click(); }}><EvidenceClipIcon/></button>
     </div>}</div>
     <input ref={uploadInput} type="file" accept=".pdf,application/pdf" hidden
       onChange={event => { const file = event.target.files?.[0]; if (file) void attach(file); }}/>

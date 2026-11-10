@@ -741,17 +741,14 @@ def project_evidence_list(path: str):
     if principal is not None and principal.role == "guest":
         return {"files": []}
     files = project_evidence.list_evidence(path)
-    owner = project_collaboration.summary(path)["owner"] if principal else None
+    # Once project access has been checked, every authorized collaborator can
+    # remove Source Material, including attachments uploaded by another member.
     return {
         "files": [
             {
                 **entry,
                 "enabled": entry.get("enabled", True),
-                "can_remove": principal is None
-                or (
-                    principal.role != "guest"
-                    and principal.email in {owner, entry.get("uploaded_by")}
-                ),
+                "can_remove": principal is None or principal.role != "guest",
             }
             for entry in files
         ]

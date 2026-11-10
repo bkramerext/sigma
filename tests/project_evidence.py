@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from sigma import papers, project_evidence, research_sessions, research_supplied_evidence
@@ -36,6 +37,46 @@ def test_project_evidence_lifecycle() -> None:
         assert sources[0]["id"] == context[0]["id"]
         project_evidence.remove_evidence(str(path), entry["id"])
         assert project_evidence.list_evidence(str(path)) == []
+
+
+def test_project_collaborator_can_remove_another_users_source_material() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "shared-source.sigma"
+        initialize_project(path, "Shared", "Test shared Source Material")
+        with patch.object(
+            project_evidence, "_extract", return_value=(1, "Document text", False)
+        ):
+            attachment = project_evidence.add_evidence(
+                str(path), "other-owner.pdf", b"%PDF-1.7 fixture"
+            )
+        # The uploader is a different person; authorized collaborators can
+        # remove entries from this project just as they can edit them.
+        assert attachment["uploaded_by"] is None
+        member = SimpleNamespace(email="collaborator@example.org", role="member")
+        with patch("sigma.cloud_auth.current_principal", return_value=member):
+            project_evidence.remove_evidence(str(path), attachment["id"])
+        assert project_evidence.list_evidence(str(path)) == []
+
+
+def test_source_material_removal_rejects_guest() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "guest-source.sigma"
+        initialize_project(path, "Guest", "Test read-only guest")
+        with patch.object(
+            project_evidence, "_extract", return_value=(1, "Document text", False)
+        ):
+            attachment = project_evidence.add_evidence(
+                str(path), "attached.pdf", b"%PDF-1.7 fixture"
+            )
+        guest = SimpleNamespace(email="guest@example.org", role="guest")
+        with patch("sigma.cloud_auth.current_principal", return_value=guest):
+            try:
+                project_evidence.remove_evidence(str(path), attachment["id"])
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Guest removed Source Material")
+        assert len(project_evidence.list_evidence(str(path))) == 1
 
 
 def test_project_evidence_validation() -> None:
@@ -287,6 +328,8 @@ def test_enable_disable_and_edit_applies_to_future_session_inputs() -> None:
 
 if __name__ == "__main__":
     test_project_evidence_lifecycle()
+    test_project_collaborator_can_remove_another_users_source_material()
+    test_source_material_removal_rejects_guest()
     test_project_evidence_validation()
     test_compiled_evidence_is_never_silently_clipped()
     test_pdf_extraction_covers_every_page()
