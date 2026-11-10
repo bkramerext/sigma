@@ -12,7 +12,6 @@ import binascii
 import hashlib
 import io
 import json
-import os
 import re
 import tarfile
 from pathlib import Path
@@ -20,7 +19,14 @@ from uuid import uuid4
 
 from sigma import project_bundle
 from sigma.project_bundle import BundleError
-from sigma.zstd_codec import MAX_BUNDLE_BYTES, MAX_MEMBER_BYTES, ZstdCodecError, compress, decompress
+from sigma.zstd_codec import (
+    MAX_BUNDLE_BYTES,
+    MAX_COMPRESSED_MEMBER_BYTES,
+    MAX_MEMBER_BYTES,
+    ZstdCodecError,
+    compress,
+    decompress,
+)
 
 FORMAT = project_bundle.FORMAT
 VERSION = 4
@@ -86,9 +92,11 @@ def _archive(artifacts: dict[str, bytes]) -> dict:
 
 
 def _unarchive(entry: object) -> dict[str, bytes]:
-    if not isinstance(entry, dict) or set(entry) != {
-        "encoding", "uncompressed_size", "sha256", "data"
-    } or entry["encoding"] != ARCHIVE_ENCODING:
+    if (
+        not isinstance(entry, dict)
+        or set(entry) != {"encoding", "uncompressed_size", "sha256", "data"}
+        or entry["encoding"] != ARCHIVE_ENCODING
+    ):
         raise BundleError("Invalid Source Material/paper archive")
     expected = entry["uncompressed_size"]
     digest = entry["sha256"]
@@ -100,7 +108,7 @@ def _unarchive(entry: object) -> dict[str, bytes]:
         or not isinstance(digest, str)
         or re.fullmatch("[0-9a-f]{64}", digest) is None
         or not isinstance(encoded, str)
-        or len(encoded) > ((MAX_ARCHIVE_BYTES + 65536 + 2) // 3) * 4 + 4
+        or len(encoded) > ((MAX_COMPRESSED_MEMBER_BYTES + 2) // 3) * 4 + 4
     ):
         raise BundleError("Invalid source artifact archive metadata")
     try:
@@ -172,7 +180,9 @@ def export_project(path: str | Path) -> bytes:
         members = project_bundle._decode(project_bundle.read_bundle(source))
     else:
         raise BundleError("Invalid project source")
-    return (json.dumps(make_bundle(members), sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    return (
+        json.dumps(make_bundle(members), sort_keys=True, ensure_ascii=False, indent=2) + "\n"
+    ).encode("utf-8")
 
 
 def decode_bundle(payload: dict) -> dict[str, bytes]:
@@ -185,9 +195,13 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
         or any(name.startswith("artifacts/") for name in payload["files"])
     ):
         raise BundleError("Only version-4 directory project bundles are supported")
-    standard = project_bundle._decode({
-        "format": FORMAT, "version": project_bundle.VERSION, "files": payload["files"],
-    })
+    standard = project_bundle._decode(
+        {
+            "format": FORMAT,
+            "version": project_bundle.VERSION,
+            "files": payload["files"],
+        }
+    )
     artifacts = _unarchive(payload["artifacts"])
     if set(standard).intersection(artifacts):
         raise BundleError("Duplicate project member")
@@ -207,7 +221,11 @@ def bundle_document(payload: dict) -> dict:
 
 
 def import_project(
-    payload: dict, destination: str | Path, *, independent: bool = True, title_override: str | None = None
+    payload: dict,
+    destination: str | Path,
+    *,
+    independent: bool = True,
+    title_override: str | None = None,
 ) -> Path:
     """Validate, reidentify, and restore an imported bundle as a real directory."""
     from sigma.project_copy import rebase_copy
@@ -228,14 +246,17 @@ def import_project(
         old_id = document["id"]
         new_id = str(uuid4())
         document["id"] = new_id
-        members["project.json"] = (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode()
+        members["project.json"] = (
+            json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+        ).encode()
         # Rebase through the existing full-provenance project copy machinery.
         # It expects historical paper member names internally, not in the v4
         # transfer payload.
         working = {}
         for name, data in members.items():
             historical = (
-                "artifacts/papers/snapshots/" + name[len("artifacts/generated_papers/.snapshots/") :]
+                "artifacts/papers/snapshots/"
+                + name[len("artifacts/generated_papers/.snapshots/") :]
                 if name.startswith("artifacts/generated_papers/.snapshots/")
                 else "artifacts/papers/" + name[len("artifacts/generated_papers/") :]
                 if name.startswith("artifacts/generated_papers/")
