@@ -440,7 +440,11 @@
 
 /* Public Privacy Notice and Terms pages: anchor their shared close X to the
    card's upper-right corner, not the inset text heading. */
-.privacy-notice-card { position: relative; }
+.privacy-notice-card {
+  position: relative;
+  /* Public pages sit outside Home/Workspace, where this token is normally set. */
+  --copper-gradient: linear-gradient(#0005, #0005), linear-gradient(115deg, #75402f 0%, #cd9270 48%, #a96548 72%, #593428 100%);
+}
 .privacy-notice-card .privacy-notice-heading { position: static; }
 .privacy-notice-card .privacy-notice-heading .sigma-dialog-dismiss {
   top: 10px;

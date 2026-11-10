@@ -653,3 +653,20 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 ):is(:hover, :focus-visible):not(:disabled) svg {
   color: #fff2e9 !important;
 }
+
+/* Saved-project title actions are one aligned inline group: shared, copy, remove.
+   The controls move with the title rather than sitting after the metadata. */
+.home-page .home-recents .recent-title-row {
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 4px;
+}
+.home-page .home-recents .recent-title-row > :is(
+  .recent-title-star,
+  .recent-title-shared,
+  .recent-save-as,
+  .recent-forget
+) {
+  align-self: center;
+  margin: 0;
+}
