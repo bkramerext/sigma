@@ -300,6 +300,7 @@ class CollaborationTests(TestCase):
             expected_project_id="saved-project",
             expected_binding="unused-stop-binding",
         )
+        shared.reserve_paper_draft(self.path, "saved-project", resuming=False)
         token = shared.acquire_lease(self.path, "Paper generation")
         self.assertIsNotNone(token)
         other_workspace = replace(
@@ -328,7 +329,7 @@ class CollaborationTests(TestCase):
                         "sigma.project_collaboration.cloud_auth.current_principal",
                         return_value=self.other,
                     ),
-                    self.assertRaisesRegex(ProjectError, "being used"),
+                    self.assertRaisesRegex(ProjectError, "original paper creator"),
                 ):
                     asyncio.run(api.paper_cancel_view(body))
                 self.assertEqual(cancel.await_count, 1)
@@ -485,6 +486,7 @@ class CollaborationTests(TestCase):
             subject_hash="other-hash",
             email=self.other.email,
             verified_subject=self.other.subject,
+            path=self.root / "other-workspace",
         )
         with (
             patch(
@@ -565,6 +567,53 @@ class CollaborationTests(TestCase):
         )
         self.assertEqual(len(work["model_change_history"]), 2)
         self.assertEqual(len(saved), 2)
+
+    def test_legacy_live_lease_holder_can_stop_but_not_rewrite_saved_work(self) -> None:
+        other_workspace = replace(
+            self.workspace,
+            subject_hash="other-hash",
+            email=self.other.email,
+            verified_subject=self.other.subject,
+            path=self.root / "other-workspace",
+        )
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current",
+                return_value=other_workspace,
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            token = shared.acquire_lease(self.path, "Research session")
+            self.assertIsNotNone(token)
+            try:
+                # The existing lease proves the active operator, but not the
+                # creator of any unrelated paused legacy session.
+                shared.require_execution_operator(
+                    self.path,
+                    "session",
+                    "legacy-live",
+                    "Research session",
+                    require_active_lease=True,
+                )
+                with self.assertRaisesRegex(ProjectError, "creator is unknown"):
+                    shared.require_execution_operator(
+                        self.path, "session", "legacy-paused", "Research session"
+                    )
+            finally:
+                shared.release_lease(self.path, token)
+            token = shared.acquire_lease(self.path, "Paper generation")
+            self.assertIsNotNone(token)
+            try:
+                shared.require_paper_draft_operator(
+                    self.path, "saved-project", controlling_active=True
+                )
+                with self.assertRaisesRegex(ProjectError, "Unattributed paper work"):
+                    shared.require_paper_draft_operator(self.path, "saved-project")
+            finally:
+                shared.release_lease(self.path, token)
 
     def revision(self) -> int:
         with shared._db() as db:

@@ -732,9 +732,7 @@ async def _answer_locked(
     # The backend task outlives its HTTP waiter, so a disconnect cannot leave
     # a published answer with no removable creator ACL. A failed publication
     # may leave an inert author row, but never misattributes another answer.
-    project_collaboration.note_artifact_author(
-        path, "answer", record["qa_id"], created_only=True
-    )
+    project_collaboration.note_artifact_author(path, "answer", record["qa_id"], created_only=True)
     return _archive_update(path, save_answer)
 
 

@@ -189,9 +189,7 @@ def _select_user_paper_call_config(
     """Resolve each billable paper call from its initiating user's settings."""
     from sigma import global_research_settings
 
-    return _select_paper_call_config(
-        base, work, global_research_settings.load_config(), save_work
-    )
+    return _select_paper_call_config(base, work, global_research_settings.load_config(), save_work)
 
 
 class PaperStageCallback(Protocol):
@@ -9922,9 +9920,7 @@ async def _generate_impl(
             # Resolve at dispatch, never mutate a config held by an in-flight call.
             # Spending/model choices belong to this account, never to a
             # collaborator's shared project preferences.
-            return _select_user_paper_call_config(
-                base, work, lambda: _save_work(path, work)
-            )
+            return _select_user_paper_call_config(base, work, lambda: _save_work(path, work))
 
         # _generate_impl runs in its own task; child section tasks inherit this
         # selector, while unrelated paper scoring and tests never do.
@@ -10656,7 +10652,11 @@ async def _generate_impl(
             "created_at": timestamp,
             **(
                 {"created_by": original_creator}
-                if (original_creator := project_collaboration.paper_draft_creator(path, view.project.id))
+                if (
+                    original_creator := project_collaboration.paper_draft_creator(
+                        path, view.project.id
+                    )
+                )
                 else {}
             ),
             "snapshot_sha256": snapshot_hash,

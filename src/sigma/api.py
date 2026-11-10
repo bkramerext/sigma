@@ -858,9 +858,12 @@ async def paper_cancel_view(body: PaperCancelRequest):
     current = inspect_project(body.path)
     if current.project.id != body.expected_project_id:
         raise ProjectError("Project changed before paper generation could stop.")
-    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
+    active = papers.has_live_generation(body.path)
+    project_collaboration.require_paper_draft_operator(
+        body.path, body.expected_project_id, controlling_active=active
+    )
     with project_collaboration.bind_session_control_lease(
-        body.path, "Paper generation", require_active_lease=papers.has_live_generation(body.path)
+        body.path, "Paper generation", require_active_lease=active
     ):
         return {"cancelled": await papers.cancel_generation(body.path)}
 

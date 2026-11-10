@@ -621,19 +621,31 @@ def require_execution_operator(
             "SELECT email,activity,expires_at FROM shared_leases WHERE path=?", (path,)
         ).fetchone()
         active = lease is not None and lease["expires_at"] > time.time()
-        shared = db.execute(
-            "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
-        ).fetchone() is not None
+        shared = (
+            db.execute(
+                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
+            ).fetchone()
+            is not None
+        )
         if active and (lease["email"] != actor or lease["activity"] != activity):
             raise ProjectError("Only the current execution owner can control this operation.")
         if require_active_lease and shared and not active:
             raise ProjectError("Active execution has no valid owner lease; wait for recovery.")
         if creator is not None:
             if creator["email"] != actor:
-                raise ProjectError("Only the original execution creator can control this operation.")
-        elif creator is None and row["owner_hash"] != _identity()[0].subject_hash:
-            # A project-level lease does not prove which legacy session it owns.
-            raise ProjectError("Execution creator is unknown; only the project owner can recover it.")
+                raise ProjectError(
+                    "Only the original execution creator can control this operation."
+                )
+        elif (
+            creator is None
+            and row["owner_hash"] != _identity()[0].subject_hash
+            and not (require_active_lease and active)
+        ):
+            # Legacy creatorless work may be stopped by its live lease holder;
+            # paused/restart work with no active worker is owner-only.
+            raise ProjectError(
+                "Execution creator is unknown; only the project owner can recover it."
+            )
 
 
 def paper_draft_creator(path: str, project_id: str) -> str | None:
@@ -689,7 +701,9 @@ def reserve_paper_draft(path: str, project_id: str, *, resuming: bool) -> None:
         db.commit()
 
 
-def require_paper_draft_operator(path: str, project_id: str) -> None:
+def require_paper_draft_operator(
+    path: str, project_id: str, *, controlling_active: bool = False
+) -> None:
     """Allow destructive draft operations only for its original creator."""
     from sigma.projects import ProjectError
 
@@ -707,7 +721,20 @@ def require_paper_draft_operator(path: str, project_id: str) -> None:
         if saved is not None and saved["email"] != actor:
             raise ProjectError("Only the original paper creator can change unfinished paper work.")
         if saved is None and row["owner_hash"] != _identity()[0].subject_hash:
-            raise ProjectError("Unattributed paper work can only be managed by the project owner.")
+            lease = db.execute(
+                "SELECT email,activity,expires_at FROM shared_leases WHERE path=?", (path,)
+            ).fetchone()
+            live_holder = (
+                controlling_active
+                and lease is not None
+                and lease["email"] == actor
+                and lease["activity"] == "Paper generation"
+                and lease["expires_at"] > time.time()
+            )
+            if not live_holder:
+                raise ProjectError(
+                    "Unattributed paper work can only be managed by the project owner."
+                )
 
 
 def attribute_published_paper(path: str, project_id: str, paper_id: str) -> None:
@@ -789,18 +816,21 @@ def bind_session_control_lease(
         return
     lease_token: str | None = None
     with _db() as db:
-        registered = db.execute(
-            "SELECT 1 FROM shared_projects WHERE path=?", (path,)
-        ).fetchone() is not None
+        registered = (
+            db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is not None
+        )
         if registered:
             _row_value, actor = _membership(db, path)
             lease = db.execute(
                 "SELECT token,email,activity,expires_at FROM shared_leases WHERE path=?",
                 (path,),
             ).fetchone()
-            has_members = db.execute(
-                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
-            ).fetchone() is not None
+            has_members = (
+                db.execute(
+                    "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
+                ).fetchone()
+                is not None
+            )
             if lease is not None and lease["expires_at"] > time.time():
                 if lease["email"] != actor or lease["activity"] != activity:
                     raise ProjectError(
