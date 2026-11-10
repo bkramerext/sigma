@@ -167,6 +167,8 @@ def make_bundle(members: dict[str, bytes]) -> dict:
         target[name] = data
     if "project.json" not in standard:
         raise BundleError("Cannot export a project without project.json")
+    if sum(map(len, standard.values())) + sum(map(len, artifacts.values())) > MAX_BUNDLE_BYTES:
+        raise BundleError("Project members exceed the total bundle size limit")
     encoded_standard = project_bundle.portable_bundle(standard)["files"]
     return {
         "format": FORMAT,
@@ -233,6 +235,8 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
     artifacts = _unarchive(payload["artifacts"])
     if set(standard).intersection(artifacts):
         raise BundleError("Duplicate project member")
+    if sum(map(len, standard.values())) + sum(map(len, artifacts.values())) > MAX_BUNDLE_BYTES:
+        raise BundleError("Project members exceed the total bundle size limit")
     return {**standard, **artifacts}
 
 
