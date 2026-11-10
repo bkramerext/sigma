@@ -282,9 +282,9 @@ def import_project(
             record = json.loads(members[member])
             record["source_session_id"] = old_session_id
             record["imported_via_bundle"] = True
-            members[member] = (
-                json.dumps(record, ensure_ascii=False, indent=2) + "\n"
-            ).encode("utf-8")
+            members[member] = (json.dumps(record, ensure_ascii=False, indent=2) + "\n").encode(
+                "utf-8"
+            )
         members = {_canon(name): data for name, data in members.items()}
     # Verify all paper artifacts before publishing the directory.
     historical = {}
