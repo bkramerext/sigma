@@ -75,10 +75,11 @@ function SourceMaterialLink({ url }: { url: string }) {
   return <a className="sigma-evidence-link" href={url} target="_blank" rel="noopener noreferrer">{title || url}</a>;
 }
 
-function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; expanded: boolean; onToggle: () => void; guest: boolean }) {
+function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevision }: { path: string; expanded: boolean; onToggle: () => void; guest: boolean; collaborationRevision?: number }) {
   const [rows, setRows] = useState<EvidenceRow[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const editingOriginalUrl = useRef<string | null>(null);
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -97,7 +98,20 @@ function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; e
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not load Source Material.');
-    if (currentPath.current === path && !currentGuest.current) setRows(result.files as EvidenceRow[]);
+    if (currentPath.current === path && !currentGuest.current) {
+      const latest = result.files as EvidenceRow[];
+      if (editingId) {
+        const current = latest.find(row => row.id === editingId);
+        if (!current || current.url !== editingOriginalUrl.current) {
+          cancelled.current = true;
+          setEditingId(null);
+          editingOriginalUrl.current = null;
+          setUrl('');
+          setError('This Source Material changed in another window. Your edit was cancelled.');
+        }
+      }
+      setRows(latest);
+    }
   }
 
   useEffect(() => {
@@ -106,10 +120,16 @@ function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; e
   }, [path, guest]);
 
   useEffect(() => { if (adding || editingId) linkInput.current?.focus(); }, [adding, editingId]);
+  // Reload the collection on committed remote revisions. A draft for a
+  // different item (or a new link) must not be cancelled.
+  useEffect(() => {
+    if (collaborationRevision === undefined || guest) return;
+    void reload().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+  }, [collaborationRevision, path, guest]);
 
   function cancelLink() {
     cancelled.current = true;
-    setAdding(false); setEditingId(null); setUrl(''); setError('');
+    setAdding(false); setEditingId(null); editingOriginalUrl.current = null; setUrl(''); setError('');
   }
 
   async function saveLink() {
@@ -145,7 +165,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; e
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not save link.');
       await reload();
-      setAdding(false); setEditingId(null); setUrl('');
+      setAdding(false); setEditingId(null); editingOriginalUrl.current = null; setUrl('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -244,7 +264,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; e
             <EvidenceActionIcon kind={entry.enabled === false ? 'disabled' : 'enabled'}/>
           </button>
           {entry.kind === 'link' && <button type="button" aria-label="Edit Source Material link" data-tooltip="Edit link"
-            disabled={busy} onClick={() => { cancelled.current = false; setError(''); setAdding(false); setEditingId(entry.id); setUrl(entry.url || ''); }}>
+            disabled={busy} onClick={() => { cancelled.current = false; setError(''); setAdding(false); editingOriginalUrl.current = entry.url || ''; setEditingId(entry.id); setUrl(entry.url || ''); }}>
             <EvidenceActionIcon kind="edit"/>
           </button>}
           {entry.can_remove !== false && <button type="button" aria-label={'Remove ' + (entry.filename || entry.url)}
@@ -275,13 +295,14 @@ const definitions = [
 ] as const;
 
 export default function ProjectDescriptionEditor({
-  view, editing, busy, canEditTitle = true, onBusyChange, onDirtyChange, onExitMode, onSave, guest,
+  view, editing, busy, canEditTitle = true, onBusyChange, onDirtyChange, onExitMode, onSave, guest, collaborationRevision,
 }: {
   view: ProjectDescriptionView;
   guest: boolean;
   editing: boolean;
   busy: boolean;
   canEditTitle?: boolean;
+  collaborationRevision?: number;
   onBusyChange: (busy: boolean) => void;
   onDirtyChange: (dirty: boolean) => void;
   onExitMode: () => void;
@@ -358,7 +379,7 @@ export default function ProjectDescriptionEditor({
       </div>}
       </div>
     </section>)}
-    <SuppliedEvidence path={view.path} guest={guest} expanded={expandedFields.supplied_evidence ?? true} onToggle={() => toggleField('supplied_evidence')}/>
+    <SuppliedEvidence path={view.path} guest={guest} collaborationRevision={collaborationRevision} expanded={expandedFields.supplied_evidence ?? true} onToggle={() => toggleField('supplied_evidence')}/>
   </div>;
 
   return     <div className="sigma-description-editor">
