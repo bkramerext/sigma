@@ -259,7 +259,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             == 0
         )
         expect(
-            member_dialog.get_by_text(
+            member_dialog.locator(".project-classification-readonly-note").get_by_text(
                 "Title, research category, difficulty, and user settings are inherited from the project owner."
             )
         ).to_be_visible()
