@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import errno
 import json
+import shutil
 import smtplib
 import sqlite3
 import tempfile
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from email.message import EmailMessage
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +21,25 @@ from uuid import uuid4
 from sigma import cloud_auth, project_email, research_sessions
 from sigma.project_bundle import import_bundle, list_files, portable_bundle, read_file
 from sigma.projects import ProjectError, initialize_project
+
+
+@contextmanager
+def _temporary_import_workspace():
+    """Cleanup remains strict but tolerates a short ENOTEMPTY filesystem race."""
+    directory = tempfile.mkdtemp()
+    try:
+        yield directory
+    finally:
+        for attempt in range(5):
+            try:
+                shutil.rmtree(directory)
+                break
+            except FileNotFoundError:
+                break
+            except OSError as exc:
+                if exc.errno != errno.ENOTEMPTY or attempt == 4:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
 
 
 class ProjectEmailTests(unittest.TestCase):
@@ -285,7 +308,7 @@ class ProjectEmailTests(unittest.TestCase):
         self.assertEqual(smtp.call_args.kwargs["reply_to"], "alice@example.org")
 
     def test_imported_session_transport_handoff_preserves_history(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with _temporary_import_workspace() as directory:
             root = Path(directory)
             sender = root / "sender.json"
             receiver = root / "receiver.json"
