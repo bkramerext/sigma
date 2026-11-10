@@ -9,6 +9,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
+from urllib.parse import urlsplit
 
 import pypdfium2
 
@@ -155,6 +156,7 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
         identifier = uuid4().hex
         entry = {
             "id": identifier,
+            "kind": "file",
             "filename": name,
             "sha256": sha,
             "bytes": len(pdf),
@@ -172,10 +174,50 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
         return entry
 
 
+
+def add_link(path: str, url: str) -> dict:
+    """Persist a URL as a clearly uninspected evidence pointer."""
+    parsed = urlsplit(url.strip())
+    if (
+        parsed.scheme not in {"https", "http"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or len(url) > 2048
+        or any(ord(c) < 32 for c in url)
+    ):
+        raise ProjectError("Enter a valid HTTP or HTTPS evidence link.")
+    from sigma import cloud_auth
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise ProjectError("Guests cannot add evidence.")
+    with project_write_lock(path):
+        rows = list_evidence(path)
+        duplicate = next(
+            (row for row in rows if row.get("kind") == "link" and row.get("url") == url.strip()),
+            None,
+        )
+        if duplicate is not None:
+            return duplicate
+        if len(rows) >= MAX_FILES:
+            raise ProjectError("This project already has 20 supplied evidence entries.")
+        entry = {
+            "id": uuid4().hex,
+            "kind": "link",
+            "url": url.strip(),
+            "uploaded_by": principal.email if principal else None,
+            "uploaded_at": datetime.now(UTC).isoformat(),
+        }
+        _write(path, {MANIFEST: json.dumps([*rows, entry], sort_keys=True).encode()})
+        return entry
+
 def get_pdf(path: str, identifier: str) -> tuple[dict, bytes]:
     row = next((row for row in list_evidence(path) if row["id"] == identifier), None)
     if row is None:
         raise ProjectError("Evidence file not found.")
+    if row.get("kind") == "link":
+        raise ProjectError("Evidence link is not an attached PDF.")
     pdf = _read(path, f"artifacts/evidence/{identifier}.pdf")
     if pdf is None or hashlib.sha256(pdf).hexdigest() != row["sha256"]:
         raise ProjectError("Evidence PDF is unavailable or has changed.")
@@ -200,8 +242,10 @@ def remove_evidence(path: str, identifier: str) -> None:
         _write(
             path,
             {
-                f"artifacts/evidence/{identifier}.pdf": None,
-                f"artifacts/evidence/{identifier}.txt": None,
+                **({} if entry.get("kind") == "link" else {
+                    f"artifacts/evidence/{identifier}.pdf": None,
+                    f"artifacts/evidence/{identifier}.txt": None,
+                }),
                 MANIFEST: json.dumps(
                     [row for row in rows if row["id"] != identifier], sort_keys=True
                 ).encode(),
@@ -217,6 +261,15 @@ def evidence_context(path: str, *, limit: int = 16000) -> list[dict]:
         return output
     remaining = limit
     for index, row in enumerate(rows):
+        if row.get("kind") == "link":
+            output.append({
+                "id": f"uploaded-link:{row['id']}",
+                "url": row["url"],
+                "excerpt": "",
+                "incomplete_extract": True,
+                "provenance": "User-supplied URL pointer; content has not been retrieved or verified.",
+            })
+            continue
         body = _read(path, f"artifacts/evidence/{row['id']}.txt")
         if body is None:
             raise ProjectError("Saved evidence extract is missing.")
