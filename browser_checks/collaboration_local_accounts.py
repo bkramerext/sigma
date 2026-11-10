@@ -258,11 +258,9 @@ def exercise(ui: str, workspaces: Path) -> None:
             member_dialog.locator(".settings-classification-row .research-type-chevron").count()
             == 0
         )
-        expect(
-            member_dialog.get_by_text(
-                "Project category, difficulty, and title are read-only for non-owner collaborators."
-            )
-        ).to_be_visible()
+        expect(member_dialog.locator(".project-classification-readonly-note")).to_have_text(
+            "Title, research category, difficulty, and user settings are inherited from the project owner."
+        )
         # Pointer clicks and keyboard actions cannot open a listbox.
         readonly.nth(0).click()
         readonly.nth(1).click()

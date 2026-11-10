@@ -267,7 +267,7 @@ def add_link(path: str, url: str) -> dict:
     return selected
 
 
-def edit_link(path: str, identifier: str, url: str) -> dict:
+def edit_link(path: str, identifier: str, url: str, *, expected_url: str | None = None) -> dict:
     """Edit a linked source without changing its ID, uploader, or enabled status."""
     from sigma.projects import _update_project
 
@@ -281,6 +281,10 @@ def edit_link(path: str, identifier: str, url: str) -> dict:
         current = next((row for row in rows if row["id"] == identifier), None)
         if current is None:
             raise ProjectError("Source Material link not found.")
+        if expected_url is not None and current["url"] != expected_url:
+            raise ProjectError(
+                "Source Material was changed by another collaborator. Your edit was not saved."
+            )
         if any(row["url"] == canonical and row["id"] != identifier for row in rows):
             raise ProjectError("Duplicate Source Material URL.")
         selected = {**current, "url": canonical}

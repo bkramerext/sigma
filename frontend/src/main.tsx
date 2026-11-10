@@ -1435,7 +1435,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   </details>;
 }
 
-function ResearchWorkspace({ artifactAuthors, path, projectId, strategies, nextStrategyOrdinal, onInferredStrategy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onInitialActivity, onRevealNewSession, onSectionOpened, sessionControls, guest, onGuestPlay, playButtonRef, controlsDisabled, missingType, safeSavedTypeSettings, savedTypeName, onChooseReplacement }: { artifactAuthors?: Record<string, string>; path: string; projectId: string; strategies: Strategy[]; nextStrategyOrdinal: number; onInferredStrategy: (view: ProjectView, id: string) => void; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onInitialActivity: (status: 'running' | 'queued' | null) => void; onRevealNewSession: () => void; onSectionOpened: () => void; sessionControls: ProcessControls; guest: boolean; onGuestPlay: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null>; controlsDisabled: boolean; missingType: boolean; safeSavedTypeSettings: boolean; savedTypeName: string; onChooseReplacement: () => void }) {
+function ResearchWorkspace({ collaborationRevision, artifactAuthors, path, projectId, strategies, nextStrategyOrdinal, onInferredStrategy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onInitialActivity, onRevealNewSession, onSectionOpened, sessionControls, guest, onGuestPlay, playButtonRef, controlsDisabled, missingType, safeSavedTypeSettings, savedTypeName, onChooseReplacement }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; path: string; projectId: string; strategies: Strategy[]; nextStrategyOrdinal: number; onInferredStrategy: (view: ProjectView, id: string) => void; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onInitialActivity: (status: 'running' | 'queued' | null) => void; onRevealNewSession: () => void; onSectionOpened: () => void; sessionControls: ProcessControls; guest: boolean; onGuestPlay: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null>; controlsDisabled: boolean; missingType: boolean; safeSavedTypeSettings: boolean; savedTypeName: string; onChooseReplacement: () => void }) {
   const cloud = useCloudIdentity();
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
@@ -1640,6 +1640,18 @@ function ResearchWorkspace({ artifactAuthors, path, projectId, strategies, nextS
     }
     readErrorReported.current = true;
   }, [path]);
+
+  const lastResearchRevision = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (collaborationRevision === undefined) return;
+    if (lastResearchRevision.current === undefined) {
+      lastResearchRevision.current = collaborationRevision;
+      return;
+    }
+    if (lastResearchRevision.current === collaborationRevision) return;
+    lastResearchRevision.current = collaborationRevision;
+    void load().catch(reportReadFailure);
+  }, [collaborationRevision, load, reportReadFailure]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2595,7 +2607,7 @@ function paperTimingLabel(progress: PaperProgress, now: number): string {
   return paperElapsed(seconds);
 }
 
-function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { artifactAuthors?: Record<string, string>; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
+function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
   const ai = useAI();
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
   const [paperMenu, setPaperMenu] = useState<{ paperId: string; kind: 'download' | 'actions' } | null>(null);
@@ -2766,6 +2778,17 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
     return () => document.removeEventListener('pointerdown', dismissOutside);
   }, [confirmRestartDraft, confirmDiscardDraft, confirmPlayRestartDraft, confirmRecoverDraft]);
   useEffect(() => { if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest, path]);
+  const lastPaperRevision = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (collaborationRevision === undefined || guest) return;
+    if (lastPaperRevision.current === undefined) {
+      lastPaperRevision.current = collaborationRevision;
+      return;
+    }
+    if (lastPaperRevision.current === collaborationRevision) return;
+    lastPaperRevision.current = collaborationRevision;
+    void refresh(undefined, true);
+  }, [collaborationRevision, guest, path]);
   useEffect(() => {
     if (!paperMenu) return;
     const dismiss = (event: PointerEvent) => { if (event.target instanceof Element && !event.target.closest('.paper-action-menu')) setPaperMenu(null); };
@@ -5106,7 +5129,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             </div>
           </div>
           {nonOwnerCollaborator && <p className="project-classification-readonly-note">
-            Project category, difficulty, and title are read-only for non-owner collaborators.
+            Title, research category, difficulty, and user settings are inherited from the project owner.
           </p>}
           {!!shared?.owner && <>
             <section className="project-collaborators" aria-label="Collaborators">
@@ -5117,7 +5140,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
               <div className="project-collaborator-row">
                 <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
               </div>
-              {collaborators.length > 0 && <p className="project-collaborator-standards-note">The project title, research category, difficulty, and research and publication standards are determined by the project owner and apply to all collaborators.</p>}
+              {collaborators.length > 0 && <p className="project-collaborator-standards-note">Title, research category, difficulty, and user settings are inherited from the project owner.</p>}
               {collaborators.map(email => <div className="project-collaborator-row" key={email}>
                 <span>{email}</span>
                 {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
@@ -6381,6 +6404,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [paperRunning, setPaperRunning] = useState(false);
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
+  const lastLoadedSharedRevision = useRef<number | null>(null);
   // A verified execution lease identifies the collaborator responsible for
   // green/yellow activity across nested UI elements and CSS-generated dots.
   const pulseAuthor = sharedActivity?.shared && sharedActivity.collaborators.length > 0
@@ -6503,6 +6527,46 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [guestAiNotice, setGuestAiNotice] = useState('');
+  // Collaborators keep an open project fresh without losing local drafts or focus.
+  // The existing lightweight collaboration poll supplies the revision; only a
+  // changed revision triggers the more expensive project-open request.
+  useEffect(() => {
+    if (!sharedActivity?.shared || !view || guest) return;
+    const revision = sharedActivity.revision;
+    if (lastLoadedSharedRevision.current === null) {
+      lastLoadedSharedRevision.current = revision;
+      return;
+    }
+    if (revision === lastLoadedSharedRevision.current) return;
+    // Committed changes supersede unsaved drafts in other windows.
+    // Avoid interrupting an in-flight write; the backend revision fence protects it.
+    if (closing || descriptionBusy || ordering) return;
+    const controller = new AbortController();
+    void post<ProjectView>('open', { path, compact: true }, controller.signal)
+      .then(next => {
+        if (controller.signal.aborted) return;
+        modeOwner.current = null;
+        setActiveMode(null);
+        setProjectEditing(false);
+        setDescriptionEditing(false);
+        setDescriptionDirty(false);
+        setEditing(false);
+        setGenerating(false);
+        setManualDraft(undefined);
+        setCombinedTextDrafts({});
+        setTextEditSignals({});
+        setEditorVersion(value => value + 1);
+        setView(next);
+        lastLoadedSharedRevision.current = revision;
+        setAnnouncement('Project updated by a collaborator. Unsaved edits were discarded.');
+      })
+      .catch(() => { /* Retain the current view and retry on the next poll. */ });
+    return () => controller.abort();
+  }, [sharedActivity, view?.project.id, guest,
+      activeMode, editing, generating, projectEditing, descriptionEditing,
+      descriptionDirty, ordering, dragId, manualDraft, closing, path]);
+
+  const [editorVersion, setEditorVersion] = useState(0);
   const [focusStrategy, setFocusStrategy] = useState('');
   const citationRevealHandled = useRef(false);
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
@@ -6852,7 +6916,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. {guest ? 'Sign in to replace the project type.' : 'Choose a replacement in Project Settings to use a current type.'}</p>{!guest && <button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button>}</div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>TITLE</span></div>
-      <ProjectDescriptionEditor view={view} guest={guest}
+      <ProjectDescriptionEditor view={view} guest={guest} collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined}
         editing={descriptionEditing} busy={descriptionBusy}
         canEditTitle={!sharedActivity?.owner || sharedActivity.owner === sharedActivity.you}
         onBusyChange={setDescriptionBusy}
@@ -6902,7 +6966,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${strategies.length === 1 ? ' is-only-strategy' : ''}${!strategy.enabled ? ' is-disabled' : ''}${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor authorEmail={sharedActivity?.shared ? sharedActivity.artifact_authors?.strategy?.[strategy.id] : undefined} strategy={strategy} path={view.path} onSaved={setView} modeDisabled={guest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={guest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
+            <StrategyTitleEditor key={`${strategy.id}:${editorVersion}`} authorEmail={sharedActivity?.shared ? sharedActivity.artifact_authors?.strategy?.[strategy.id] : undefined} strategy={strategy} path={view.path} onSaved={setView} modeDisabled={guest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={guest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
               if (guest || ordering || dragId || activeMode !== null || processControls.confirming) return;
               if (mode === 'toggle') {
                 const owner = `strategy-toggle-${strategy.id}`;
@@ -6929,7 +6993,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
                 .catch(cause => { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); })
                 .finally(() => exitMode(owner));
             }}/>} />
-            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews guest={guest} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={guest || (activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`)} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
+            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews key={`${strategy.id}:${editorVersion}`} guest={guest} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={guest || (activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`)} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
           </div>
           {strategies.length > 1 && <button id={`grip-${strategy.id}`} className="drag-grip" disabled={guest || ordering || closing}
             aria-label={`Reorder ${strategy.title}`} data-tooltip={`Drag to reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
@@ -6951,7 +7015,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
-    <ResearchWorkspace artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.session : undefined} path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
+    <ResearchWorkspace collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.session : undefined} path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
       if (guest) { setGuestAdvancedOutcome(true); return; }
       if (advancedOutcomeGlobal) return;
       const response = await fetch('/api/user-preferences/research-settings', {
@@ -6962,7 +7026,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setAdvancedOutcomeGlobal(true);
       setAnnouncement('Advanced Outcome enabled for your account.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
-    <PapersPane artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.paper : undefined} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
+    <PapersPane collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.paper : undefined} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
     {sharedActivity?.shared && sharedActivity.lease && <p className="project-collaboration-activity" role="status" aria-live="polite">
       {`${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`}
     </p>}
