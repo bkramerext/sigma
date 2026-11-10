@@ -166,28 +166,36 @@ with sync_playwright() as playwright:
     assert restore_response.ok
     page.evaluate("window.dispatchEvent(new Event('sigma-global-settings-saved'))")
 
-    # New Project uses the same SIGMA dropdown controls as Project Settings.
+    # A new project inherits personal Model/Thinking, not its own editable pair.
     page.get_by_role("button", name="New project", exact=True).click()
     new_dialog = page.get_by_role("dialog", name="New Project")
     expect(new_dialog).to_be_visible()
-    assert new_dialog.locator(".settings-model-row select").count() == 0
-    model_choice = new_dialog.get_by_role("combobox", name="Model", exact=True)
-    thinking_choice = new_dialog.get_by_role("combobox", name="Thinking level")
+    assert new_dialog.get_by_role("combobox", name="Model", exact=True).count() == 0
+    assert new_dialog.locator(".settings-model-row").count() == 0
+    new_dialog.get_by_role("button", name="Cancel project settings").click()
+    expect(new_dialog).not_to_be_visible()
+
+    # User Settings is the authoritative second tab for both header pills.
+    page.get_by_role("button", name="Settings", exact=True).click()
+    user_dialog = page.get_by_role("dialog", name="User Settings")
+    tabs = user_dialog.get_by_role("tab")
+    assert tabs.nth(1).inner_text() == "Model/Thinking"
+    tabs.nth(1).click()
+    model_choice = user_dialog.get_by_role("combobox", name="Model", exact=True)
+    thinking_choice = user_dialog.get_by_role("combobox", name="Thinking", exact=True)
     expect(model_choice).to_be_visible()
     expect(thinking_choice).to_be_visible()
-    expect(model_choice).to_contain_text("$")
     model_choice.click()
-    model_options = new_dialog.get_by_role("listbox", name="Model")
-    expect(model_options).to_be_visible()
+    model_options = page.get_by_role("listbox", name="Model", exact=True)
     expect(model_options.get_by_role("option").filter(has_text="GPT-6-Luna · $")).to_be_visible()
     expect(model_options.get_by_role("option").filter(has_text="GPT-6.1-Sol · $$")).to_be_visible()
     expect(model_options.get_by_role("option").filter(has_text="GPT-6-Astra · $$$")).to_be_visible()
     page.keyboard.press("Escape")
     thinking_choice.click()
-    expect(new_dialog.get_by_role("listbox", name="Thinking level")).to_be_visible()
+    expect(page.get_by_role("listbox", name="Thinking")).to_be_visible()
     page.keyboard.press("Escape")
-    new_dialog.get_by_role("button", name="Cancel project settings").click()
-    expect(new_dialog).not_to_be_visible()
+    user_dialog.get_by_role("button", name="Close Settings").click()
+    expect(user_dialog).not_to_be_visible()
 
     # A visible test host avoids the default Samples tab hiding Saved's
     # animations. Compare the CSSAnimation timeline anchors directly.

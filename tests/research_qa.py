@@ -110,14 +110,15 @@ def check_api_task_lifecycle(path: Path, project_id: str, binding: dict[str, str
 
 def check_bounded_shared_conversation() -> None:
     history = [
-        {"question": f"Other background {i}", "answer": "Unrelated " * 2000}
-        for i in range(45)
+        {"question": f"Other background {i}", "answer": "Unrelated " * 2000} for i in range(45)
     ]
-    history.append({
-        "question": "What does the skeptic say about the narrow passage?",
-        "answer": "The prior answer was inconclusive; corroboration is required.",
-        "source_refs": ["forged:untrusted"],
-    })
+    history.append(
+        {
+            "question": "What does the skeptic say about the narrow passage?",
+            "answer": "The prior answer was inconclusive; corroboration is required.",
+            "source_refs": ["forged:untrusted"],
+        }
+    )
     selected = research_qa._prior_qa_context("Follow up on the narrow passage skeptic?", history)
     assert selected and len(selected) <= research_qa.MAX_PRIOR_QA_EXCHANGES
     assert any("narrow passage" in item["question"] for item in selected)

@@ -5110,6 +5110,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
 
 function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
   useDocumentScrollLock();
+  const cloud = useCloudIdentity();
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);

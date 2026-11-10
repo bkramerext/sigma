@@ -571,7 +571,6 @@ def _selected_sources(question: str, package: dict[str, Any]) -> list[dict[str, 
     return picked
 
 
-
 def _prior_qa_context(question: str, records: list[dict[str, Any]]) -> list[dict[str, str]]:
     """Bound previous exchanges to conversational context, not cited evidence.
 
