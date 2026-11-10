@@ -503,16 +503,18 @@ class CollaborationTests(TestCase):
         self.assertIsNotNone(lease)
 
         async def exercise() -> None:
-            task = asyncio.create_task(asyncio.sleep(3600))
+            task = asyncio.create_task(asyncio.sleep(3600, result={}))
             research_sessions._tasks[session_id] = task
             body = api.ResearchSessionRemoveRequest(
                 path=self.path, expected_updated_at="2026-11-09T00:00:00+00:00"
             )
             record = {"status": "running", "updated_at": body.expected_updated_at}
             try:
-                with patch("sigma.api.research_sessions.get_session", return_value=record):
-                    with self.assertRaisesRegex(ProjectError, "execution owner"):
-                        await api.research_session_remove_view(session_id, body)
+                with (
+                    patch("sigma.api.research_sessions.get_session", return_value=record),
+                    self.assertRaisesRegex(ProjectError, "execution owner"),
+                ):
+                    await api.research_session_remove_view(session_id, body)
                 self.assertFalse(task.done())
                 # Defense in depth: direct callers cannot bypass the API and
                 # cancel a running cloud session through remove_session().
@@ -522,11 +524,11 @@ class CollaborationTests(TestCase):
                         return_value=nullcontext(),
                     ),
                     patch("sigma.research_sessions._read", return_value=record),
+                    self.assertRaisesRegex(ProjectError, "Stop the active session"),
                 ):
-                    with self.assertRaisesRegex(ProjectError, "Stop the active session"):
-                        await research_sessions.remove_session(
-                            self.path, session_id, body.expected_updated_at
-                        )
+                    await research_sessions.remove_session(
+                        self.path, session_id, body.expected_updated_at
+                    )
                 self.assertFalse(task.done())
             finally:
                 research_sessions._tasks.pop(session_id, None)
