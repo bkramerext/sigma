@@ -53,7 +53,9 @@ def test_single_archive_roundtrip() -> None:
         project_transfer.import_project(payload, new)
         assert new.is_dir()
         assert inspect_project(new).project.id != inspect_project(origin).project.id
-        assert (new / "artifacts" / "generated_papers" / "example.tex").read_text() == "Generated paper TeX"
+        assert (
+            new / "artifacts" / "generated_papers" / "example.tex"
+        ).read_text() == "Generated paper TeX"
         assert project_evidence.get_pdf(str(new), attached["id"])[1] == pdf
         assert any(row["url"] == link["url"] for row in project_evidence.list_evidence(str(new)))
         _expect_failure(lambda: project_transfer.decode_bundle({**payload, "version": 3}))
