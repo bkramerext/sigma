@@ -206,7 +206,9 @@ def bundle_document(payload: dict) -> dict:
         raise BundleError("Imported project document is invalid") from exc
 
 
-def import_project(payload: dict, destination: str | Path, *, independent: bool = True) -> Path:
+def import_project(
+    payload: dict, destination: str | Path, *, independent: bool = True, title_override: str | None = None
+) -> Path:
     """Validate, reidentify, and restore an imported bundle as a real directory."""
     from sigma.project_copy import rebase_copy
     from sigma.projects import _decode as validate_project
@@ -215,6 +217,11 @@ def import_project(payload: dict, destination: str | Path, *, independent: bool 
     if destination.suffix != ".sigma" or destination.exists():
         raise BundleError("Import destination must be a new .sigma directory")
     members = decode_bundle(payload)
+    if title_override is not None:
+        renamed = project_bundle.rename_bundle_project(
+            project_bundle.portable_bundle(members), title_override
+        )
+        members = project_bundle._decode(renamed)
     document = json.loads(members["project.json"])
     validate_project(document)
     if independent:
