@@ -183,6 +183,20 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* Subtle link/attachment hover, without altering the icon buttons or row geometry. */
+.sigma-evidence-row :is(.sigma-evidence-link, .sigma-evidence-attachment) {
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+.sigma-evidence-row :is(.sigma-evidence-link, .sigma-evidence-attachment):is(:hover, :focus-visible) {
+  color: #fff2e9;
+  text-decoration: underline;
+  text-decoration-color: #d6a36f;
+  text-underline-offset: 3px;
+}
+.sigma-evidence-row .sigma-evidence-attachment:is(:hover, :focus-visible) svg {
+  color: #fff2e9;
+}
+
 .sigma-evidence-row .sigma-evidence-attachment {
   position: relative;
   display: inline-flex;
