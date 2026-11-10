@@ -263,14 +263,28 @@ def import_project(
                 else name
             )
             working[historical] = data
+        session_ids: dict[str, str] = {}
         rebased = rebase_copy(
             project_bundle.portable_bundle(working),
             source_id=old_id,
             new_id=new_id,
             source_path="/sigma-import-original",
             destination_path=str(destination),
+            session_ids_out=session_ids,
         )
         members = project_bundle._decode(rebased)
+        # Imported sessions retain their immediate source identity for audit.
+        # Preserve saved findings and their original status, including stopped.
+        for old_session_id, new_session_id in session_ids.items():
+            member = f"research-sessions/{new_session_id}.json"
+            if member not in members:
+                raise BundleError("Imported session checkpoint is missing")
+            record = json.loads(members[member])
+            record["source_session_id"] = old_session_id
+            record["imported_via_bundle"] = True
+            members[member] = (
+                json.dumps(record, ensure_ascii=False, indent=2) + "\n"
+            ).encode("utf-8")
         members = {_canon(name): data for name, data in members.items()}
     # Verify all paper artifacts before publishing the directory.
     historical = {}
