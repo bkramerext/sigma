@@ -1990,7 +1990,7 @@ def read_project_artifact(value: str | Path, name: str) -> bytes:
 
     try:
         if path.suffix == ".sigma" and name.startswith("artifacts/papers/"):
-            canonical = "artifacts/generated_papers/" + name[len("artifacts/papers/"):]
+            canonical = "artifacts/generated_papers/" + name[len("artifacts/papers/") :]
             try:
                 return read_file(path, canonical)
             except ValueError:
