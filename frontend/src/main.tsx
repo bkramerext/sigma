@@ -3851,7 +3851,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
+      }}>{rendering ? <ProjectOpeningHourglass/> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
   const markdownControl = <span className="text-view-format-control">
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
