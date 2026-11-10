@@ -71,7 +71,7 @@ def main() -> None:
         # Narrowing Settings must not disturb the About/Model origin or gap.
         pill = page.locator(".global-model-pill")
         maximum = pill.locator(".global-model-pill-max-labels > span").first
-        expect(maximum).to_have_text("Model · GPT-6-Astra · $$")
+        expect(maximum).to_have_text("Model · GPT-6-Astra · $$$")
         assert pill.evaluate(
             """button => {
                 const label = button.querySelector('.global-model-pill-max-labels > span');
