@@ -50,7 +50,7 @@ class ProjectImportTitleTests(TestCase):
         result, renamed, paths = self._import(["TestProject v1"])
         self.assertEqual(result["title"], "TestProject v2")
         self.assertEqual(renamed, ["TestProject v2"])
-        self.assertEqual(paths, ["TestProject-v2.json"])
+        self.assertEqual(paths, ["testproject-v2.json"])
 
     def test_import_skips_all_visible_versions(self):
         result, renamed, _ = self._import(["TestProject v1", "TestProject v2"])
