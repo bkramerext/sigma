@@ -16,13 +16,39 @@
 .sigma-global-settings .settings-header,
 .sigma-global-settings .settings-tabs { flex: 0 0 auto; }
 .sigma-global-settings .settings-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.sigma-global-settings .settings-body .sigma-model-select {
-  display: block;
-  width: min(100%, 300px);
+.sigma-global-settings .sigma-global-model-thinking .settings-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 258px) minmax(0, 132px);
+  gap: 12px;
+  width: min(100%, 402px);
+  align-items: start;
 }
-.sigma-global-settings .settings-body .sigma-effort-select {
-  display: block;
-  width: min(100%, 155px);
+.sigma-global-settings .sigma-global-model-thinking .settings-model-row > div { min-width: 0; }
+.sigma-global-settings .settings-body .sigma-model-select,
+.sigma-global-settings .settings-body .sigma-effort-select { display: block; width: 100%; }
+.sigma-global-settings .sigma-global-model-thinking .sigma-select-trigger {
+  justify-content: flex-start;
+  text-align: left;
+  padding-left: 12px;
+}
+.sigma-global-settings .sigma-global-model-thinking .sigma-select-trigger > span {
+  text-align: left;
+  padding-left: 0;
+  margin-left: 0;
+}
+.sigma-global-settings .sigma-global-model-thinking .sigma-select-options [role="option"] {
+  text-align: left;
+  padding-left: 11px;
+}
+.sigma-global-settings .sigma-global-model-thinking .sigma-select-options [role="option"] > span {
+  text-align: left;
+  padding-left: 0;
+  margin-left: 0;
+}
+@media (max-width: 480px) {
+  .sigma-global-settings .sigma-global-model-thinking .settings-model-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 120px);
+  }
 }
 .sigma-global-settings .settings-tabs { display: flex; flex-wrap: wrap; padding: 12px 24px 0; gap: 18px; }
 .sigma-global-settings .settings-tabs button {

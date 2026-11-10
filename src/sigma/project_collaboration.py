@@ -28,7 +28,6 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 from sigma import cloud_auth, cloud_workspaces
-from sigma.model_catalog import validate_pair
 
 LEASE_SECONDS = 120
 MAX_NOTIFICATION_ATTEMPTS = 3
@@ -543,7 +542,7 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
                         (view.path, kind),
                     )
                 }
-                for kind in ("strategy", "session", "paper")
+                for kind in ("strategy", "session", "paper", "answer")
             }
             if members
             else {},
@@ -563,14 +562,15 @@ def note_artifact_author(
 
     Autonomous checkpoints must not overwrite the initiating human's identity.
     """
-    if kind not in {"strategy", "session", "paper"} or not artifact_id:
+    if kind not in {"strategy", "session", "paper", "answer"} or not artifact_id:
         raise ValueError("Invalid artifact attribution")
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return
     with _db() as db:
-        row, actor = _membership(db, path)
-        if row is None:
+        # Private/unregistered projects do not have collaboration provenance.
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
             return
+        _row, actor = _membership(db, path)
         verb = "INSERT OR IGNORE" if created_only else "INSERT OR REPLACE"
         db.execute(
             f"{verb} INTO shared_artifact_authors "
@@ -578,6 +578,304 @@ def note_artifact_author(
             (path, kind, artifact_id, actor, time.time()),
         )
         db.commit()
+
+
+def require_project_classification_owner(path: str) -> None:
+    """Only the verified owner may change the project's category or difficulty."""
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    with _db() as db:
+        row, _actor = _membership(db, path)
+        if row["owner_hash"] != _identity()[0].subject_hash:
+            raise ProjectError(
+                "Only the project owner can change the research category or difficulty."
+            )
+
+
+def require_project_title_owner(path: str) -> None:
+    """The project owner alone may rename a shared project.
+
+    Collaborators may still edit the project research description and other
+    shared fields. This check belongs at the storage boundary, not just the UI.
+    """
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    with _db() as db:
+        row, _actor = _membership(db, path)
+        if row["owner_hash"] != _identity()[0].subject_hash:
+            raise ProjectError("Only the project owner can change the project title.")
+
+
+def collaborator_identity(path: str) -> str | None:
+    """Verified collaborator email for durable, human-authored output metadata."""
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return None
+    try:
+        with _db() as db:
+            _row_value, actor = _membership(db, path)
+            shared = db.execute(
+                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
+            ).fetchone()
+            return actor if shared else None
+    except ValueError:
+        # A personal, unshared project has no collaborator identity.
+        return None
+
+
+def require_execution_operator(
+    path: str,
+    kind: str,
+    artifact_id: str,
+    activity: str,
+    *,
+    require_active_lease: bool = False,
+) -> None:
+    """Authorize an executor independently of the owner's artifact-delete privilege."""
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    with _db() as db:
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
+            return  # Private, unregistered projects have no collaboration ACL.
+        row, actor = _membership(db, path)
+        creator = db.execute(
+            "SELECT email FROM shared_artifact_authors WHERE path=? AND kind=? AND artifact_id=?",
+            (path, kind, artifact_id),
+        ).fetchone()
+        lease = db.execute(
+            "SELECT email,activity,expires_at FROM shared_leases WHERE path=?", (path,)
+        ).fetchone()
+        active = lease is not None and lease["expires_at"] > time.time()
+        shared = (
+            db.execute(
+                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
+            ).fetchone()
+            is not None
+        )
+        if (
+            active
+            and lease is not None
+            and (lease["email"] != actor or lease["activity"] != activity)
+        ):
+            raise ProjectError("Only the current execution owner can control this operation.")
+        if require_active_lease and shared and not active:
+            raise ProjectError("Active execution has no valid owner lease; wait for recovery.")
+        if creator is not None:
+            if creator["email"] != actor:
+                raise ProjectError(
+                    "Only the original execution creator can control this operation."
+                )
+        elif (
+            creator is None
+            and row["owner_hash"] != _identity()[0].subject_hash
+            and not (require_active_lease and active)
+        ):
+            # Legacy creatorless work may be stopped by its live lease holder;
+            # paused/restart work with no active worker is owner-only.
+            raise ProjectError(
+                "Execution creator is unknown; only the project owner can recover it."
+            )
+
+
+def paper_draft_creator(path: str, project_id: str) -> str | None:
+    """Server-owned original draft identity, independent of the resumed account."""
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return None
+    with _db() as db:
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
+            return None
+        _membership(db, path)
+        row = db.execute(
+            "SELECT email FROM shared_artifact_authors "
+            "WHERE path=? AND kind='paper_draft' AND artifact_id=?",
+            (path, project_id),
+        ).fetchone()
+        return row["email"] if row is not None else None
+
+
+def reserve_paper_draft(path: str, project_id: str, *, resuming: bool) -> None:
+    """Bind the original paper draft owner before dispatching any provider call."""
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    with _db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
+            db.commit()
+            return
+        row, actor = _membership(db, path)
+        if row["project_id"] != project_id:
+            raise ProjectError("Paper project identity changed before admission.")
+        saved = db.execute(
+            "SELECT email FROM shared_artifact_authors "
+            "WHERE path=? AND kind='paper_draft' AND artifact_id=?",
+            (path, project_id),
+        ).fetchone()
+        if resuming:
+            if saved is None:
+                if row["owner_hash"] != _identity()[0].subject_hash:
+                    raise ProjectError("Legacy paper draft can only be recovered by the owner.")
+                # An uncredited legacy draft remains owner-controlled.
+            elif saved["email"] != actor:
+                raise ProjectError("Only the original paper creator can resume this draft.")
+        else:
+            db.execute(
+                "INSERT INTO shared_artifact_authors "
+                "(path,kind,artifact_id,email,updated_at) VALUES (?, 'paper_draft', ?, ?, ?) "
+                "ON CONFLICT(path,kind,artifact_id) DO UPDATE SET "
+                "email=excluded.email,updated_at=excluded.updated_at",
+                (path, project_id, actor, time.time()),
+            )
+        db.commit()
+
+
+def require_paper_draft_operator(
+    path: str, project_id: str, *, controlling_active: bool = False
+) -> None:
+    """Allow destructive draft operations only for its original creator."""
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    with _db() as db:
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
+            return
+        row, actor = _membership(db, path)
+        saved = db.execute(
+            "SELECT email FROM shared_artifact_authors "
+            "WHERE path=? AND kind='paper_draft' AND artifact_id=?",
+            (path, project_id),
+        ).fetchone()
+        if saved is not None and saved["email"] != actor:
+            raise ProjectError("Only the original paper creator can change unfinished paper work.")
+        if saved is None and row["owner_hash"] != _identity()[0].subject_hash:
+            lease = db.execute(
+                "SELECT email,activity,expires_at FROM shared_leases WHERE path=?", (path,)
+            ).fetchone()
+            live_holder = (
+                controlling_active
+                and lease is not None
+                and lease["email"] == actor
+                and lease["activity"] == "Paper generation"
+                and lease["expires_at"] > time.time()
+            )
+            if not live_holder:
+                raise ProjectError(
+                    "Unattributed paper work can only be managed by the project owner."
+                )
+
+
+def attribute_published_paper(path: str, project_id: str, paper_id: str) -> None:
+    """Record the first paper author's identity in the enclosing fenced SQLite write."""
+    transaction = _WRITE_CONTEXT.get()
+    if transaction is None or transaction[0] != str(path):
+        # Unshared/local project saves do not use a collaboration transaction.
+        return
+    db = transaction[1]
+    original = db.execute(
+        "SELECT email FROM shared_artifact_authors "
+        "WHERE path=? AND kind='paper_draft' AND artifact_id=?",
+        (path, project_id),
+    ).fetchone()
+    if original is not None:
+        db.execute(
+            "INSERT OR IGNORE INTO shared_artifact_authors "
+            "(path,kind,artifact_id,email,updated_at) VALUES (?, 'paper', ?, ?, ?)",
+            (path, paper_id, original["email"], time.time()),
+        )
+
+
+def require_artifact_manager(path: str, kind: str, artifact_id: str) -> None:
+    """Creator or owner may remove saved work; missing legacy provenance is owner-only."""
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    if kind not in {"session", "paper", "answer"}:
+        raise ValueError("Unknown artifact kind")
+    with _db() as db:
+        row, actor = _membership(db, path)
+        if row["owner_hash"] == _identity()[0].subject_hash:
+            return
+        creator = db.execute(
+            "SELECT email FROM shared_artifact_authors WHERE path=? AND kind=? AND artifact_id=?",
+            (path, kind, artifact_id),
+        ).fetchone()
+        if creator is None or creator["email"] != actor:
+            raise ProjectError("Only the project owner or artifact creator can remove it.")
+
+
+def leave_project(path: str, expected_project_id: str) -> None:
+    """Leave the collaboration using the same revision-fenced settings mutation."""
+    from sigma.projects import ProjectError, inspect_project
+
+    view = inspect_project(path)
+    if view.project.id != expected_project_id:
+        raise ProjectError("Project changed. Refresh My Work and try again.")
+    data = summary(view.path, verify_revision=True)
+    actor = data.get("you")
+    if not actor or data.get("owner") == actor or actor not in data["collaborators"]:
+        raise ProjectError("Only a collaborator can stop collaborating on this project.")
+    save_settings(
+        view.path,
+        data["revision"],
+        [address for address in data["collaborators"] if address != actor],
+        data["model"],
+        data["thinking"],
+        view.project.title,
+    )
+
+
+@contextmanager
+def bind_session_control_lease(
+    path: str, activity: str, *, require_active_lease: bool = False
+) -> Iterator[None]:
+    """Bind a control request to its own active execution without transferring ownership.
+
+    Cancellation requests arrive independently from the background worker.
+    Only the currently verified holder of the project lease can borrow its
+    token to stop/pause the exact kind of operation they started.
+    """
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        # Non-cloud/local test mode has no authenticated collaboration lease.
+        yield
+        return
+    lease_token: str | None = None
+    with _db() as db:
+        registered = (
+            db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is not None
+        )
+        if registered:
+            _row_value, actor = _membership(db, path)
+            lease = db.execute(
+                "SELECT token,email,activity,expires_at FROM shared_leases WHERE path=?",
+                (path,),
+            ).fetchone()
+            has_members = (
+                db.execute(
+                    "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
+                ).fetchone()
+                is not None
+            )
+            if lease is not None and lease["expires_at"] > time.time():
+                if lease["email"] != actor or lease["activity"] != activity:
+                    raise ProjectError(
+                        f"Project is being used by {lease['email']} ({lease['activity']}). "
+                        "Wait for that activity to finish."
+                    )
+                lease_token = lease["token"]
+            elif require_active_lease and has_members:
+                raise ProjectError("Active execution has no valid owner lease; wait for recovery.")
+    with bind_lease(path, lease_token):
+        yield
 
 
 def model_settings(path: str) -> dict[str, str] | None:
@@ -662,7 +960,6 @@ def save_settings(
         raise ProjectError("A project supports at most 50 collaborators.")
     try:
         emails = [normalize_collaborator(item) for item in collaborators]
-        validate_pair(model, thinking)
     except (TypeError, ValueError) as exc:
         raise ProjectError(str(exc)) from exc
     if len(set(emails)) != len(emails):
@@ -688,7 +985,8 @@ def save_settings(
                 raise ProjectError(
                     "Only the owner, the inviter, or the account itself can remove a collaborator."
                 )
-        changed = new_members != previous or row["model"] != model or row["thinking"] != thinking
+        # User-specific model preferences must never be written by shared settings.
+        changed = new_members != previous
         if changed:
             db.executemany(
                 "DELETE FROM shared_collaborators WHERE path=? AND email=?",
@@ -699,8 +997,8 @@ def save_settings(
                 [(path, member, actor) for member in sorted(new_members - previous)],
             )
             db.execute(
-                """UPDATE shared_projects SET model=?,thinking=?,last_writer=? WHERE path=?""",
-                (model, thinking, actor, path),
+                "UPDATE shared_projects SET last_writer=? WHERE path=?",
+                (actor, path),
             )
             for member in previous - new_members:
                 db.execute("DELETE FROM shared_leases WHERE path=? AND email=?", (path, member))

@@ -330,7 +330,7 @@ def test_standalone_score_format_and_input_validation() -> None:
         path.write_bytes(b"not a PDF")
         try:
             read_pdf(str(path))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - parser backend may raise different errors
             assert "not a PDF" in str(exc)
         else:
             raise AssertionError("Accepted a non-PDF input")
@@ -338,7 +338,7 @@ def test_standalone_score_format_and_input_validation() -> None:
         link.symlink_to(path)
         try:
             read_pdf(str(link))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - parser backend may raise different errors
             assert "symlink" in str(exc)
         else:
             raise AssertionError("Accepted a symlink PDF")

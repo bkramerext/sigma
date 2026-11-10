@@ -1198,6 +1198,7 @@ async def middleware(request: Request, call_next):
             "/api/projects/strategies/reorder",
             "/api/projects/text/source",
             "/api/projects/recent/forget",
+            "/api/projects/collaboration/leave",
             "/api/projects/samples/open",
             "/api/projects/research-sessions/mock",
             "/api/projects/guest-copy",
