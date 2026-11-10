@@ -580,6 +580,21 @@ def note_artifact_author(
         db.commit()
 
 
+
+def require_project_classification_owner(path: str) -> None:
+    """Only the verified owner may change the project's category or difficulty."""
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    with _db() as db:
+        row, _actor = _membership(db, path)
+        if row["owner_hash"] != _identity()[0].subject_hash:
+            raise ProjectError(
+                "Only the project owner can change the research category or difficulty."
+            )
+
+
 def require_project_title_owner(path: str) -> None:
     """The project owner alone may rename a shared project.
 

@@ -96,6 +96,7 @@ class CollaborationTests(TestCase):
 
     def test_only_project_owner_can_rename_but_collaborator_can_edit_other_fields(self) -> None:
         shared.require_project_title_owner(self.path)
+        shared.require_project_classification_owner(self.path)
         colleague = Workspace(
             workspace_id="collaborator-workspace",
             subject_hash="other-hash",
@@ -112,6 +113,8 @@ class CollaborationTests(TestCase):
         ):
             with self.assertRaisesRegex(ProjectError, "Only the project owner"):
                 shared.require_project_title_owner(self.path)
+            with self.assertRaisesRegex(ProjectError, "Only the project owner"):
+                shared.require_project_classification_owner(self.path)
             # Other project fields retain normal collaborator editing privileges.
             self.assertEqual(shared.summary(self.path)["owner"], self.owner.email)
 

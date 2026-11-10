@@ -1556,6 +1556,11 @@ def update_project(
             )
         if project_only(current) == project_only(effective_wanted):
             return project
+        if (
+            effective_wanted.investigation_type != current.investigation_type
+            or effective_wanted.difficulty != current.difficulty
+        ):
+            project_collaboration.require_project_classification_owner(str(value))
         if effective_wanted.title != current.title:
             project_collaboration.require_project_title_owner(str(value))
             _require_available_title(effective_wanted.title, projects_root(), exclude_id=project.id)

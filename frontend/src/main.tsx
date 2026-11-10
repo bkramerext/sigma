@@ -4712,7 +4712,7 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
     };
   },[open]);
   return <div className="research-type-picker" ref={root}>
-    <button ref={trigger} id="project-mode" type="button" role="combobox" aria-labelledby="project-mode-label project-mode-value" aria-haspopup="listbox" aria-expanded={open} aria-controls="project-mode-options" onClick={() => { setActiveIndex(Math.max(0, selectedIndex)); setOpen(current => !current); }} onKeyDown={event => {
+    <button ref={trigger} id="project-mode" type="button" role="combobox" aria-labelledby="project-mode-label project-mode-value" aria-haspopup="listbox" aria-expanded={open} aria-controls="project-mode-options" data-tooltip-disabled="true" onClick={() => { setActiveIndex(Math.max(0, selectedIndex)); setOpen(current => !current); }} onKeyDown={event => {
       if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex(Math.max(0, selectedIndex)); setOpen(true); }
       else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex(choices.length - 1); setOpen(true); }
     }}>
@@ -4888,7 +4888,7 @@ function DifficultyPicker({ value, onChange }: {
   return <div className="research-type-picker sigma-difficulty-picker" ref={root}>
     <button ref={trigger} id="sigma-project-difficulty" type="button" role="combobox"
       aria-label="Difficulty" aria-haspopup="listbox" aria-expanded={open}
-      aria-controls="sigma-project-difficulty-options"
+      aria-controls="sigma-project-difficulty-options" data-tooltip-disabled="true"
       onClick={() => { setActive(current); setOpen(previous => !previous); }}
       onKeyDown={event => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -4981,9 +4981,11 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       });
     return () => controller.abort();
   }, [initial.path]);
-  const changed = projectType !== baseline.project.investigation_type
-    || difficulty !== baseline.project.difficulty
-    || (!!shared?.owner && JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators));
+  const nonOwnerCollaborator = !!shared?.owner && shared.owner !== shared.you;
+  const canEditClassification = !!shared && !nonOwnerCollaborator;
+  const changed = (canEditClassification && (
+    projectType !== baseline.project.investigation_type || difficulty !== baseline.project.difficulty
+  )) || (!!shared?.owner && JSON.stringify(collaborators) !== JSON.stringify(shared.collaborators));
   function finishCollaboratorEntry(value: string) {
     if (!value.trim()) { setAdding(false); setNewEmail(''); setError(''); return; }
     const email = plausibleCollaboratorEmail(value);
@@ -5010,7 +5012,8 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       const previous = settingsOf(baseline);
       const next = await post<ProjectView>('update', {
         path: initial.path, ...previous,
-        investigation_type: projectType, difficulty,
+        investigation_type: canEditClassification ? projectType : baseline.project.investigation_type,
+        difficulty: canEditClassification ? difficulty : baseline.project.difficulty,
         ai_model: baseline.project.ai_model, reasoning_effort: baseline.project.reasoning_effort,
         expected: previous,
         ...(shared.owner ? { expected_revision: shared.revision, collaborators } : {}),
@@ -5061,13 +5064,28 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
           <div className="settings-classification-row">
             <div>
               <label id="project-mode-label">Research category</label>
-              <ResearchTypePicker fieldLabel="Research category" value={projectType} onChange={setProjectType}/>
+              {canEditClassification
+                ? <ResearchTypePicker fieldLabel="Research category" value={projectType} onChange={setProjectType}/>
+                : <div className="research-type-picker"><div className="sigma-classification-readonly" aria-labelledby="project-mode-label">
+                    <ResearchTypeIcon type={projectType} snapshot={initial.project.project_type_snapshot}/>
+                    <span>{initial.project.project_type_snapshot?.id === projectType
+                      ? initial.project.project_type_snapshot.name : researchTypeLabel(projectType)}</span>
+                  </div></div>}
             </div>
             <div>
               <label id="sigma-project-difficulty-label">Difficulty</label>
-              <DifficultyPicker value={difficulty} onChange={setDifficulty}/>
+              {canEditClassification
+                ? <DifficultyPicker value={difficulty} onChange={setDifficulty}/>
+                : <div className="research-type-picker sigma-difficulty-picker">
+                    <div className="sigma-classification-readonly" aria-labelledby="sigma-project-difficulty-label">
+                      <span>{difficultyLabel(difficulty)}</span>
+                    </div>
+                  </div>}
             </div>
           </div>
+          {nonOwnerCollaborator && <p className="project-classification-readonly-note">
+            Project category, difficulty, and title are read-only for non-owner collaborators.
+          </p>}
           {!!shared?.owner && <>
             <section className="project-collaborators" aria-label="Collaborators">
               <div className="project-collaborators-heading">

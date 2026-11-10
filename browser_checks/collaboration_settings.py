@@ -155,6 +155,9 @@ def main() -> None:
         classification = dialog.locator(".settings-classification-row")
         category = dialog.get_by_role("combobox", name="Research category")
         difficulty = dialog.get_by_label("Difficulty")
+        for control in (category, difficulty):
+            expect(control).to_have_attribute("data-tooltip-disabled", "true")
+            assert control.get_attribute("title") is None
         collaborators = dialog.get_by_role("region", name="Collaborators")
         assert dialog.locator(".settings-model-row").count() == 0
         assert dialog.get_by_role("combobox", name="Model").count() == 0
