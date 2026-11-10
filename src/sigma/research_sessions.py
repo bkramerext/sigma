@@ -15522,7 +15522,7 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
             record["message"] = f"Reading supplied evidence {len(saved) + 1} of {len(inputs)}."
             _save(path, record)
         # External HTTP and PDF extraction run outside session state locks.
-        compiled = await asyncio.to_thread(research_supplied_evidence.compile_entry, source)
+        compiled = await asyncio.to_thread(research_supplied_evidence.compile_entry, path, source)
         async with _session_state_lock(session_id):
             latest = _read(path, session_id)
             stage = latest["supplied_evidence_compilation"]
