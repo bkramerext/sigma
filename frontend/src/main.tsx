@@ -3450,7 +3450,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={`Paper ${draftVersion}`} data-paper-version={draftVersion}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={`Paper ${draftVersion}`} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
-              badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={formatRunAttribution({ kind: 'paper', number: draftVersion, creator: draftCreatorEmail, model: effectiveModel, thinking: effectiveEffort, mode: 'hover' })}/> : undefined}
+              badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={formatRunAttribution({ kind: 'paper', number: draftVersion, creator: draftCreatorEmail, model, thinking: effort, mode: 'hover' })}/> : undefined}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && canControlDraft && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
@@ -6449,7 +6449,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [paperRunning, setPaperRunning] = useState(false);
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
-  const [activeRuns, setActiveRuns] = useState<Array<{ kind: 'Paper' | 'Session'; number: number; creator: string | null }>>([]);
+  const [activeRuns, setActiveRuns] = useState<Array<{ kind: AttributionKind; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }>>([]);
   useEffect(() => {
     if (guest || !view) return;
     const controller = new AbortController();
@@ -6459,24 +6459,31 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       pending = true;
       try {
         const query = new URLSearchParams({ path });
-        const [sessionResponse, paperResponse, savedResponse] = await Promise.all([
+        const [sessionResponse, paperResponse, savedResponse, askResponse, configResponse] = await Promise.all([
           fetch(`/api/projects/research-sessions?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
           fetch(`/api/projects/papers/progress?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
           fetch(`/api/projects/papers?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
+          fetch(`/api/projects/research-qa/activity?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
+          fetch(`/api/projects/proposals/config?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
         ]);
         if (!sessionResponse.ok || !paperResponse.ok || !savedResponse.ok) return;
         const sessions = await sessionResponse.json() as { sessions?: ResearchSession[] };
         const progress = await paperResponse.json() as { progress?: PaperProgress | null };
         const saved = await savedResponse.json() as { papers?: PaperSummary[] };
+        const ask = askResponse.ok ? await askResponse.json() as { active?: Array<{ request_id: string; creator: string; model: string; thinking: string }> } : { active: [] };
+        const config = configResponse.ok ? await configResponse.json() as { model?: string; reasoning_effort?: string } : {};
         if (controller.signal.aborted) return;
-        const items: Array<{ kind: 'Paper' | 'Session'; number: number; creator: string | null }> = [];
+        const items: Array<{ kind: AttributionKind; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }> = [];
         if (progress.progress?.status === 'active' || progress.progress?.status === 'queued') {
-          items.push({ kind: 'Paper', number: Math.max(0, ...(saved.papers ?? []).map(p => p.paper_version)) + 1, creator: null });
+          items.push({ kind: 'paper', number: Math.max(0, ...(saved.papers ?? []).map(p => p.paper_version)) + 1, model: config.model, thinking: config.reasoning_effort });
         }
         for (const session of sessions.sessions ?? []) {
           if (session.status === 'running' || session.status === 'queued') {
-            items.push({ kind: 'Session', number: session.session_number, creator: session.id });
+            items.push({ kind: 'session', number: session.session_number, id: session.id, model: session.model, thinking: session.reasoning_effort });
           }
+        }
+        for (const entry of ask.active ?? []) {
+          items.push({ kind: 'answer', id: entry.request_id, creator: entry.creator, model: entry.model, thinking: entry.thinking });
         }
         setActiveRuns(items);
       } catch { /* Preserve the last known activity during transient failures. */ }
@@ -6487,12 +6494,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     return () => { controller.abort(); window.clearInterval(interval); };
   }, [path, guest, view?.project.id]);
 
-  const activeRunLabels = activeRuns.map(run => {
-    const creator = run.kind === 'Session'
-      ? sharedActivity?.artifact_authors?.session?.[run.creator ?? '']
-      : sharedActivity?.artifact_authors?.paper_draft?.[view?.project.id ?? ''];
-    return `${run.kind} ${run.number}${creator ? ` by ${creator}` : ''}`;
-  });
+  const activeRunLabels = activeRuns.map(run => formatRunAttribution({
+    ...run,
+    creator: run.creator || (run.kind === 'session'
+      ? sharedActivity?.artifact_authors?.session?.[run.id ?? '']
+      : run.kind === 'paper' ? sharedActivity?.artifact_authors?.paper_draft?.[view?.project.id ?? ''] : null),
+    mode: 'hover',
+  }));
   const lastLoadedSharedRevision = useRef<number | null>(null);
   useEffect(() => {
     if (guest) return;
