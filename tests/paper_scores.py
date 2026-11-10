@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
 from sigma import paper_scores, papers
-from sigma.projects import initialize_project
+from sigma.projects import ProjectError, initialize_project
 
 
 def judgment() -> paper_scores.PaperJudgment:
@@ -330,7 +330,7 @@ def test_standalone_score_format_and_input_validation() -> None:
         path.write_bytes(b"not a PDF")
         try:
             read_pdf(str(path))
-        except Exception as exc:
+        except ProjectError as exc:
             assert "not a PDF" in str(exc)
         else:
             raise AssertionError("Accepted a non-PDF input")
@@ -338,7 +338,7 @@ def test_standalone_score_format_and_input_validation() -> None:
         link.symlink_to(path)
         try:
             read_pdf(str(link))
-        except Exception as exc:
+        except ProjectError as exc:
             assert "symlink" in str(exc)
         else:
             raise AssertionError("Accepted a symlink PDF")
