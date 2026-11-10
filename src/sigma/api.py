@@ -1761,9 +1761,7 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
     if body.action not in {"resume", "repair"}:
         # The original creator may borrow their own live worker's lease to
         # persist Stop/Pause without taking ownership of somebody else's run.
-        with project_collaboration.bind_session_control_lease(
-            body.path, "Research session"
-        ):
+        with project_collaboration.bind_session_control_lease(body.path, "Research session"):
             result = await research_sessions.control_session(
                 body.path,
                 session_id,
@@ -1799,9 +1797,7 @@ async def research_intervention_view(session_id: str, body: ResearchIntervention
     project_collaboration.require_execution_operator(
         body.path, "session", session_id, "Research session"
     )
-    with project_collaboration.bind_session_control_lease(
-        body.path, "Research session"
-    ):
+    with project_collaboration.bind_session_control_lease(body.path, "Research session"):
         return await research_sessions.submit_intervention(
             body.path,
             session_id,
@@ -1822,9 +1818,7 @@ async def research_session_remove_view(session_id: str, body: ResearchSessionRem
         session_id,
         owner_terminal=session["status"] in {"completed", "ended"},
     )
-    with project_collaboration.bind_session_control_lease(
-        body.path, "Research session"
-    ):
+    with project_collaboration.bind_session_control_lease(body.path, "Research session"):
         return await research_sessions.remove_session(
             body.path, session_id, body.expected_updated_at
         )
