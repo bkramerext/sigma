@@ -6490,9 +6490,9 @@ async def start_session(
                 "id": str(uuid4()),
                 "session_number": 0,
                 "project_path": view.path,
-            "uploaded_project_evidence": project_evidence.evidence_context(
-                view.path, limit=6000
-            ),
+                "uploaded_project_evidence": project_evidence.evidence_context(
+                    view.path, limit=6000
+                ),
                 "project_id": view.project.id,
                 # Set by the start endpoint before the worker can be scheduled.
                 # API/CLI sessions omit it and run without browser-page history.
@@ -8457,7 +8457,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     # Keep the source's page markers, provenance and omission markers visible
     # to both Investigator and Skeptic within the bounded provider context.
     context["uploaded_project_evidence"] = record.get("uploaded_project_evidence", [])
-        # A recovered role must receive its exact saved authorization and prior
+    # A recovered role must receive its exact saved authorization and prior
     # uncertain attempt IDs. Recovery text is operational context, not evidence.
     protocol_recovery = record.get("protocol_completion_recovery")
     if (
