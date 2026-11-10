@@ -5032,9 +5032,7 @@ def mock_session(
             "id": str(uuid4()),
             "session_number": _allocate_session_number(view.path, records),
             "project_path": view.path,
-            "uploaded_project_evidence": project_evidence.evidence_context(
-                view.path, limit=6000
-            ),
+            "uploaded_project_evidence": project_evidence.evidence_context(view.path, limit=6000),
             "project_id": view.project.id,
             "strategy_id": strategy.id,
             "strategy_title": strategy.title,
