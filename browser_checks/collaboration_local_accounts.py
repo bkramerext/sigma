@@ -237,7 +237,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         member.get_by_role("button", name="Edit project fields").click()
         assert member.get_by_role("textbox", name="Project title").count() == 0
         expect(member.locator(".sigma-description-title-row .current-project")).to_have_text(title)
-        expect(member.get_by_role("textbox", name="Research Subject")).to_be_visible()
+        expect(member.get_by_role("textbox", name="Research Problem")).to_be_visible()
         member.get_by_role("button", name="Cancel", exact=True).click()
 
         # Non-owners see values in the established field layout, not disabled
