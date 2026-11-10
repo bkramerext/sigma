@@ -555,9 +555,15 @@
   resize: both;
 }
 .project-settings-dialog.ai-paper-dialog.research-qa-dialog > .settings-body.ai-paper-body {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
-  /* The resizable fixed-height Q/A body must not stretch its grid rows apart. */
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #805f43 #101b26;
+  /* Compact content-sized rows; overflow scrolls rather than being clipped. */
   align-content: start;
   grid-auto-rows: max-content;
 }
