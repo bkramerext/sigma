@@ -332,7 +332,8 @@ def test_distinct_source_material_additions_survive_and_duplicate_additions_coll
             duplicate = project_evidence.add_link(str(path), "https://example.org/first")
         assert duplicate["id"] == first["id"]
         assert {row["id"] for row in project_evidence.list_evidence(str(path))} == {
-            first["id"], second["id"]
+            first["id"],
+            second["id"],
         }
 
 
@@ -345,13 +346,17 @@ def test_source_material_edit_rejects_overlap_but_accepts_unrelated_additions() 
             # A second collaborator can add an unrelated source during this edit.
             added = project_evidence.add_link(str(path), "https://example.org/other")
             changed = project_evidence.edit_link(
-                str(path), first["id"], "https://example.org/revised",
+                str(path),
+                first["id"],
+                "https://example.org/revised",
                 expected_url=first["url"],
             )
             assert changed["url"] == "https://example.org/revised"
             try:
                 project_evidence.edit_link(
-                    str(path), first["id"], "https://example.org/stale",
+                    str(path),
+                    first["id"],
+                    "https://example.org/stale",
                     expected_url=first["url"],
                 )
             except ProjectError as exc:
@@ -359,10 +364,15 @@ def test_source_material_edit_rejects_overlap_but_accepts_unrelated_additions() 
             else:
                 raise AssertionError("Overlapping Source Material edit was accepted")
         assert {row["id"] for row in project_evidence.list_evidence(str(path))} == {
-            first["id"], added["id"]
+            first["id"],
+            added["id"],
         }
-        assert next(row for row in project_evidence.list_evidence(str(path))
-                    if row["id"] == first["id"])["url"] == changed["url"]
+        assert (
+            next(
+                row for row in project_evidence.list_evidence(str(path)) if row["id"] == first["id"]
+            )["url"]
+            == changed["url"]
+        )
 
 
 if __name__ == "__main__":
