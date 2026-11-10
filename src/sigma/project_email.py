@@ -8,7 +8,6 @@ Optional standalone paper attachments are convenience copies.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import sqlite3
