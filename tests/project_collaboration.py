@@ -554,7 +554,6 @@ class CollaborationTests(TestCase):
 
         asyncio.run(exercise())
 
-
     def test_provider_configuration_always_uses_current_user_not_project_model(self) -> None:
         from sigma import proposals
 
@@ -581,10 +580,14 @@ class CollaborationTests(TestCase):
         ):
             available.return_value = catalog
             owner = asyncio.run(
-                proposals.configuration(view=project_view, context={"identity": "owner", "mode": "chatgpt"})
+                proposals.configuration(
+                    view=project_view, context={"identity": "owner", "mode": "chatgpt"}
+                )
             )
             other = asyncio.run(
-                proposals.configuration(view=project_view, context={"identity": "other", "mode": "chatgpt"})
+                proposals.configuration(
+                    view=project_view, context={"identity": "other", "mode": "chatgpt"}
+                )
             )
         self.assertEqual((owner["model"], owner["reasoning_effort"]), ("gpt-6.1-sol", "high"))
         self.assertEqual((other["model"], other["reasoning_effort"]), ("gpt-6-luna", "low"))
@@ -595,7 +598,9 @@ class CollaborationTests(TestCase):
             self.path, before, [self.other.email], "gpt-6-luna", "low", "Study"
         )
         self.assertFalse(response["changed"])
-        self.assertEqual(self.revision(), before)
+        # A revision-fenced settings transaction advances its CAS revision even
+        # when the legacy model fields are ignored.
+        self.assertEqual(self.revision(), before + 1)
         with shared._db() as db:
             row = db.execute(
                 "SELECT model,thinking FROM shared_projects WHERE path=?", (self.path,)
