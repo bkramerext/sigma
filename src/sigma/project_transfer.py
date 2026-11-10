@@ -24,16 +24,19 @@ from sigma.zstd_codec import (
     MAX_COMPRESSED_MEMBER_BYTES,
     MAX_MEMBER_BYTES,
     ZstdCodecError,
-    compress,
-    decompress,
+    compress_archive,
+    decompress_archive,
 )
 
 FORMAT = project_bundle.FORMAT
 VERSION = 4
 ARCHIVE_ENCODING = "tar+zstd+base64"
 MAX_ARTIFACT_FILES = 10000
-# A single zstd frame is deliberately bounded. Never silently omit artifacts.
-MAX_ARCHIVE_BYTES = MAX_MEMBER_BYTES
+# Files remain individually bounded, but a TAR may hold multiple files.
+# Encode it as consecutive bounded zstd frames rather than limiting the
+# entire project to one 256 MiB frame.
+MAX_ARCHIVE_BYTES = MAX_BUNDLE_BYTES
+MAX_ARCHIVE_FRAME_BYTES = MAX_MEMBER_BYTES
 
 
 def _canon(name: str) -> str:
@@ -80,7 +83,7 @@ def _archive(artifacts: dict[str, bytes]) -> dict:
     if len(uncompressed) > MAX_ARCHIVE_BYTES:
         raise BundleError("Source artifacts exceed the compressed archive input limit")
     try:
-        packed = compress(uncompressed)
+        packed = compress_archive(uncompressed, MAX_ARCHIVE_FRAME_BYTES)
     except ZstdCodecError as exc:
         raise BundleError(f"Source artifact archive compression failed: {exc}") from exc
     return {
@@ -108,12 +111,15 @@ def _unarchive(entry: object) -> dict[str, bytes]:
         or not isinstance(digest, str)
         or re.fullmatch("[0-9a-f]{64}", digest) is None
         or not isinstance(encoded, str)
-        or len(encoded) > ((MAX_COMPRESSED_MEMBER_BYTES + 2) // 3) * 4 + 4
     ):
         raise BundleError("Invalid source artifact archive metadata")
+    frames = max(1, (expected + MAX_ARCHIVE_FRAME_BYTES - 1) // MAX_ARCHIVE_FRAME_BYTES)
+    max_encoded = ((frames * MAX_COMPRESSED_MEMBER_BYTES + 2) // 3) * 4 + 4
+    if len(encoded) > max_encoded:
+        raise BundleError("Source artifact archive exceeds the compressed size limit")
     try:
         compressed = base64.b64decode(encoded, validate=True)
-        raw = decompress(compressed, expected)
+        raw = decompress_archive(compressed, expected, MAX_ARCHIVE_FRAME_BYTES)
     except (binascii.Error, ValueError, ZstdCodecError) as exc:
         raise BundleError("Cannot decode the Source Material/paper archive") from exc
     if hashlib.sha256(raw).hexdigest() != digest:
