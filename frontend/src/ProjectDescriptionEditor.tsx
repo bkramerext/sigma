@@ -82,13 +82,13 @@ function SuppliedEvidence({ path, expanded, onToggle }: { path: string; expanded
     finally { setBusy(false); }
   }
   return <section className="sigma-description-field sigma-supplied-evidence">
-    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle" data-tooltip={`${expanded ? 'Collapse' : 'Expand'} Supplied Evidence`} aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}><EvidenceChevron expanded={expanded}/>Supplied Evidence</button></h4><div className="sigma-evidence-actions">
+    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle" data-tooltip={`${expanded ? 'Collapse' : 'Expand'} Source Material`} aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}><EvidenceChevron expanded={expanded}/>Source Material</button></h4><div className="sigma-evidence-actions">
       <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add link" data-tooltip="Add link" disabled={busy || adding || rows.length >= 20} onClick={() => setAdding(true)}><EvidencePlusIcon/></button>
       <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Attach a file" data-tooltip="Attach a file" disabled={busy || rows.length >= 20} onClick={() => uploadInput.current?.click()}><EvidenceClipIcon/></button>
     </div></div>
     <input ref={uploadInput} type="file" accept=".pdf,application/pdf" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void attach(file); }}/>
     <div id="sigma-supplied-evidence-content" hidden={!expanded}>
-    <p className="settings-hint">Supplied documents and links are read when research starts. Their contents are treated as true premises for this project, with source attribution preserved.</p>
+    <p className="settings-hint">Attached documents and linked sources are read when research starts. Their contents are treated as true premises for this project, with source attribution preserved.</p>
     {rows.map(entry => <div className="sigma-evidence-row" key={entry.id}>
       {entry.kind === 'link'
         ? <a href={entry.url} target="_blank" rel="noopener noreferrer">{entry.url}</a>
