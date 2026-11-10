@@ -217,6 +217,7 @@ class Project:
     project_type_snapshot: dict[str, Any] | None = None
     desired_outcomes: str = ""
     paper_requirements: str = ""
+    source_material_links: tuple[dict[str, Any], ...] = ()
 
     @property
     def research_mode(self) -> str:
@@ -352,6 +353,33 @@ def _decode(raw: Any) -> Project:
         fields.add("show_advanced_outcome_details")
     if "project_type_snapshot" in raw:
         fields.add("project_type_snapshot")
+    if "source_material_links" in raw:
+        fields.add("source_material_links")
+        links = raw["source_material_links"]
+        if not isinstance(links, list) or len(links) > 20:
+            raise ProjectError("Invalid Source Material links")
+        ids = set()
+        for link in links:
+            if not isinstance(link, dict) or set(link) != {
+                "id", "kind", "url", "uploaded_by", "uploaded_at"
+            }:
+                raise ProjectError("Invalid Source Material link entry")
+            if (
+                link["kind"] != "link"
+                or not isinstance(link["id"], str)
+                or re.fullmatch(r"[0-9a-f]{32}", link["id"]) is None
+                or link["id"] in ids
+                or not isinstance(link["url"], str)
+                or not 1 <= len(link["url"]) <= 2048
+                or not link["url"].startswith(("https://", "http://"))
+                or (
+                    link["uploaded_by"] is not None
+                    and not isinstance(link["uploaded_by"], str)
+                )
+            ):
+                raise ProjectError("Invalid Source Material link metadata")
+            _timestamp(link["uploaded_at"])
+            ids.add(link["id"])
     # Optional in all schema versions: existing exported projects must remain readable.
     if "backend_build_commit" in raw:
         commit = raw["backend_build_commit"]
@@ -682,6 +710,7 @@ def _decode(raw: Any) -> Project:
         snapshot,
         settings.desired_outcomes,
         settings.paper_requirements,
+        tuple(raw.get("source_material_links", [])),
     )
 
 
@@ -692,6 +721,8 @@ def _document(project: Project) -> bytes:
     if project.schema_version < 13:
         del raw["desired_outcomes"]
         del raw["paper_requirements"]
+    if not raw["source_material_links"]:
+        del raw["source_material_links"]
     if project.schema_version < 8:
         del raw["difficulty"]
     if project.schema_version < 9 or project.schema_version >= 12:
