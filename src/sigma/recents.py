@@ -422,6 +422,7 @@ class RecentProject:
     paper_activity: str | None = None
     shared: bool = False
     collaborator: bool = False
+    activity_author: str | None = None
 
 
 def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
@@ -509,6 +510,15 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                         available=True,
                         shared=view.path in shared_paths,
                         collaborator=view.path in shared_by_path,
+                        activity_author=(
+                            (project_collaboration.summary(view.path).get("lease") or {}).get(
+                                "email"
+                            )
+                            if view.path in shared_paths
+                            and not lightweight
+                            and (view.path in shared_by_path or workspace is not None)
+                            else None
+                        ),
                         pinned=(view.project.id in pins.values()),
                         pin_state=(
                             "unpin"
@@ -557,6 +567,7 @@ def recent_activity() -> dict:
                 "id": item["id"],
                 "research_running": item["research_running"],
                 "paper_activity": item["paper_activity"],
+                "activity_author": item["activity_author"],
             }
             for item in recent_projects(activity_only=True)["projects"]
             if item["available"]

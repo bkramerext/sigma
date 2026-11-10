@@ -78,12 +78,27 @@ def main() -> None:
             opener.click()
             dialog = page.get_by_role("dialog", name="About SIGMA")
             expect(dialog).to_be_visible()
-            expect(dialog.get_by_role("link", name="Privacy Notice", exact=True)).to_have_attribute(
-                "href", "/privacy?return_to=%2F&return_dialog=about"
-            )
+            # In-app legal notices replace About without navigating away.
+            dialog.get_by_role("button", name="Privacy Notice", exact=True).click()
+            privacy = page.get_by_role("dialog", name="SIGMA Privacy Notice")
+            expect(privacy).to_be_visible()
             expect(
-                dialog.get_by_role("link", name="Terms of Service", exact=True)
-            ).to_have_attribute("href", "/tos")
+                privacy.get_by_text("Prepared October 26, 2026 · Version 1.0", exact=True)
+            ).to_be_visible()
+            assert (
+                privacy.evaluate("node => getComputedStyle(node, '::backdrop').backgroundColor")
+                == "rgba(0, 0, 0, 0)"
+            )
+            privacy.get_by_role("button", name="Close privacy notice").click()
+            dialog = page.get_by_role("dialog", name="About SIGMA")
+            expect(dialog).to_be_visible()
+
+            dialog.get_by_role("button", name="Terms of Service", exact=True).click()
+            terms_dialog = page.get_by_role("dialog", name="Terms of Service")
+            expect(terms_dialog).to_be_visible()
+            terms_dialog.get_by_role("button", name="Close terms of service").click()
+            dialog = page.get_by_role("dialog", name="About SIGMA")
+            expect(dialog).to_be_visible()
             marker = dialog.locator(".about-disclosure > summary").first
             expect(marker).to_be_visible()
             marker_style = marker.evaluate(
@@ -99,7 +114,9 @@ def main() -> None:
         finally:
             browser.close()
 
-    print("PASS public legal pages, Welcome-sized Terms text, backdrop close and About links")
+    print(
+        "PASS public legal pages, standalone backgrounds, and in-app legal dialogs returning to About"
+    )
 
 
 if __name__ == "__main__":
