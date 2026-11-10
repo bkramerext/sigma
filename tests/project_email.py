@@ -97,7 +97,9 @@ class ProjectEmailTests(unittest.TestCase):
             self.assertEqual(imported["status"], "stopped")
             self.assertTrue(imported["imported_via_bundle"])
             self.assertNotEqual(imported["project_id"], project_id)
-            self.assertEqual(imported["project_id"], json.loads(read_file(target, "project.json"))["id"])
+            self.assertEqual(
+                imported["project_id"], json.loads(read_file(target, "project.json"))["id"]
+            )
             self.assertEqual(imported["project_path"], str(target.resolve()))
             self.assertEqual(read_file(target, "artifacts/evidence.bin"), b"\x00real\xff")
 
