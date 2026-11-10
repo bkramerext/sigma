@@ -270,6 +270,22 @@ def exercise(ui: str, workspaces: Path) -> None:
         member_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(member_dialog).not_to_be_visible()
 
+        # A title saved by the owner must propagate to N's already-open window,
+        # even when that browser tab is backgrounded.
+        member.evaluate(
+            """() => Object.defineProperty(document, 'visibilityState',
+                {configurable: true, get: () => 'hidden'})"""
+        )
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
+        owner.get_by_role("button", name="Edit project fields").click()
+        title = title + " renamed"
+        owner.get_by_role("textbox", name="Project title").fill(title)
+        owner.get_by_role("button", name="Save", exact=True).click()
+        expect(owner.locator(".project-overview-card .current-project")).to_have_text(title)
+        expect(member.locator(".project-overview-card .current-project")).to_have_text(
+            title, timeout=20000
+        )
+
         # The same authorization is enforced at the API boundary. Forged
         # classification requests must never change the stored project.
         from_view = get_json(
