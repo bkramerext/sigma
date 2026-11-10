@@ -43,9 +43,7 @@ def test_project_collaborator_can_remove_another_users_source_material() -> None
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "shared-source.sigma"
         initialize_project(path, "Shared", "Test shared Source Material")
-        with patch.object(
-            project_evidence, "_extract", return_value=(1, "Document text", False)
-        ):
+        with patch.object(project_evidence, "_extract", return_value=(1, "Document text", False)):
             attachment = project_evidence.add_evidence(
                 str(path), "other-owner.pdf", b"%PDF-1.7 fixture"
             )
@@ -62,9 +60,7 @@ def test_source_material_removal_rejects_guest() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "guest-source.sigma"
         initialize_project(path, "Guest", "Test read-only guest")
-        with patch.object(
-            project_evidence, "_extract", return_value=(1, "Document text", False)
-        ):
+        with patch.object(project_evidence, "_extract", return_value=(1, "Document text", False)):
             attachment = project_evidence.add_evidence(
                 str(path), "attached.pdf", b"%PDF-1.7 fixture"
             )

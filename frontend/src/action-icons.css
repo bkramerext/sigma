@@ -343,9 +343,35 @@
   right: 10px !important;
 }
 
-/* Match Projects' metallic copper hover on the four subsection actions:
-   Source Material (add link, attach) and Strategies (add, generate). */
-.workspace-page .strategies-pane-heading .strategy-heading-actions button.sigma-heading-icon-action:is(:hover, :focus-visible):not(:disabled),
+/* Section icon actions share Project's 34px target and metallic copper hover.
+   Keep text-only Start/Cancel actions outside these selectors. */
+.workspace-page :is(
+  .strategies-pane-heading .strategy-heading-actions,
+  .sessions-pane-heading .sessions-heading-actions,
+  .papers-pane-heading .papers-heading-actions
+) button.sigma-heading-icon-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none;
+}
+.workspace-page :is(
+  .strategies-pane-heading .strategy-heading-actions,
+  .sessions-pane-heading .sessions-heading-actions,
+  .papers-pane-heading .papers-heading-actions
+) button.sigma-heading-icon-action:is(:hover, :focus-visible):not(:disabled),
 .workspace-page .sigma-supplied-evidence .sigma-evidence-actions button.sigma-heading-icon-action:is(:hover, :focus-visible):not(:disabled) {
   color: #fff2e9 !important;
   background: var(--copper-gradient) !important;
@@ -353,8 +379,13 @@
   border-radius: 4px;
   text-shadow: 0 1px 1px #24120d;
   box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+  filter: none;
 }
-.workspace-page .strategies-pane-heading .strategy-heading-actions button.sigma-heading-icon-action:is(:hover, :focus-visible):not(:disabled) svg,
+.workspace-page :is(
+  .strategies-pane-heading .strategy-heading-actions,
+  .sessions-pane-heading .sessions-heading-actions,
+  .papers-pane-heading .papers-heading-actions
+) button.sigma-heading-icon-action:is(:hover, :focus-visible):not(:disabled) svg,
 .workspace-page .sigma-supplied-evidence .sigma-evidence-actions button.sigma-heading-icon-action:is(:hover, :focus-visible):not(:disabled) svg {
   color: #fff2e9;
 }

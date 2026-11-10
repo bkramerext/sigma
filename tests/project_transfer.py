@@ -81,7 +81,12 @@ def test_single_archive_roundtrip() -> None:
         assert project_evidence.get_pdf(str(new), attached["id"])[1] == pdf
         assert (new / compiled_pdf["snapshot_path"]).read_bytes() == pdf
         assert (new / (compiled["snapshot_path"] + ".bin")).read_bytes() == b"Linked premise B"
-        assert any(row["url"] == link["url"] for row in project_evidence.list_evidence(str(new)))
+        restored_sources = project_evidence.list_evidence(str(new))
+        assert [row["kind"] for row in restored_sources] == ["file", "link"]
+        assert restored_sources[0]["id"] == attached["id"]
+        assert restored_sources[0]["filename"] == attached["filename"]
+        assert restored_sources[1]["id"] == link["id"]
+        assert restored_sources[1]["url"] == link["url"]
         _expect_failure(lambda: project_transfer.decode_bundle({**payload, "version": 3}))
 
 
