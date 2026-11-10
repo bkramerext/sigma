@@ -450,8 +450,12 @@
 /* Restore the original Project mail and Settings glyph scale while retaining
    the shared 34px hover targets and header spacing. */
 .workspace-page .project-pane-heading .project-pane-actions button.project-email-button svg {
-  width: 27px;
-  height: 27px;
+  display: block;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  max-width: none;
+  max-height: none;
 }
 .workspace-page .project-pane-heading .project-pane-actions button.project-classification-settings-button svg {
   width: 25px;
