@@ -514,6 +514,26 @@ def migrate(directory: str | Path, destination: str | Path) -> Path:
 def read_file(bundle_path: str | Path, relative_path: str) -> bytes:
     """Read one member of an authoritative JSON bundle."""
     path = Path(bundle_path)
+    if path.suffix == ".sigma" and path.is_dir() and not path.is_symlink():
+        if (
+            not isinstance(relative_path, str)
+            or not relative_path
+            or "\\\\" in relative_path
+            or relative_path.startswith("/")
+            or any(part in {"", ".", ".."} for part in relative_path.split("/"))
+        ):
+            raise BundleError("Unsafe project member path")
+        member = path
+        for component in relative_path.split("/"):
+            member = member / component
+            if member.is_symlink():
+                raise BundleError("Project member must not be a symlink")
+        try:
+            if not member.is_file():
+                raise BundleError("Project member not found")
+            return member.read_bytes()
+        except OSError as exc:
+            raise BundleError("Cannot read project member") from exc
     if path.is_symlink() or not path.is_file():
         raise BundleError("Project JSON must be a regular file")
     try:
