@@ -211,3 +211,54 @@ SIGMA remains an experimental research application. Investigator/Skeptic agreeme
 
 **Release status:** The v0.3.0 version files and lockfiles are prepared from source cutoff `ef463bd0fb06dcd9f437651d6dff803bd206b545` with documentation-only additions. The final release commit is the merged version-bump commit after green exact-SHA CI. **Not yet deployed:** isolated restore verification, guarded cutover and production acceptance remain pending. Production is still documented at v0.2.2.
 
+
+
+---
+
+## Version 0.3.1 — Source Materials and Collaboration Trial
+*Release notes draft · November 9, 2026 · Deployment not yet confirmed*
+
+**SIGMA v0.3.1 expands the evidence researchers can bring to a project, introduces shared-project collaboration on a trial basis, and improves paper evaluation, reliability, and navigation.**
+
+### Source Materials
+
+- **Project attachments and PDFs.** Researchers can supply documents, research papers, technical reports, observations, experimental results, and other project-specific evidence.
+- **Purpose.** Source Materials establish the facts and background the Investigator and Skeptic should use when exploring the research question. Supplied materials are treated as accepted premises **within that investigation**, not as independently established truth outside the project.
+- **Preparation and reuse.** SIGMA compiles relevant supplied content for use in research and retains source materials with the project, including portable project exports and imports.
+
+### Research inputs have distinct roles
+
+- **Source Materials:** *What is assumed true* for the investigation—the supplied facts and evidence.
+- **Research Standards:** *How to investigate*—methodology, reasoning practices, and research expectations.
+- **Publication Standards:** *How to present the paper*—structure, conventions, and editorial requirements.
+
+These inputs serve different purposes: attaching source evidence does not replace research methodology or publication guidance.
+
+### Project collaboration — trial feature
+
+- Invite other Google-account users by email to work on a shared project, including its research, papers, and Q&A.
+- The project owner controls the project title, Research category, and Difficulty; collaborators can contribute to the permitted research content.
+- Participants can stop their own research or paper execution without giving other collaborators permission to stop it.
+- Saved sessions, papers, and Q&A carry creator attribution and recorded Model/Thinking information.
+- Collaboration remains **experimental and in trial**. Multi-user behavior may still have limitations or unexpected results; this release does not represent a production-readiness guarantee for collaborative workflows.
+
+### Personal settings and paper evaluation
+
+- **User-scoped Model/Thinking.** AI model and reasoning-effort choices belong to individual accounts, including when people collaborate on the same project.
+- **Refined User Settings.** Model and Limits controls are more compact and consistent with other SIGMA selectors.
+- **Standalone PDF scoring.** The `sigma score_paper <pdf>` command evaluates a local PDF using SIGMA's paper rubric, showing category explanations and weights. An imported PDF does not have the original research archive for full evidence verification.
+
+### Usability, speed, and fixes
+
+- More consistent project and source-material actions, spacing, icons, dialogs, and tooltips.
+- Faster loading of Samples, Saved projects, and saved papers, with clearer navigation.
+- Restored the Math-project Lean proof-verification action as a **coming-soon preview**, not an enabled proof engine.
+- Improved sign-in isolation across browser windows and invitation navigation.
+- Strengthened shared-project permissions, cancellation controls, execution leases, and provenance across Stop, Resume, deletion, and Rescore.
+- Improved mathematical typesetting in generated papers and fixed assorted interface-state regressions.
+
+### Limitations and release status
+
+SIGMA remains experimental. Supplied source material can be incomplete or wrong; treating it as an investigation premise is not independent verification. Investigator/Skeptic agreement and paper scores do not establish scientific validity. Review generated findings, citations, and PDFs before relying on or publishing them.
+
+**Status:** These notes describe the proposed v0.3.1 release contents. Merging this documentation does **not** deploy v0.3.1 or certify that every feature has completed production smoke testing.
