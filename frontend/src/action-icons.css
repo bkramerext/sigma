@@ -182,7 +182,7 @@
  */
 @media (min-width: 701px) {
   .home-page .home-projects {
-    --home-project-edge: var(--home-side-gap);
+    --home-project-edge: var(--home-corner-gap);
     top: var(--home-corner-gap);
   }
 }
