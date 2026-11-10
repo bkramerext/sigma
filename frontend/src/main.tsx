@@ -6935,7 +6935,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         }}
         onSave={async (draft: ProjectDescriptionDraft) => {
           const current = settingsOf(view);
-          const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current });
+          // Project field edits share the same revision fence as classification
+          // and collaborator Settings. Without it, shared-project title saves
+          // are rejected as legacy unversioned writes.
+          const collaboration = sharedActivity?.shared
+            ? { expected_revision: sharedActivity.revision, collaborators: sharedActivity.collaborators }
+            : {};
+          const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current, ...collaboration });
           setView(next);
           // The parent owns the toolbar mode: a successful save must return
           // to the pencil even if the updated view re-renders the editor.
