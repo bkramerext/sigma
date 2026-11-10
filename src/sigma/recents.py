@@ -510,36 +510,53 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                     ):
                         if session.get("status") not in {"running", "queued"}:
                             continue
-                        activity_runs.append({
-                            "kind": "session",
-                            "status": "queued" if session["status"] == "queued" else "active",
-                            "number": session.get("session_number"),
-                            "creator": (authors.get("session") or {}).get(session.get("id", ""), ""),
-                            "model": session.get("model", ""),
-                            "thinking": session.get("reasoning_effort", ""),
-                        })
+                        activity_runs.append(
+                            {
+                                "kind": "session",
+                                "status": "queued" if session["status"] == "queued" else "active",
+                                "number": session.get("session_number"),
+                                "creator": (authors.get("session") or {}).get(
+                                    session.get("id", ""), ""
+                                ),
+                                "model": session.get("model", ""),
+                                "thinking": session.get("reasoning_effort", ""),
+                            }
+                        )
                     if paper_status in {"active", "queued"}:
-                        paper_number = max(
-                            (paper.get("paper_version", 0) for paper in papers.list_papers(view.path)),
-                            default=0,
-                        ) + 1
+                        paper_number = (
+                            max(
+                                (
+                                    paper.get("paper_version", 0)
+                                    for paper in papers.list_papers(view.path)
+                                ),
+                                default=0,
+                            )
+                            + 1
+                        )
                         progress = papers.progress_status(view.path) or {}
-                        activity_runs.append({
-                            "kind": "paper",
-                            "status": paper_status,
-                            "number": paper_number,
-                            "creator": (authors.get("paper_draft") or {}).get(view.project.id, ""),
-                            "model": progress.get("model") or view.project.ai_model,
-                            "thinking": progress.get("reasoning_effort") or view.project.reasoning_effort,
-                        })
+                        activity_runs.append(
+                            {
+                                "kind": "paper",
+                                "status": paper_status,
+                                "number": paper_number,
+                                "creator": (authors.get("paper_draft") or {}).get(
+                                    view.project.id, ""
+                                ),
+                                "model": progress.get("model") or view.project.ai_model,
+                                "thinking": progress.get("reasoning_effort")
+                                or view.project.reasoning_effort,
+                            }
+                        )
                     for answer in research_qa.list_pending_answers(view.path):
-                        activity_runs.append({
-                            "kind": "answer",
-                            "status": "active",
-                            "creator": answer.get("creator", ""),
-                            "model": answer.get("model", ""),
-                            "thinking": answer.get("thinking", ""),
-                        })
+                        activity_runs.append(
+                            {
+                                "kind": "answer",
+                                "status": "active",
+                                "creator": answer.get("creator", ""),
+                                "model": answer.get("model", ""),
+                                "thinking": answer.get("thinking", ""),
+                            }
+                        )
                 except (ProjectError, OSError, ValueError):
                     # Activity decoration must not prevent Saved Projects loading.
                     pass
