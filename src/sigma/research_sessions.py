@@ -6498,7 +6498,11 @@ async def start_session(
                 "session_number": 0,
                 "project_path": view.path,
                 **(
-                    {"uploaded_project_evidence": project_evidence.evidence_context(view.path, limit=6000)}
+                    {
+                        "uploaded_project_evidence": project_evidence.evidence_context(
+                            view.path, limit=6000
+                        )
+                    }
                     if project_evidence.list_evidence(view.path)
                     else {}
                 ),
