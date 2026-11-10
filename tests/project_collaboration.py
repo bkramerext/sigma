@@ -567,7 +567,8 @@ class CollaborationTests(TestCase):
         config_a = {"ai_model": "gpt-6.1-sol", "reasoning_effort": "high"}
         config_b = {"ai_model": "gpt-6-luna", "reasoning_effort": "low"}
         project_view = cast(
-            ProjectView, SimpleNamespace(path=self.path, project=SimpleNamespace(id="saved-project"))
+            ProjectView,
+            SimpleNamespace(path=self.path, project=SimpleNamespace(id="saved-project")),
         )
         with (
             patch("sigma.proposals.models", new_callable=AsyncMock) as available,
