@@ -288,9 +288,7 @@ class CollaborationTests(TestCase):
             authors = shared.summary(self.path)["artifact_authors"]
             self.assertEqual(authors["session"]["other-session"], self.other.email)
             self.assertEqual(authors["paper"]["other-paper"], self.other.email)
-            self.assertEqual(
-                authors["paper_draft"]["saved-project"], self.other.email
-            )
+            self.assertEqual(authors["paper_draft"]["saved-project"], self.other.email)
 
     def revision(self) -> int:
         with shared._db() as db:
