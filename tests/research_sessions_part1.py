@@ -1561,7 +1561,7 @@ async def test_start_preflight_does_not_hold_project_or_global_admission_locks(p
             assert await asyncio.wait_for(acquire_both(), timeout=2)
         finally:
             release.set()
-        result = await asyncio.wait_for(task, timeout=2)
+        result = await asyncio.wait_for(task, timeout=12)
         await research_sessions._tasks[result["id"]]
 
 

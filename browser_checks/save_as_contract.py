@@ -122,9 +122,9 @@ with sync_playwright() as playwright:
         return row
 
     row = row_for_v4()
-    actions = row.locator(".recent-meta-row button").evaluate_all(
-        "(nodes) => nodes.map(node => node.getAttribute('aria-label'))"
-    )
+    actions = row.locator(
+        ".recent-title-row button.recent-save-as, .recent-title-row button.recent-forget"
+    ).evaluate_all("(nodes) => nodes.map(node => node.getAttribute('aria-label'))")
     assert actions == [
         "Save project with a new name",
         "Remove this project",

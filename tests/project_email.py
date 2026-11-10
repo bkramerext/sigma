@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from sigma import cloud_auth, project_email, research_sessions
 from sigma.project_bundle import import_bundle, list_files, portable_bundle, read_file
-from sigma.projects import ProjectError
+from sigma.projects import ProjectError, initialize_project
 
 
 class ProjectEmailTests(unittest.TestCase):
@@ -48,13 +48,14 @@ class ProjectEmailTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source.json"
-            target = root / "recipient.json"
-            project_id = str(uuid4())
+            target = root / "recipient.sigma"
+            source_view = initialize_project(
+                source, "Shared Test", "Research the imported source material."
+            )
+            project_id = source_view.project.id
             session_id = str(uuid4())
             members = {
-                "project.json": json.dumps(
-                    {"schema_version": 11, "id": project_id, "title": "Shared Test"}
-                ).encode(),
+                "project.json": read_file(source, "project.json"),
                 f"research-sessions/{session_id}.json": json.dumps(
                     {
                         "id": session_id,
@@ -80,7 +81,9 @@ class ProjectEmailTests(unittest.TestCase):
             self.assertNotIn("artifacts/papers/old.json", payload["files"])
             self.assertNotIn("artifacts/papers/old.pdf", payload["files"])
             self.assertIn(f"research-sessions/{session_id}.json", payload["files"])
-            import_bundle(payload, target)
+            from sigma.project_transfer import import_project
+
+            import_project(payload, target)
             session_paths = [
                 name
                 for name in list_files(target)
@@ -94,7 +97,10 @@ class ProjectEmailTests(unittest.TestCase):
             self.assertEqual(imported["source_session_id"], session_id)
             self.assertEqual(imported["status"], "stopped")
             self.assertTrue(imported["imported_via_bundle"])
-            self.assertEqual(imported["project_id"], project_id)
+            self.assertNotEqual(imported["project_id"], project_id)
+            self.assertEqual(
+                imported["project_id"], json.loads(read_file(target, "project.json"))["id"]
+            )
             self.assertEqual(imported["project_path"], str(target.resolve()))
             self.assertEqual(read_file(target, "artifacts/evidence.bin"), b"\x00real\xff")
 

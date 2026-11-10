@@ -71,11 +71,11 @@ def main() -> None:
                 removed = remove_strategy(created.path, strategy_id)
                 assert removed.project.research_mode == mode
                 assert removed.project.schema_version == 13
-                snapshot = Path(created.path).read_bytes()
+                snapshot = read_file(created.path, STATE)
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
                 )
-                assert Path(created.path).read_bytes() == snapshot
+                assert read_file(created.path, STATE) == snapshot
             print(
                 "PASS all research types serialized/reopened, destination preview, collision and strategy integrity"
             )
@@ -126,7 +126,7 @@ def main() -> None:
                     f"sigma.projects.os.{operation}", side_effect=OSError("publication failed")
                 ):
                     rejects(lambda: create_project("Failed publication", "Question"))
-                assert not (managed / "failed-publication.json").exists()
+                assert not (managed / "failed-publication.sigma").exists()
 
             # If another local process inserts research into a reserved directory, never remove it.
             def inserted_research(path, *args):
@@ -138,7 +138,7 @@ def main() -> None:
 
             with patch("sigma.projects.initialize_project", side_effect=inserted_research):
                 rejects(lambda: create_project("Preserve partial", "Question"))
-            assert (managed / "preserve-partial.json").read_text() == "Concurrent research"
+            assert (managed / "preserve-partial.sigma").read_text() == "Concurrent research"
 
             def competing_create(index):
                 try:
@@ -158,7 +158,7 @@ def main() -> None:
             with TestClient(app) as client:
                 preview = client.get("/api/projects/destination", params={"title": "API math"})
                 assert preview.status_code == 200
-                assert preview.json()["path"] == str(managed / "api-math.json")
+                assert preview.json()["path"] == str(managed / "api-math.sigma")
                 body = {
                     "title": "API math",
                     "problem": "A mathematical question",
@@ -196,7 +196,21 @@ def main() -> None:
                 assert "attachment" in downloaded.headers["content-disposition"]
                 portable = downloaded.json()
                 assert portable["format"] == "sigma.project.bundle"
-                assert portable["version"] == 3
+                assert portable["version"] == 4
+                # External v1-v3 uploads must not bypass v4 artifact validation.
+                # Legacy live .json projects are still readable and exported as v4.
+                old_version = client.post(
+                    "/api/projects/import",
+                    json={
+                        "bundle": {
+                            "format": portable["format"],
+                            "version": 3,
+                            "files": portable["files"],
+                        }
+                    },
+                )
+                assert old_version.status_code == 400, old_version.text
+                assert "Only version 4" in old_version.json()["error"]
                 # Both the canonical export route and the legacy download
                 # alias must return one complete, importable file bundle.
                 legacy_download = client.get(
@@ -209,7 +223,7 @@ def main() -> None:
                 portable["files"]["project.json"] = imported_document
                 imported = client.post("/api/projects/import", json={"bundle": portable})
                 assert imported.status_code == 201, imported.text
-                assert Path(imported.json()["path"]).suffix == ".json"
+                assert Path(imported.json()["path"]).suffix == ".sigma"
                 duplicate_import = client.post("/api/projects/import", json={"bundle": portable})
                 assert duplicate_import.status_code == 201, duplicate_import.text
                 assert duplicate_import.json()["project"]["title"] == "API math imported v2"
@@ -255,7 +269,7 @@ def main() -> None:
                 )
                 assert renamed.status_code == 200, renamed.text
                 assert renamed.json()["project"]["events"][-1]["kind"] == "project.updated"
-                before_import = Path(history_path).read_bytes()
+                before_import = read_file(history_path, STATE)
                 mail_bundle = client.get(
                     "/api/projects/export", params={"path": history_path}
                 ).json()
@@ -277,15 +291,15 @@ def main() -> None:
                     assert (
                         inspect_project(mail_import.json()["path"]).project.title == imported_title
                     )
-                assert Path(history_path).read_bytes() == before_import
+                assert read_file(history_path, STATE) == before_import
 
                 # Home discovery and Open Project must work for both original
                 # and imported single-file projects, not only legacy directories.
                 from sigma.projects import list_json_projects
 
                 discovered = {view.path for view in list_json_projects()}
-                assert response.json()["path"] in discovered
-                assert imported.json()["path"] in discovered
+                assert response.json()["path"] not in discovered
+                assert imported.json()["path"] not in discovered
                 for project_path in (response.json()["path"], imported.json()["path"]):
                     reopened = client.post("/api/projects/open", json={"path": project_path})
                     assert reopened.status_code == 200, reopened.text
@@ -300,8 +314,14 @@ def main() -> None:
                 from sigma.project_bundle import list_files, update_files
                 from sigma.python_sandbox import list_executions
 
-                source_path = response.json()["path"]
-                source_id = response.json()["project"]["id"]
+                # Preserve explicit coverage of legacy live .json projects while
+                # newly created API projects are directory-backed .sigma.
+                legacy_copy = initialize_project(
+                    managed / "legacy-copy.json", "Legacy Copy", "Legacy snapshot compatibility"
+                )
+                source_path = legacy_copy.path
+                open_project(source_path)  # The legacy test project is explicitly opened.
+                source_id = legacy_copy.project.id
                 session_id = str(uuid4())
                 run_id = uuid4().hex
                 execution_id = str(uuid4())
@@ -507,7 +527,11 @@ def main() -> None:
                 # Incomplete paper transfers must reject publication, never
                 # succeed with an empty Papers view.
                 incomplete = json.loads(json.dumps(full_payload))
-                incomplete["files"].pop(f"artifacts/papers/{paper_id}.pdf")
+                from sigma.project_transfer import decode_bundle, make_bundle
+
+                members = decode_bundle(incomplete)
+                members.pop(f"artifacts/generated_papers/{paper_id}.pdf")
+                incomplete = make_bundle(members)
                 existing_json = {item.name for item in managed.glob("*.json")}
                 rejected = client.post("/api/projects/import", json={"bundle": incomplete})
                 assert rejected.status_code != 201, rejected.text
@@ -822,7 +846,7 @@ def main() -> None:
                     legacy_fixture, "Xenopus Saved Project Copy Regression"
                 )
                 assert legacy_copy.project.id != legacy_id
-                assert legacy_copy.path.endswith(".json")
+                assert legacy_copy.path.endswith(".sigma")
                 copied_papers = papers.list_papers(legacy_copy.path)
                 copied_answers = research_qa.list_answers(legacy_copy.path)
                 assert {row["paper_id"] for row in copied_papers} == {

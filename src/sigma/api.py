@@ -731,6 +731,106 @@ class ResearchQARequest(OpenRequest):
     question: str = Field(min_length=1, max_length=4000)
 
 
+@app.get("/api/projects/evidence")
+def project_evidence_list(path: str):
+    from sigma import project_evidence
+
+    principal = cloud_auth.current_principal()
+    # Public sample guests can view the project but have no private evidence
+    # directory and must not make unauthorized evidence requests.
+    if principal is not None and principal.role == "guest":
+        return {"files": []}
+    files = project_evidence.list_evidence(path)
+    # Once project access has been checked, every authorized collaborator can
+    # remove Source Material, including attachments uploaded by another member.
+    return {
+        "files": [
+            {
+                **entry,
+                "enabled": entry.get("enabled", True),
+                "can_remove": principal is None or principal.role != "guest",
+            }
+            for entry in files
+        ]
+    }
+
+
+class EvidenceLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    url: str
+
+
+@app.post("/api/projects/evidence/link")
+def project_evidence_add_link(body: EvidenceLinkRequest):
+    from sigma import project_evidence
+
+    return project_evidence.add_link(body.path, body.url)
+
+
+class EvidenceLinkEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    url: str
+
+
+@app.put("/api/projects/evidence/{evidence_id}/link")
+def project_evidence_edit_link(evidence_id: str, body: EvidenceLinkEditRequest):
+    from sigma import project_evidence
+
+    return project_evidence.edit_link(body.path, evidence_id, body.url)
+
+
+class EvidenceEnabledRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    enabled: bool
+
+
+@app.patch("/api/projects/evidence/{evidence_id}/enabled")
+def project_evidence_set_enabled(evidence_id: str, body: EvidenceEnabledRequest):
+    from sigma import project_evidence
+
+    return project_evidence.set_enabled(body.path, evidence_id, body.enabled)
+
+
+@app.post("/api/projects/evidence")
+async def project_evidence_upload(request: Request, path: str, filename: str):
+    from sigma import project_evidence
+
+    project_evidence.list_evidence(path)  # Reject inaccessible projects before reading bytes.
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > project_evidence.MAX_PDF_BYTES:
+            raise HTTPException(413, "PDF evidence exceeds 12 MiB.")
+    return project_evidence.add_evidence(path, filename, bytes(data))
+
+
+@app.get("/api/projects/evidence/{evidence_id}/pdf")
+def project_evidence_pdf(evidence_id: str, path: str):
+    from sigma import project_evidence
+
+    entry, pdf = project_evidence.get_pdf(path, evidence_id)
+    return Response(
+        pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": "inline; filename*=UTF-8''" + quote(entry["filename"], safe=""),
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.delete("/api/projects/evidence/{evidence_id}")
+def project_evidence_remove(evidence_id: str, path: str):
+    from sigma import project_evidence
+
+    project_evidence.remove_evidence(path, evidence_id)
+    return {"deleted": evidence_id}
+
+
 @app.get("/api/projects/research-qa")
 def research_qa_list(path: str):
     return {
@@ -1890,19 +1990,12 @@ def export_project_view(path: str):
 @app.get("/api/projects/download")
 def download_project_bundle(path: str):
     """Export every project file as one complete, importable JSON bundle."""
-    from sigma.project_bundle import download_bytes, encode
+    from sigma.project_transfer import export_project
     from sigma.projects import project_path
 
     authorized = project_path(path)
     inspect_project(authorized)
-    # Legacy directory projects remain exportable without modifying live storage.
-    # A lossless bundle snapshot has the same importable format as a JSON project.
-    if authorized.suffix == ".json":
-        content = download_bytes(authorized)
-    elif authorized.suffix == ".sigma" and authorized.is_dir():
-        content = encode(authorized)
-    else:
-        raise ProjectError("Unsupported project storage format")
+    content = export_project(authorized)
     return Response(
         content=content,
         media_type="application/json",
@@ -1917,12 +2010,8 @@ class ImportBundleRequest(BaseModel):
 @app.post("/api/projects/import", status_code=201)
 def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
-    from sigma.project_bundle import (
-        BundleError,
-        bundle_project_document,
-        import_independent_bundle,
-        rename_bundle_project,
-    )
+    from sigma.project_bundle import BundleError
+    from sigma.project_transfer import VERSION, bundle_document, import_project
     from sigma.projects import (
         _occupied_titles,
         _project_name,
@@ -1932,7 +2021,12 @@ def import_project_bundle(body: ImportBundleRequest):
     )
 
     try:
-        document = bundle_project_document(body.bundle)
+        # Legacy single-file projects remain readable internally, but external
+        # uploads must use v4. Accepting v1-v3 here would silently drop the
+        # separate artifact archive that v4 requires.
+        if type(body.bundle.get("version")) is not int or body.bundle["version"] != VERSION:
+            raise BundleError("Only version 4 project exports can be imported")
+        document = bundle_document(body.bundle)
         title = document["title"]
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
@@ -1962,19 +2056,18 @@ def import_project_bundle(body: ImportBundleRequest):
                     suffix = f" v{number - 1}"
                     candidate = title[: 200 - len(suffix)].rstrip() + suffix
                 _, name = _project_name(candidate)
-                destination = (root / name).with_suffix(".json")
+                destination = root / name
                 if (
                     _title_key(candidate) in occupied_titles
                     or os.path.lexists(destination)
                     or os.path.lexists(root / name)
                 ):
                     continue
-                payload = (
-                    body.bundle
-                    if candidate == title
-                    else rename_bundle_project(body.bundle, candidate)
+                imported = import_project(
+                    body.bundle,
+                    destination,
+                    title_override=candidate if candidate != title else None,
                 )
-                imported = import_independent_bundle(payload, destination)
                 break
             if imported is None:
                 raise ProjectError("A unique name for the imported project is unavailable.")

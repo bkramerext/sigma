@@ -275,7 +275,7 @@ function compilationBarrierActive(session: ResearchSession): boolean {
   if (typeof status === 'string') return status === 'pending' || status === 'running';
   // A pre-compiler or partially migrated session may expose only its action.
   // Never let stale action text override a persisted completed/fallback state.
-  return /compiling research references/i.test(session.current_action);
+  return /compiling (?:research references|supplied evidence)/i.test(session.current_action);
 }
 
 function parallelSessionActivity(session: ResearchSession): string | null {
@@ -292,10 +292,11 @@ function strategyLiveStatusLines(session: ResearchSession): { id: string; label:
   // Compilation is the session-wide barrier before any strategy fanout.
   const compilation = session.outcome.source_material?.compilation;
   if (compilationBarrierActive(session)) {
+    const supplied = /compiling source material/i.test(session.current_action);
     return [{
-      id: 'reference-compilation',
-      label: compilation?.status === 'pending' ? 'Preparing references' : 'Compiling references',
-      detail: 'Preparing shared guidance for all strategies…',
+      id: supplied ? 'supplied-evidence-compilation' : 'reference-compilation',
+      label: supplied ? 'Compiling source material' : compilation?.status === 'pending' ? 'Preparing research standards' : 'Compiling research standards',
+      detail: supplied ? session.message : 'Preparing shared guidance for all strategies…',
     }];
   }
   if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
@@ -932,7 +933,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const budgetNotice = budgetDenied
     ? session.calls_used === 0
       ? compilerAttempted
-        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research References for its status.'
+        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research Standards for its status.'
         : 'No Investigator or Skeptic call was dispatched. Check the saved funding denial below.'
       : 'Research stopped because another provider call could not be funded. Saved findings are preserved.'
     : '';
@@ -1107,14 +1108,14 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   </div>;
   const researchReferences = (
       <details className="outcome-subsection outcome-source-material">
-        <summary><DisclosureChevron expanded={false}/>Research References</summary>
+        <summary><DisclosureChevron expanded={false}/>Research Standards</summary>
         <div className="outcome-subsection-content">
-          <p>Research-method references selected before the Investigator/Skeptic turns. These describe how to investigate; they are not independent evidence for the research findings.</p>
+          <p>Research standards selected before the Investigator/Skeptic turns. These describe how to investigate; they are not independent evidence for the research findings.</p>
           {session.outcome.source_material?.compilation && <div className="outcome-reference-compilation">
-            <p><strong>Initial step · Compile references:</strong> {session.outcome.source_material.compilation.status === 'completed' ? 'Completed' : session.outcome.source_material.compilation.status === 'not_needed' ? 'No references selected' : session.outcome.source_material.compilation.status === 'pending' ? 'Queued' : session.outcome.source_material.compilation.status === 'running' ? 'Running' : 'Unavailable; frozen reference notes retained'}</p>
+            <p><strong>Initial step · Compile research standards:</strong> {session.outcome.source_material.compilation.status === 'completed' ? 'Completed' : session.outcome.source_material.compilation.status === 'not_needed' ? 'No standards selected' : session.outcome.source_material.compilation.status === 'pending' ? 'Queued' : session.outcome.source_material.compilation.status === 'running' ? 'Running' : 'Unavailable; frozen standards notes retained'}</p>
             {session.outcome.source_material.compilation.guidance && <p>{session.outcome.source_material.compilation.guidance}</p>}
-            {session.outcome.source_material.compilation.status === 'completed' && <small>{session.outcome.source_material.compilation.selected_source_ids?.length ?? 0} references retained · {session.outcome.source_material.compilation.omitted_source_ids?.length ?? 0} omitted as low value or irrelevant. Original reference records preserved in this session.</small>}
-            {['fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <p className="reference-compilation-degraded" role="alert"><strong>Compiled guidance unavailable.</strong> {session.outcome.source_material.compilation.reason ?? 'Original frozen reference notes were used instead.'}</p>}
+            {session.outcome.source_material.compilation.status === 'completed' && <small>{session.outcome.source_material.compilation.selected_source_ids?.length ?? 0} standards retained · {session.outcome.source_material.compilation.omitted_source_ids?.length ?? 0} omitted as low value or irrelevant. Original standards records preserved in this session.</small>}
+            {['fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <p className="reference-compilation-degraded" role="alert"><strong>Compiled guidance unavailable.</strong> {session.outcome.source_material.compilation.reason ?? 'Original frozen standards notes were used instead.'}</p>}
             {session.outcome.source_material.compilation.reason && !['completed', 'fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <small>{session.outcome.source_material.compilation.reason}</small>}
             {!!session.outcome.source_material.compilation.attempts?.length && <div className="reference-compilation-diagnostics">
               <strong>Compiler attempts · {session.outcome.source_material.compilation.attempts?.length} of 3 maximum</strong>
@@ -2445,7 +2446,7 @@ type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: st
 
 const PAPER_STAGES = [
   { label: 'Wait', stages: ['queued'] },
-  { label: 'Review references', stages: ['snapshot', 'source_material', 'publication_compilation'] },
+  { label: 'Review publication standards', stages: ['snapshot', 'source_material', 'publication_compilation'] },
   { label: 'Extract evidence', stages: ['evidence', 'consolidation'] },
   { label: 'Planning', stages: ['planning'] },
   { label: 'Write sections', stages: ['writing', 'sections'] },
@@ -2461,7 +2462,7 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
   const current = step === active && (progress.status === 'active' || progress.status === 'queued');
   const sectionsTotal = progress.sections_total ?? (progress.stage === 'sections' ? progress.total : null);
   if (step === 0) return completed ? 'Started' : current ? 'Waiting' : 'Wait';
-  if (step === 1) return completed ? 'Reviewed references' : current ? 'Reviewing references' : 'Review references';
+  if (step === 1) return completed ? 'Reviewed publication standards' : current ? 'Reviewing publication standards' : 'Review publication standards';
   if (step === 2) return completed ? 'Extracted evidence' : current ? 'Extracting evidence' : 'Extract evidence';
   if (step === 3) return completed ? 'Planned' : 'Planning';
   if (step === 4) {
@@ -3130,7 +3131,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
+    setBusy(true); setPhase('Compiling publication standards…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
     let requestDispatched = false;
@@ -3197,7 +3198,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.draft_recovery_available
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
-        : 'Compiling publication references…');
+        : 'Compiling publication standards…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
@@ -5630,8 +5631,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
             {entry.best_paper_score != null && entry.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
-          </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
+            <button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
             onClick={() => { setConfirmRemoveId(''); setSaveAsEntry(entry); }}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
@@ -5640,7 +5640,9 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
+          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+          </div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -6788,7 +6790,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. {guest ? 'Sign in to replace the project type.' : 'Choose a replacement in Project Settings to use a current type.'}</p>{!guest && <button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button>}</div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
-      <ProjectDescriptionEditor view={view}
+      <ProjectDescriptionEditor view={view} guest={guest}
         editing={descriptionEditing} busy={descriptionBusy}
         canEditTitle={!sharedActivity?.owner || sharedActivity.owner === sharedActivity.you}
         onBusyChange={setDescriptionBusy}

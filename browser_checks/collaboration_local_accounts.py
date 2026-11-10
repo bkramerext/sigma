@@ -106,7 +106,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         project = get_json(created)
         path = project["path"]
         url = ui + "/project?path=" + quote(path, safe="")
-        assert Path(path).is_file()
+        assert Path(path).is_dir() and (Path(path) / "project.json").is_file()
 
         # Member cannot see the owner's project before invitation.
         forbidden = member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
@@ -237,7 +237,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         member.get_by_role("button", name="Edit project fields").click()
         assert member.get_by_role("textbox", name="Project title").count() == 0
         expect(member.locator(".sigma-description-title-row .current-project")).to_have_text(title)
-        expect(member.get_by_role("textbox", name="Research Subject")).to_be_visible()
+        expect(member.get_by_role("textbox", name="Research Problem")).to_be_visible()
         member.get_by_role("button", name="Cancel", exact=True).click()
 
         # Non-owners see values in the established field layout, not disabled
@@ -374,7 +374,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(owner.get_by_role("button", name=f"Manage collaborators for {title}")).to_have_count(
             0
         )
-        assert Path(path).is_file(), "Revocation must not move or delete the owner's project"
+        assert Path(path).is_dir() and (Path(path) / "project.json").is_file(), (
+            "Revocation must not move or delete the owner's project"
+        )
 
         # The My Work X for an invited collaborator must actually revoke
         # membership, not merely hide the recent entry until the next poll.
@@ -403,7 +405,9 @@ def exercise(ui: str, workspaces: Path) -> None:
             owner_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
         )
         assert COLLABORATOR not in owner_membership["collaborators"]
-        assert Path(path).is_file(), "Leaving must not delete the owner's project"
+        assert Path(path).is_dir() and (Path(path) / "project.json").is_file(), (
+            "Leaving must not delete the owner's project"
+        )
 
         verify_new_windows_inherit_latest_google_account(browser, ui)
         owner_context.close()

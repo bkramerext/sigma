@@ -1401,6 +1401,9 @@
 /* Human feedback uses the Project Settings copper dropdown. */
 .workspace-page .human-intervention-strategy { min-width: 0; width: 100%; }
 .workspace-page .human-intervention-strategy .sigma-select-trigger { min-height: 34px; padding: 6px 8px; font-size: 12px; }
+/* The menu is a top-layer popover, outside its form ancestor. Match its
+   option text inset to the selected value (8px from the left edge). */
+.sigma-select-options[aria-label="Strategy"] [role="option"] { padding-left: 2px; }
 
 /* Leave space for the close X in strategy removal confirmations. */
 .workspace-page .strategy-remove-popover .research-stop-confirm { padding: 28px 14px 14px; }
