@@ -6972,10 +6972,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setAnnouncement('Advanced Outcome enabled for your account.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
     <PapersPane artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.paper : undefined} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
-    {sharedActivity?.shared && <p className="project-collaboration-activity" role="status" aria-live="polite">
-      {sharedActivity.lease
-        ? `${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`
-        : 'No collaborator is currently running this project.'}
+    {sharedActivity?.shared && sharedActivity.lease && <p className="project-collaboration-activity" role="status" aria-live="polite">
+      {`${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`}
     </p>}
     {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setAnnouncement('Project settings saved.'); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
