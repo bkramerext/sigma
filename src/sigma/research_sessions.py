@@ -5033,7 +5033,11 @@ def mock_session(
             "session_number": _allocate_session_number(view.path, records),
             "project_path": view.path,
             **(
-                {"uploaded_project_evidence": project_evidence.evidence_context(view.path, limit=6000)}
+                {
+                    "uploaded_project_evidence": project_evidence.evidence_context(
+                        view.path, limit=6000
+                    )
+                }
                 if project_evidence.list_evidence(view.path)
                 else {}
             ),
@@ -15465,12 +15469,14 @@ def _bounded_supplied_evidence(sources: list[dict], limit: int = 6000) -> list[d
         full = str(source.get("excerpt") or "")
         excerpt = full[:allowance]
         remaining -= len(excerpt)
-        output.append({
-            **source,
-            "excerpt": excerpt,
-            "incomplete_extract": bool(source.get("incomplete_extract"))
-            or len(excerpt) < len(full),
-        })
+        output.append(
+            {
+                **source,
+                "excerpt": excerpt,
+                "incomplete_extract": bool(source.get("incomplete_extract"))
+                or len(excerpt) < len(full),
+            }
+        )
     return output
 
 
@@ -15513,9 +15519,7 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
             stage["status"] = "running"
             record["status"] = "running"
             record["current_action"] = "Compiling supplied evidence"
-            record["message"] = (
-                f"Reading supplied evidence {len(saved) + 1} of {len(inputs)}."
-            )
+            record["message"] = f"Reading supplied evidence {len(saved) + 1} of {len(inputs)}."
             _save(path, record)
         # External HTTP and PDF extraction run outside session state locks.
         compiled = await asyncio.to_thread(research_supplied_evidence.compile_entry, source)
