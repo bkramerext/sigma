@@ -697,10 +697,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderEffectiveIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      <section><div className="pt-reference-heading"><h3>Research Standards</h3>{referenceAddButton(item.id, 'research_standards_references', [...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : [])], false, readonly ? item.research_standards_references.length : 0)}</div>{listEditor(item.id, 'research_standards_references', [
+      <section><div className="pt-reference-heading"><h3>Research Standards</h3>{referenceAddButton(item.id, 'research_standards_references', [...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : [])], false, readonly ? item.research_standards_references.length : 0)}</div><p className="settings-hint">How SIGMA conducts research and evaluates its reasoning—not facts it must assume are true.</p>{listEditor(item.id, 'research_standards_references', [
         ...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : []),
       ], false, readonly ? item.research_standards_references.length : 0)}</section>
-      <section><div className="pt-reference-heading"><h3>Publication Standards</h3>{referenceAddButton(item.id, 'publication_standards_references', [...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : [])], false, readonly ? item.publication_standards_references.length : 0)}</div>{listEditor(item.id, 'publication_standards_references', [
+      <section><div className="pt-reference-heading"><h3>Publication Standards</h3>{referenceAddButton(item.id, 'publication_standards_references', [...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : [])], false, readonly ? item.publication_standards_references.length : 0)}</div><p className="settings-hint">How SIGMA writes, structures, and presents the finished paper—not research premises.</p>{listEditor(item.id, 'publication_standards_references', [
         ...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : []),
       ], false, readonly ? item.publication_standards_references.length : 0)}</section>
     </div>
@@ -750,11 +750,13 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
         <div className="pt-reference-heading"><h4>Research Standards for all project types</h4>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>
+        <p className="settings-hint">How research is conducted and evaluated across projects; not factual premises.</p>
         {listEditor('common', 'research_standards_references', [
           ...(commonReferences?.research_standards_references ?? []),
           ...commonCustomReferences.research_standards_references,
         ], false, commonReferences?.research_standards_references.length ?? 0)}
         <div className="pt-reference-heading"><h4>Publication Standards for all project types</h4>{referenceAddButton('common', 'publication_standards_references', [...(commonReferences?.publication_standards_references ?? []), ...commonCustomReferences.publication_standards_references], false, commonReferences?.publication_standards_references.length ?? 0)}</div>
+        <p className="settings-hint">How papers are written, structured, and presented across projects.</p>
         {listEditor('common', 'publication_standards_references', [
           ...(commonReferences?.publication_standards_references ?? []),
           ...commonCustomReferences.publication_standards_references,
