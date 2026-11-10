@@ -779,7 +779,9 @@ class EvidenceLinkEditRequest(BaseModel):
 def project_evidence_edit_link(evidence_id: str, body: EvidenceLinkEditRequest):
     from sigma import project_evidence
 
-    return project_evidence.edit_link(body.path, evidence_id, body.url, expected_url=body.expected_url)
+    return project_evidence.edit_link(
+        body.path, evidence_id, body.url, expected_url=body.expected_url
+    )
 
 
 class EvidenceEnabledRequest(BaseModel):
