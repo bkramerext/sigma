@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sigma import (
     cloud_research,
     cloud_workspaces,
+    project_evidence,
     reference_efficiency,
     research_ethos,
     research_preferences,
@@ -5031,9 +5032,9 @@ def mock_session(
             "id": str(uuid4()),
             "session_number": _allocate_session_number(view.path, records),
             "project_path": view.path,
-            "uploaded_project_evidence": __import__(
-                "sigma.project_evidence", fromlist=["evidence_context"]
-            ).evidence_context(view.path, limit=6000),
+            "uploaded_project_evidence": project_evidence.evidence_context(
+                view.path, limit=6000
+            ),
             "project_id": view.project.id,
             "strategy_id": strategy.id,
             "strategy_title": strategy.title,
@@ -6489,9 +6490,9 @@ async def start_session(
                 "id": str(uuid4()),
                 "session_number": 0,
                 "project_path": view.path,
-            "uploaded_project_evidence": __import__(
-                "sigma.project_evidence", fromlist=["evidence_context"]
-            ).evidence_context(view.path, limit=6000),
+            "uploaded_project_evidence": project_evidence.evidence_context(
+                view.path, limit=6000
+            ),
                 "project_id": view.project.id,
                 # Set by the start endpoint before the worker can be scheduled.
                 # API/CLI sessions omit it and run without browser-page history.
