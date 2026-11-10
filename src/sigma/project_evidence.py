@@ -165,7 +165,7 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
             "uploaded_at": datetime.now(UTC).isoformat(),
             "uploaded_by": principal.email if principal is not None else None,
         }
-        updates = {
+        updates: dict[str, bytes | None] = {
             f"artifacts/evidence/{identifier}.pdf": pdf,
             f"artifacts/evidence/{identifier}.txt": extract.encode("utf-8"),
             MANIFEST: json.dumps([*rows, entry], sort_keys=True).encode(),
