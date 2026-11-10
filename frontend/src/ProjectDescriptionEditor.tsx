@@ -11,19 +11,74 @@ export type ProjectDescriptionDraft = {
 };
 
 type ProjectDescriptionView = { path: string; project: ProjectDescriptionDraft };
-type EvidenceRow = { id: string; kind?: 'file' | 'link'; filename?: string; url?: string; pages?: number; can_remove?: boolean };
+type EvidenceRow = {
+  id: string; kind?: 'file' | 'link'; filename?: string; url?: string;
+  pages?: number; can_remove?: boolean; enabled?: boolean;
+};
+
 function EvidencePlusIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>;
 }
+
 function EvidenceClipIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m20 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 3a3.7 3.7 0 0 1 5.3 5.3l-9.3 9.3a1.9 1.9 0 0 1-2.7-2.7L14.7 6.5"/></svg>;
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m20 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 3a3.7 3.7 0 0 1 5.3 5.3l-9.3 9.3a1.9 1.9 0 0 1-2.7-2.7L14.7 6.5"/></svg>;
 }
-function EvidenceRemoveIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>;
+
+function EvidenceActionIcon({ kind }: { kind: 'enabled' | 'disabled' | 'edit' | 'remove' }) {
+  return <svg aria-hidden="true" className="pt-reference-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {kind === 'enabled' || kind === 'disabled' ? <>
+      <rect x="4" y="4" width="16" height="16" rx="2"/>
+      {kind === 'enabled' && <path d="m8 12 3 3 5-6" strokeWidth="2.3"/>}
+    </> : kind === 'edit' ? <>
+      <path d="M12 20H4a1 1 0 0 1-1-1v-7"/>
+      <path d="m8 16 9.7-9.7 3 3L11 19l-4 1zM16.7 7.3l2-2a2.1 2.1 0 0 1 3 3l-1 1"/>
+    </> : <path d="M8 8 16 16M16 8 8 16" strokeWidth="4"/>}
+  </svg>;
 }
+
+function sourceUrl(value: string, previous = ''): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.includes('://') || /^[a-z][a-z\d+.-]*:(?!\d)/i.test(trimmed)) return trimmed;
+  return (previous.toLowerCase().startsWith('http://') ? 'http://' : 'https://') + trimmed;
+}
+
+function sourceUrlError(value: string): string | null {
+  if (value.length > 2048) return 'URL must be at most 2,048 characters.';
+  try {
+    const parsed = new URL(value);
+    const domain = /^(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i;
+    if (!['http:', 'https:'].includes(parsed.protocol) || !domain.test(parsed.hostname)
+      || parsed.username || parsed.password) return 'Enter a valid public website address, such as example.org.';
+    const standardPort = parsed.protocol === 'https:' ? '443' : '80';
+    if (parsed.port && parsed.port !== standardPort) return 'Source Material URLs must use the standard HTTP or HTTPS port.';
+    return null;
+  } catch {
+    return 'Enter a valid public website address, such as example.org.';
+  }
+}
+
+function SourceMaterialLink({ url }: { url: string }) {
+  const [title, setTitle] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    setTitle(null);
+    void fetch('/api/reference-title?url=' + encodeURIComponent(url), {
+      signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' },
+    }).then(response => response.ok ? response.json() : null)
+      .then((result: { title?: string | null } | null) => {
+        if (!controller.signal.aborted) setTitle(result?.title?.trim() || null);
+      }).catch(() => {});
+    return () => controller.abort();
+  }, [url]);
+  return <a className="sigma-evidence-link" href={url} target="_blank" rel="noopener noreferrer">{title || url}</a>;
+}
+
 function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; expanded: boolean; onToggle: () => void; guest: boolean }) {
   const [rows, setRows] = useState<EvidenceRow[]>([]);
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -35,83 +90,172 @@ function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; e
   const currentGuest = useRef(guest);
   currentPath.current = path;
   currentGuest.current = guest;
+
   async function reload() {
-    const response = await fetch(`/api/projects/evidence?${new URLSearchParams({ path })}`, {
+    const response = await fetch('/api/projects/evidence?' + new URLSearchParams({ path }), {
       headers: { 'X-Sigma-Error-Handled': 'true' },
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.detail ?? 'Could not load evidence.');
+    if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not load Source Material.');
     if (currentPath.current === path && !currentGuest.current) setRows(result.files as EvidenceRow[]);
   }
+
   useEffect(() => {
-    setRows([]); setError(''); setAdding(false); setUrl('');
-    if (!guest) void reload().catch(cause => setError(String(cause)));
+    setRows([]); setError(''); setAdding(false); setEditingId(null); setUrl('');
+    if (!guest) void reload().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
   }, [path, guest]);
-  useEffect(() => { if (adding) linkInput.current?.focus(); }, [adding]);
-  async function addLink() {
-    if (saving.current) return;
-    const value = url.trim();
-    if (!value) { setAdding(false); return; }
+
+  useEffect(() => { if (adding || editingId) linkInput.current?.focus(); }, [adding, editingId]);
+
+  function cancelLink() {
+    cancelled.current = true;
+    setAdding(false); setEditingId(null); setUrl(''); setError('');
+  }
+
+  async function saveLink() {
+    if (saving.current || cancelled.current) return;
+    const old = editingId ? rows.find(row => row.id === editingId) : undefined;
+    const candidate = sourceUrl(url, old?.url);
+    if (!candidate) { cancelLink(); return; }
+    const syntaxError = sourceUrlError(candidate);
+    if (syntaxError) { setError(syntaxError); return; }
+    if (rows.some(row => row.kind === 'link' && row.id !== editingId && row.url === candidate)) {
+      setError('Duplicate Source Material URL.');
+      return;
+    }
     saving.current = true; setBusy(true); setError('');
     try {
-      const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-      const response = await fetch('/api/projects/evidence/link', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, url: normalized }),
+      // The same DNS/domain-status service used by Research/Publication Standards.
+      // An unverified lookup is transient; only definitive invalidity blocks saving.
+      const lookup = await fetch('/api/reference-title?url=' + encodeURIComponent(candidate), {
+        headers: { 'X-Sigma-Error-Handled': 'true' },
+      });
+      if (lookup.ok) {
+        const metadata = await lookup.json() as { domain_status?: string };
+        if (metadata.domain_status === 'invalid') throw new Error('Website could not be found. Check the address.');
+      }
+      const endpoint = editingId
+        ? '/api/projects/evidence/' + encodeURIComponent(editingId) + '/link'
+        : '/api/projects/evidence/link';
+      const response = await fetch(endpoint, {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({ path, url: candidate }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.detail ?? 'Could not add link.');
-      await reload(); setAdding(false); setUrl('');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { saving.current = false; setBusy(false); }
+      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not save link.');
+      await reload();
+      setAdding(false); setEditingId(null); setUrl('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      saving.current = false; setBusy(false);
+    }
   }
+
   async function attach(file: File) {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`/api/projects/evidence?${new URLSearchParams({ path, filename: file.name })}`, {
+      const response = await fetch('/api/projects/evidence?' + new URLSearchParams({ path, filename: file.name }), {
         method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf', 'X-Sigma-Error-Handled': 'true' },
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.detail ?? 'Could not attach file.');
+      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not attach file.');
       await reload();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); if (uploadInput.current) uploadInput.current.value = ''; }
   }
-  async function remove(id: string) {
+
+  async function toggleEnabled(entry: EvidenceRow) {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`/api/projects/evidence/${id}?${new URLSearchParams({ path })}`, {
-        method: 'DELETE', headers: { 'X-Sigma-Error-Handled': 'true' },
+      const response = await fetch('/api/projects/evidence/' + encodeURIComponent(entry.id) + '/enabled', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({ path, enabled: entry.enabled === false }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.detail ?? 'Could not remove evidence.');
+      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not change Source Material state.');
       await reload();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
+
+  async function remove(id: string) {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/projects/evidence/' + encodeURIComponent(id) + '?' + new URLSearchParams({ path }), {
+        method: 'DELETE', headers: { 'X-Sigma-Error-Handled': 'true' },
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not remove Source Material.');
+      await reload();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
+  }
+
+  function linkEditor() {
+    return <input ref={linkInput} className="sigma-evidence-link-input" aria-label="Source Material link"
+      aria-invalid={!!error} inputMode="url" type="text" placeholder="example.org/document"
+      value={url} disabled={busy} onChange={event => { setUrl(event.target.value); setError(''); }}
+      onBlur={() => { if (!cancelled.current) void saveLink(); }}
+      onKeyDown={event => {
+        if (event.key === 'Enter') { event.preventDefault(); void saveLink(); }
+        if (event.key === 'Escape') { event.preventDefault(); cancelLink(); }
+      }}/>;
+  }
+
   return <section className="sigma-description-field sigma-supplied-evidence">
-    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle" data-tooltip={`${expanded ? 'Collapse' : 'Expand'} Source Material`} aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}><EvidenceChevron expanded={expanded}/>Source Material</button></h4>{!guest && <div className="sigma-evidence-actions">
-      <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add link" data-tooltip="Add link" disabled={busy || adding || rows.length >= 20} onClick={() => { cancelled.current = false; setAdding(true); }}><EvidencePlusIcon/></button>
-      <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Attach a file" data-tooltip="Attach a file" disabled={busy || rows.length >= 20} onClick={() => uploadInput.current?.click()}><EvidenceClipIcon/></button>
+    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle"
+      data-tooltip={(expanded ? 'Collapse' : 'Expand') + ' Source Material'}
+      aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}>
+      <EvidenceChevron expanded={expanded}/>Source Material
+    </button></h4>{!guest && <div className="sigma-evidence-actions">
+      <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add link" data-tooltip="Add link"
+        disabled={busy || adding || !!editingId || rows.length >= 20}
+        onClick={() => { cancelled.current = false; setError(''); setUrl(''); setAdding(true); }}><EvidencePlusIcon/></button>
+      <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Attach a file" data-tooltip="Attach a file"
+        disabled={busy || rows.length >= 20} onClick={() => uploadInput.current?.click()}><EvidenceClipIcon/></button>
     </div>}</div>
-    <input ref={uploadInput} type="file" accept=".pdf,application/pdf" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void attach(file); }}/>
+    <input ref={uploadInput} type="file" accept=".pdf,application/pdf" hidden
+      onChange={event => { const file = event.target.files?.[0]; if (file) void attach(file); }}/>
     <div id="sigma-supplied-evidence-content" hidden={!expanded}>
-    <p className="settings-hint">Files and links SIGMA reads and accepts as true premises for this research. Unlike Research Standards, these define what is true—not how to investigate.</p>
-    {rows.map(entry => <div className="sigma-evidence-row" key={entry.id}>
-      {entry.kind === 'link'
-        ? <a href={entry.url} target="_blank" rel="noopener noreferrer">{entry.url}</a>
-        : <a href={`/api/projects/evidence/${entry.id}/pdf?${new URLSearchParams({ path })}`} target="_blank" rel="noopener noreferrer">Attached: {entry.filename}</a>}
-      {entry.can_remove !== false && <button type="button" className="text-view-link sigma-evidence-remove" aria-label={`Remove ${entry.filename ?? entry.url}`} data-tooltip="Remove evidence" disabled={busy} onClick={() => void remove(entry.id)}><EvidenceRemoveIcon/></button>}
-    </div>)}
-    {adding && <input ref={linkInput} className="sigma-evidence-link-input" aria-label="Evidence link" placeholder="Paste a URL" value={url} disabled={busy}
-      onChange={event => setUrl(event.target.value)}
-      onBlur={() => { if (!cancelled.current) void addLink(); }}
-      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addLink(); } if (event.key === 'Escape') { cancelled.current = true; setAdding(false); setUrl(''); } }}/>}
-    {error && <p className="error" role="alert">{error}</p>}
+      <p className="settings-hint">Files and links SIGMA reads and accepts as true premises for this research. Unlike Research Standards, these define what is true—not how to investigate.</p>
+      {rows.map(entry => <div className="sigma-evidence-row" key={entry.id}>
+        <div className={'sigma-evidence-item' + (entry.enabled === false ? ' is-disabled' : '')}>
+          {entry.kind === 'link'
+            ? editingId === entry.id ? linkEditor() : <SourceMaterialLink url={entry.url || ''}/>
+            : <a className="sigma-evidence-attachment" href={'/api/projects/evidence/' + encodeURIComponent(entry.id) + '/pdf?' + new URLSearchParams({ path })}
+                target="_blank" rel="noopener noreferrer"><EvidenceClipIcon/><span>{entry.filename}</span></a>}
+          {editingId === entry.id && error && <span className="sigma-evidence-url-error" role="alert">{error}</span>}
+        </div>
+        {!guest && editingId !== entry.id && <div className="sigma-evidence-row-actions">
+          <button type="button" aria-pressed={entry.enabled !== false}
+            aria-label={(entry.enabled === false ? 'Enable ' : 'Disable ') + (entry.filename || entry.url || 'Source Material')}
+            data-tooltip={(entry.enabled === false ? 'Enable' : 'Disable') + ' Source Material'}
+            disabled={busy} onClick={() => void toggleEnabled(entry)}>
+            <EvidenceActionIcon kind={entry.enabled === false ? 'disabled' : 'enabled'}/>
+          </button>
+          {entry.kind === 'link' && <button type="button" aria-label="Edit Source Material link" data-tooltip="Edit link"
+            disabled={busy} onClick={() => { cancelled.current = false; setError(''); setAdding(false); setEditingId(entry.id); setUrl(entry.url || ''); }}>
+            <EvidenceActionIcon kind="edit"/>
+          </button>}
+          {entry.can_remove !== false && <button type="button" aria-label={'Remove ' + (entry.filename || entry.url)}
+            data-tooltip="Remove Source Material" disabled={busy} onClick={() => void remove(entry.id)}>
+            <EvidenceActionIcon kind="remove"/>
+          </button>}
+        </div>}
+      </div>)}
+      {adding && <div className="sigma-evidence-row sigma-evidence-adding">
+        <div className="sigma-evidence-item">
+          {linkEditor()}
+          {error && <span className="sigma-evidence-url-error" role="alert">{error}</span>}
+        </div>
+      </div>}
+      {error && !adding && !editingId && <p className="sigma-evidence-url-error" role="alert">{error}</p>}
     </div>
   </section>;
 }
-
 
 function EvidenceChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;

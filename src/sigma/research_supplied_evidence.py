@@ -1,7 +1,7 @@
 """Durable, bounded content compilation for user-supplied research evidence.
 
 Unlike methodology pointers, supplied URLs must be fetched and read. All
-network destinations use the reference fetcher's DNS-pinned public HTTPS
+network destinations use the reference fetcher's DNS-pinned public HTTP/HTTPS
 validation, including each redirect. No user-supplied text is an instruction.
 """
 
@@ -15,7 +15,7 @@ import socket
 import ssl
 import time
 from datetime import UTC, datetime
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from sigma import project_evidence, research_reference_content
 from sigma.projects import project_write_lock
@@ -29,7 +29,7 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
     current = url
     for redirect_count in range(3):
         host, host_header, _, path, address_info = research_reference_content._public_endpoint(
-            current
+            current, allow_http=True
         )
         family, socktype, proto, _, address = address_info
         deadline = time.monotonic() + MAX_LINK_SECONDS
@@ -43,7 +43,12 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
             raw.settimeout(MAX_LINK_SECONDS)
             raw.connect(address)
             raw.settimeout(max(0.1, deadline - time.monotonic()))
-            with ssl.create_default_context().wrap_socket(raw, server_hostname=host) as secure:
+            connection = (
+                ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+                if urlsplit(current).scheme == "https"
+                else raw
+            )
+            with connection as secure:
                 secure.settimeout(max(0.1, deadline - time.monotonic()))
                 secure.sendall(request)
                 response = http.client.HTTPResponse(secure)
@@ -53,7 +58,13 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
                 if status in {301, 302, 303, 307, 308} and location:
                     if redirect_count == 2:
                         raise ValueError("too_many_redirects")
-                    current = urljoin(current, location)
+                    target = urljoin(current, location)
+                    if (
+                        urlsplit(current).scheme == "https"
+                        and urlsplit(target).scheme != "https"
+                    ):
+                        raise ValueError("https_redirect_downgrade")
+                    current = target
                     continue
                 if status != 200:
                     raise ValueError(f"http_{status}")
@@ -82,7 +93,7 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
 
 
 def read_link(url: str, fetched: tuple[bytes, str, str] | None = None) -> dict:
-    """Read actual HTTPS document contents, or return a typed failure."""
+    """Read actual public HTTP/HTTPS content, or return a typed failure."""
     result = {
         "status": "unavailable",
         "url": url,

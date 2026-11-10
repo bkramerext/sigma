@@ -216,25 +216,83 @@ def test_link_rejects_invalid_utf8() -> None:
     assert result["reason"]
 
 
-def test_link_policy_rejects_http_and_private_targets() -> None:
+def test_link_policy_allows_http_and_rejects_unsafe_targets() -> None:
+    import socket
+
     from sigma import research_reference_content
 
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "urls.sigma"
         initialize_project(path, "URLs", "Validate linked sources")
-        try:
-            project_evidence.add_link(str(path), "http://example.org/source.txt")
-        except ProjectError:
-            pass
-        else:
-            raise AssertionError("Accepted an HTTP source that retrieval will reject")
-    for url in ("http://example.org/source.txt", "https://127.0.0.1/source.txt"):
-        try:
-            research_reference_content._public_endpoint(url)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("Accepted an unsafe Source Material destination")
+        with patch("sigma.reference_titles.domain_status", return_value="valid"):
+            link = project_evidence.add_link(str(path), "http://example.org/source.txt")
+        assert link["url"] == "http://example.org/source.txt"
+        assert link["enabled"] is True
+        with patch("sigma.reference_titles.domain_status", return_value="invalid"):
+            try:
+                project_evidence.add_link(
+                    str(path), "https://nxdomain.invalid/source.txt"
+                )
+            except ProjectError as exc:
+                assert "Website could not be found" in str(exc)
+            else:
+                raise AssertionError(
+                    "Accepted a definitively invalid Source Material host"
+                )
+
+    try:
+        research_reference_content._public_endpoint("http://example.org/source.txt")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Research Standards' HTTPS-only endpoint was weakened")
+    with patch(
+        "sigma.research_reference_content.socket.getaddrinfo",
+        return_value=[
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 80))
+        ],
+    ):
+        host, _, port, _, _ = research_reference_content._public_endpoint(
+            "http://example.org/source.txt", allow_http=True
+        )
+    assert host == "example.org" and port == 80
+
+
+def test_enable_disable_and_edit_applies_to_future_session_inputs() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "source-toggles.sigma"
+        initialize_project(path, "Source toggles", "Research only enabled premises")
+        with patch("sigma.reference_titles.domain_status", return_value="valid"):
+            link = project_evidence.add_link(str(path), "http://example.org/a.txt")
+        with patch.object(
+            project_evidence,
+            "_extract",
+            return_value=(1, "[PDF page 1] Premise", False),
+        ):
+            file = project_evidence.add_evidence(
+                str(path), "source.pdf", b"%PDF-1.7 fixture"
+            )
+        assert len(project_evidence.evidence_context(str(path))) == 2
+        assert project_evidence.has_enabled_evidence(str(path))
+        disabled_link = project_evidence.set_enabled(str(path), link["id"], False)
+        disabled_file = project_evidence.set_enabled(str(path), file["id"], False)
+        assert not disabled_link["enabled"] and not disabled_file["enabled"]
+        assert not project_evidence.has_enabled_evidence(str(path))
+        assert project_evidence.evidence_context(str(path)) == []
+        assert not any(
+            item["enabled"] for item in project_evidence.list_evidence(str(path))
+        )
+        with patch("sigma.reference_titles.domain_status", return_value="valid"):
+            edited = project_evidence.edit_link(
+                str(path), link["id"], "https://example.org/updated.txt"
+            )
+        assert edited["id"] == link["id"] and edited["enabled"] is False
+        assert edited["url"] == "https://example.org/updated.txt"
+        project_evidence.set_enabled(str(path), file["id"], True)
+        context = project_evidence.evidence_context(str(path))
+        assert len(context) == 1 and context[0]["filename"] == "source.pdf"
+        project_evidence.set_enabled(str(path), link["id"], True)
+        assert len(project_evidence.evidence_context(str(path))) == 2
 
 
 if __name__ == "__main__":
@@ -246,5 +304,6 @@ if __name__ == "__main__":
     test_link_snapshot_survives_resume()
     test_unreadable_link_is_retried_without_caching_failure()
     test_link_rejects_invalid_utf8()
-    test_link_policy_rejects_http_and_private_targets()
+    test_link_policy_allows_http_and_rejects_unsafe_targets()
+    test_enable_disable_and_edit_applies_to_future_session_inputs()
     print("Project evidence tests passed.")

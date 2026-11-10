@@ -5043,7 +5043,7 @@ def mock_session(
                         view.path, limit=6000
                     )
                 }
-                if project_evidence.list_evidence(view.path)
+                if project_evidence.has_enabled_evidence(view.path)
                 else {}
             ),
             "project_id": view.project.id,
@@ -6507,7 +6507,7 @@ async def start_session(
                             view.path, limit=6000
                         )
                     }
-                    if project_evidence.list_evidence(view.path)
+                    if project_evidence.has_enabled_evidence(view.path)
                     else {}
                 ),
                 "project_id": view.project.id,

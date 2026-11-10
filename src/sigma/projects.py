@@ -360,13 +360,12 @@ def _decode(raw: Any) -> Project:
             raise ProjectError("Invalid Source Material links")
         ids = set()
         for link in links:
-            if not isinstance(link, dict) or set(link) != {
-                "id",
-                "kind",
-                "url",
-                "uploaded_by",
-                "uploaded_at",
-            }:
+            mandatory = {"id", "kind", "url", "uploaded_by", "uploaded_at"}
+            if (
+                not isinstance(link, dict)
+                or not mandatory <= set(link)
+                or set(link) - mandatory - {"enabled"}
+            ):
                 raise ProjectError("Invalid Source Material link entry")
             if (
                 link["kind"] != "link"
@@ -376,6 +375,7 @@ def _decode(raw: Any) -> Project:
                 or not isinstance(link["url"], str)
                 or not 1 <= len(link["url"]) <= 2048
                 or not link["url"].startswith(("https://", "http://"))
+                or type(link.get("enabled", True)) is not bool
                 or (link["uploaded_by"] is not None and not isinstance(link["uploaded_by"], str))
             ):
                 raise ProjectError("Invalid Source Material link metadata")

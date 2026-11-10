@@ -746,6 +746,7 @@ def project_evidence_list(path: str):
         "files": [
             {
                 **entry,
+                "enabled": entry.get("enabled", True),
                 "can_remove": principal is None
                 or (
                     principal.role != "guest"
@@ -768,6 +769,32 @@ def project_evidence_add_link(body: EvidenceLinkRequest):
     from sigma import project_evidence
 
     return project_evidence.add_link(body.path, body.url)
+
+
+class EvidenceLinkEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    url: str
+
+
+@app.put("/api/projects/evidence/{evidence_id}/link")
+def project_evidence_edit_link(evidence_id: str, body: EvidenceLinkEditRequest):
+    from sigma import project_evidence
+
+    return project_evidence.edit_link(body.path, evidence_id, body.url)
+
+
+class EvidenceEnabledRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    enabled: bool
+
+
+@app.patch("/api/projects/evidence/{evidence_id}/enabled")
+def project_evidence_set_enabled(evidence_id: str, body: EvidenceEnabledRequest):
+    from sigma import project_evidence
+
+    return project_evidence.set_enabled(body.path, evidence_id, body.enabled)
 
 
 @app.post("/api/projects/evidence")

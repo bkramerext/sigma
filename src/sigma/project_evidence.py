@@ -97,7 +97,14 @@ def _file_rows(path: str) -> list[dict]:
 def list_evidence(path: str) -> list[dict]:
     """Combine URL records from project.json with disk-backed file records."""
     view = inspect_project(path)
-    return [*view.project.source_material_links, *_file_rows(path)]
+    return sorted(
+        [*view.project.source_material_links, *_file_rows(path)],
+        key=lambda row: str(row.get("uploaded_at") or ""),
+    )
+
+
+def has_enabled_evidence(path: str) -> bool:
+    return any(row.get("enabled", True) for row in list_evidence(path))
 
 
 def _extract(pdf: bytes) -> tuple[int, str, bool]:
@@ -169,6 +176,7 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
             "id": identifier,
             "kind": "file",
             "filename": name,
+            "enabled": True,
             "sha256": sha,
             "bytes": len(pdf),
             "pages": page_count,
@@ -185,29 +193,59 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
         return entry
 
 
-def add_link(path: str, url: str) -> dict:
-    """Store URL records in project.json; never create an artifact for a link."""
-    parsed = urlsplit(url.strip())
+def _validated_link_url(url: str) -> str:
+    """Validate using the same domain resolver as Research/Publication Standards."""
+    from sigma.reference_titles import domain_status
+
+    canonical = url.strip()
+    try:
+        parsed = urlsplit(canonical)
+        port = parsed.port
+    except (ValueError, UnicodeError) as exc:
+        raise ProjectError(
+            "Enter a valid public website address, such as example.org."
+        ) from exc
     if (
-        parsed.scheme != "https"
+        parsed.scheme not in {"http", "https"}
         or not parsed.hostname
         or parsed.username is not None
         or parsed.password is not None
-        or len(url) > 2048
-        or any(ord(c) < 32 for c in url)
+        or len(canonical) > 2048
+        or any(ord(char) < 32 for char in canonical)
     ):
-        raise ProjectError("Enter a valid HTTPS Source Material link.")
+        raise ProjectError("Enter a valid public HTTP or HTTPS website address.")
+    standard_port = 443 if parsed.scheme == "https" else 80
+    if port not in {None, standard_port}:
+        raise ProjectError(
+            "Source Material URLs must use the standard HTTP or HTTPS port."
+        )
+    if domain_status(canonical) == "invalid":
+        raise ProjectError("Website could not be found. Check the address.")
+    # Unverified DNS is not definitive failure, as with Research/Publication Standards.
+    return canonical
+
+
+def _require_source_editor() -> None:
     from sigma import cloud_auth
-    from sigma.projects import _update_project
 
     principal = cloud_auth.current_principal()
     if principal is not None and principal.role == "guest":
-        raise ProjectError("Guests cannot add Source Material.")
-    canonical = url.strip()
+        raise ProjectError("Guests cannot modify Source Material.")
+
+
+def add_link(path: str, url: str) -> dict:
+    """Store HTTP/HTTPS Source Material links in project.json."""
+    from sigma import cloud_auth
+    from sigma.projects import _update_project
+
+    _require_source_editor()
+    canonical = _validated_link_url(url)
+    principal = cloud_auth.current_principal()
     new_entry = {
         "id": uuid4().hex,
         "kind": "link",
         "url": canonical,
+        "enabled": True,
         "uploaded_by": principal.email if principal else None,
         "uploaded_at": datetime.now(UTC).isoformat(),
     }
@@ -228,6 +266,73 @@ def add_link(path: str, url: str) -> dict:
 
     _update_project(path, update)
     return selected
+
+
+def edit_link(path: str, identifier: str, url: str) -> dict:
+    """Edit a linked source without changing its ID, uploader, or enabled status."""
+    from sigma.projects import _update_project
+
+    _require_source_editor()
+    canonical = _validated_link_url(url)
+    selected: dict = {}
+
+    def update(project):
+        nonlocal selected
+        rows = project.source_material_links
+        current = next((row for row in rows if row["id"] == identifier), None)
+        if current is None:
+            raise ProjectError("Source Material link not found.")
+        if any(row["url"] == canonical and row["id"] != identifier for row in rows):
+            raise ProjectError("Duplicate Source Material URL.")
+        selected = {**current, "url": canonical}
+        return replace(
+            project,
+            source_material_links=tuple(
+                selected if row["id"] == identifier else row for row in rows
+            ),
+        )
+
+    _update_project(path, update)
+    return selected
+
+
+def set_enabled(path: str, identifier: str, enabled: bool) -> dict:
+    """Persist enable/disable for both links and attachments."""
+    from sigma.projects import _update_project
+
+    _require_source_editor()
+    if type(enabled) is not bool:
+        raise ProjectError("Source Material enabled state must be boolean.")
+    if any(
+        row["id"] == identifier for row in inspect_project(path).project.source_material_links
+    ):
+        selected: dict = {}
+
+        def update(project):
+            nonlocal selected
+            rows = project.source_material_links
+            current = next((row for row in rows if row["id"] == identifier), None)
+            if current is None:
+                raise ProjectError("Source Material link not found.")
+            selected = {**current, "enabled": enabled}
+            return replace(
+                project,
+                source_material_links=tuple(
+                    selected if row["id"] == identifier else row for row in rows
+                ),
+            )
+
+        _update_project(path, update)
+        return selected
+    with project_write_lock(path):
+        rows = _file_rows(path)
+        current = next((row for row in rows if row["id"] == identifier), None)
+        if current is None:
+            raise ProjectError("Source Material attachment not found.")
+        selected = {**current, "enabled": enabled}
+        updated = [selected if row["id"] == identifier else row for row in rows]
+        _write(path, {MANIFEST: json.dumps(updated, sort_keys=True).encode()})
+        return selected
 
 
 def get_pdf(path: str, identifier: str) -> tuple[dict, bytes]:
@@ -299,7 +404,7 @@ def remove_evidence(path: str, identifier: str) -> None:
 
 def evidence_context(path: str, *, limit: int = 16000) -> list[dict]:
     """Source-attributed extracts, distributing context fairly across files."""
-    rows = list_evidence(path)
+    rows = [row for row in list_evidence(path) if row.get("enabled", True)]
     output: list[dict] = []
     if not rows:
         return output
