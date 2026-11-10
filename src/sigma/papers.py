@@ -183,6 +183,15 @@ def _select_paper_call_config(
     return selected
 
 
+def _select_user_paper_call_config(
+    base: dict[str, Any], work: dict[str, Any], save_work: Callable[[], None]
+) -> dict[str, Any]:
+    """Resolve each billable paper call from its initiating user's settings."""
+    from sigma import global_research_settings
+
+    return _select_paper_call_config(base, work, global_research_settings.load_config(), save_work)
+
+
 class PaperStageCallback(Protocol):
     def __call__(
         self,
@@ -3144,6 +3153,9 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
         record["paper_version"] = _allocate_paper_version(path)
     record["pdf_sha256"] = hashlib.sha256(pdf).hexdigest()
     record["pdf_size_bytes"] = len(pdf)
+    # This participates in the same collaboration transaction as publication.
+    # Reopening/reviewing a paper must not replace its original author.
+    project_collaboration.attribute_published_paper(path, record["project_id"], identifier)
     stored_record = dict(record)
     if isinstance(stored_record.get("snapshot"), dict):
         stored_record["snapshot_ref"] = _store_frozen_snapshot(
@@ -9966,15 +9978,9 @@ async def _generate_impl(
         def model_for_next_paper_call(base: dict[str, Any]) -> dict[str, Any]:
             # The user may change Model/Thinking during a long paper run.
             # Resolve at dispatch, never mutate a config held by an in-flight call.
-            from sigma import global_research_settings
-
-            shared_settings = project_collaboration.model_settings(path)
-            return _select_paper_call_config(
-                base,
-                work,
-                shared_settings or global_research_settings.load_config(),
-                lambda: _save_work(path, work),
-            )
+            # Spending/model choices belong to this account, never to a
+            # collaborator's shared project preferences.
+            return _select_user_paper_call_config(base, work, lambda: _save_work(path, work))
 
         # _generate_impl runs in its own task; child section tasks inherit this
         # selector, while unrelated paper scoring and tests never do.
@@ -10704,6 +10710,15 @@ async def _generate_impl(
             "paper_id": identifier,
             "project_id": view.project.id,
             "created_at": timestamp,
+            **(
+                {"created_by": original_creator}
+                if (
+                    original_creator := project_collaboration.paper_draft_creator(
+                        path, view.project.id
+                    )
+                )
+                else {}
+            ),
             "snapshot_sha256": snapshot_hash,
             "snapshot": package,
             "draft": draft.model_dump(),
@@ -11497,6 +11512,23 @@ async def generate(
         _started_paper_attempts.discard(key)
         if _generation_tasks.get(key) is task:
             _generation_tasks.pop(key, None)
+
+
+def has_live_generation(path: str) -> bool:
+    """Whether an actual in-process paper task could be cancelled."""
+    key = str(project_path(path).resolve())
+    return any(
+        task is not None and not task.done()
+        for task in (_submission_tasks.get(key), _generation_tasks.get(key))
+    )
+
+
+def has_unfinished_work(path: str) -> bool:
+    """Distinguish a continuation from a new paper without losing queued ownership."""
+    if _load_work(path) is not None:
+        return True
+    receipt = _read_queue_status(path)
+    return receipt is not None and receipt["status"] == "queued"
 
 
 async def cancel_generation(path: str) -> bool:

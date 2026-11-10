@@ -866,6 +866,8 @@ async def research_qa_answer(body: ResearchQARequest):
             lambda completed, task_key=key: _cleanup_research_qa_task(task_key, completed)
         )
     try:
+        # The background task persists its author before publishing the saved
+        # answer; a disconnected HTTP waiter must not affect provenance.
         return await asyncio.shield(task)
     except asyncio.CancelledError:
         if memory_guard.is_critical():
@@ -883,6 +885,8 @@ def research_qa_get(qa_id: str, path: str):
 
 @app.delete("/api/projects/research-qa/{qa_id}")
 def research_qa_delete(qa_id: str, path: str):
+    research_qa.get_answer(path, qa_id)
+    project_collaboration.require_artifact_manager(path, "answer", qa_id)
     research_qa.delete_answer(path, qa_id)
     return {"deleted": qa_id}
 
@@ -949,10 +953,19 @@ def papers_progress_view(path: str):
 
 @app.post("/api/projects/papers/cancel")
 async def paper_cancel_view(body: PaperCancelRequest):
-    await require_cloud_inference_binding(
-        body.expected_binding, body.expected_project_id, body.path
+    # Stop is a control operation, not a new paid inference authorization.
+    # Verify the project and user, then borrow only the caller's own lease.
+    current = inspect_project(body.path)
+    if current.project.id != body.expected_project_id:
+        raise ProjectError("Project changed before paper generation could stop.")
+    active = papers.has_live_generation(body.path)
+    project_collaboration.require_paper_draft_operator(
+        body.path, body.expected_project_id, controlling_active=active
     )
-    return {"cancelled": await papers.cancel_generation(body.path)}
+    with project_collaboration.bind_session_control_lease(
+        body.path, "Paper generation", require_active_lease=active
+    ):
+        return {"cancelled": await papers.cancel_generation(body.path)}
 
 
 @app.post("/api/projects/papers/discard")
@@ -960,11 +973,13 @@ async def papers_discard_view(body: PaperDiscardRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
+    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
     return await papers.discard_work(body.path, body.expected_project_id)
 
 
 @app.post("/api/projects/papers/restart")
 async def papers_restart_view(body: PaperRestartRequest):
+    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
     return await papers.restart_work(
         body.path,
         body.expected_project_id,
@@ -1002,7 +1017,7 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
             force=body.force,
         )
         papers.mark_scored_progress(body.path, paper_id)
-        project_collaboration.note_artifact_author(body.path, "paper", paper_id)
+        # Scoring must never manufacture a creator for a legacy paper.
         return {"score": score}
     except asyncio.CancelledError:
         if memory_guard.is_critical():
@@ -1089,6 +1104,8 @@ def paper_tex_view(paper_id: str, path: str):
 
 @app.delete("/api/projects/papers/{paper_id}")
 def paper_delete_view(paper_id: str, path: str):
+    papers.get_paper(path, paper_id, include_tex=False)
+    project_collaboration.require_artifact_manager(path, "paper", paper_id)
     papers.delete_paper(path, paper_id)
     return {"deleted": paper_id}
 
@@ -1118,6 +1135,16 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     from sigma import project_collaboration
 
     lease = project_collaboration.acquire_lease(body.path, "Paper generation")
+    try:
+        with project_collaboration.bind_lease(body.path, lease):
+            project_collaboration.reserve_paper_draft(
+                body.path,
+                body.expected_project_id,
+                resuming=papers.has_unfinished_work(body.path),
+            )
+    except BaseException:
+        project_collaboration.release_lease(body.path, lease)
+        raise
     with project_collaboration.bind_lease(body.path, lease):
         task = asyncio.create_task(
             papers.generate(
@@ -1653,9 +1680,7 @@ def mock_research_start_view(
         scenario,
         body.continue_using_saved_type_settings,
     )
-    project_collaboration.note_artifact_author(
-        body.path, "session", result["id"], created_only=True
-    )
+    # Session creation has already persisted its original human creator.
     return result
 
 
@@ -1707,10 +1732,8 @@ async def research_start_view(body: ResearchStartRequest):
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
-        if isinstance(result.get("id"), str):
-            project_collaboration.note_artifact_author(
-                body.path, "session", result["id"], created_only=True
-            )
+        # A repeated idempotent start must not assign the replaying account
+        # as creator of an existing session.
         return result
     finally:
         if not transferred:
@@ -1719,6 +1742,16 @@ async def research_start_view(body: ResearchStartRequest):
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
 async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):
+    project_collaboration.require_execution_operator(
+        body.path,
+        "session",
+        session_id,
+        "Research session",
+        require_active_lease=(
+            session_id in research_sessions._tasks
+            and not research_sessions._tasks[session_id].done()
+        ),
+    )
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
     if (
@@ -1733,18 +1766,24 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         )
         if simulated is None:
             raise HTTPException(404, "Not found")
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
         return simulated
 
     if body.action not in {"resume", "repair"}:
-        result = await research_sessions.control_session(
+        with project_collaboration.bind_session_control_lease(
             body.path,
-            session_id,
-            body.action,
-            additional_calls=body.additional_calls,
-            browser_presence_required=body.browser_presence_required,
-        )
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
+            "Research session",
+            require_active_lease=(
+                session_id in research_sessions._tasks
+                and not research_sessions._tasks[session_id].done()
+            ),
+        ):
+            result = await research_sessions.control_session(
+                body.path,
+                session_id,
+                body.action,
+                additional_calls=body.additional_calls,
+                browser_presence_required=body.browser_presence_required,
+            )
         return result
     lease = project_collaboration.acquire_lease(body.path, "Research session")
     transferred = False
@@ -1761,7 +1800,7 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
+        # Resuming legacy research cannot establish its original creator.
         return result
     finally:
         if not transferred:
@@ -1770,19 +1809,38 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
 
 @app.post("/api/projects/research-sessions/{session_id}/interventions")
 async def research_intervention_view(session_id: str, body: ResearchInterventionRequest):
-    return await research_sessions.submit_intervention(
-        body.path,
-        session_id,
-        body.kind,
-        body.text,
-        body.strategy_ids,
-        body.agent_roles,
-        body.supersedes_intervention_id,
+    project_collaboration.require_execution_operator(
+        body.path, "session", session_id, "Research session"
     )
+    with project_collaboration.bind_session_control_lease(body.path, "Research session"):
+        return await research_sessions.submit_intervention(
+            body.path,
+            session_id,
+            body.kind,
+            body.text,
+            body.strategy_ids,
+            body.agent_roles,
+            body.supersedes_intervention_id,
+        )
 
 
 @app.delete("/api/projects/research-sessions/{session_id}")
 async def research_session_remove_view(session_id: str, body: ResearchSessionRemoveRequest):
+    project_collaboration.require_artifact_manager(body.path, "session", session_id)
+    record = research_sessions.get_session(body.path, session_id)
+    if record["updated_at"] != body.expected_updated_at:
+        raise ProjectError("Session changed; refresh its status before removing it")
+    worker = research_sessions._tasks.get(session_id)
+    if record["status"] in {"queued", "running", "paused"} and worker and not worker.done():
+        project_collaboration.require_execution_operator(
+            body.path, "session", session_id, "Research session", require_active_lease=True
+        )
+        with project_collaboration.bind_session_control_lease(
+            body.path, "Research session", require_active_lease=True
+        ):
+            stopped = await research_sessions.control_session(body.path, session_id, "stop")
+        # The active worker has exited; now use the independent artifact-delete privilege.
+        return await research_sessions.remove_session(body.path, session_id, stopped["updated_at"])
     return await research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
 
 
@@ -1976,8 +2034,19 @@ def import_project_bundle(body: ImportBundleRequest):
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
         root = projects_root()
+        # Shared projects are stored in another owner's workspace. Include all
+        # accessible Saved projects in the collision set so uploading a shared
+        # "Study v1" creates "Study v2" rather than another visible "Study v1".
+        # Read Saved before taking .names.lock: Saved has its own index lock.
+        from sigma.recents import recent_projects
+
+        visible_titles = {
+            _title_key(item["title"])
+            for item in recent_projects(lightweight=True)["projects"]
+            if item["available"]
+        }
         with _title_registry_lock(root):
-            occupied_titles = _occupied_titles(root)
+            occupied_titles = _occupied_titles(root) | visible_titles
             imported = None
             version_match = re.search(r"(?i)\bv(\d+)$", title)
             for number in range(1, 1001):
@@ -2963,6 +3032,19 @@ def sample_open_view(body: SampleOpenRequest):
 class ForgetRecentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_id: str
+
+
+class LeaveSharedProjectRequest(OpenRequest):
+    project_id: str = Field(min_length=1, max_length=100)
+
+
+@app.post("/api/projects/collaboration/leave")
+def leave_shared_project_view(body: LeaveSharedProjectRequest):
+    project_collaboration.leave_project(body.path, body.project_id)
+    from sigma.recents import forget_recent
+
+    forget_recent(body.project_id, body.path)
+    return {"left": True}
 
 
 @app.post("/api/projects/recent/forget")

@@ -5117,6 +5117,13 @@ def mock_session(
             "simulated": True,
         }
         record["outcome"] = _outcome(record)
+        # An idempotent replay returns above without changing the original
+        # creator. Reserve attribution before publishing even the mock record.
+        from sigma import project_collaboration
+
+        project_collaboration.note_artifact_author(
+            view.path, "session", record["id"], created_only=True
+        )
         _save(view.path, record)
         return _public(record)
 
@@ -5633,6 +5640,14 @@ async def remove_session(path: str, session_id: str, expected_updated_at: str) -
         # lifecycle state is still "paused". Stop it first so removal uses the
         # same worker-release checks as every other session.
         active = record.get("status") in {"queued", "running", "paused"}
+        worker = _tasks.get(session_id)
+        if active and worker is not None and not worker.done():
+            # A DELETE must never cancel a foreign execution as a side effect
+            # of artifact-owner privileges. The API stops an owned worker first.
+            from sigma import cloud_workspaces
+
+            if cloud_workspaces.current() is not None:
+                raise ProjectError("Stop the active session before removing its saved record.")
     if active:
         task = _tasks.get(session_id)
         if task is not None and not task.done():
@@ -6784,6 +6799,14 @@ async def start_session(
                     cloud_research.prepare_job(record)
                 except cloud_research.CloudResearchUnavailable as exc:
                     raise ProjectError(str(exc)) from exc
+            # Attribution must be durable before the queued worker can run.
+            # On failed admission a reserved creator row is inert; on replay
+            # the existing session returns without ever changing its owner.
+            from sigma import project_collaboration
+
+            project_collaboration.note_artifact_author(
+                view.path, "session", record["id"], created_only=True
+            )
             _save(view.path, record)
             from sigma import cloud_auth, progress_notifications
 

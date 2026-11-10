@@ -120,6 +120,12 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
         expect(owner_dialog.get_by_text(OWNER)).to_be_visible()
         assert owner_dialog.get_by_role("button", name=f"Remove {OWNER}").count() == 0
+        # Project owner has real dropdowns, but neither displays hover text.
+        for name in ("Research category", "Difficulty"):
+            control = owner_dialog.get_by_role("combobox", name=name)
+            expect(control).to_be_visible()
+            expect(control).to_have_attribute("data-tooltip-disabled", "true")
+            assert control.get_attribute("title") is None
         owner_dialog.get_by_role("button", name="Add collaborator").click()
         invite_input = owner_dialog.get_by_label("New collaborator email")
         invite_input.fill(COLLABORATOR)
@@ -165,6 +171,8 @@ def exercise(ui: str, workspaces: Path) -> None:
         shortcut.evaluate("element => element.click()")
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
+        # Shared-project settings is a one-shot deep link, not persistent on refresh.
+        assert owner.evaluate("new URL(location.href).searchParams.get('settings')") is None
 
         # An email deep link opens immediately only for the invited account.
         invitation_url = (
@@ -222,36 +230,135 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(guest.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
         guest_context.close()
 
-        # Preserve the original owner's staged settings for conflict testing.
-        # Concurrent settings: a collaborator can edit the same file, while
-        # the owner's stale draft must fail revision CAS, not overwrite it.
+        # Collaborators may edit the research description, but the owner
+        # alone can change the project title.
+        member.goto(url)
+        expect(member.get_by_role("button", name="Edit project fields")).to_be_visible()
+        member.get_by_role("button", name="Edit project fields").click()
+        assert member.get_by_role("textbox", name="Project title").count() == 0
+        expect(member.locator(".sigma-description-title-row .current-project")).to_have_text(title)
+        expect(member.get_by_role("textbox", name="Research Subject")).to_be_visible()
+        member.get_by_role("button", name="Cancel", exact=True).click()
+
+        # Non-owners see values in the established field layout, not disabled
+        # dropdowns that could be activated with a pointer or keyboard.
         member.goto(url)
         member.get_by_role("button", name="Project settings", exact=True).click()
         member_dialog = member.get_by_role("dialog", name="Project Settings")
         expect(member_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
-        choose_difficulty(member_dialog, "Hard")
+        assert member_dialog.get_by_role("combobox", name="Research category").count() == 0
+        assert member_dialog.get_by_role("combobox", name="Difficulty").count() == 0
+        readonly = member_dialog.locator(
+            ".settings-classification-row .sigma-classification-readonly"
+        )
+        assert readonly.count() == 2
+        expect(readonly.nth(0)).to_contain_text("Mathematics")
+        expect(readonly.nth(1)).to_have_text("Medium")
+        assert (
+            member_dialog.locator(".settings-classification-row .research-type-chevron").count()
+            == 0
+        )
+        expect(
+            member_dialog.get_by_text(
+                "Project category, difficulty, and title are read-only for non-owner collaborators."
+            )
+        ).to_be_visible()
+        # Pointer clicks and keyboard actions cannot open a listbox.
+        readonly.nth(0).click()
+        readonly.nth(1).click()
+        member_dialog.press("ArrowDown")
+        assert member_dialog.get_by_role("listbox", name="Research category").count() == 0
+        assert member_dialog.get_by_role("listbox", name="Difficulty").count() == 0
         member_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(member_dialog).not_to_be_visible()
+
+        # The same authorization is enforced at the API boundary. Forged
+        # classification requests must never change the stored project.
+        from_view = get_json(
+            member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )
+        initial_settings = {
+            key: from_view["project"][key]
+            for key in (
+                "title",
+                "problem",
+                "desired_outcomes",
+                "paper_requirements",
+                "investigation_type",
+                "ai_model",
+                "reasoning_effort",
+                "difficulty",
+                "show_advanced_outcome_details",
+            )
+        }
+        member_collaboration = get_json(
+            member_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
+        )
+        for field, forbidden_value in (
+            ("investigation_type", "physics"),
+            ("difficulty", "hard"),
+            ("title", title + " unauthorized"),
+        ):
+            attempt = member_context.request.post(
+                ui + "/api/projects/update",
+                headers={"Origin": ui},
+                data={
+                    **initial_settings,
+                    field: forbidden_value,
+                    "path": path,
+                    "expected": initial_settings,
+                    "expected_revision": member_collaboration["revision"],
+                    "collaborators": member_collaboration["collaborators"],
+                },
+            )
+            assert attempt.status >= 400, (field, attempt.status, attempt.text())
+            assert "Only the project owner" in attempt.text(), (field, attempt.text())
+            still = get_json(
+                owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+            )
+            assert still["project"][field] == initial_settings[field], field
+
+        # A non-owner can still edit the research subject. This advances
+        # the revision so the owner's existing classification draft is stale.
+        amended = "Research subject updated by collaborator"
+        subject_update = member_context.request.post(
+            ui + "/api/projects/update",
+            headers={"Origin": ui},
+            data={
+                **initial_settings,
+                "problem": amended,
+                "path": path,
+                "expected": initial_settings,
+                "expected_revision": member_collaboration["revision"],
+                "collaborators": member_collaboration["collaborators"],
+            },
+        )
+        assert subject_update.status == 200, subject_update.text()
         updated = get_json(
             owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
         )
-        assert updated["project"]["difficulty"] == "hard", updated
+        assert updated["project"]["problem"] == amended, updated
+        assert updated["project"]["difficulty"] == "medium", updated
 
         choose_difficulty(owner_dialog, "Easy")
         expect(owner_dialog.locator(".error")).to_contain_text("saved by")
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Easy")
-        # A stale draft remains visible for review, but cannot overwrite the
-        # collaborator's newer change. Reopen the original for a clean editor.
+        # Stale owner edits must not overwrite the collaborator's description.
         owner.goto(url)
         expect(owner_dialog).not_to_be_visible()
 
-        # The Shared shortcut leaves ?settings=collaborators in the URL.
-        # Reloading that deep link intentionally reopens the modal, so use
-        # the canonical project URL for a fresh editor after a stale Save.
-        owner.goto(url)
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
-        expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Hard")
+        expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Medium")
+        choose_difficulty(owner_dialog, "Hard")
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
+        expect(owner_dialog).not_to_be_visible()
+        updated = get_json(
+            owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )
+        assert updated["project"]["difficulty"] == "hard", updated
+        owner.get_by_role("button", name="Project settings", exact=True).click()
+        owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
@@ -270,6 +377,36 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert Path(path).is_dir() and (Path(path) / "project.json").is_file(), (
             "Revocation must not move or delete the owner's project"
         )
+
+        # The My Work X for an invited collaborator must actually revoke
+        # membership, not merely hide the recent entry until the next poll.
+        owner.goto(url)
+        owner.get_by_role("button", name="Project settings", exact=True).click()
+        owner_dialog = owner.get_by_role("dialog", name="Project Settings")
+        owner_dialog.get_by_role("button", name="Add collaborator").click()
+        invite = owner_dialog.get_by_label("New collaborator email")
+        invite.fill(COLLABORATOR)
+        invite.press("Tab")
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
+        member.goto(ui)
+        member.get_by_role("tab", name="My Work").click()
+        expand_saved_group(member)
+        leave = member.get_by_role("button", name="Stop collaborating on this project")
+        expect(leave).to_be_visible()
+        leave.click()
+        confirm = member.get_by_role("group", name=f"Confirm remove {title}")
+        confirm.get_by_role("button", name="Confirm").click()
+        expect(leave).to_have_count(0)
+        after_leave = member_context.request.get(
+            ui + "/api/projects/inspect", params={"path": path}
+        )
+        assert after_leave.status in {400, 401, 403, 404}, after_leave.text()
+        owner_membership = get_json(
+            owner_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
+        )
+        assert COLLABORATOR not in owner_membership["collaborators"]
+        assert Path(path).is_file(), "Leaving must not delete the owner's project"
+
         verify_new_windows_inherit_latest_google_account(browser, ui)
         owner_context.close()
         member_context.close()

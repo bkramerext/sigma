@@ -285,7 +285,9 @@ class ProjectEmailTests(unittest.TestCase):
         self.assertEqual(smtp.call_args.kwargs["reply_to"], "alice@example.org")
 
     def test_imported_session_transport_handoff_preserves_history(self):
-        with tempfile.TemporaryDirectory() as directory:
+        # Import tests can overlap a brief asynchronous index refresh under CI.
+        # Artifacts are asserted above; tolerate only a racy temp cleanup.
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             root = Path(directory)
             sender = root / "sender.json"
             receiver = root / "receiver.json"

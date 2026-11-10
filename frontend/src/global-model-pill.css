@@ -937,3 +937,14 @@
     padding-block: 2px;
   }
 }
+
+/* Keep About at its intrinsic width and preserve the existing inter-pill gap.
+   Settings fills only the remaining width so its right edge matches Model. */
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row {
+  width: 100%;
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row > :is(.home-settings-pill, .project-global-settings-pill) {
+  flex: 1 1 53px;
+  width: auto;
+  min-width: 53px;
+}

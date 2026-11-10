@@ -67,6 +67,33 @@ def main() -> None:
         dialog = page.get_by_role("dialog", name="Project Settings")
         expect(dialog).to_be_visible()
 
+        # The invisible maximum label reserves Astra's complete $$ width.
+        # Narrowing Settings must not disturb the About/Model origin or gap.
+        pill = page.locator(".global-model-pill")
+        maximum = pill.locator(".global-model-pill-max-labels > span").first
+        expect(maximum).to_have_text("Model · GPT-6-Astra · $$$")
+        assert pill.evaluate(
+            """button => {
+                const label = button.querySelector('.global-model-pill-max-labels > span');
+                return button.getBoundingClientRect().width >=
+                    label.getBoundingClientRect().width + 27;
+            }"""
+        )
+        settings_pill = page.locator(".project-global-settings-pill")
+        about_pill = page.locator(".sigma-header-first-row > .about-action")
+        model_box = pill.bounding_box()
+        about_box = about_pill.bounding_box()
+        settings_box = settings_pill.bounding_box()
+        assert model_box and about_box and settings_box
+        assert abs(model_box["x"] - about_box["x"]) <= 1
+        assert abs(
+            (settings_box["x"] + settings_box["width"])
+            - (model_box["x"] + model_box["width"])
+        ) <= 1, "Settings right edge must align with Model pill"
+        assert (
+            settings_box["x"] - (about_box["x"] + about_box["width"]) >= 8
+        ), "About/Settings gap must be preserved"
+
         # Unauthenticated fixture: explain that Google identity is required
         # locally or hosted, not that collaboration is hosted-only.
         expect(
@@ -80,6 +107,7 @@ def main() -> None:
 
         shared = {
             "owner": "owner@example.org",
+            "you": "owner@example.org",
             "collaborators": ["alice@example.net"],
             "removable_collaborators": ["alice@example.net"],
             "revision": 7,
@@ -151,23 +179,16 @@ def main() -> None:
         expect(dialog.get_by_text("Owner", exact=True)).to_be_visible()
         assert dialog.get_by_role("button", name="Remove owner@example.org").count() == 0
 
-        # Classification, aligned model/thinking pair, then collaborators.
+        # Only project-wide classification and collaborators belong here.
         classification = dialog.locator(".settings-classification-row")
         category = dialog.get_by_role("combobox", name="Research category")
         difficulty = dialog.get_by_label("Difficulty")
+        for control in (category, difficulty):
+            expect(control).to_have_attribute("data-tooltip-disabled", "true")
+            assert control.get_attribute("title") is None
         collaborators = dialog.get_by_role("region", name="Collaborators")
-        model_row = dialog.locator(".settings-model-row")
-        assert model_row.locator("select").count() == 0, "Model/Thinking must use SIGMA dropdowns"
-        model_picker = model_row.get_by_role("combobox", name="Model")
-        thinking_picker = model_row.get_by_role("combobox", name="Thinking")
-        expect(model_picker).to_be_visible()
-        expect(thinking_picker).to_be_visible()
-        model_picker.click()
-        expect(dialog.get_by_role("listbox", name="Model")).to_be_visible()
-        page.keyboard.press("Escape")
-        thinking_picker.click()
-        expect(dialog.get_by_role("listbox", name="Thinking")).to_be_visible()
-        page.keyboard.press("Escape")
+        assert dialog.locator(".settings-model-row").count() == 0
+        assert dialog.get_by_role("combobox", name="Model").count() == 0
         for width in (1440, 390):
             page.set_viewport_size({"width": width, "height": 930 if width == 1440 else 844})
             cat_box = category.bounding_box()
@@ -177,14 +198,12 @@ def main() -> None:
                 collaborators.evaluate("element => getComputedStyle(element).borderTopWidth")
                 == "1px"
             )
-            model_box = model_row.bounding_box()
-            assert cat_box and diff_box and collab_box and model_box
+            assert cat_box and diff_box and collab_box
             assert abs(cat_box["y"] - diff_box["y"]) < 4, (width, cat_box, diff_box)
             assert cat_box["x"] + cat_box["width"] <= diff_box["x"] + 1
-            assert model_box["y"] >= (
-                classification.bounding_box()["y"] + category.bounding_box()["height"]
-            )
-            assert collab_box["y"] >= model_box["y"] + model_box["height"] - 1
+            class_box = classification.bounding_box()
+            assert class_box
+            assert collab_box["y"] >= class_box["y"] + class_box["height"] - 1
             assert dialog.evaluate("element => element.scrollWidth <= element.clientWidth")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=f"/tmp/sigma-collaboration-settings-{width}.png")

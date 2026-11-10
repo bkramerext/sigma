@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import patch
 
 from sigma import api, research_qa
@@ -108,7 +109,26 @@ def check_api_task_lifecycle(path: Path, project_id: str, binding: dict[str, str
     asyncio.run(scenario())
 
 
+def check_bounded_shared_conversation() -> None:
+    history: list[dict[str, Any]] = [
+        {"question": f"Other background {i}", "answer": "Unrelated " * 2000} for i in range(45)
+    ]
+    history.append(
+        {
+            "question": "What does the skeptic say about the narrow passage?",
+            "answer": "The prior answer was inconclusive; corroboration is required.",
+            "source_refs": ["forged:untrusted"],
+        }
+    )
+    selected = research_qa._prior_qa_context("Follow up on the narrow passage skeptic?", history)
+    assert selected and len(selected) <= research_qa.MAX_PRIOR_QA_EXCHANGES
+    assert any("narrow passage" in item["question"] for item in selected)
+    assert all(set(item) == {"question", "answer"} for item in selected)
+    assert len(json.dumps(selected).encode()) <= research_qa.MAX_PRIOR_QA_CONTEXT_BYTES + 60
+
+
 def main() -> None:
+    check_bounded_shared_conversation()
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "qa.sigma"
         before = initialize_project(path, "Q/A fixture", "Explain the saved research results")
@@ -164,12 +184,14 @@ def main() -> None:
             ]
         }
         calls = 0
+        captured_inputs: list[dict] = []
         forged = False
         unsupported = False
 
         async def structured(_input, *_args, **kwargs):
             nonlocal calls
             calls += 1
+            captured_inputs.append(_input)
             if forged:
                 bogus = "session:99999999-9999-4999-8999-999999999999"
                 refs = [f"session:{s1}", bogus, f"session:{s1}"] if forged == "mixed" else [bogus]
@@ -218,7 +240,27 @@ def main() -> None:
                 )
             )
             assert first["qa_id"] == repeated["qa_id"] and calls == 1
+            assert first["created_by"] == "Local user"
+            assert first["generation"]["model"] == "fixture-model"
+            assert first["generation"]["reasoning_effort"] == "medium"
             assert [row["session_number"] for row in first["sources"]] == [1, 2]
+            assert len(research_qa.list_answers(str(path))) == 1
+            assert captured_inputs[0]["prior_qa"] == []
+            followup = asyncio.run(
+                research_qa.answer(
+                    str(path),
+                    "What limitations did the skeptic identify in that result?",
+                    before.project.id,
+                    credential["identity"],
+                    "d" * 32,
+                )
+            )
+            assert len(captured_inputs) == 2
+            assert captured_inputs[1]["prior_qa"] == [
+                {"question": first["question"], "answer": first["answer"][:900]}
+            ]
+            assert all(source["source_id"].startswith("session:") for source in followup["sources"])
+            research_qa.delete_answer(str(path), followup["qa_id"])
             assert len(research_qa.list_answers(str(path))) == 1
             from sigma.text_views import digest
 
@@ -368,7 +410,7 @@ print("portable Q/A concurrent save/list/remove passed")
             )
             assert "do not answer" in inconclusive["answer"]
             assert inconclusive["sources"][0]["session_number"] == 2
-            assert calls == 2
+            assert calls == 3
             with patch.object(
                 api,
                 "export_project_view",
