@@ -259,10 +259,10 @@ def exercise(ui: str, workspaces: Path) -> None:
             == 0
         )
         expect(
-            member_dialog.locator(".project-classification-readonly-note").get_by_text(
-                "Title, research category, difficulty, and user settings are inherited from the project owner."
-            )
-        ).to_be_visible()
+            member_dialog.locator(".project-classification-readonly-note")
+        ).to_have_text(
+            "Title, research category, difficulty, and user settings are inherited from the project owner."
+        )
         # Pointer clicks and keyboard actions cannot open a listbox.
         readonly.nth(0).click()
         readonly.nth(1).click()
