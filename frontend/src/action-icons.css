@@ -400,11 +400,11 @@
 /* Match the Project-to-first-action gap to the Pencil-to-Q/A gap.
    Applies in editing and non-editing modes, without extra first-button margin. */
 .workspace-page .project-pane-heading {
-  column-gap: 7px;
+  column-gap: 10px;
 }
 .workspace-page .project-pane-heading .project-primary-actions .project-pane-actions {
-  column-gap: 7px;
-  row-gap: 7px;
+  column-gap: 10px;
+  row-gap: 10px;
 }
 .workspace-page .project-pane-heading .project-pane-actions button.text-view-icon {
   box-sizing: border-box;
@@ -423,10 +423,13 @@
   box-shadow: none;
   transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
+/* Q/A uses the same button box as the icons, avoiding an apparent
+   extra gap on either side of its text. */
 .workspace-page .project-pane-heading .project-pane-actions button.project-qa-button {
-  flex-basis: 42px;
-  width: 42px;
-  min-width: 42px;
+  flex-basis: 34px;
+  width: 34px;
+  min-width: 34px;
+  padding-inline: 0;
 }
 .workspace-page .project-pane-heading .project-pane-actions button.text-view-icon:is(:hover, :focus-visible):not(:disabled) {
   color: #fff2e9 !important;
