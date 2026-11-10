@@ -295,20 +295,16 @@ def exercise(ui: str, workspaces: Path) -> None:
         project_entry = member.locator(".recent-entry").filter(
             has=member.get_by_role("button", name=title, exact=True)
         )
-        exit_button = project_entry.get_by_role(
-            "button", name="Stop collaborating on this project"
-        )
-        expect(exit_button).to_have_attribute(
-            "data-tooltip", "Stop collaborating on this project"
-        )
+        exit_button = project_entry.get_by_role("button", name="Stop collaborating on this project")
+        expect(exit_button).to_have_attribute("data-tooltip", "Stop collaborating on this project")
         exit_button.click()
         project_entry.get_by_role("button", name="Confirm", exact=True).click()
         expect(
             member.get_by_role("button", name=f"Manage collaborators for {title}")
         ).to_have_count(0)
-        after_leave = get_json(owner_context.request.get(
-            ui + "/api/projects/collaboration", params={"path": path}
-        ))
+        after_leave = get_json(
+            owner_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
+        )
         assert COLLABORATOR not in after_leave["collaborators"], after_leave
         assert Path(path).is_file(), "Leaving a project must not delete its research"
         verify_new_windows_inherit_latest_google_account(browser, ui)

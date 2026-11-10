@@ -904,9 +904,7 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
             force=body.force,
         )
         papers.mark_scored_progress(body.path, paper_id)
-        project_collaboration.note_artifact_author(
-            body.path, "paper", paper_id, created_only=True
-        )
+        project_collaboration.note_artifact_author(body.path, "paper", paper_id, created_only=True)
         return {"score": score}
     except asyncio.CancelledError:
         if memory_guard.is_critical():
@@ -1823,7 +1821,6 @@ def retry_collaboration_notices_view(body: RetryCollaborationNoticesRequest):
     return {"requeued": count}
 
 
-
 class LeaveCollaborationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     path: str = Field(min_length=1, max_length=4096)
@@ -1835,9 +1832,7 @@ def leave_collaboration_view(body: LeaveCollaborationRequest):
     # Uses exactly the same membership catalog as the Collaborators editor.
     # Do not alter project files, research, or the creator's Saved index.
     view = inspect_project(body.path)
-    project_collaboration.leave_project(
-        view.path, body.expected_project_id, view.project.title
-    )
+    project_collaboration.leave_project(view.path, body.expected_project_id, view.project.title)
     return {"left": True}
 
 

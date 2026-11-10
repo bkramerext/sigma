@@ -928,7 +928,6 @@ def keep_lease(path: str, token: str | None) -> Iterator[None]:
         worker.join(timeout=1)
 
 
-
 def creator_identity() -> str:
     """Verified author for durable answers; local-only work has no Google identity."""
     principal = cloud_auth.current_principal()
@@ -950,10 +949,14 @@ def require_artifact_permission(
     if cloud_workspaces.current() is None:
         return
     with _db() as db:
+        # Unregistered private projects retain their existing endpoint ACLs.
+        if db.execute(
+            "SELECT 1 FROM shared_projects WHERE path=?", (str(path),)
+        ).fetchone() is None:
+            return
         row, actor = _membership(db, str(path))
         creator = db.execute(
-            "SELECT email FROM shared_artifact_authors "
-            "WHERE path=? AND kind=? AND artifact_id=?",
+            "SELECT email FROM shared_artifact_authors WHERE path=? AND kind=? AND artifact_id=?",
             (str(path), kind, artifact_id),
         ).fetchone()
         if creator is not None and creator["email"] == actor:
@@ -985,18 +988,25 @@ def bind_execution_control_lease(path: str, activity: str) -> Iterator[None]:
         return
     token: str | None = None
     with _db() as db:
-        _row, actor = _membership(db, str(path))
-        lease = db.execute(
-            "SELECT token,email,activity,expires_at FROM shared_leases WHERE path=?",
-            (str(path),),
-        ).fetchone()
-        if lease is not None and lease["expires_at"] > time.time():
-            if lease["email"] != actor or lease["activity"] != activity:
-                raise ProjectError(
-                    f"Project is being used by {lease['email']} ({lease['activity']}). "
-                    "Wait for that activity to finish."
-                )
-            token = lease["token"]
+        registered = db.execute(
+            "SELECT 1 FROM shared_projects WHERE path=?", (str(path),)
+        ).fetchone() is not None
+        if registered:
+            _row, actor = _membership(db, str(path))
+            lease = db.execute(
+                "SELECT token,email,activity,expires_at FROM shared_leases WHERE path=?",
+                (str(path),),
+            ).fetchone()
+            if lease is not None and lease["expires_at"] > time.time():
+                if lease["email"] != actor or lease["activity"] != activity:
+                    raise ProjectError(
+                        f"Project is being used by {lease['email']} ({lease['activity']}). "
+                        "Wait for that activity to finish."
+                    )
+                token = lease["token"]
+    if not registered:
+        yield  # Unregistered private projects have no collaboration lease.
+        return
     with bind_lease(str(path), token):
         yield
 
@@ -1033,7 +1043,6 @@ def leave_project(path: str, expected_project_id: str, title: str) -> None:
             (uuid4().hex, actor, str(path), title, "removed", time.time()),
         )
         db.commit()
-
 
 
 def require_not_leased(path: str) -> None:

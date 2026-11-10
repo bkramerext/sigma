@@ -721,9 +721,7 @@ async def _answer_locked(
     # The archive is authoritative for local and exported projects. The hosted
     # attribution index additionally enforces creator-only deletion.
     if saved.get("created_by") == creator:
-        project_collaboration.note_artifact_author(
-            path, "qa", saved["qa_id"], created_only=True
-        )
+        project_collaboration.note_artifact_author(path, "qa", saved["qa_id"], created_only=True)
     return saved
 
 

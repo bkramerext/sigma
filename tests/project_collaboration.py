@@ -16,6 +16,8 @@ from typing import cast
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
 
+from starlette.requests import Request
+
 from sigma import project_bundle
 from sigma import project_collaboration as shared
 from sigma.cloud_auth import Principal
@@ -222,7 +224,6 @@ class CollaborationTests(TestCase):
             self.owner.email,
         )
 
-
     def test_creator_controls_own_execution_but_other_member_cannot(self) -> None:
         from sigma import api
 
@@ -251,20 +252,28 @@ class CollaborationTests(TestCase):
                 api.research_control_view(
                     session,
                     api.ResearchControlRequest(path=self.path, action="stop"),
-                    SimpleNamespace(state=SimpleNamespace(cloud_principal=None)),
+                    Request({"type": "http", "method": "POST", "path": "/api/projects/research-sessions/test/control", "headers": []}),
                 )
             )
             self.assertEqual(result["status"], "stopped")
             control.assert_awaited_once()
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
             self.assertRaisesRegex(ProjectError, "Only the creator"),
         ):
             shared.require_artifact_permission(self.path, "session", session)
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
             self.assertRaisesRegex(ProjectError, "being used"),
             shared.bind_execution_control_lease(self.path, "Research session"),
         ):
@@ -285,9 +294,7 @@ class CollaborationTests(TestCase):
             body = api.PaperCancelRequest(
                 path=self.path, expected_project_id="saved-project", expected_binding="unused"
             )
-            self.assertEqual(
-                asyncio.run(api.paper_cancel_view(body)), {"cancelled": True}
-            )
+            self.assertEqual(asyncio.run(api.paper_cancel_view(body)), {"cancelled": True})
             cancel.assert_awaited_once()
             with (
                 patch(
@@ -315,7 +322,9 @@ class CollaborationTests(TestCase):
         )
         with (
             patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
         ):
             for kind, key in (("session", "s-one"), ("paper", "p-one"), ("qa", "a-one")):
                 with self.assertRaisesRegex(ProjectError, "creator"):
@@ -323,7 +332,10 @@ class CollaborationTests(TestCase):
             shared.note_artifact_author(self.path, "qa", "a-two")
             shared.require_artifact_permission(self.path, "qa", "a-two", delete=True)
         for kind, key in (
-            ("session", "s-one"), ("paper", "p-one"), ("qa", "a-one"), ("qa", "a-two")
+            ("session", "s-one"),
+            ("paper", "p-one"),
+            ("qa", "a-one"),
+            ("qa", "a-two"),
         ):
             shared.require_artifact_permission(self.path, kind, key, delete=True)
 
@@ -332,7 +344,9 @@ class CollaborationTests(TestCase):
         token = shared.acquire_lease(self.path, "Research session")
         with (
             patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
         ):
             shared.leave_project(self.path, "saved-project", "Study")
             self.assertEqual(shared.shared_listing()[0], [])
