@@ -432,3 +432,12 @@
 .workspace-page .project-pane-heading .project-pane-actions button.text-view-icon:is(:hover, :focus-visible):not(:disabled) svg {
   color: #fff2e9;
 }
+
+/* Public Privacy Notice and Terms pages: anchor their shared close X to the
+   card's upper-right corner, not the inset text heading. */
+.privacy-notice-card { position: relative; }
+.privacy-notice-card .privacy-notice-heading { position: static; }
+.privacy-notice-card .privacy-notice-heading .sigma-dialog-dismiss {
+  top: 10px;
+  right: 10px;
+}
