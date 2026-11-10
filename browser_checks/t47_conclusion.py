@@ -765,9 +765,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     variant["current_action"] = (
                         "Queued"
                         if state == "pending"
-                        else "Compiling research references"
+                        else "Compiling research standards"
                         if state == "running"
-                        else "Compiling research references"
+                        else "Compiling research standards"
                         if state == "completed"
                         else "2 strategies active · shared budget"
                     )
@@ -835,8 +835,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 compilation_page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
             expect(compilation_page.get_by_role("heading", name="Strategies")).to_be_visible()
             for state, label in (
-                ("pending", "Preparing references"),
-                ("running", "Compiling references"),
+                ("pending", "Preparing research standards"),
+                ("running", "Compiling research standards"),
             ):
                 stage_row = compilation_page.locator(f'li[data-session-id="{stage_ids[state]}"]')
                 expect(stage_row.locator(".session-strategy-live-status li")).to_have_count(1)
