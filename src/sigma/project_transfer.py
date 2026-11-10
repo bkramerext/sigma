@@ -2,7 +2,7 @@
 
 The interchange has human-readable/nonartifact project members and exactly one
 zstd-compressed TAR archive containing all artifacts/. Older bundle versions
-are not accepted by this import path.
+can be imported safely and are migrated to the new disk-backed format.
 """
 
 from __future__ import annotations
@@ -186,6 +186,27 @@ def export_project(path: str | Path) -> bytes:
 
 
 def decode_bundle(payload: dict) -> dict[str, bytes]:
+    # Historical exports must remain importable after the runtime moves to
+    # directory-backed projects. The legacy decoder validates member names,
+    # size bounds and content encoding before any files are published.
+    if (
+        isinstance(payload, dict)
+        and set(payload) == {"format", "version", "files"}
+        and payload.get("format") == FORMAT
+        and payload.get("version") in {
+            project_bundle.LEGACY_VERSION,
+            project_bundle.LEGACY_PORTABLE_VERSION,
+            project_bundle.VERSION,
+        }
+    ):
+        legacy = project_bundle._decode(payload)
+        migrated: dict[str, bytes] = {}
+        for original, data in legacy.items():
+            name = _canon(original)
+            if not _safe_name(name) or name in migrated:
+                raise BundleError("Conflicting legacy project artifact path")
+            migrated[name] = data
+        return migrated
     if (
         not isinstance(payload, dict)
         or set(payload) != {"format", "version", "files", "artifacts"}
@@ -194,7 +215,7 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
         or not isinstance(payload["files"], dict)
         or any(name.startswith("artifacts/") for name in payload["files"])
     ):
-        raise BundleError("Only version-4 directory project bundles are supported")
+        raise BundleError("Unsupported or malformed project bundle")
     standard = project_bundle._decode(
         {
             "format": FORMAT,
