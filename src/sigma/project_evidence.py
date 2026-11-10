@@ -282,7 +282,9 @@ def edit_link(path: str, identifier: str, url: str, *, expected_url: str | None 
         if current is None:
             raise ProjectError("Source Material link not found.")
         if expected_url is not None and current["url"] != expected_url:
-            raise ProjectError("Source Material was changed by another collaborator. Your edit was not saved.")
+            raise ProjectError(
+                "Source Material was changed by another collaborator. Your edit was not saved."
+            )
         if any(row["url"] == canonical and row["id"] != identifier for row in rows):
             raise ProjectError("Duplicate Source Material URL.")
         selected = {**current, "url": canonical}
