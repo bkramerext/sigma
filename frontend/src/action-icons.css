@@ -401,7 +401,7 @@
   column-gap: 2px;
 }
 .workspace-page .project-pane-heading .project-primary-actions .project-pane-actions {
-  column-gap: 2px;
+  column-gap: 7px;
   row-gap: 7px;
 }
 .workspace-page .project-pane-heading .project-pane-actions button.text-view-icon {
