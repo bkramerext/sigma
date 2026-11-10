@@ -1904,19 +1904,11 @@ def export_project_view(path: str):
 @app.get("/api/projects/download")
 def download_project_bundle(path: str):
     """Export every project file as one complete, importable JSON bundle."""
-    from sigma.project_bundle import download_bytes, encode
-    from sigma.projects import project_path
+    from sigma.project_transfer import export_project
 
     authorized = project_path(path)
     inspect_project(authorized)
-    # Legacy directory projects remain exportable without modifying live storage.
-    # A lossless bundle snapshot has the same importable format as a JSON project.
-    if authorized.suffix == ".json":
-        content = download_bytes(authorized)
-    elif authorized.suffix == ".sigma" and authorized.is_dir():
-        content = encode(authorized)
-    else:
-        raise ProjectError("Unsupported project storage format")
+    content = export_project(authorized)
     return Response(
         content=content,
         media_type="application/json",
@@ -1931,12 +1923,8 @@ class ImportBundleRequest(BaseModel):
 @app.post("/api/projects/import", status_code=201)
 def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
-    from sigma.project_bundle import (
-        BundleError,
-        bundle_project_document,
-        import_independent_bundle,
-        rename_bundle_project,
-    )
+    from sigma.project_bundle import BundleError
+    from sigma.project_transfer import bundle_document, import_project
     from sigma.projects import (
         _occupied_titles,
         _project_name,
@@ -1946,7 +1934,7 @@ def import_project_bundle(body: ImportBundleRequest):
     )
 
     try:
-        document = bundle_project_document(body.bundle)
+        document = bundle_document(body.bundle)
         title = document["title"]
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
@@ -1965,19 +1953,18 @@ def import_project_bundle(body: ImportBundleRequest):
                     suffix = f" v{number - 1}"
                     candidate = title[: 200 - len(suffix)].rstrip() + suffix
                 _, name = _project_name(candidate)
-                destination = (root / name).with_suffix(".json")
+                destination = root / name
                 if (
                     _title_key(candidate) in occupied_titles
                     or os.path.lexists(destination)
                     or os.path.lexists(root / name)
                 ):
                     continue
-                payload = (
-                    body.bundle
-                    if candidate == title
-                    else rename_bundle_project(body.bundle, candidate)
+                imported = import_project(
+                    body.bundle,
+                    destination,
+                    title_override=candidate if candidate != title else None,
                 )
-                imported = import_independent_bundle(payload, destination)
                 break
             if imported is None:
                 raise ProjectError("A unique name for the imported project is unavailable.")
