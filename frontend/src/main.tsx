@@ -5701,7 +5701,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active ${entry.research_running ? 'Session' : 'Paper'} in ${entry.title}`} data-tooltip={entry.shared && entry.activity_author ? `Open active work by ${entry.activity_author}` : entry.research_running ? 'Open running Session' : 'Open active Paper'} disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active ${entry.research_running ? 'Session' : 'Paper'} in ${entry.title}`} data-tooltip={`${entry.research_running ? 'Session running' : entry.paper_activity === 'queued' ? 'Paper queued' : 'Paper generating'}${entry.shared && entry.activity_author ? ` by ${entry.activity_author}` : ''}`} disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -6411,12 +6411,19 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     ? sharedActivity.lease?.email ?? null : null;
   useEffect(() => {
     if (!pulseAuthor) return;
-    const tooltip = `By ${pulseAuthor}`;
+    const withAuthor = (label: string) => `${label.replace(/\s+by\s+.+$/i, '')} by ${pulseAuthor}`;
     const selector = '.workspace-page .research-running-indicator, .workspace-page .session-running i, .workspace-page .paper-stage-list li.is-active, .workspace-page .paper-stage-list li.is-queued, .workspace-page .project-header-title-action';
     const original = new Map<Element, string | null>();
     const decorate = () => {
       for (const node of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
         if (!original.has(node)) original.set(node, node.getAttribute('data-tooltip'));
+        const originalLabel = original.get(node) ?? '';
+        const baseLabel = originalLabel || (
+          node.closest('.session-row') ? 'Session running'
+          : node.closest('.paper-stage-list') || node.closest('.papers-pane') ? 'Paper generating'
+          : researchRunning ? 'Session running' : 'Paper generating'
+        );
+        const tooltip = withAuthor(baseLabel);
         if (node.getAttribute('data-tooltip') !== tooltip) node.setAttribute('data-tooltip', tooltip);
       }
     };
@@ -6430,7 +6437,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         else node.setAttribute('data-tooltip', previous);
       }
     };
-  }, [pulseAuthor]);
+  }, [pulseAuthor, researchRunning, paperRunning, paperQueued]);
   useEffect(() => {
     if (guest) return;
     const controller = new AbortController();
