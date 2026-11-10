@@ -116,6 +116,19 @@ def test_multiframe_artifact_archive_is_lossless_and_bounded() -> None:
         _expect_failure(lambda: project_transfer._unarchive(missing_final_frame))
 
 
+def test_total_size_includes_metadata_and_artifacts() -> None:
+    members = {
+        "project.json": b'{"schema_version": 13}',
+        "notes.txt": b"x" * 8192,
+        "artifacts/source_material/premise.txt": b"y" * 4096,
+    }
+    bundle = project_transfer.make_bundle(members)
+    # Each section fits below the limit; their combined size does not.
+    with patch.object(project_transfer, "MAX_BUNDLE_BYTES", 11000):
+        _expect_failure(lambda: project_transfer.make_bundle(members))
+        _expect_failure(lambda: project_transfer.decode_bundle(bundle))
+
+
 def test_rejects_traversal_in_archive() -> None:
     with TemporaryDirectory() as temporary:
         origin = Path(temporary) / "original.sigma"
@@ -139,5 +152,6 @@ def test_rejects_traversal_in_archive() -> None:
 if __name__ == "__main__":
     test_single_archive_roundtrip()
     test_multiframe_artifact_archive_is_lossless_and_bounded()
+    test_total_size_includes_metadata_and_artifacts()
     test_rejects_traversal_in_archive()
     print("PASS v4 artifact archive, source links, restored files and unsafe path rejection.")
