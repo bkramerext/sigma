@@ -470,3 +470,16 @@
   width: 25px;
   height: 25px;
 }
+
+/* Disabled toolbar actions remain visible, but unmistakably inactive.
+   Project editor Save/Cancel are text actions and deliberately unaffected. */
+.workspace-page .project-pane-heading .project-primary-actions .project-pane-actions button.text-view-icon:disabled,
+.workspace-page .papers-pane-heading .papers-heading-actions button.papers-include-action:disabled {
+  color: #929aa4 !important;
+  opacity: .38;
+  filter: grayscale(1);
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+}

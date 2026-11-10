@@ -270,6 +270,33 @@ def exercise(ui: str, workspaces: Path) -> None:
         member_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(member_dialog).not_to_be_visible()
 
+        # A title saved by the owner must propagate to N's already-open window,
+        # even when that browser tab is backgrounded.
+        member.evaluate(
+            """() => Object.defineProperty(document, 'visibilityState',
+                {configurable: true, get: () => 'hidden'})"""
+        )
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
+        owner.get_by_role("button", name="Edit project fields").click()
+        # Editing keeps other Project actions visible but unmistakably gray.
+        for action in (
+            "Research Q/A",
+            "Lean proof verification",
+            "Export project",
+            "Email project",
+            "Project settings",
+        ):
+            button = owner.get_by_role("button", name=action, exact=True)
+            expect(button).to_be_disabled()
+            expect(button).to_have_css("opacity", "0.38")
+        title = title + " renamed"
+        owner.get_by_role("textbox", name="Project title").fill(title)
+        owner.get_by_role("button", name="Save", exact=True).click()
+        expect(owner.locator(".project-overview-card .current-project")).to_have_text(title)
+        expect(member.locator(".project-overview-card .current-project")).to_have_text(
+            title, timeout=20000
+        )
+
         # The same authorization is enforced at the API boundary. Forged
         # classification requests must never change the stored project.
         from_view = get_json(
@@ -317,7 +344,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             assert still["project"][field] == initial_settings[field], field
 
         # A non-owner can still edit the research subject. This advances
-        # the revision so the owner's existing classification draft is stale.
+        # the shared revision, cancelling the owner's still-open settings edit.
         amended = "Research subject updated by collaborator"
         subject_update = member_context.request.post(
             ui + "/api/projects/update",
@@ -337,24 +364,43 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         assert updated["project"]["problem"] == amended, updated
         assert updated["project"]["difficulty"] == "medium", updated
+        # Exercise the same open browser pair for another saved field update.
+        expect(owner.locator(".project-overview-card")).to_contain_text(amended, timeout=20000)
 
-        choose_difficulty(owner_dialog, "Easy")
-        expect(owner_dialog.locator(".error")).to_contain_text("saved by")
-        expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Easy")
-        # Stale owner edits must not overwrite the collaborator's description.
+        # Remote committed changes invalidate an in-progress editor rather
+        # than trying to merge its draft. The owner must reopen settings.
+        expect(owner_dialog).not_to_be_visible(timeout=20000)
         owner.goto(url)
         expect(owner_dialog).not_to_be_visible()
 
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Medium")
-        choose_difficulty(owner_dialog, "Hard")
+        with member.expect_response(
+            lambda response: (
+                response.url.split("?")[0].endswith("/api/projects/open")
+                and response.request.method == "POST"
+            ),
+            timeout=20000,
+        ) as refreshed:
+            choose_difficulty(owner_dialog, "Hard")
+        assert get_json(refreshed.value)["project"]["difficulty"] == "hard"
+        member.evaluate(
+            "() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+        )
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
         updated = get_json(
             owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
         )
         assert updated["project"]["difficulty"] == "hard", updated
+        # Owner settings also flow to N without navigation or a second browser.
+        member.get_by_role("button", name="Project settings", exact=True).click()
+        member_dialog = member.get_by_role("dialog", name="Project Settings")
+        expect(member_dialog.locator(".settings-classification-row")).to_contain_text(
+            "Hard", timeout=20000
+        )
+        member_dialog.get_by_role("button", name="Close Project Settings").click()
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()

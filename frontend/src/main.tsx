@@ -3357,14 +3357,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
     <header className="workspace-pane-heading papers-pane-heading">
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
-      {!guest && !showDraftPaper && <div className="papers-heading-actions strategy-heading-actions">
-        {confirmNewPaper ? <>
+      {!guest && <div className="papers-heading-actions strategy-heading-actions">
+        {!showDraftPaper && (confirmNewPaper ? <>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); void generatePaper(); }}>Start Paper {draftVersion}</button>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => setConfirmNewPaper(false)}>Cancel</button>
         </> : <>
         <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
+        </>)}
         <span className="paper-includes-anchor">
-          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
+          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" disabled={loading || confirmNewPaper || showDraftPaper} onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
           {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className={`paper-includes-dialog${includePopupAbove ? ' paper-includes-dialog-above' : ''}`} role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset, maxHeight: includePopupMaxHeight }}>
       <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
@@ -3380,7 +3381,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
       </fieldset>
           </div>}
         </span>
-        </>}
       </div>}
       <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
@@ -6436,7 +6436,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     const controller = new AbortController();
     let pending = false;
     const poll = async () => {
-      if (controller.signal.aborted || pending || document.visibilityState !== 'visible') return;
+      if (controller.signal.aborted || pending) return;
       pending = true;
       try {
         const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path })}`, {
@@ -6527,17 +6527,25 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [guestAiNotice, setGuestAiNotice] = useState('');
+  const markLocalSharedSave = () => {
+    if (sharedActivity?.shared) {
+      // A successful local save is already reflected in this window's view.
+      // Do not interpret its next polling revision as a remote edit.
+      lastLoadedSharedRevision.current = Math.max(
+        lastLoadedSharedRevision.current ?? 0, sharedActivity.revision,
+      ) + 1;
+    }
+  };
   // Collaborators keep an open project fresh without losing local drafts or focus.
   // The existing lightweight collaboration poll supplies the revision; only a
   // changed revision triggers the more expensive project-open request.
   useEffect(() => {
     if (!sharedActivity?.shared || !view || guest) return;
     const revision = sharedActivity.revision;
-    if (lastLoadedSharedRevision.current === null) {
-      lastLoadedSharedRevision.current = revision;
-      return;
-    }
+    // The project may have changed before this window's first poll completed.
+    // Load the authoritative title and settings even on the first response.
     if (revision === lastLoadedSharedRevision.current) return;
+    const initialRevision = lastLoadedSharedRevision.current === null;
     // Committed changes supersede unsaved drafts in other windows.
     // Avoid interrupting an in-flight write; the backend revision fence protects it.
     if (closing || descriptionBusy || ordering) return;
@@ -6545,6 +6553,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     void post<ProjectView>('open', { path, compact: true }, controller.signal)
       .then(next => {
         if (controller.signal.aborted) return;
+        // The first collaboration response establishes the revision baseline.
+        // Only interrupt an already-open editor when the persisted project
+        // actually differs from what this window loaded.
+        if (initialRevision && JSON.stringify({ ...view.project, events: [] }) === JSON.stringify(next.project)) {
+          lastLoadedSharedRevision.current = revision;
+          return;
+        }
         modeOwner.current = null;
         setActiveMode(null);
         setProjectEditing(false);
@@ -6929,7 +6944,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         }}
         onSave={async (draft: ProjectDescriptionDraft) => {
           const current = settingsOf(view);
-          const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current });
+          // Project field edits share the same revision fence as classification
+          // and collaborator Settings. Without it, shared-project title saves
+          // are rejected as legacy unversioned writes.
+          const collaboration = sharedActivity?.shared
+            ? { expected_revision: sharedActivity.revision, collaborators: sharedActivity.collaborators }
+            : {};
+          const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current, ...collaboration });
+          markLocalSharedSave();
           setView(next);
           // The parent owns the toolbar mode: a successful save must return
           // to the pencil even if the updated view re-renders the editor.
@@ -7030,7 +7052,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {sharedActivity?.shared && sharedActivity.lease && <p className="project-collaboration-activity" role="status" aria-live="polite">
       {`${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`}
     </p>}
-    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setAnnouncement('Project settings saved.'); }}/>}
+    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { markLocalSharedSave(); setView(next); setAnnouncement('Project settings saved.'); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
       onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
