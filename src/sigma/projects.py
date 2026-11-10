@@ -1360,7 +1360,7 @@ def project_destination(title: str = "") -> ProjectDestination:
         or os.path.lexists(json_path)
         or _title_key(title) in _occupied_titles(root)
     )
-    return ProjectDestination(str(root), str(json_path), taken)
+    return ProjectDestination(str(root), str(path), taken)
 
 
 def create_project(
@@ -1374,22 +1374,33 @@ def create_project(
     desired_outcomes: str = "",
     paper_requirements: str = "",
 ) -> ProjectView:
-    """Create a single-file JSON project by default.
+    """Create a directory-backed project, with artifacts stored as files.
 
-    Existing directory-backed projects remain readable and writable through
-    their paths; only newly created projects use the portable bundle format.
+    Portable project bundles are produced only when explicitly exporting.
     """
-    return create_json_project(
-        title,
-        problem,
-        research_mode,
-        ai_model,
-        reasoning_effort,
-        difficulty,
-        show_advanced_outcome_details,
-        desired_outcomes,
-        paper_requirements,
-    )
+    from sigma.recents import record_access
+
+    title, name = _project_name(title)
+    root = projects_root()
+    with _title_registry_lock(root):
+        _require_available_title(title, root)
+        destination = root / name
+        if os.path.lexists(destination) or os.path.lexists(destination.with_suffix(".json")):
+            raise ProjectError("A project already uses that destination name.")
+        view = initialize_project(
+            destination,
+            title,
+            problem,
+            research_mode,
+            ai_model,
+            reasoning_effort,
+            difficulty,
+            show_advanced_outcome_details,
+            desired_outcomes,
+            paper_requirements,
+        )
+    record_access(view)
+    return view
 
 
 def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView:
