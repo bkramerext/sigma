@@ -120,3 +120,32 @@
 .sigma-evidence-row a { overflow-wrap: anywhere; min-width: 0; color: var(--sigma-copper-foreground); }
 .sigma-evidence-row .sigma-evidence-remove { display: inline-flex; flex: 0 0 auto; border: 0; background: transparent; color: var(--sigma-copper-foreground); padding: 2px; }
 .sigma-evidence-link-input { width: min(100%, 540px); margin-top: 8px; }
+
+/* Match the disclosure chevron and title behavior of the main workspace panes. */
+.sigma-description-field .sigma-subsection-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.sigma-description-field .sigma-subsection-toggle .disclosure-chevron {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  transition: transform 160ms ease;
+}
+.sigma-description-field .sigma-subsection-toggle .disclosure-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+.sigma-description-field [hidden] { display: none; }
