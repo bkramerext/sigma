@@ -404,8 +404,9 @@
   column-gap: 7px;
   row-gap: 7px;
 }
-/* Editing only: increase the space between Project and Save. */
-.workspace-page .project-pane-heading .project-pane-actions > .sigma-description-toolbar-action:first-child {
+/* Match the extra title-to-action space in normal and edit modes. */
+.workspace-page .project-pane-heading .project-pane-actions > .sigma-description-toolbar-action:first-child,
+.workspace-page .project-pane-heading .project-pane-actions > .project-description-toolbar-edit:first-child {
   margin-left: 10px;
 }
 .workspace-page .project-pane-heading .project-pane-actions button.text-view-icon {
