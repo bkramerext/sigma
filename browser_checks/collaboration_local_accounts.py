@@ -248,14 +248,21 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(member_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
         assert member_dialog.get_by_role("combobox", name="Research category").count() == 0
         assert member_dialog.get_by_role("combobox", name="Difficulty").count() == 0
-        readonly = member_dialog.locator(".settings-classification-row .sigma-classification-readonly")
+        readonly = member_dialog.locator(
+            ".settings-classification-row .sigma-classification-readonly"
+        )
         assert readonly.count() == 2
         expect(readonly.nth(0)).to_contain_text("Mathematics")
         expect(readonly.nth(1)).to_have_text("Medium")
-        assert member_dialog.locator(".settings-classification-row .research-type-chevron").count() == 0
-        expect(member_dialog.get_by_text(
-            "Project category, difficulty, and title are read-only for non-owner collaborators."
-        )).to_be_visible()
+        assert (
+            member_dialog.locator(".settings-classification-row .research-type-chevron").count()
+            == 0
+        )
+        expect(
+            member_dialog.get_by_text(
+                "Project category, difficulty, and title are read-only for non-owner collaborators."
+            )
+        ).to_be_visible()
         # Pointer clicks and keyboard actions cannot open a listbox.
         readonly.nth(0).click()
         readonly.nth(1).click()
@@ -267,27 +274,38 @@ def exercise(ui: str, workspaces: Path) -> None:
 
         # The same authorization is enforced at the API boundary. Forged
         # classification requests must never change the stored project.
-        from_view = get_json(member_context.request.get(ui + "/api/projects/inspect", params={"path": path}))
+        from_view = get_json(
+            member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )
         initial_settings = {
             key: from_view["project"][key]
             for key in (
-                "title", "problem", "desired_outcomes", "paper_requirements",
-                "investigation_type", "ai_model", "reasoning_effort",
-                "difficulty", "show_advanced_outcome_details",
+                "title",
+                "problem",
+                "desired_outcomes",
+                "paper_requirements",
+                "investigation_type",
+                "ai_model",
+                "reasoning_effort",
+                "difficulty",
+                "show_advanced_outcome_details",
             )
         }
-        member_collaboration = get_json(member_context.request.get(
-            ui + "/api/projects/collaboration", params={"path": path}
-        ))
+        member_collaboration = get_json(
+            member_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
+        )
         for field, forbidden_value in (
             ("investigation_type", "physics"),
             ("difficulty", "hard"),
             ("title", title + " unauthorized"),
         ):
             attempt = member_context.request.post(
-                ui + "/api/projects/update", headers={"Origin": ui},
+                ui + "/api/projects/update",
+                headers={"Origin": ui},
                 data={
-                    **initial_settings, field: forbidden_value, "path": path,
+                    **initial_settings,
+                    field: forbidden_value,
+                    "path": path,
                     "expected": initial_settings,
                     "expected_revision": member_collaboration["revision"],
                     "collaborators": member_collaboration["collaborators"],
@@ -295,23 +313,30 @@ def exercise(ui: str, workspaces: Path) -> None:
             )
             assert attempt.status >= 400, (field, attempt.status, attempt.text())
             assert "Only the project owner" in attempt.text(), (field, attempt.text())
-            still = get_json(owner_context.request.get(ui + "/api/projects/inspect", params={"path": path}))
+            still = get_json(
+                owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+            )
             assert still["project"][field] == initial_settings[field], field
 
         # A non-owner can still edit the research subject. This advances
         # the revision so the owner's existing classification draft is stale.
         amended = "Research subject updated by collaborator"
         subject_update = member_context.request.post(
-            ui + "/api/projects/update", headers={"Origin": ui},
+            ui + "/api/projects/update",
+            headers={"Origin": ui},
             data={
-                **initial_settings, "problem": amended, "path": path,
+                **initial_settings,
+                "problem": amended,
+                "path": path,
                 "expected": initial_settings,
                 "expected_revision": member_collaboration["revision"],
                 "collaborators": member_collaboration["collaborators"],
             },
         )
         assert subject_update.status == 200, subject_update.text()
-        updated = get_json(owner_context.request.get(ui + "/api/projects/inspect", params={"path": path}))
+        updated = get_json(
+            owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )
         assert updated["project"]["problem"] == amended, updated
         assert updated["project"]["difficulty"] == "medium", updated
 
@@ -328,7 +353,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         choose_difficulty(owner_dialog, "Hard")
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
-        updated = get_json(owner_context.request.get(ui + "/api/projects/inspect", params={"path": path}))
+        updated = get_json(
+            owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )
         assert updated["project"]["difficulty"] == "hard", updated
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")

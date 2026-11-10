@@ -67,6 +67,27 @@ def main() -> None:
         dialog = page.get_by_role("dialog", name="Project Settings")
         expect(dialog).to_be_visible()
 
+        # The invisible maximum label reserves Astra's complete $$ width.
+        # Narrowing Settings must not disturb the About/Model origin or gap.
+        pill = page.locator(".global-model-pill")
+        maximum = pill.locator(".global-model-pill-max-labels > span").first
+        expect(maximum).to_have_text("Model · GPT-6-Astra · $$")
+        assert pill.evaluate(
+            """button => {
+                const label = button.querySelector('.global-model-pill-max-labels > span');
+                return button.getBoundingClientRect().width >=
+                    label.getBoundingClientRect().width + 27;
+            }"""
+        )
+        settings_pill = page.locator(".project-global-settings-pill")
+        assert abs(settings_pill.bounding_box()["width"] - 47) <= 1
+        about_pill = page.locator(".sigma-header-first-row > .about-action")
+        assert abs(pill.bounding_box()["x"] - about_pill.bounding_box()["x"]) <= 1
+        assert (
+            settings_pill.bounding_box()["x"]
+            >= about_pill.bounding_box()["x"] + about_pill.bounding_box()["width"] + 8
+        )
+
         # Unauthenticated fixture: explain that Google identity is required
         # locally or hosted, not that collaboration is hosted-only.
         expect(

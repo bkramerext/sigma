@@ -587,9 +587,9 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   align-items: center;
   justify-content: center;
   justify-self: end;
-  flex: 0 0 53px;
-  width: 53px;
-  min-width: 53px;
+  flex: 0 0 47px;
+  width: 47px;
+  min-width: 47px;
   height: 34px;
   min-height: 34px;
   padding: 4px;

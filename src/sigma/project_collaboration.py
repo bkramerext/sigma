@@ -580,7 +580,6 @@ def note_artifact_author(
         db.commit()
 
 
-
 def require_project_classification_owner(path: str) -> None:
     """Only the verified owner may change the project's category or difficulty."""
     from sigma.projects import ProjectError
