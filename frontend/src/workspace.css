@@ -498,6 +498,10 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
    -webkit-box line clamp. Its text and trailing pulse share one line flow,
    with every wrapped line starting at the dedicated title column. */
 .workspace-page .project-header-title-row .project-header-title-action {
+  /* The button is the tooltip anchor. Size it to its rendered title, not
+     the full header grid track, while retaining wrapping for long titles. */
+  width: fit-content;
+  max-width: 100%;
   display: block;
   overflow: visible;
   -webkit-line-clamp: unset;
