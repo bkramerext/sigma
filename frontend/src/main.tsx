@@ -4240,14 +4240,17 @@ function AboutWorkflow() {
 }
 
 function AboutDialog({ onClose }: { onClose: () => void }) {
+  const [legalView, setLegalView] = useState<'privacy' | 'terms' | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const cloud = useCloudIdentity();
   useEffect(() => {
     dialog.current?.showModal();
     closeButton.current?.focus();
-  }, []);
-  return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+  }, [legalView]);
+  const dismiss = () => { if (legalView) setLegalView(null); else onClose(); };
+  return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className={`project-entry-dialog about-dialog${legalView ? ' about-legal-dialog' : ''}`} aria-labelledby={legalView ? 'about-legal-heading' : 'about-heading'} onCancel={event => { event.preventDefault(); dismiss(); }} onClick={event => { if (event.target === event.currentTarget) dismiss(); }}>
+    {legalView ? <div className="about-legal-document"><div className="entry-dialog-header privacy-notice-heading"><h2 id="about-legal-heading">{legalView === 'privacy' ? 'SIGMA Privacy Notice' : 'Terms of Service'}</h2><DialogDismissButton ref={closeButton} label={legalView === 'privacy' ? 'Close privacy notice' : 'Close terms of service'} onClick={dismiss}/></div><div className="about-legal-document-body">{legalView === 'privacy' ? <PrivacyNoticeContent/> : <TermsOfServiceContent/>}</div></div> : <>
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><DialogDismissButton ref={closeButton} label="Close About SIGMA" onClick={onClose}/></div>
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
@@ -4280,7 +4283,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       </details>
       {cloud?.enabled && cloud.ready && <details className="about-disclosure about-feedback-disclosure" data-about-section="feedback" open={aboutDisclosureState('feedback')} onToggle={event => rememberAboutDisclosure(event, 'feedback')}><summary>Send product feedback</summary><div className="about-disclosure-content"><FeedbackForm signedInEmail={cloud.authenticated ? cloud.user?.email || null : null}/></div></details>}
     </div>
-    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('about')}>Privacy Notice</a><a className="about-privacy-link" href="/tos">Terms of Service</a></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
+    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><button type="button" className="about-privacy-link" onClick={() => setLegalView('privacy')}>Privacy Notice</button><button type="button" className="about-privacy-link" onClick={() => setLegalView('terms')}>Terms of Service</button></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
+  </>}
   </dialog></div>;
 }
 
@@ -8209,6 +8213,34 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
   </dialog>;
 }
 
+function PrivacyNoticeContent() {
+  return <div className="privacy-notice-content">
+    <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
+    <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
+    <h2>Information SIGMA stores</h2>
+    <p>When you sign in with Google, SIGMA receives your stable Google account identifier and verified email address. SIGMA stores them with your access role, whether access is active, assigned workspace, sponsored eligibility, selected model-access mode, and connection status. The hosted sign-in session is represented by a browser cookie and a hashed session token in SIGMA's authentication database. Sessions last up to eight hours. Sign-in flow data expires after five minutes; a temporary denied-sign-in record expires after ten minutes.</p>
+    <p>If you request an invitation, SIGMA stores your Google account identifier, verified email, request time, and request/notification/review status. SIGMA sends your verified email and request time through its configured mail service to the SIGMA invitation administrator. If you send product feedback, SIGMA stores your message, submission time, status, and contact email. When signed in, the contact email is your verified Google sign-in email; signed-out visitors may provide an optional unverified contact email. The signed-in feedback record is associated with your account identifier and email. Feedback is reviewed in SIGMA's administrator interface; it is not sent to an AI or mail provider. Feedback submissions are limited to five per 24 hours per signed-in account or signed-out browser.</p>
+    <p>Your account workspace can contain project titles and questions, project settings, strategies, research prompts and results, evidence, uploaded or imported project files, code and execution output, analyses, reports, and generated papers. SIGMA also stores research-session identifiers and sponsored-service accounting records, including reserved and estimated usage, call status, and token counts when the provider returns them. Usage estimates are used to enforce SIGMA spending limits and may differ from a provider's final bill.</p>
+    <h2>How SIGMA uses and shares information</h2>
+    <p>SIGMA uses your Google account information to sign you in, apply access rules, and keep your projects in your account workspace. SIGMA administrators can review invitation requests and product feedback, including any optional contact email.</p>
+    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are saved in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
+    <p>For an invitation request, SIGMA's configured mail service receives the verified email and request time so it can notify the invitation administrator. Product feedback is not included in invitation email. SIGMA does not send feedback messages to AI providers.</p>
+    <h2>Where information is stored and how long it remains</h2>
+    <p>In hosted SIGMA, authentication, access, invitation, and feedback records are kept in server-side SQLite databases. Each signed-in account has a separate server-side workspace for its projects and research files. Sponsored usage records are kept in a server-side accounting ledger. The service stores these in its configured persistent storage; the exact physical hosting location and backup schedule are set by the operator.</p>
+    <p>SIGMA has no general time-based deletion schedule for account, invitation, feedback, research, or sponsored-usage records. Signing out ends your browser session but does not erase these records. Project controls can remove project data where available, but the hosted service does not currently offer a control that deletes all information associated with an account. If the operator makes backups, copies may remain according to the operator's backup schedule.</p>
+    <h2>Cookies and account controls</h2>
+    <p>Hosted sign-in uses Secure, HttpOnly, SameSite=Lax cookies for the sign-in flow and session. The session cookie expires after eight hours; the short-lived sign-in and denied-access cookies expire after five and ten minutes respectively. The feedback form uses a random, HttpOnly cookie to apply its five-per-day limit to signed-out browsers. Signing out removes the active session; it does not delete saved projects or records described above. For a request about your account data, contact the SIGMA administrator who invited you.</p>
+  </div>;
+}
+
+function TermsOfServiceContent() {
+  const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
+  return <div className="terms-of-service-copy">
+    <p>No terms except to discover something interesting, wonderous, or pioneering.</p>
+    <p className="terms-welcome-phrase">{phrase}</p>
+  </div>;
+}
+
 function PrivacyNoticePage() {
   useEffect(() => { document.title = 'Privacy notice · SIGMA'; }, []);
   function closeNotice() {
@@ -8230,33 +8262,15 @@ function PrivacyNoticePage() {
   }
   return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
     <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><DialogDismissButton label="Close privacy notice" onClick={closeNotice}/></div>
-    <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
-    <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
-    <h2>Information SIGMA stores</h2>
-    <p>When you sign in with Google, SIGMA receives your stable Google account identifier and verified email address. SIGMA stores them with your access role, whether access is active, assigned workspace, sponsored eligibility, selected model-access mode, and connection status. The hosted sign-in session is represented by a browser cookie and a hashed session token in SIGMA's authentication database. Sessions last up to eight hours. Sign-in flow data expires after five minutes; a temporary denied-sign-in record expires after ten minutes.</p>
-    <p>If you request an invitation, SIGMA stores your Google account identifier, verified email, request time, and request/notification/review status. SIGMA sends your verified email and request time through its configured mail service to the SIGMA invitation administrator. If you send product feedback, SIGMA stores your message, submission time, status, and contact email. When signed in, the contact email is your verified Google sign-in email; signed-out visitors may provide an optional unverified contact email. The signed-in feedback record is associated with your account identifier and email. Feedback is reviewed in SIGMA's administrator interface; it is not sent to an AI or mail provider. Feedback submissions are limited to five per 24 hours per signed-in account or signed-out browser.</p>
-    <p>Your account workspace can contain project titles and questions, project settings, strategies, research prompts and results, evidence, uploaded or imported project files, code and execution output, analyses, reports, and generated papers. SIGMA also stores research-session identifiers and sponsored-service accounting records, including reserved and estimated usage, call status, and token counts when the provider returns them. Usage estimates are used to enforce SIGMA spending limits and may differ from a provider's final bill.</p>
-    <h2>How SIGMA uses and shares information</h2>
-    <p>SIGMA uses your Google account information to sign you in, apply access rules, and keep your projects in your account workspace. SIGMA administrators can review invitation requests and product feedback, including any optional contact email.</p>
-    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are saved in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
-    <p>For an invitation request, SIGMA's configured mail service receives the verified email and request time so it can notify the invitation administrator. Product feedback is not included in invitation email. SIGMA does not send feedback messages to AI providers.</p>
-    <h2>Where information is stored and how long it remains</h2>
-    <p>In hosted SIGMA, authentication, access, invitation, and feedback records are kept in server-side SQLite databases. Each signed-in account has a separate server-side workspace for its projects and research files. Sponsored usage records are kept in a server-side accounting ledger. The service stores these in its configured persistent storage; the exact physical hosting location and backup schedule are set by the operator.</p>
-    <p>SIGMA has no general time-based deletion schedule for account, invitation, feedback, research, or sponsored-usage records. Signing out ends your browser session but does not erase these records. Project controls can remove project data where available, but the hosted service does not currently offer a control that deletes all information associated with an account. If the operator makes backups, copies may remain according to the operator's backup schedule.</p>
-    <h2>Cookies and account controls</h2>
-    <p>Hosted sign-in uses Secure, HttpOnly, SameSite=Lax cookies for the sign-in flow and session. The session cookie expires after eight hours; the short-lived sign-in and denied-access cookies expire after five and ten minutes respectively. The feedback form uses a random, HttpOnly cookie to apply its five-per-day limit to signed-out browsers. Signing out removes the active session; it does not delete saved projects or records described above. For a request about your account data, contact the SIGMA administrator who invited you.</p>
+    <PrivacyNoticeContent/>
   </article></main>;
 }
 
 function TermsOfServicePage() {
-  const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
   useEffect(() => { document.title = 'Terms of Service · SIGMA'; }, []);
   return <main className="cloud-auth-shell terms-of-service-shell" onClick={event => { if (event.target === event.currentTarget) window.location.assign('/'); }}><article className="cloud-auth-card privacy-notice-card terms-of-service-card">
     <div className="privacy-notice-heading"><h1>Terms of Service</h1><DialogDismissButton label="Close terms of service" onClick={() => { window.location.assign('/'); }}/></div>
-    <div className="terms-of-service-copy">
-      <p>No terms except to discover something interesting, wonderous, or pioneering.</p>
-      <p className="terms-welcome-phrase">{phrase}</p>
-    </div>
+    <TermsOfServiceContent/>
   </article></main>;
 }
 
