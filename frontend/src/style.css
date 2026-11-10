@@ -364,7 +364,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 
 /* Compact Home project navigation. The artwork is independent of this column. */
 .home-page .home-projects {
-  --home-project-edge: calc(2 * var(--home-side-gap));
+  --home-project-edge: var(--home-corner-gap);
   width: min(520px, calc(100% - 2 * var(--home-project-edge)));
   position: absolute;
   top: var(--home-projects-top);
