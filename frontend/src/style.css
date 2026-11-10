@@ -370,7 +370,8 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   top: var(--home-projects-top);
   bottom: 16px;
   left: var(--home-project-edge);
-  z-index: 1;
+  /* The Projects tab hit targets must stay above the overlapping header stack. */
+  z-index: 3;
 }
 .home-page .home-projects-heading {
   display: flex;
