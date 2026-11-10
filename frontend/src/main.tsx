@@ -6515,15 +6515,27 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       return;
     }
     if (revision === lastLoadedSharedRevision.current) return;
-    if (activeMode !== null || editing || generating || projectEditing ||
-        descriptionEditing || descriptionDirty || ordering || dragId || manualDraft ||
-        closing) return;
+    // Committed changes supersede unsaved drafts in other windows.
+    // Avoid interrupting an in-flight write; the backend revision fence protects it.
+    if (closing || descriptionBusy || ordering) return;
     const controller = new AbortController();
     void post<ProjectView>('open', { path, compact: true }, controller.signal)
       .then(next => {
         if (controller.signal.aborted) return;
+        modeOwner.current = null;
+        setActiveMode(null);
+        setProjectEditing(false);
+        setDescriptionEditing(false);
+        setDescriptionDirty(false);
+        setEditing(false);
+        setGenerating(false);
+        setManualDraft(undefined);
+        setCombinedTextDrafts({});
+        setTextEditSignals({});
+        setEditorVersion(value => value + 1);
         setView(next);
         lastLoadedSharedRevision.current = revision;
+        setAnnouncement('Project updated by a collaborator. Unsaved edits were discarded.');
       })
       .catch(() => { /* Retain the current view and retry on the next poll. */ });
     return () => controller.abort();
@@ -6531,6 +6543,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       activeMode, editing, generating, projectEditing, descriptionEditing,
       descriptionDirty, ordering, dragId, manualDraft, closing, path]);
 
+  const [editorVersion, setEditorVersion] = useState(0);
   const [focusStrategy, setFocusStrategy] = useState('');
   const citationRevealHandled = useRef(false);
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
@@ -6880,7 +6893,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. {guest ? 'Sign in to replace the project type.' : 'Choose a replacement in Project Settings to use a current type.'}</p>{!guest && <button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button>}</div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>TITLE</span></div>
-      <ProjectDescriptionEditor view={view} guest={guest}
+      <ProjectDescriptionEditor key={editorVersion} view={view} guest={guest}
         editing={descriptionEditing} busy={descriptionBusy}
         canEditTitle={!sharedActivity?.owner || sharedActivity.owner === sharedActivity.you}
         onBusyChange={setDescriptionBusy}
@@ -6930,7 +6943,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${strategies.length === 1 ? ' is-only-strategy' : ''}${!strategy.enabled ? ' is-disabled' : ''}${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor authorEmail={sharedActivity?.shared ? sharedActivity.artifact_authors?.strategy?.[strategy.id] : undefined} strategy={strategy} path={view.path} onSaved={setView} modeDisabled={guest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={guest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
+            <StrategyTitleEditor key={`${strategy.id}:${editorVersion}`} authorEmail={sharedActivity?.shared ? sharedActivity.artifact_authors?.strategy?.[strategy.id] : undefined} strategy={strategy} path={view.path} onSaved={setView} modeDisabled={guest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={guest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
               if (guest || ordering || dragId || activeMode !== null || processControls.confirming) return;
               if (mode === 'toggle') {
                 const owner = `strategy-toggle-${strategy.id}`;
@@ -6957,7 +6970,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
                 .catch(cause => { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); })
                 .finally(() => exitMode(owner));
             }}/>} />
-            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews guest={guest} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={guest || (activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`)} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
+            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews key={`${strategy.id}:${editorVersion}`} guest={guest} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={guest || (activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`)} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
           </div>
           {strategies.length > 1 && <button id={`grip-${strategy.id}`} className="drag-grip" disabled={guest || ordering || closing}
             aria-label={`Reorder ${strategy.title}`} data-tooltip={`Drag to reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
