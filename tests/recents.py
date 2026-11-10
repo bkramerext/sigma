@@ -654,7 +654,7 @@ def check(root: Path, base: Path) -> None:
     moved = root / "saved-sample.sigma"
     collision.rename(moved)
     impostor = create_project(selected["id"], "Different research")
-    assert impostor.path == str(root / f"{selected['id']}.json")
+    assert impostor.path == str(root / f"{selected['id']}.sigma")
     assert inspect_project(impostor.path).project == impostor.project
     additional = open_sample_project(selected["id"])
     assert additional.path == str(collision)
