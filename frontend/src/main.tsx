@@ -6992,7 +6992,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
-    <ResearchWorkspace artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.session : undefined} path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
+    <ResearchWorkspace key={editorVersion} artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.session : undefined} path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
       if (guest) { setGuestAdvancedOutcome(true); return; }
       if (advancedOutcomeGlobal) return;
       const response = await fetch('/api/user-preferences/research-settings', {
@@ -7003,7 +7003,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setAdvancedOutcomeGlobal(true);
       setAnnouncement('Advanced Outcome enabled for your account.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
-    <PapersPane artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.paper : undefined} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
+    <PapersPane key={editorVersion} artifactAuthors={sharedActivity?.shared ? sharedActivity.artifact_authors?.paper : undefined} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
     {sharedActivity?.shared && sharedActivity.lease && <p className="project-collaboration-activity" role="status" aria-live="polite">
       {`${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`}
     </p>}
