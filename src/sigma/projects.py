@@ -1700,13 +1700,14 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
     give the project a new identity and rebind sessions to it. Record the new
     title as a genuine project edit so existing settings history stays valid.
     """
-    from sigma.project_bundle import BundleError, import_bundle
+    from sigma.project_bundle import BundleError, _decode as decode_bundle_members
+    from sigma.project_transfer import import_project, make_bundle
     from sigma.recents import record_access
 
     title, name = _project_name(title)
     source = project_path(value)
     root = projects_root()
-    destination = (root / name).with_suffix(".json")
+    destination = root / name
     try:
         with _title_registry_lock(root):
             _require_available_title(title, root)
@@ -1750,7 +1751,11 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                     session_ids_out=session_ids,
                     session_numbers_out=session_numbers,
                 )
-                imported = import_bundle(independent, destination, rekey_sessions=False)
+                imported = import_project(
+                    make_bundle(decode_bundle_members(independent)),
+                    destination,
+                    independent=False,
+                )
                 from sigma.project_copy_logs import clone_project_logs
 
                 try:
@@ -1766,7 +1771,9 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                     # The bundle has been imported, but Save As is not
                     # complete until its external diagnostic history exists.
                     # This file was exclusively created by this operation.
-                    destination.unlink()
+                    from shutil import rmtree
+
+                    rmtree(destination)
                     raise
         view = inspect_project(imported)
         record_access(view)
