@@ -638,3 +638,6 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .research-qa-dialog .saved-paper-title-tools .qa-markdown-action:is(:hover, :focus-visible):not(:disabled) svg {
   color: #fff2e9;
 }
+
+/* Run-attribution hovertext uses one line per active execution. */
+.sigma-ui-tooltip { white-space: pre-line; }
