@@ -29,18 +29,23 @@ class ProjectImportTitleTests(TestCase):
                 for index, name in enumerate(visible_titles)
             ]
             with (
-                patch("sigma.project_bundle.bundle_project_document", return_value={
-                    "id": "source-project", "title": title
-                }),
+                patch(
+                    "sigma.project_bundle.bundle_project_document",
+                    return_value={"id": "source-project", "title": title},
+                ),
                 patch("sigma.project_bundle.rename_bundle_project", side_effect=rename),
                 patch("sigma.project_bundle.import_independent_bundle", side_effect=save),
                 patch("sigma.projects.projects_root", return_value=root),
                 patch("sigma.projects._occupied_titles", return_value=set()),
                 patch("sigma.recents.recent_projects", return_value={"projects": visible}),
                 patch("sigma.recents.record_access"),
-                patch("sigma.api.inspect_project", side_effect=lambda path: SimpleNamespace(
-                    path=str(path), project=SimpleNamespace(title=renamed[-1] if renamed else title)
-                )),
+                patch(
+                    "sigma.api.inspect_project",
+                    side_effect=lambda path: SimpleNamespace(
+                        path=str(path),
+                        project=SimpleNamespace(title=renamed[-1] if renamed else title),
+                    ),
+                ),
                 patch("sigma.api.asdict", side_effect=lambda view: {"title": view.project.title}),
             ):
                 result = import_project_bundle(ImportBundleRequest(bundle={"sample": True}))
