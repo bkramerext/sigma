@@ -253,7 +253,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             # removed; retain browser coverage for the new subject/outcome/
             # publication display and the existing strategy conversion UI.
             subject = page.locator(".sigma-description-field").first
-            expect(subject.get_by_role("heading", name="Research Subject")).to_be_visible(
+            expect(subject.get_by_role("heading", name="Research Problem")).to_be_visible(
                 timeout=20000
             )
             expect(subject.locator(".sigma-description-rendered")).to_contain_text(

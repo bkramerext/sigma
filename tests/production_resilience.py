@@ -169,6 +169,7 @@ def check_memory_sources() -> None:
         return fake[str(path)].replace("\\t", "\t").replace("\\n", "\n")
 
     with (
+        patch.object(telemetry.sys, "platform", "linux"),
         patch.object(telemetry.Path, "read_text", autospec=True, side_effect=read),
         patch.object(telemetry._LOGGER, "warning") as warning,
     ):
@@ -184,6 +185,7 @@ def check_memory_sources() -> None:
     # When both procfs and cgroupfs are unreadable, peak RSS still has a
     # standard-library fallback and the new-work admission gate fails closed.
     with (
+        patch.object(telemetry.sys, "platform", "linux"),
         patch.object(
             telemetry.Path,
             "read_text",

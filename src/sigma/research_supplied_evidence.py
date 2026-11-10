@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import http.client
+import json
+import re
 import socket
 import ssl
 import time
@@ -16,6 +18,7 @@ from datetime import UTC, datetime
 from urllib.parse import urljoin
 
 from sigma import project_evidence, research_reference_content
+from sigma.projects import project_write_lock
 
 MAX_REMOTE_BYTES = 12 * 1024 * 1024
 MAX_LINK_SECONDS = 10
@@ -78,7 +81,7 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
     raise ValueError("redirect_unresolved")
 
 
-def read_link(url: str) -> dict:
+def read_link(url: str, fetched: tuple[bytes, str, str] | None = None) -> dict:
     """Read actual HTTPS document contents, or return a typed failure."""
     result = {
         "status": "unavailable",
@@ -91,14 +94,14 @@ def read_link(url: str) -> dict:
         "incomplete_extract": True,
     }
     try:
-        payload, content_type, resolved = _fetch_url(url)
+        payload, content_type, resolved = fetched if fetched is not None else _fetch_url(url)
         if content_type == "application/pdf":
             if not payload.startswith(b"%PDF-"):
                 raise ValueError("invalid_pdf")
             pages, text, truncated = project_evidence._extract(payload)
             result["pages"] = pages
         else:
-            decoded = payload.decode("utf-8", errors="replace")
+            decoded = payload.decode("utf-8")
             if content_type == "text/html":
                 parser = research_reference_content._ReadableHTML()
                 parser.feed(decoded)
@@ -126,7 +129,7 @@ def read_link(url: str) -> dict:
     return result
 
 
-def compile_entry(path: str, entry: dict) -> dict:
+def compile_entry(path: str, entry: dict, session_id: str | None = None) -> dict:
     """Convert a frozen source entry into a content-bearing evidence record."""
     if entry["id"].startswith("uploaded-pdf:"):
         try:
@@ -137,6 +140,19 @@ def compile_entry(path: str, entry: dict) -> dict:
             pages, text, truncated = project_evidence._extract(pdf)
             if not text.strip():
                 raise ValueError("no_extractable_text")
+            snapshot_path = None
+            if session_id is not None:
+                if not re.fullmatch(r"[0-9a-f-]{36}", session_id) or not re.fullmatch(
+                    r"[0-9a-f]{32}", identifier
+                ):
+                    raise ValueError("invalid_source_identity")
+                snapshot_path = f"artifacts/source_material/snapshots/{session_id}/{identifier}.pdf"
+                with project_write_lock(path):
+                    saved = project_evidence._read(path, snapshot_path)
+                    if saved is None:
+                        project_evidence._write(path, {snapshot_path: pdf})
+                    elif hashlib.sha256(saved).hexdigest() != entry["sha256"]:
+                        raise ValueError("attachment_snapshot_changed")
             return {
                 **entry,
                 "status": "retrieved",
@@ -144,14 +160,76 @@ def compile_entry(path: str, entry: dict) -> dict:
                 "excerpt": text,
                 "excerpt_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
                 "incomplete_extract": truncated,
+                "snapshot_path": snapshot_path,
                 "reason": None,
             }
         except (ValueError, OSError, project_evidence.ProjectError) as exc:
             return {**entry, "status": "unavailable", "reason": str(exc)[:160], "excerpt": ""}
     if entry["id"].startswith("uploaded-link:"):
+        fetched = None
+        snapshot = None
+        new_fetch = False
+        if session_id is not None:
+            source_id = entry["id"].split(":", 1)[1]
+            if not re.fullmatch(r"[0-9a-f-]{36}", session_id) or not re.fullmatch(
+                r"[0-9a-f]{32}", source_id
+            ):
+                return {**entry, "status": "unavailable", "reason": "invalid_source_identity"}
+            snapshot = f"artifacts/source_material/snapshots/{session_id}/{source_id}"
+            try:
+                metadata = project_evidence._read(path, snapshot + ".json")
+                binary = project_evidence._read(path, snapshot + ".bin")
+            except (ValueError, OSError) as exc:
+                return {**entry, "status": "unavailable", "reason": str(exc)[:160]}
+            if metadata is not None and binary is not None:
+                try:
+                    saved = json.loads(metadata)
+                    if (
+                        saved["url"] == entry["url"]
+                        and saved["sha256"] == hashlib.sha256(binary).hexdigest()
+                    ):
+                        fetched = (binary, saved["content_type"], saved["resolved_url"])
+                except (ValueError, KeyError, TypeError):
+                    pass
+            if fetched is None:
+                try:
+                    fetched = _fetch_url(entry["url"])
+                    new_fetch = True
+                except (
+                    ValueError,
+                    OSError,
+                    TimeoutError,
+                    ssl.SSLError,
+                    http.client.HTTPException,
+                ) as exc:
+                    return {**entry, "status": "unavailable", "reason": str(exc)[:160]}
+        result = read_link(entry["url"], fetched)
+        if new_fetch and result["status"] == "retrieved" and snapshot is not None:
+            assert fetched is not None
+            binary, content_type, resolved = fetched
+            try:
+                with project_write_lock(path):
+                    project_evidence._write(
+                        path,
+                        {
+                            snapshot + ".bin": binary,
+                            snapshot + ".json": json.dumps(
+                                {
+                                    "url": entry["url"],
+                                    "resolved_url": resolved,
+                                    "content_type": content_type,
+                                    "sha256": hashlib.sha256(binary).hexdigest(),
+                                },
+                                sort_keys=True,
+                            ).encode(),
+                        },
+                    )
+            except (ValueError, OSError) as exc:
+                result = {**result, "status": "unavailable", "reason": str(exc)[:160]}
         return {
             **entry,
-            **read_link(entry["url"]),
+            **result,
+            "snapshot_path": snapshot,
             "provenance": "User-supplied external document; extracted assertions are unverified.",
         }
     return {**entry, "status": "unavailable", "reason": "unsupported_source_type"}

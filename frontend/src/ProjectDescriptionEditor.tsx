@@ -21,7 +21,7 @@ function EvidenceClipIcon() {
 function EvidenceRemoveIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>;
 }
-function SuppliedEvidence({ path, expanded, onToggle }: { path: string; expanded: boolean; onToggle: () => void }) {
+function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; expanded: boolean; onToggle: () => void; guest: boolean }) {
   const [rows, setRows] = useState<EvidenceRow[]>([]);
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState('');
@@ -30,15 +30,23 @@ function SuppliedEvidence({ path, expanded, onToggle }: { path: string; expanded
   const uploadInput = useRef<HTMLInputElement>(null);
   const linkInput = useRef<HTMLInputElement>(null);
   const saving = useRef(false);
+  const cancelled = useRef(false);
+  const currentPath = useRef(path);
+  const currentGuest = useRef(guest);
+  currentPath.current = path;
+  currentGuest.current = guest;
   async function reload() {
     const response = await fetch(`/api/projects/evidence?${new URLSearchParams({ path })}`, {
       headers: { 'X-Sigma-Error-Handled': 'true' },
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail ?? 'Could not load evidence.');
-    setRows(result.files as EvidenceRow[]);
+    if (currentPath.current === path && !currentGuest.current) setRows(result.files as EvidenceRow[]);
   }
-  useEffect(() => { void reload().catch(cause => setError(String(cause))); }, [path]);
+  useEffect(() => {
+    setRows([]); setError(''); setAdding(false); setUrl('');
+    if (!guest) void reload().catch(cause => setError(String(cause)));
+  }, [path, guest]);
   useEffect(() => { if (adding) linkInput.current?.focus(); }, [adding]);
   async function addLink() {
     if (saving.current) return;
@@ -82,10 +90,10 @@ function SuppliedEvidence({ path, expanded, onToggle }: { path: string; expanded
     finally { setBusy(false); }
   }
   return <section className="sigma-description-field sigma-supplied-evidence">
-    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle" data-tooltip={`${expanded ? 'Collapse' : 'Expand'} Source Material`} aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}><EvidenceChevron expanded={expanded}/>Source Material</button></h4><div className="sigma-evidence-actions">
-      <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add link" data-tooltip="Add link" disabled={busy || adding || rows.length >= 20} onClick={() => setAdding(true)}><EvidencePlusIcon/></button>
+    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle" data-tooltip={`${expanded ? 'Collapse' : 'Expand'} Source Material`} aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}><EvidenceChevron expanded={expanded}/>Source Material</button></h4>{!guest && <div className="sigma-evidence-actions">
+      <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add link" data-tooltip="Add link" disabled={busy || adding || rows.length >= 20} onClick={() => { cancelled.current = false; setAdding(true); }}><EvidencePlusIcon/></button>
       <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Attach a file" data-tooltip="Attach a file" disabled={busy || rows.length >= 20} onClick={() => uploadInput.current?.click()}><EvidenceClipIcon/></button>
-    </div></div>
+    </div>}</div>
     <input ref={uploadInput} type="file" accept=".pdf,application/pdf" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void attach(file); }}/>
     <div id="sigma-supplied-evidence-content" hidden={!expanded}>
     <p className="settings-hint">Files and links SIGMA reads and accepts as true premises for this research. Unlike Research Standards, these define what is true—not how to investigate.</p>
@@ -97,8 +105,8 @@ function SuppliedEvidence({ path, expanded, onToggle }: { path: string; expanded
     </div>)}
     {adding && <input ref={linkInput} className="sigma-evidence-link-input" aria-label="Evidence link" placeholder="Paste a URL" value={url} disabled={busy}
       onChange={event => setUrl(event.target.value)}
-      onBlur={() => void addLink()}
-      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addLink(); } if (event.key === 'Escape') { setAdding(false); setUrl(''); } }}/>}
+      onBlur={() => { if (!cancelled.current) void addLink(); }}
+      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addLink(); } if (event.key === 'Escape') { cancelled.current = true; setAdding(false); setUrl(''); } }}/>}
     {error && <p className="error" role="alert">{error}</p>}
     </div>
   </section>;
@@ -110,15 +118,16 @@ function EvidenceChevron({ expanded }: { expanded: boolean }) {
 }
 
 const definitions = [
-  { key: 'problem', title: 'Research Subject', help: 'What are we investigating?', rows: 3 },
+  { key: 'problem', title: 'Research Problem', help: 'What are we investigating?', rows: 3 },
   { key: 'desired_outcomes', title: 'Desired Outcomes', help: 'What insights or advances are we hoping for?', rows: 4 },
   { key: 'paper_requirements', title: 'Paper Requirements', help: 'What should the finished publication contain?', rows: 4 },
 ] as const;
 
 export default function ProjectDescriptionEditor({
-  view, editing, busy, onBusyChange, onDirtyChange, onExitMode, onSave,
+  view, editing, busy, onBusyChange, onDirtyChange, onExitMode, onSave, guest,
 }: {
   view: ProjectDescriptionView;
+  guest: boolean;
   editing: boolean;
   busy: boolean;
   onBusyChange: (busy: boolean) => void;
@@ -168,7 +177,7 @@ export default function ProjectDescriptionEditor({
     event.preventDefault();
     if (busy || !dirty) return;
     if (!draft.title.trim() || !draft.problem.trim()) {
-      setError('Project title and Research Subject are required.');
+      setError('Project title and Research Problem are required.');
       return;
     }
     onBusyChange(true); setError('');
@@ -197,7 +206,7 @@ export default function ProjectDescriptionEditor({
       </div>}
       </div>
     </section>)}
-    <SuppliedEvidence path={view.path} expanded={expandedFields.supplied_evidence ?? true} onToggle={() => toggleField('supplied_evidence')}/>
+    <SuppliedEvidence path={view.path} guest={guest} expanded={expandedFields.supplied_evidence ?? true} onToggle={() => toggleField('supplied_evidence')}/>
   </div>;
 
   return     <div className="sigma-description-editor">

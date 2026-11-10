@@ -241,7 +241,8 @@ def check_home_list_uses_only_paper_records(root: Path) -> None:
         assert papers.list_papers(view.path)[0]["score"]["total"] == 70
         assert papers.get_paper(view.path, paper_id, include_tex=False)["score"]["total"] == 70
         # Corrupt individual paper records must not hide the saved project.
-        paper_dir = Path(view.path) / "papers"
+        paper_dir = Path(view.path) / "artifacts" / "generated_papers"
+        paper_dir.mkdir(parents=True, exist_ok=True)
         (paper_dir / "malformed.json").write_text("{broken", encoding="utf-8")
         assert any(
             row["id"] == view.project.id and row["available"] for row in home_projects()["projects"]
@@ -657,9 +658,10 @@ def check(root: Path, base: Path) -> None:
     assert impostor.path == str(root / f"{selected['id']}.sigma")
     assert inspect_project(impostor.path).project == impostor.project
     additional = open_sample_project(selected["id"])
-    assert additional.path == str(collision)
+    assert additional.path != str(collision)
+    assert Path(additional.path).is_dir()
     assert additional.project.id not in {first.project.id, second.project.id}
-    assert inspect_project(collision).project == additional.project
+    assert inspect_project(additional.path).project == additional.project
     collision.rename(root / "saved-impostor.sigma")
     moved.rename(collision)
     last_copy = open_sample_project(selected["id"])
@@ -713,11 +715,9 @@ def check(root: Path, base: Path) -> None:
     actual = recent_projects()["projects"]
     running_project = created[-1]
     session_id = str(uuid4())
-    from sigma.project_bundle import write_file
-
-    write_file(
-        running_project.path,
-        f"research-sessions/{session_id}.json",
+    running_session = Path(running_project.path) / "research-sessions" / f"{session_id}.json"
+    running_session.parent.mkdir(exist_ok=True)
+    running_session.write_text(
         json.dumps(
             {
                 "id": session_id,
@@ -725,7 +725,8 @@ def check(root: Path, base: Path) -> None:
                 "project_path": running_project.path,
                 "status": "stopped",
             }
-        ).encode("utf-8"),
+        ),
+        encoding="utf-8",
     )
     assert [entry["id"] for entry in actual[:4]] == [
         view.project.id for view in reversed(created[-4:])
@@ -772,12 +773,11 @@ def check(root: Path, base: Path) -> None:
             ).status_code
             == 200
         )
-        from sigma.project_bundle import read_file, write_file
-
         identity_drift = create_project("Codex identity drift", "Saved from a Codex session")
-        document = json.loads(read_file(identity_drift.path, "project.json"))
+        project_file = Path(identity_drift.path) / "project.json"
+        document = json.loads(project_file.read_text(encoding="utf-8"))
         document["id"] = str(uuid4())
-        write_file(identity_drift.path, "project.json", json.dumps(document).encode())
+        project_file.write_text(json.dumps(document), encoding="utf-8")
         drifted_entry = next(
             item
             for item in api.get("/api/projects/recent").json()["projects"]

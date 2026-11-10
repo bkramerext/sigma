@@ -1703,7 +1703,7 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
     """
     from sigma.project_bundle import BundleError
     from sigma.project_bundle import _decode as decode_bundle_members
-    from sigma.project_transfer import import_project, make_bundle
+    from sigma.project_transfer import export_project, import_project, make_bundle
     from sigma.recents import record_access
 
     title, name = _project_name(title)
@@ -1744,8 +1744,11 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
 
                 session_ids: dict[str, str] = {}
                 session_numbers: dict[str, int] = {}
+                from sigma.project_bundle import portable_bundle
+                from sigma.project_transfer import decode_bundle
+
                 independent = rebase_copy(
-                    payload,
+                    portable_bundle(decode_bundle(payload)),
                     source_id=original.id,
                     new_id=new_id,
                     source_path=str(source),
@@ -1798,7 +1801,7 @@ def copy_project_between_workspaces(
     """
     from sigma import cloud_workspaces
     from sigma.project_bundle import BundleError
-    from sigma.project_transfer import bundle_document, export_project, import_project
+    from sigma.project_transfer import bundle_document, import_project
 
     source_token = (
         cloud_workspaces.bind_workspace(source_workspace) if source_workspace is not None else None

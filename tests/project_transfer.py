@@ -11,7 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from sigma import project_evidence, project_transfer
+from sigma import project_evidence, project_transfer, research_supplied_evidence
 from sigma.project_bundle import BundleError
 from sigma.projects import initialize_project, inspect_project
 from sigma.zstd_codec import compress
@@ -36,6 +36,26 @@ def test_single_archive_roundtrip() -> None:
             project_evidence, "_extract", return_value=(2, "[PDF page 1]\nPremise A", False)
         ):
             attached = project_evidence.add_evidence(str(origin), "source.pdf", pdf)
+            compiled_pdf = research_supplied_evidence.compile_entry(
+                str(origin),
+                {
+                    "id": "uploaded-pdf:" + attached["id"],
+                    "sha256": attached["sha256"],
+                    "filename": attached["filename"],
+                },
+                "11111111-1111-4111-8111-111111111111",
+            )
+        with patch.object(
+            research_supplied_evidence,
+            "_fetch_url",
+            return_value=(b"Linked premise B", "text/plain", link["url"]),
+        ):
+            compiled = research_supplied_evidence.compile_entry(
+                str(origin),
+                {"id": "uploaded-link:" + link["id"], "url": link["url"]},
+                "11111111-1111-4111-8111-111111111111",
+            )
+        assert compiled["status"] == "retrieved"
         paper_dir = origin / "artifacts" / "generated_papers"
         paper_dir.mkdir(parents=True)
         (paper_dir / "example.tex").write_text("Generated paper TeX", encoding="utf-8")
@@ -48,6 +68,8 @@ def test_single_archive_roundtrip() -> None:
         assert payload["files"]["project.json"]["source_material_links"][0]["id"] == link["id"]
         members = project_transfer.decode_bundle(payload)
         assert members[f"artifacts/source_material/{attached['id']}.pdf"] == pdf
+        assert members[compiled_pdf["snapshot_path"]] == pdf
+        assert members[compiled["snapshot_path"] + ".bin"] == b"Linked premise B"
         assert members["artifacts/generated_papers/example.tex"] == b"Generated paper TeX"
         new = root / "imported.sigma"
         project_transfer.import_project(payload, new)
@@ -57,6 +79,8 @@ def test_single_archive_roundtrip() -> None:
             new / "artifacts" / "generated_papers" / "example.tex"
         ).read_text() == "Generated paper TeX"
         assert project_evidence.get_pdf(str(new), attached["id"])[1] == pdf
+        assert (new / compiled_pdf["snapshot_path"]).read_bytes() == pdf
+        assert (new / (compiled["snapshot_path"] + ".bin")).read_bytes() == b"Linked premise B"
         assert any(row["url"] == link["url"] for row in project_evidence.list_evidence(str(new)))
         _expect_failure(lambda: project_transfer.decode_bundle({**payload, "version": 3}))
 

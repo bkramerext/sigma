@@ -52,7 +52,7 @@ def _canon(name: str) -> str:
 def _safe_name(name: str) -> bool:
     return (
         isinstance(name, str)
-        and name
+        and bool(name)
         and "\\" not in name
         and not name.startswith("/")
         and all(part not in {"", ".", ".."} for part in name.split("/"))

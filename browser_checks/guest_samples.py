@@ -457,7 +457,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         )
         expect(project_markdown).to_have_count(0)
         subject = page.locator(".sigma-description-field").first
-        expect(subject.get_by_role("heading", name="Research Subject")).to_be_visible()
+        expect(subject.get_by_role("heading", name="Research Problem")).to_be_visible()
         expect(subject.locator(".sigma-description-rendered")).to_be_visible()
         expect(page.get_by_role("heading", name="Desired Outcomes")).to_be_visible()
         expect(page.get_by_role("heading", name="Paper Requirements")).to_be_visible()

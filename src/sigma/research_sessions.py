@@ -8470,9 +8470,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
-    # User-supplied PDFs are evidence to test, not independently verified facts.
-    # Keep the source's page markers, provenance and omission markers visible
-    # to both Investigator and Skeptic within the bounded provider context.
+    # Supplied assertions are project premises, with attribution retained.
+    # Agents may test deductions and contradictions without treating embedded
+    # source text as operational instructions.
     if record.get("uploaded_project_evidence"):
         context["uploaded_project_evidence"] = record["uploaded_project_evidence"]
         context["supplied_evidence_policy"] = (
@@ -15476,26 +15476,15 @@ def _strict_compilation_block_reason(compilation: Any) -> str | None:
     )
 
 
-def _bounded_supplied_evidence(sources: list[dict], limit: int = 6000) -> list[dict]:
-    """Keep every source identity/status while bounding agent-visible extracts."""
-    if not sources:
-        return []
-    remaining = limit
-    output = []
-    for index, source in enumerate(sources):
-        allowance = remaining // (len(sources) - index)
-        full = str(source.get("excerpt") or "")
-        excerpt = full[:allowance]
-        remaining -= len(excerpt)
-        output.append(
-            {
-                **source,
-                "excerpt": excerpt,
-                "incomplete_extract": bool(source.get("incomplete_extract"))
-                or len(excerpt) < len(full),
-            }
+def _bounded_supplied_evidence(sources: list[dict], limit: int = 60000) -> list[dict]:
+    """Supply complete extracts or reject the session before role dispatch."""
+    total = sum(len(str(source.get("excerpt") or "")) for source in sources)
+    if total > limit:
+        raise ValueError(
+            f"Source Material contains {total:,} extracted characters; the session "
+            f"supports at most {limit:,}. Split or shorten the supplied documents."
         )
-    return output
+    return sources
 
 
 async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> bool:
@@ -15522,6 +15511,35 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                 {"status": "pending", "sources": [], "total": len(inputs)},
             )
             if stage.get("status") == "completed":
+                completed = stage.get("sources")
+                valid = isinstance(completed, list) and len(completed) == len(inputs)
+                if valid:
+                    valid = all(
+                        item.get("id") == source.get("id")
+                        and item.get("status") == "retrieved"
+                        and not item.get("incomplete_extract")
+                        and isinstance(item.get("excerpt"), str)
+                        and hashlib.sha256(item["excerpt"].encode("utf-8")).hexdigest()
+                        == item.get("excerpt_sha256")
+                        for item, source in zip(completed, inputs, strict=True)
+                    )
+                if not valid:
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · source material checkpoint invalid"
+                    record["message"] = "Saved Source Material compilation failed integrity checks."
+                    _save(path, record)
+                    return False
+                try:
+                    restored_evidence = _bounded_supplied_evidence(completed)
+                except ValueError as exc:
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · source material exceeds context limit"
+                    record["message"] = str(exc)
+                    _save(path, record)
+                    return False
+                if record["uploaded_project_evidence"] != restored_evidence:
+                    record["uploaded_project_evidence"] = restored_evidence
+                    _save(path, record)
                 return True
             saved = stage.setdefault("sources", [])
             if stage.get("status") == "blocked":
@@ -15565,10 +15583,21 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     _event(record, "source_material.compilation.blocked", record["message"])
                     _save(path, record)
                     return False
+                try:
+                    complete_evidence = _bounded_supplied_evidence(assembled)
+                except ValueError as exc:
+                    stage["status"] = "blocked"
+                    stage["reason"] = str(exc)
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · source material exceeds context limit"
+                    record["message"] = str(exc)
+                    _event(record, "source_material.compilation.blocked", record["message"])
+                    _save(path, record)
+                    return False
                 stage["sources"] = assembled
                 stage["status"] = "completed"
                 stage["finished_at"] = _now()
-                record["uploaded_project_evidence"] = _bounded_supplied_evidence(assembled)
+                record["uploaded_project_evidence"] = complete_evidence
                 record["status"] = "queued"
                 record["current_action"] = "Source material ready"
                 record["message"] = (
@@ -15586,7 +15615,9 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
             )
             _save(path, record)
         # The potentially slow linked-document request is outside locks.
-        compiled = await asyncio.to_thread(research_supplied_evidence.compile_entry, path, source)
+        compiled = await asyncio.to_thread(
+            research_supplied_evidence.compile_entry, path, source, session_id
+        )
         async with _session_state_lock(session_id):
             latest = _read(path, session_id)
             stage = latest["supplied_evidence_compilation"]

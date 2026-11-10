@@ -842,7 +842,7 @@ class CollaborationTests(TestCase):
 
         deletion = SimpleNamespace(path=self.path, expected_project_id="saved-project")
         with (
-            patch("sigma.projects.project_path", return_value=Path(self.path)),
+            patch("sigma.projects.project_path", return_value=Path(self.path).resolve()),
             patch("sigma.projects.projects_root", return_value=self.root),
             patch("sigma.project_collaboration.acquire_lease", return_value=None),
             patch("sigma.api._delete_project_unleased", new_callable=AsyncMock) as delete,

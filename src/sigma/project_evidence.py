@@ -39,8 +39,11 @@ def _read(path: str, member: str) -> bytes | None:
 
         return read_file(target, member) if member in list_files(target) else None
     file = target / member
-    if file.is_symlink():
-        raise ProjectError("Evidence storage must not be a symlink.")
+    ancestor = file
+    while ancestor != target:
+        if ancestor.is_symlink():
+            raise ProjectError("Evidence storage must not be a symlink.")
+        ancestor = ancestor.parent
     return file.read_bytes() if file.is_file() else None
 
 
