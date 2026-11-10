@@ -15583,9 +15583,7 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
             )
             _save(path, record)
         # The potentially slow linked-document request is outside locks.
-        compiled = await asyncio.to_thread(
-            research_supplied_evidence.compile_entry, path, source
-        )
+        compiled = await asyncio.to_thread(research_supplied_evidence.compile_entry, path, source)
         async with _session_state_lock(session_id):
             latest = _read(path, session_id)
             stage = latest["supplied_evidence_compilation"]
