@@ -731,6 +731,50 @@ class ResearchQARequest(OpenRequest):
     question: str = Field(min_length=1, max_length=4000)
 
 
+@app.get("/api/projects/evidence")
+def project_evidence_list(path: str):
+    from sigma import project_evidence
+
+    return {"files": project_evidence.list_evidence(path)}
+
+
+@app.post("/api/projects/evidence")
+async def project_evidence_upload(request: Request, path: str, filename: str):
+    from sigma import project_evidence
+
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > project_evidence.MAX_PDF_BYTES:
+            raise HTTPException(413, "PDF evidence exceeds 12 MiB.")
+    return project_evidence.add_evidence(path, filename, bytes(data))
+
+
+@app.get("/api/projects/evidence/{evidence_id}/pdf")
+def project_evidence_pdf(evidence_id: str, path: str):
+    from sigma import project_evidence
+
+    entry, pdf = project_evidence.get_pdf(path, evidence_id)
+    return Response(
+        pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": "inline; filename*=UTF-8''"
+            + quote(entry["filename"], safe=""),
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.delete("/api/projects/evidence/{evidence_id}")
+def project_evidence_remove(evidence_id: str, path: str):
+    from sigma import project_evidence
+
+    project_evidence.remove_evidence(path, evidence_id)
+    return {"deleted": evidence_id}
+
+
 @app.get("/api/projects/research-qa")
 def research_qa_list(path: str):
     return {
