@@ -236,9 +236,11 @@ class CollaborationTests(TestCase):
             verified_subject=self.other.subject,
         )
         token = shared.acquire_lease(self.path, "Research session")
-        with shared.bind_execution_control_lease(self.path, "Research session"):
-            with shared.write_guard(self.path):
-                pass
+        with (
+            shared.bind_execution_control_lease(self.path, "Research session"),
+            shared.write_guard(self.path),
+        ):
+            pass
         with (
             patch("sigma.api.cloud_auth._mock_enabled", return_value=False),
             patch("sigma.api.cloud_auth.config", return_value=SimpleNamespace()),
