@@ -4283,106 +4283,19 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   </dialog></div>;
 }
 
-type ProjectEvidenceEntry = {
-  id: string; filename: string; sha256: string; bytes: number;
-  pages: number; extract_truncated: boolean; uploaded_at: string;
-  uploaded_by?: string | null; can_remove: boolean;
-};
-
-function ProjectEvidenceIcon() {
-  return <svg aria-hidden="true" className="sigma-action-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m20 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 3a3.7 3.7 0 0 1 5.3 5.3l-9.3 9.3a1.9 1.9 0 0 1-2.7-2.7L14.7 6.5"/>
-  </svg>;
-}
-
-function ProjectEvidenceDialog({ path, onClose }: { path: string; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const input = useRef<HTMLInputElement>(null);
-  const [entries, setEntries] = useState<ProjectEvidenceEntry[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => { dialog.current?.showModal(); }, []);
-  async function reload() {
-    const response = await fetch(`/api/projects/evidence?${new URLSearchParams({ path })}`, {
-      headers: { 'X-Sigma-Error-Handled': 'true' },
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail ?? data.error ?? 'Could not load project evidence.');
-    setEntries(data.files as ProjectEvidenceEntry[]);
-  }
-  useEffect(() => { void reload().catch(cause => setError(errorMessage(cause))); }, [path]);
-  async function upload(file: File) {
-    setBusy(true); setError('');
-    try {
-      const url = `/api/projects/evidence?${new URLSearchParams({ path, filename: file.name })}`;
-      const response = await fetch(url, {
-        method: 'POST', body: file,
-        headers: { 'Content-Type': 'application/pdf', 'X-Sigma-Error-Handled': 'true' },
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail ?? data.error ?? 'Evidence upload failed.');
-      }
-      await reload();
-    } catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); if (input.current) input.current.value = ''; }
-  }
-  async function remove(entry: ProjectEvidenceEntry) {
-    if (!window.confirm(`Remove "${entry.filename}" from project evidence?`)) return;
-    setBusy(true); setError('');
-    try {
-      const response = await fetch(`/api/projects/evidence/${entry.id}?${new URLSearchParams({ path })}`, {
-        method: 'DELETE', headers: { 'X-Sigma-Error-Handled': 'true' },
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail ?? data.error ?? 'Could not remove evidence.');
-      }
-      await reload();
-    } catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); }
-  }
-  return <dialog ref={dialog} className="project-settings-dialog project-evidence-dialog" aria-labelledby="project-evidence-title"
-    onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
-    <header className="settings-header">
-      <h2 id="project-evidence-title">Project Evidence</h2>
-      <div className="settings-actions">
-        <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add PDF evidence" data-tooltip="Add PDF evidence"
-          disabled={busy || entries.length >= 20} onClick={() => input.current?.click()}><CirclePlusIcon/></button>
-        <DialogDismissButton label="Close project evidence" onClick={onClose}/>
-      </div>
-    </header>
-    <div className="settings-body">
-      <input ref={input} type="file" accept=".pdf,application/pdf" hidden
-        onChange={event => { const file = event.target.files?.[0]; if (file) void upload(file); }}/>
-      {error && <p className="error" role="alert">{error}</p>}
-      {busy && <p role="status">Updating evidence…</p>}
-      {!entries.length && !busy && <p className="settings-hint">Add a PDF to make its extracted text available as source evidence in future research and papers.</p>}
-      <div className="project-evidence-list">{entries.map(entry => <div className="project-evidence-entry" key={entry.id}>
-        <a href={`/api/projects/evidence/${entry.id}/pdf?${new URLSearchParams({ path })}`} target="_blank" rel="noreferrer">{entry.filename}</a>
-        <span>{entry.pages} pages{entry.extract_truncated ? ' · excerpt limited' : ''}</span>
-        {entry.can_remove && <button type="button" className="text-view-link" data-tooltip="Remove evidence" aria-label={`Remove ${entry.filename}`} disabled={busy}
-          onClick={() => void remove(entry)}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>}
-      </div>)}</div>
-    </div>
-  </dialog>;
-}
-
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
-  const [projectEvidenceOpen, setProjectEvidenceOpen] = useState(false);
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{(researchRunning || paperRunning || paperQueued)
         ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : 'Scroll to Papers'} in ${projectTitle}`} data-tooltip={researchRunning ? 'Scroll to running session' : 'Scroll to Papers'} onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : 'sigma-reveal-papers'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true"><span className={`research-running-indicator${paperQueued && !researchRunning && !paperRunning ? " paper-queued-indicator" : ""}`}/></span></span></button>
-        : <span className="project-header-title">{projectTitle}</span>}{projectView && <button type="button" className="text-view-link workspace-icon-button project-evidence-launch" aria-label="Project evidence" data-tooltip="Project evidence" onClick={() => setProjectEvidenceOpen(true)}><ProjectEvidenceIcon/></button>}</div>{projectActions}</>}</div>
+        : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
-    {projectEvidenceOpen && projectView && <ProjectEvidenceDialog path={projectView.path} onClose={() => setProjectEvidenceOpen(false)}/>}
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
