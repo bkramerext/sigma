@@ -1699,9 +1699,7 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
     from sigma import project_evidence
 
     for entry in project_evidence.evidence_context(path, limit=48000):
-        sources.append(
-            {"id": entry["id"], "kind": "uploaded_pdf", "data": entry}
-        )
+        sources.append({"id": entry["id"], "kind": "uploaded_pdf", "data": entry})
     from sigma import research_ethos
 
     package = {
