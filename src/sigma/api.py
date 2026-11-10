@@ -759,8 +759,7 @@ def project_evidence_pdf(evidence_id: str, path: str):
         pdf,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": "inline; filename*=UTF-8''"
-            + quote(entry["filename"], safe=""),
+            "Content-Disposition": "inline; filename*=UTF-8''" + quote(entry["filename"], safe=""),
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
         },
