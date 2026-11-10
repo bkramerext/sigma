@@ -197,6 +197,20 @@ def main() -> None:
                 portable = downloaded.json()
                 assert portable["format"] == "sigma.project.bundle"
                 assert portable["version"] == 4
+                # External v1-v3 uploads must not bypass v4 artifact validation.
+                # Legacy live .json projects are still readable and exported as v4.
+                old_version = client.post(
+                    "/api/projects/import",
+                    json={
+                        "bundle": {
+                            "format": portable["format"],
+                            "version": 3,
+                            "files": portable["files"],
+                        }
+                    },
+                )
+                assert old_version.status_code == 400, old_version.text
+                assert "Only version 4" in old_version.json()["error"]
                 # Both the canonical export route and the legacy download
                 # alias must return one complete, importable file bundle.
                 legacy_download = client.get(
