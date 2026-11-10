@@ -910,3 +910,14 @@
 
 /* The LEAN teaser is a two-line notice, not a full-size settings dialog. */
 .project-settings-dialog.lean-placeholder-dialog { box-sizing: border-box; width: min(400px, calc(100vw - 32px)); min-width: 0; max-width: calc(100vw - 32px); }
+
+
+/* Project-level source evidence: small extension of SIGMA's dialog/action patterns. */
+.project-evidence-dialog { width: min(580px, calc(100vw - 36px)); }
+.project-evidence-dialog .project-evidence-list { display: flex; flex-direction: column; gap: 6px; }
+.project-evidence-dialog .project-evidence-entry { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 8px 0; border-bottom: 1px solid #39434c; }
+.project-evidence-dialog .project-evidence-entry a { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; color: var(--sigma-copper-foreground); }
+.project-evidence-dialog .project-evidence-entry span { color: #c1c5ca; font-size: 0.8rem; white-space: nowrap; }
+.project-evidence-dialog .project-evidence-entry button { flex: 0 0 auto; }
+.project-header-title-row .project-evidence-launch { display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; padding: 2px; border: 0; background: none; color: var(--sigma-copper-foreground); cursor: pointer; }
+.project-header-title-row .project-evidence-launch .sigma-action-glyph { width: 19px; height: 19px; }
