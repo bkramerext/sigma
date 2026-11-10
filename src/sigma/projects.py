@@ -825,8 +825,8 @@ def initialize_project(
     except ValueError as exc:
         raise ProjectError(str(exc)) from exc
     path = project_path(value)
-    if not title.strip() or not problem.strip():
-        raise ProjectError("Title and problem must be nonempty")
+    title = _text(title, "Project name", 200)
+    problem = _text(problem, "Research problem", 20000)
     if path.suffix == ".json":
         from sigma.project_bundle import stored_bundle
 
