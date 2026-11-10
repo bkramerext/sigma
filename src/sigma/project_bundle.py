@@ -523,6 +523,17 @@ def read_file(bundle_path: str | Path, relative_path: str) -> bytes:
             or any(part in {"", ".", ".."} for part in relative_path.split("/"))
         ):
             raise BundleError("Unsafe project member path")
+        # Historical callers still use the pre-v4 paper member namespace.
+        if relative_path.startswith("artifacts/papers/snapshots/"):
+            relative_path = (
+                "artifacts/generated_papers/.snapshots/"
+                + relative_path[len("artifacts/papers/snapshots/") :]
+            )
+        elif relative_path.startswith("artifacts/papers/"):
+            relative_path = (
+                "artifacts/generated_papers/"
+                + relative_path[len("artifacts/papers/") :]
+            )
         member = path
         for component in relative_path.split("/"):
             member = member / component
