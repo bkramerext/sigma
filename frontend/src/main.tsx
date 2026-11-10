@@ -4924,6 +4924,7 @@ function DifficultyPicker({ value, onChange }: {
 type SharedProjectInfo = {
   artifact_authors?: Partial<Record<'strategy' | 'session' | 'paper', Record<string, string>>>;
   owner: string | null;
+  you?: string;
   collaborators: string[];
   removable_collaborators?: string[];
   revision: number;
@@ -6770,7 +6771,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <div className="project-overview-card">
       <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
       <ProjectDescriptionEditor view={view}
-        editing={descriptionEditing} busy={descriptionBusy} onBusyChange={setDescriptionBusy}
+        editing={descriptionEditing} busy={descriptionBusy}
+        canEditTitle={!sharedActivity?.owner || sharedActivity.owner === sharedActivity.you}
+        onBusyChange={setDescriptionBusy}
         onDirtyChange={setDescriptionDirty}
         onExitMode={() => {
           setDescriptionEditing(false);

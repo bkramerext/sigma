@@ -224,6 +224,16 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(guest.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
         guest_context.close()
 
+        # Collaborators may edit the research description, but the owner
+        # alone can change the project title.
+        member.goto(url)
+        expect(member.get_by_role("button", name="Edit project fields")).to_be_visible()
+        member.get_by_role("button", name="Edit project fields").click()
+        assert member.get_by_role("textbox", name="Project title").count() == 0
+        expect(member.locator(".sigma-description-title-row .current-project")).to_have_text(title)
+        expect(member.get_by_role("textbox", name="Research Subject")).to_be_visible()
+        member.get_by_role("button", name="Cancel", exact=True).click()
+
         # Preserve the original owner's staged settings for conflict testing.
         # Concurrent settings: a collaborator can edit the same file, while
         # the owner's stale draft must fail revision CAS, not overwrite it.

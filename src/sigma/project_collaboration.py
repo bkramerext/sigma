@@ -580,6 +580,22 @@ def note_artifact_author(
         db.commit()
 
 
+def require_project_title_owner(path: str) -> None:
+    """The project owner alone may rename a shared project.
+
+    Collaborators may still edit the project research description and other
+    shared fields. This check belongs at the storage boundary, not just the UI.
+    """
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    with _db() as db:
+        row, _actor = _membership(db, path)
+        if row["owner_hash"] != _identity()[0].subject_hash:
+            raise ProjectError("Only the project owner can change the project title.")
+
+
 def collaborator_identity(path: str) -> str | None:
     """Verified collaborator email for durable, human-authored output metadata."""
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:

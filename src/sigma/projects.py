@@ -1557,6 +1557,7 @@ def update_project(
         if project_only(current) == project_only(effective_wanted):
             return project
         if effective_wanted.title != current.title:
+            project_collaboration.require_project_title_owner(str(value))
             _require_available_title(effective_wanted.title, projects_root(), exclude_id=project.id)
         wanted_type_id = str(
             getattr(

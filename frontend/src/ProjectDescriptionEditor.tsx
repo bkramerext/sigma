@@ -18,11 +18,12 @@ const definitions = [
 ] as const;
 
 export default function ProjectDescriptionEditor({
-  view, editing, busy, onBusyChange, onDirtyChange, onExitMode, onSave,
+  view, editing, busy, canEditTitle = true, onBusyChange, onDirtyChange, onExitMode, onSave,
 }: {
   view: ProjectDescriptionView;
   editing: boolean;
   busy: boolean;
+  canEditTitle?: boolean;
   onBusyChange: (busy: boolean) => void;
   onDirtyChange: (dirty: boolean) => void;
   onExitMode: () => void;
@@ -49,8 +50,8 @@ export default function ProjectDescriptionEditor({
   }, [editing, view.project.title, view.project.problem,
       view.project.desired_outcomes, view.project.paper_requirements]);
   useEffect(() => {
-    if (editing) { titleInput.current?.focus(); titleInput.current?.select(); }
-  }, [editing]);
+    if (editing && canEditTitle) { titleInput.current?.focus(); titleInput.current?.select(); }
+  }, [editing, canEditTitle]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -88,10 +89,12 @@ export default function ProjectDescriptionEditor({
   return     <div className="sigma-description-editor">
     {editing ? <form id="sigma-project-description-form" onSubmit={save}>
       <div className="project-pane-title-line is-renaming sigma-description-title-row">
-        <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
-        <input id="project-pane-title-input" ref={titleInput} required
-          aria-label="Project title" value={draft.title} maxLength={200} disabled={busy}
-          onChange={event => setDraft(old => ({ ...old, title: event.target.value }))}/>
+        {canEditTitle ? <>
+          <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
+          <input id="project-pane-title-input" ref={titleInput} required
+            aria-label="Project title" value={draft.title} maxLength={200} disabled={busy}
+            onChange={event => setDraft(old => ({ ...old, title: event.target.value }))}/>
+        </> : <h3 className="current-project">{view.project.title}</h3>}
       </div>
       {fields}
       {error && <p className="error" role="alert">{error}</p>}

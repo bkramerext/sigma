@@ -94,6 +94,27 @@ class CollaborationTests(TestCase):
                 (self.path, self.other.email),
             )
 
+    def test_only_project_owner_can_rename_but_collaborator_can_edit_other_fields(self) -> None:
+        shared.require_project_title_owner(self.path)
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="other-hash",
+            path=self.root / "other",
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            with self.assertRaisesRegex(ProjectError, "Only the project owner"):
+                shared.require_project_title_owner(self.path)
+            # Other project fields retain normal collaborator editing privileges.
+            self.assertEqual(shared.summary(self.path)["owner"], self.owner.email)
+
     def test_collaborator_alone_sees_shared_project_in_saved(self) -> None:
         """An invitation is durable and does not depend on owner's login session."""
         from contextlib import contextmanager

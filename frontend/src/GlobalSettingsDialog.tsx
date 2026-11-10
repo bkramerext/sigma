@@ -32,7 +32,7 @@ type EthosConfig = { markdown: string; is_override: boolean; version: string; sh
 type Preference = { allow_unattended_background_execution: boolean; expand_one_project_section_at_a_time: boolean; progress_email: boolean };
 const tabs: { id: Tab; title: string }[] = [
   { id: 'types', title: 'Project Types' },
-  { id: 'model', title: 'Model/Thinking' },
+  { id: 'model', title: 'Model' },
   { id: 'limits', title: 'Limits' },
   { id: 'preferences', title: 'Preferences' },
   { id: 'ethos', title: 'Research Ethos' },
@@ -372,7 +372,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           </div>
           {!modelPairValid && <p role="alert" className="error">This model does not support the selected Thinking level.</p>}
           {modelsUnavailable && <p className="settings-hint">Model choices are unavailable; your saved settings remain unchanged.</p>}
-          <p className="settings-hint">Your choices apply to your AI calls in all projects. Existing research and papers retain their recorded models.</p>
+          <p className="settings-hint">Model and Thinking belong to your account, even in a shared project. Other collaborators cannot change your choices. Existing work keeps its recorded model.</p>
         </fieldset>}
         {config && tab === 'limits' && <fieldset disabled={busy} className="sigma-global-limits">
           <div className="sigma-global-limit-row">

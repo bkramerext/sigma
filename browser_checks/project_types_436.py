@@ -179,7 +179,7 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Settings", exact=True).click()
     user_dialog = page.get_by_role("dialog", name="User Settings")
     tabs = user_dialog.get_by_role("tab")
-    assert tabs.nth(1).inner_text() == "Model/Thinking"
+    assert tabs.nth(1).inner_text() == "Model"
     tabs.nth(1).click()
     model_choice = user_dialog.get_by_role("combobox", name="Model", exact=True)
     thinking_choice = user_dialog.get_by_role("combobox", name="Thinking", exact=True)
