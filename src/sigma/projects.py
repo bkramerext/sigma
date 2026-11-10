@@ -1979,15 +1979,22 @@ def read_project_artifact(value: str | Path, name: str) -> bytes:
     """Read an evidence or artifact member from an authorized JSON project."""
     path = project_path(value)
     if (
-        path.suffix != ".json"
-        or not isinstance(name, str)
+        not isinstance(name, str)
         or not name.startswith(("evidence/", "artifacts/"))
+        or "\\" in name
+        or any(part in {"", ".", ".."} for part in name.split("/"))
     ):
         raise ProjectError("Artifact path is invalid")
     inspect_project(path)
     from sigma.project_bundle import read_file
 
     try:
+        if path.suffix == ".sigma" and name.startswith("artifacts/papers/"):
+            canonical = "artifacts/generated_papers/" + name[len("artifacts/papers/"):]
+            try:
+                return read_file(path, canonical)
+            except ValueError:
+                return read_file(path, name)
         return read_file(path, name)
     except (OSError, ValueError) as exc:
         raise ProjectError(f"Cannot read project artifact: {exc}") from exc
