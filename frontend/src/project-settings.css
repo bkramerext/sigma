@@ -557,6 +557,9 @@
 .project-settings-dialog.ai-paper-dialog.research-qa-dialog > .settings-body.ai-paper-body {
   flex: 1 1 auto;
   min-height: 0;
+  /* The resizable fixed-height Q/A body must not stretch its grid rows apart. */
+  align-content: start;
+  grid-auto-rows: max-content;
 }
 
 /* Each expanded answer has its own vertical resize handle and independent
