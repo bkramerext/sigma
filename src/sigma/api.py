@@ -735,8 +735,12 @@ class ResearchQARequest(OpenRequest):
 def project_evidence_list(path: str):
     from sigma import project_evidence
 
-    files = project_evidence.list_evidence(path)
     principal = cloud_auth.current_principal()
+    # Public sample guests can view the project but have no private evidence
+    # directory and must not make unauthorized evidence requests.
+    if principal is not None and principal.role == "guest":
+        return {"files": []}
+    files = project_evidence.list_evidence(path)
     owner = project_collaboration.summary(path)["owner"] if principal else None
     return {
         "files": [
