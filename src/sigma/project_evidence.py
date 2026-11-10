@@ -8,8 +8,8 @@ import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import pypdfium2
 
@@ -148,7 +148,7 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
         raise ProjectError("Guests cannot add evidence.")
     with project_write_lock(path):
         rows = list_evidence(path)
-        duplicate = next((row for row in rows if row["sha256"] == sha), None)
+        duplicate = next((row for row in rows if row.get("sha256") == sha), None)
         if duplicate is not None:
             return duplicate
         if len(rows) >= MAX_FILES:
@@ -172,7 +172,6 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
         }
         _write(path, updates)
         return entry
-
 
 
 def add_link(path: str, url: str) -> dict:
@@ -212,6 +211,7 @@ def add_link(path: str, url: str) -> dict:
         _write(path, {MANIFEST: json.dumps([*rows, entry], sort_keys=True).encode()})
         return entry
 
+
 def get_pdf(path: str, identifier: str) -> tuple[dict, bytes]:
     row = next((row for row in list_evidence(path) if row["id"] == identifier), None)
     if row is None:
@@ -242,10 +242,14 @@ def remove_evidence(path: str, identifier: str) -> None:
         _write(
             path,
             {
-                **({} if entry.get("kind") == "link" else {
-                    f"artifacts/evidence/{identifier}.pdf": None,
-                    f"artifacts/evidence/{identifier}.txt": None,
-                }),
+                **(
+                    {}
+                    if entry.get("kind") == "link"
+                    else {
+                        f"artifacts/evidence/{identifier}.pdf": None,
+                        f"artifacts/evidence/{identifier}.txt": None,
+                    }
+                ),
                 MANIFEST: json.dumps(
                     [row for row in rows if row["id"] != identifier], sort_keys=True
                 ).encode(),
@@ -262,13 +266,15 @@ def evidence_context(path: str, *, limit: int = 16000) -> list[dict]:
     remaining = limit
     for index, row in enumerate(rows):
         if row.get("kind") == "link":
-            output.append({
-                "id": f"uploaded-link:{row['id']}",
-                "url": row["url"],
-                "excerpt": "",
-                "incomplete_extract": True,
-                "provenance": "User-supplied URL pointer; content has not been retrieved or verified.",
-            })
+            output.append(
+                {
+                    "id": f"uploaded-link:{row['id']}",
+                    "url": row["url"],
+                    "excerpt": "",
+                    "incomplete_extract": True,
+                    "provenance": "User-supplied URL pointer; content has not been retrieved or verified.",
+                }
+            )
             continue
         body = _read(path, f"artifacts/evidence/{row['id']}.txt")
         if body is None:
