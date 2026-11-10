@@ -88,7 +88,7 @@ function SuppliedEvidence({ path, expanded, onToggle }: { path: string; expanded
     </div></div>
     <input ref={uploadInput} type="file" accept=".pdf,application/pdf" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void attach(file); }}/>
     <div id="sigma-supplied-evidence-content" hidden={!expanded}>
-    <p className="settings-hint">Attached documents and linked sources are read when research starts. Their contents are treated as true premises for this project, with source attribution preserved.</p>
+    <p className="settings-hint">Files and links SIGMA reads and accepts as true premises for this research. Unlike Research Standards, these define what is true—not how to investigate.</p>
     {rows.map(entry => <div className="sigma-evidence-row" key={entry.id}>
       {entry.kind === 'link'
         ? <a href={entry.url} target="_blank" rel="noopener noreferrer">{entry.url}</a>
