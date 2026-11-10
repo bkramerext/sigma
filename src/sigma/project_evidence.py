@@ -107,7 +107,10 @@ def _extract(pdf: bytes) -> tuple[int, str, bool]:
                 textpage = page.get_textpage()
                 try:
                     # Extract at most 2,000 characters per sampled page.
-                    excerpt = textpage.get_text_range()[:2000]
+                    full_page_text = textpage.get_text_range()
+                    excerpt = full_page_text[:2000]
+                    if len(full_page_text) > len(excerpt):
+                        omitted = True
                 finally:
                     textpage.close()
             finally:
@@ -207,18 +210,19 @@ def remove_evidence(path: str, identifier: str) -> None:
 
 
 def evidence_context(path: str, *, limit: int = 16000) -> list[dict]:
-    """Bounded, source-attributed text for research or frozen paper snapshots."""
+    """Source-attributed extracts, distributing context fairly across files."""
     rows = list_evidence(path)
-    output = []
+    output: list[dict] = []
+    if not rows:
+        return output
     remaining = limit
-    for row in rows:
-        if remaining <= 0:
-            break
+    for index, row in enumerate(rows):
         body = _read(path, f"artifacts/evidence/{row['id']}.txt")
         if body is None:
             raise ProjectError("Saved evidence extract is missing.")
         text = body.decode("utf-8")
-        excerpt = text[:remaining]
+        allowance = max(0, remaining // (len(rows) - index))
+        excerpt = text[:allowance]
         remaining -= len(excerpt)
         output.append(
             {
