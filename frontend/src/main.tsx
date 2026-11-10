@@ -2586,6 +2586,23 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
   const includePopupRef = useRef<HTMLDivElement>(null);
   const includeButtonRef = useRef<HTMLButtonElement>(null);
   const [includePopupOffset, setIncludePopupOffset] = useState(0);
+  const [includePopupAbove, setIncludePopupAbove] = useState(false);
+  const [includePopupMaxHeight, setIncludePopupMaxHeight] = useState(380);
+  useLayoutEffect(() => {
+    if (!includeOptionsOpen) return;
+    const button = includeButtonRef.current;
+    const popup = includePopupRef.current;
+    if (!button || !popup) return;
+    const bounds = button.getBoundingClientRect();
+    const edge = 16;
+    const popupGap = 9;
+    const naturalHeight = popup.scrollHeight + 28; // Account for vertical padding.
+    const below = Math.max(0, window.innerHeight - bounds.bottom - popupGap - edge);
+    const above = Math.max(0, bounds.top - popupGap - edge);
+    const placeAbove = below < Math.min(380, naturalHeight) && above > below;
+    setIncludePopupAbove(placeAbove);
+    setIncludePopupMaxHeight(Math.max(0, Math.min(380, placeAbove ? above : below)));
+  }, [includeOptionsOpen]);
   function openIncludeOptions() {
     const button = includeButtonRef.current;
     if (!button) return;
@@ -3308,7 +3325,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
         <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
         <span className="paper-includes-anchor">
           <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
-          {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className="paper-includes-dialog" role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset }}>
+          {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className={`paper-includes-dialog${includePopupAbove ? ' paper-includes-dialog-above' : ''}`} role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset, maxHeight: includePopupMaxHeight }}>
       <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
 
