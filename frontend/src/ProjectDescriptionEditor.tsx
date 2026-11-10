@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import RenderedMarkdown from './RenderedMarkdown';
+import './project-settings.css';
 import './project-description.css';
 
 export type ProjectDescriptionDraft = {
@@ -9,7 +10,97 @@ export type ProjectDescriptionDraft = {
   paper_requirements: string;
 };
 
-type ProjectDescriptionView = { project: ProjectDescriptionDraft };
+type ProjectDescriptionView = { path: string; project: ProjectDescriptionDraft };
+type EvidenceRow = { id: string; kind?: 'file' | 'link'; filename?: string; url?: string; pages?: number; can_remove?: boolean };
+function EvidencePlusIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>;
+}
+function EvidenceClipIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m20 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 3a3.7 3.7 0 0 1 5.3 5.3l-9.3 9.3a1.9 1.9 0 0 1-2.7-2.7L14.7 6.5"/></svg>;
+}
+function EvidenceRemoveIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>;
+}
+function SuppliedEvidence({ path }: { path: string }) {
+  const [rows, setRows] = useState<EvidenceRow[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const uploadInput = useRef<HTMLInputElement>(null);
+  const linkInput = useRef<HTMLInputElement>(null);
+  const saving = useRef(false);
+  async function reload() {
+    const response = await fetch(`/api/projects/evidence?${new URLSearchParams({ path })}`, {
+      headers: { 'X-Sigma-Error-Handled': 'true' },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail ?? 'Could not load evidence.');
+    setRows(result.files as EvidenceRow[]);
+  }
+  useEffect(() => { void reload().catch(cause => setError(String(cause))); }, [path]);
+  useEffect(() => { if (adding) linkInput.current?.focus(); }, [adding]);
+  async function addLink() {
+    if (saving.current) return;
+    const value = url.trim();
+    if (!value) { setAdding(false); return; }
+    saving.current = true; setBusy(true); setError('');
+    try {
+      const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+      const response = await fetch('/api/projects/evidence/link', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({ path, url: normalized }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? 'Could not add link.');
+      await reload(); setAdding(false); setUrl('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { saving.current = false; setBusy(false); }
+  }
+  async function attach(file: File) {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch(`/api/projects/evidence?${new URLSearchParams({ path, filename: file.name })}`, {
+        method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf', 'X-Sigma-Error-Handled': 'true' },
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? 'Could not attach file.');
+      await reload();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); if (uploadInput.current) uploadInput.current.value = ''; }
+  }
+  async function remove(id: string) {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch(`/api/projects/evidence/${id}?${new URLSearchParams({ path })}`, {
+        method: 'DELETE', headers: { 'X-Sigma-Error-Handled': 'true' },
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? 'Could not remove evidence.');
+      await reload();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
+  }
+  return <section className="sigma-description-field sigma-supplied-evidence">
+    <div className="sigma-evidence-heading"><h4>Supplied Evidence</h4><div className="sigma-evidence-actions">
+      <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add link" data-tooltip="Add link" disabled={busy || adding || rows.length >= 20} onClick={() => setAdding(true)}><EvidencePlusIcon/></button>
+      <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Attach a file" data-tooltip="Attach a file" disabled={busy || rows.length >= 20} onClick={() => uploadInput.current?.click()}><EvidenceClipIcon/></button>
+    </div></div>
+    <input ref={uploadInput} type="file" accept=".pdf,application/pdf" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void attach(file); }}/>
+    {rows.map(entry => <div className="sigma-evidence-row" key={entry.id}>
+      {entry.kind === 'link'
+        ? <a href={entry.url} target="_blank" rel="noopener noreferrer">{entry.url}</a>
+        : <a href={`/api/projects/evidence/${entry.id}/pdf?${new URLSearchParams({ path })}`} target="_blank" rel="noopener noreferrer">Attached: {entry.filename}</a>}
+      {entry.can_remove !== false && <button type="button" className="text-view-link sigma-evidence-remove" aria-label={`Remove ${entry.filename ?? entry.url}`} data-tooltip="Remove evidence" disabled={busy} onClick={() => void remove(entry.id)}><EvidenceRemoveIcon/></button>}
+    </div>)}
+    {adding && <input ref={linkInput} className="sigma-evidence-link-input" aria-label="Evidence link" placeholder="Paste a URL" value={url} disabled={busy}
+      onChange={event => setUrl(event.target.value)}
+      onBlur={() => void addLink()}
+      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addLink(); } if (event.key === 'Escape') { setAdding(false); setUrl(''); } }}/>}
+    {error && <p className="error" role="alert">{error}</p>}
+  </section>;
+}
+
 
 const definitions = [
   { key: 'problem', title: 'Research Subject', help: 'What are we investigating?', rows: 3 },
@@ -83,6 +174,7 @@ export default function ProjectDescriptionEditor({
           : <p className="settings-hint">Not specified.</p>}
       </div>}
     </section>)}
+    <SuppliedEvidence path={view.path}/>
   </div>;
 
   return     <div className="sigma-description-editor">
