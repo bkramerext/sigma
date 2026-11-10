@@ -306,6 +306,7 @@ def main() -> None:
                     managed / "legacy-copy.json", "Legacy Copy", "Legacy snapshot compatibility"
                 )
                 source_path = legacy_copy.path
+                open_project(source_path)  # The legacy test project is explicitly opened.
                 source_id = legacy_copy.project.id
                 session_id = str(uuid4())
                 run_id = uuid4().hex
