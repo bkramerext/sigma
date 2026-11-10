@@ -18,7 +18,7 @@ from sigma.projects import ProjectError, inspect_project, project_path, project_
 MAX_PDF_BYTES = 12 * 1024 * 1024
 MAX_FILES = 20
 MAX_EXTRACT_CHARS = 48000
-MANIFEST = "artifacts/evidence/manifest.json"
+MANIFEST = "artifacts/source_material/manifest.json"
 _NAME = re.compile(r"[^\w .()\-]", re.UNICODE)
 
 
@@ -166,8 +166,8 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
             "uploaded_by": principal.email if principal is not None else None,
         }
         updates: dict[str, bytes | None] = {
-            f"artifacts/evidence/{identifier}.pdf": pdf,
-            f"artifacts/evidence/{identifier}.txt": extract.encode("utf-8"),
+            f"artifacts/source_material/{identifier}.pdf": pdf,
+            f"artifacts/source_material/{identifier}.txt": extract.encode("utf-8"),
             MANIFEST: json.dumps([*rows, entry], sort_keys=True).encode(),
         }
         _write(path, updates)
@@ -218,7 +218,7 @@ def get_pdf(path: str, identifier: str) -> tuple[dict, bytes]:
         raise ProjectError("Evidence file not found.")
     if row.get("kind") == "link":
         raise ProjectError("Evidence link is not an attached PDF.")
-    pdf = _read(path, f"artifacts/evidence/{identifier}.pdf")
+    pdf = _read(path, f"artifacts/source_material/{identifier}.pdf")
     if pdf is None or hashlib.sha256(pdf).hexdigest() != row["sha256"]:
         raise ProjectError("Evidence PDF is unavailable or has changed.")
     return row, pdf
@@ -246,8 +246,8 @@ def remove_evidence(path: str, identifier: str) -> None:
                     {}
                     if entry.get("kind") == "link"
                     else {
-                        f"artifacts/evidence/{identifier}.pdf": None,
-                        f"artifacts/evidence/{identifier}.txt": None,
+                        f"artifacts/source_material/{identifier}.pdf": None,
+                        f"artifacts/source_material/{identifier}.txt": None,
                     }
                 ),
                 MANIFEST: json.dumps(
@@ -276,7 +276,7 @@ def evidence_context(path: str, *, limit: int = 16000) -> list[dict]:
                 }
             )
             continue
-        body = _read(path, f"artifacts/evidence/{row['id']}.txt")
+        body = _read(path, f"artifacts/source_material/{row['id']}.txt")
         if body is None:
             raise ProjectError("Saved evidence extract is missing.")
         text = body.decode("utf-8")
