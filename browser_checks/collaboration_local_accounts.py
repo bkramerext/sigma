@@ -353,6 +353,10 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         assert updated["project"]["problem"] == amended, updated
         assert updated["project"]["difficulty"] == "medium", updated
+        # Exercise the same open browser pair for another saved field update.
+        expect(owner.locator(".project-overview-card")).to_contain_text(
+            amended, timeout=20000
+        )
 
         # Remote committed changes invalidate an in-progress editor rather
         # than trying to merge its draft. The owner must reopen settings.
@@ -370,6 +374,13 @@ def exercise(ui: str, workspaces: Path) -> None:
             owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
         )
         assert updated["project"]["difficulty"] == "hard", updated
+        # Owner settings also flow to N without navigation or a second browser.
+        member.get_by_role("button", name="Project settings", exact=True).click()
+        member_dialog = member.get_by_role("dialog", name="Project Settings")
+        expect(member_dialog.locator(".settings-classification-row")).to_contain_text(
+            "Hard", timeout=20000
+        )
+        member_dialog.get_by_role("button", name="Close Project Settings").click()
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()
