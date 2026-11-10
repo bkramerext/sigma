@@ -5464,7 +5464,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; collaborator?: boolean; activity_author?: string | null; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; collaborator?: boolean; activity_author?: string | null; answer_active?: boolean; activity_runs?: Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; creator?: string | null; model?: string; thinking?: string }>; error: string | null };
 // Saved groups by title without the terminal version; versions sort numerically descending.
 // Most Recent intentionally keeps last-accessed ordering.
 const savedVersionSuffix = /\s+(?:v(?:ersion)?\s*(\d+(?:\.\d+)*)|\(\s*v(?:ersion)?\s*(\d+(?:\.\d+)*)\s*\))$/i;
@@ -5690,10 +5690,16 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   const eligibleProjects = projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable'));
   const visibleProjects = flat ? eligibleProjects : [...eligibleProjects].sort((a, b) =>
     researchTypeLabel(a.investigation_type).localeCompare(researchTypeLabel(b.investigation_type)) || compareSavedVersions(a, b));
+  const recentRunLabels = (entry: RecentProject): string[] => {
+    const runs = entry.activity_runs ?? [];
+    const visible = runs.some(run => run.status === 'active')
+      ? runs.filter(run => run.status === 'active') : runs;
+    return visible.map(run => formatRunAttribution({ ...run, mode: 'hover' }));
+  };
   // Running work takes precedence over a queued paper on the same project.
   // The queue API exposes paper_activity when the queued-generation feature lands.
   const paperActivity = (entry: RecentProject): 'running' | 'queued' | null =>
-    entry.research_running || entry.paper_generating || entry.paper_activity === 'active'
+    entry.research_running || entry.answer_active || entry.paper_generating || entry.paper_activity === 'active'
       ? 'running'
       : entry.paper_activity === 'queued' ? 'queued' : null;
   // Keep the ten newest projects plus every older running or queued project.
@@ -5726,8 +5732,8 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
       }}>
       <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}{hiddenGroupActivity && <><span className={`research-running-indicator${hiddenGroupActivity === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={(() => {
         const active = group.projects.filter(project => paperActivity(project));
-        return active.length === 1 && active[0].shared && active[0].activity_author
-          ? `By ${active[0].activity_author}` : undefined;
+        const labels = active.flatMap(project => recentRunLabels(project).map(label => `${project.title}: ${label}`));
+        return labels.join('\n') || undefined;
       })()}/><span className="sr-only">{hiddenGroupActivity === 'queued' ? 'Paper generation queued in this category' : 'Activity running in this category'}</span></>}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
@@ -5746,7 +5752,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={entry.shared && entry.activity_author ? `By ${entry.activity_author}` : paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={recentRunLabels(entry).join('\n') || undefined}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
