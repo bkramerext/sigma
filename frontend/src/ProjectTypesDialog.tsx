@@ -697,10 +697,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderEffectiveIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      <section><div className="pt-reference-heading"><h3>Research standards references</h3>{referenceAddButton(item.id, 'research_standards_references', [...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : [])], false, readonly ? item.research_standards_references.length : 0)}</div>{listEditor(item.id, 'research_standards_references', [
+      <section><div className="pt-reference-heading"><h3>Research Standards</h3>{referenceAddButton(item.id, 'research_standards_references', [...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : [])], false, readonly ? item.research_standards_references.length : 0)}</div>{listEditor(item.id, 'research_standards_references', [
         ...item.research_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.research_standards_references ?? [] : []),
       ], false, readonly ? item.research_standards_references.length : 0)}</section>
-      <section><div className="pt-reference-heading"><h3>Publication standards references</h3>{referenceAddButton(item.id, 'publication_standards_references', [...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : [])], false, readonly ? item.publication_standards_references.length : 0)}</div>{listEditor(item.id, 'publication_standards_references', [
+      <section><div className="pt-reference-heading"><h3>Publication Standards</h3>{referenceAddButton(item.id, 'publication_standards_references', [...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : [])], false, readonly ? item.publication_standards_references.length : 0)}</div>{listEditor(item.id, 'publication_standards_references', [
         ...item.publication_standards_references, ...(readonly ? builtinCustomReferences[item.id]?.publication_standards_references ?? [] : []),
       ], false, readonly ? item.publication_standards_references.length : 0)}</section>
     </div>
@@ -745,16 +745,16 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     {!embedded && <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton ref={first} label="Close Project Types" disabled={busy} onClick={close}/></div></header>}
     {error && <p role="alert" className="pt-dialog-error">{error}</p>}
     <div className="project-types-body">
-      <p className="pt-usage-notice">Reference materials incur higher ChatGPT usage.</p>
+      <p className="pt-usage-notice">Compiling standards may increase ChatGPT usage.</p>
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" data-tooltip="New project type"><ProjectTypeNewIcon/></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
-        <div className="pt-reference-heading"><h4>Research standards references for all project types</h4>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>
+        <div className="pt-reference-heading"><h4>Research Standards for all project types</h4>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>
         {listEditor('common', 'research_standards_references', [
           ...(commonReferences?.research_standards_references ?? []),
           ...commonCustomReferences.research_standards_references,
         ], false, commonReferences?.research_standards_references.length ?? 0)}
-        <div className="pt-reference-heading"><h4>Publication standards references for all project types</h4>{referenceAddButton('common', 'publication_standards_references', [...(commonReferences?.publication_standards_references ?? []), ...commonCustomReferences.publication_standards_references], false, commonReferences?.publication_standards_references.length ?? 0)}</div>
+        <div className="pt-reference-heading"><h4>Publication Standards for all project types</h4>{referenceAddButton('common', 'publication_standards_references', [...(commonReferences?.publication_standards_references ?? []), ...commonCustomReferences.publication_standards_references], false, commonReferences?.publication_standards_references.length ?? 0)}</div>
         {listEditor('common', 'publication_standards_references', [
           ...(commonReferences?.publication_standards_references ?? []),
           ...commonCustomReferences.publication_standards_references,
