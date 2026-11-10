@@ -5031,6 +5031,9 @@ def mock_session(
             "id": str(uuid4()),
             "session_number": _allocate_session_number(view.path, records),
             "project_path": view.path,
+            "uploaded_project_evidence": __import__(
+                "sigma.project_evidence", fromlist=["evidence_context"]
+            ).evidence_context(view.path, limit=6000),
             "project_id": view.project.id,
             "strategy_id": strategy.id,
             "strategy_title": strategy.title,
@@ -6486,6 +6489,9 @@ async def start_session(
                 "id": str(uuid4()),
                 "session_number": 0,
                 "project_path": view.path,
+            "uploaded_project_evidence": __import__(
+                "sigma.project_evidence", fromlist=["evidence_context"]
+            ).evidence_context(view.path, limit=6000),
                 "project_id": view.project.id,
                 # Set by the start endpoint before the worker can be scheduled.
                 # API/CLI sessions omit it and run without browser-page history.
@@ -8449,11 +8455,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     # User-supplied PDFs are evidence to test, not independently verified facts.
     # Keep the source's page markers, provenance and omission markers visible
     # to both Investigator and Skeptic within the bounded provider context.
-    from sigma import project_evidence
-
-    context["uploaded_project_evidence"] = project_evidence.evidence_context(
-        record["project_path"], limit=6000
-    )
+    context["uploaded_project_evidence"] = record.get("uploaded_project_evidence", [])
         # A recovered role must receive its exact saved authorization and prior
     # uncertain attempt IDs. Recovery text is operational context, not evidence.
     protocol_recovery = record.get("protocol_completion_recovery")
