@@ -832,7 +832,7 @@ def main() -> None:
                     legacy_fixture, "Xenopus Saved Project Copy Regression"
                 )
                 assert legacy_copy.project.id != legacy_id
-                assert legacy_copy.path.endswith(".json")
+                assert legacy_copy.path.endswith(".sigma")
                 copied_papers = papers.list_papers(legacy_copy.path)
                 copied_answers = research_qa.list_answers(legacy_copy.path)
                 assert {row["paper_id"] for row in copied_papers} == {
