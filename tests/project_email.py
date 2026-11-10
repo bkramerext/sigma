@@ -48,7 +48,7 @@ class ProjectEmailTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source.json"
-            target = root / "recipient.json"
+            target = root / "recipient.sigma"
             project_id = str(uuid4())
             session_id = str(uuid4())
             members = {
@@ -80,7 +80,9 @@ class ProjectEmailTests(unittest.TestCase):
             self.assertNotIn("artifacts/papers/old.json", payload["files"])
             self.assertNotIn("artifacts/papers/old.pdf", payload["files"])
             self.assertIn(f"research-sessions/{session_id}.json", payload["files"])
-            import_bundle(payload, target)
+            from sigma.project_transfer import import_project
+
+            import_project(payload, target)
             session_paths = [
                 name
                 for name in list_files(target)
@@ -94,7 +96,8 @@ class ProjectEmailTests(unittest.TestCase):
             self.assertEqual(imported["source_session_id"], session_id)
             self.assertEqual(imported["status"], "stopped")
             self.assertTrue(imported["imported_via_bundle"])
-            self.assertEqual(imported["project_id"], project_id)
+            self.assertNotEqual(imported["project_id"], project_id)
+            self.assertEqual(imported["project_id"], json.loads(read_file(target, "project.json"))["id"])
             self.assertEqual(imported["project_path"], str(target.resolve()))
             self.assertEqual(read_file(target, "artifacts/evidence.bin"), b"\x00real\xff")
 
