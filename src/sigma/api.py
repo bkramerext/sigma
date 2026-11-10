@@ -1905,6 +1905,7 @@ def export_project_view(path: str):
 def download_project_bundle(path: str):
     """Export every project file as one complete, importable JSON bundle."""
     from sigma.project_transfer import export_project
+    from sigma.projects import project_path
 
     authorized = project_path(path)
     inspect_project(authorized)
