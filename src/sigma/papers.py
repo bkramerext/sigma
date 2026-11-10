@@ -1698,8 +1698,27 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
     # cannot silently rewrite an already-started paper's cited evidence.
     from sigma import project_evidence
 
+    # Prefer the newest completed research-session compilation over the
+    # upload-time preview. It actually read external links and verified files.
+    compiled_evidence: dict[str, dict[str, Any]] = {}
+    for session in sorted(
+        data.get("research_sessions", []),
+        key=lambda row: str(row.get("created_at") or ""),
+    ):
+        compilation = session.get("supplied_evidence_compilation")
+        if isinstance(compilation, dict) and compilation.get("status") == "completed":
+            for item in compilation.get("sources", []):
+                if isinstance(item, dict) and isinstance(item.get("id"), str):
+                    compiled_evidence[item["id"]] = item
     for entry in project_evidence.evidence_context(path, limit=48000):
-        sources.append({"id": entry["id"], "kind": "uploaded_pdf", "data": entry})
+        contents = compiled_evidence.get(entry["id"], entry)
+        sources.append(
+            {
+                "id": entry["id"],
+                "kind": "uploaded_link" if entry["id"].startswith("uploaded-link:") else "uploaded_pdf",
+                "data": contents,
+            }
+        )
     from sigma import research_ethos
 
     package = {
