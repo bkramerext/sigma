@@ -78,6 +78,7 @@ def list_evidence(path: str) -> list[dict]:
 
 
 def _extract(pdf: bytes) -> tuple[int, str, bool]:
+    """Bounded, representative page text from beginning, middle and end."""
     try:
         document = pypdfium2.PdfDocument(pdf)
     except (ValueError, TypeError, RuntimeError) as exc:
@@ -86,31 +87,44 @@ def _extract(pdf: bytes) -> tuple[int, str, bool]:
     total = 0
     omitted = False
     try:
-        if not len(document):
+        page_count = len(document)
+        if not page_count:
             raise ProjectError("PDF has no pages.")
-        for number in range(len(document)):
+        if page_count > 1000:
+            raise ProjectError("PDF exceeds the 1,000-page evidence safety bound.")
+        if page_count <= 24:
+            indices = list(range(page_count))
+        else:
+            indices = sorted(
+                set(range(8))
+                | set(range(max(8, page_count // 2 - 4), min(page_count, page_count // 2 + 4)))
+                | set(range(page_count - 8, page_count))
+            )
+            omitted = True
+        for number in indices:
             page = document[number]
             try:
                 textpage = page.get_textpage()
                 try:
-                    extracted = textpage.get_text_range()
+                    # Extract at most 2,000 characters per sampled page.
+                    excerpt = textpage.get_text_range()[:2000]
                 finally:
                     textpage.close()
             finally:
                 page.close()
-            if not extracted.strip():
+            if not excerpt.strip():
                 continue
             remaining = MAX_EXTRACT_CHARS - total
             if remaining <= 0:
                 omitted = True
                 break
-            excerpt = extracted[: min(len(extracted), remaining)]
-            chunks.append(f"[PDF page {number + 1}]\n{excerpt}")
+            excerpt = excerpt[:remaining]
+            chunks.append(f"[PDF page {number + 1}]\\n{excerpt}")
             total += len(excerpt)
-            if len(excerpt) != len(extracted):
+            if len(excerpt) >= remaining:
                 omitted = True
                 break
-        return len(document), "\n\n".join(chunks), omitted
+        return page_count, "\\n\\n".join(chunks), omitted
     finally:
         document.close()
 
