@@ -111,11 +111,33 @@
   .sigma-description-field + .sigma-description-field { padding-top: .85rem; }
 }
 
-.sigma-supplied-evidence { margin-top: 12px; }
+/* Source Material uses the same collapsed-section spacing as the three sections above. */
 .sigma-evidence-heading { display: flex; align-items: center; gap: 12px; }
-.sigma-evidence-heading h4 { margin: 0; }
+.sigma-evidence-heading h4 { display: flex; align-items: center; margin: 0; }
+.sigma-evidence-heading .sigma-subsection-toggle { min-height: 24px; }
 .sigma-evidence-actions { display: inline-flex; align-items: center; gap: 8px; }
-.sigma-evidence-actions .sigma-heading-icon-action { display: inline-flex; border: 0; background: transparent; padding: 2px; color: var(--sigma-copper-foreground); cursor: pointer; }
+.sigma-evidence-actions .sigma-heading-icon-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.sigma-evidence-actions .sigma-heading-icon-action svg { display: block; }
+.sigma-description-field.sigma-supplied-evidence #sigma-supplied-evidence-content > .settings-hint {
+  margin: 4px 0 12px 20px;
+  color: #aab9c7;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
 .sigma-evidence-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
 .sigma-evidence-row a { overflow-wrap: anywhere; min-width: 0; color: var(--sigma-copper-foreground); }
 .sigma-evidence-row .sigma-evidence-remove { display: inline-flex; flex: 0 0 auto; border: 0; background: transparent; color: var(--sigma-copper-foreground); padding: 2px; }
