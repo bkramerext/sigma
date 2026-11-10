@@ -541,7 +541,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .home-page .home-recents .recent-type-group > summary { min-height: 0; padding-block: 6px; }
 .home-page .home-recents .recent-type-group > summary small { display: inline-flex; align-items: center; gap: 4px; }
 .home-page .home-recents .recent-type-group > ul { margin-top: 2px; }
-.home-page .home-recents .recent-meta-row .research-running-indicator { display: inline-block; vertical-align: middle; margin-left: 6px; }
+.home-page .home-recents .recent-meta-row .research-running-indicator { display: inline-block; vertical-align: middle; margin-left: 0; }
 
 /* Admin Settings icon-only actions share SIGMA's copper hover treatment.
    Save, confirmation and other decision actions remain text. */
@@ -710,7 +710,10 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  vertical-align: middle;
+  vertical-align: baseline;
+  position: relative;
+  top: -1px;
+  line-height: 1;
   appearance: none;
   background: transparent;
   color: inherit;
