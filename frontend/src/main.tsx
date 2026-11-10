@@ -6527,6 +6527,15 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [guestAiNotice, setGuestAiNotice] = useState('');
+  const markLocalSharedSave = () => {
+    if (sharedActivity?.shared) {
+      // A successful local save is already reflected in this window's view.
+      // Do not interpret its next polling revision as a remote edit.
+      lastLoadedSharedRevision.current = Math.max(
+        lastLoadedSharedRevision.current ?? 0, sharedActivity.revision,
+      ) + 1;
+    }
+  };
   // Collaborators keep an open project fresh without losing local drafts or focus.
   // The existing lightweight collaboration poll supplies the revision; only a
   // changed revision triggers the more expensive project-open request.
@@ -6942,6 +6951,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
             ? { expected_revision: sharedActivity.revision, collaborators: sharedActivity.collaborators }
             : {};
           const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current, ...collaboration });
+          markLocalSharedSave();
           setView(next);
           // The parent owns the toolbar mode: a successful save must return
           // to the pencil even if the updated view re-renders the editor.
@@ -7042,7 +7052,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {sharedActivity?.shared && sharedActivity.lease && <p className="project-collaboration-activity" role="status" aria-live="polite">
       {`${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`}
     </p>}
-    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setAnnouncement('Project settings saved.'); }}/>}
+    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { markLocalSharedSave(); setView(next); setAnnouncement('Project settings saved.'); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
       onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
