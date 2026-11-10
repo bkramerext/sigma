@@ -5106,7 +5106,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
             </div>
           </div>
           {nonOwnerCollaborator && <p className="project-classification-readonly-note">
-            Note that title, category, difficulty, and user settings are owner-specified.
+            Title, research category, difficulty, and user settings are inherited from the project owner.
           </p>}
           {!!shared?.owner && <>
             <section className="project-collaborators" aria-label="Collaborators">
@@ -5117,7 +5117,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
               <div className="project-collaborator-row">
                 <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
               </div>
-              {collaborators.length > 0 && <p className="project-collaborator-standards-note">Note that title, category, difficulty, and user settings are owner-specified.</p>}
+              {collaborators.length > 0 && <p className="project-collaborator-standards-note">Title, research category, difficulty, and user settings are inherited from the project owner.</p>}
               {collaborators.map(email => <div className="project-collaborator-row" key={email}>
                 <span>{email}</span>
                 {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
