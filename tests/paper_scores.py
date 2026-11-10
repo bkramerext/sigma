@@ -365,9 +365,15 @@ def test_standalone_scoring_reuses_provider_and_rubric() -> None:
 
         with (
             patch.object(standalone_paper_score, "auth_context", new_callable=AsyncMock) as auth,
-            patch.object(standalone_paper_score, "configuration", new_callable=AsyncMock) as settings,
+            patch.object(
+                standalone_paper_score, "configuration", new_callable=AsyncMock
+            ) as settings,
             patch.object(standalone_paper_score.memory_guard, "require_capacity"),
-            patch.object(paper_scores, "_context", return_value={"pdf": {"page_count": 1}, "saved_research_excerpts": []}),
+            patch.object(
+                paper_scores,
+                "_context",
+                return_value={"pdf": {"page_count": 1}, "saved_research_excerpts": []},
+            ),
             patch.object(papers, "_provider_structured", side_effect=fake_provider),
         ):
             auth.return_value = {"identity": "test", "token": "unused", "mode": "api_key"}
