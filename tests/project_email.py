@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from sigma import cloud_auth, project_email, research_sessions
 from sigma.project_bundle import import_bundle, list_files, portable_bundle, read_file
-from sigma.projects import ProjectError
+from sigma.projects import ProjectError, initialize_project
 
 
 class ProjectEmailTests(unittest.TestCase):
@@ -49,12 +49,13 @@ class ProjectEmailTests(unittest.TestCase):
             root = Path(directory)
             source = root / "source.json"
             target = root / "recipient.sigma"
-            project_id = str(uuid4())
+            source_view = initialize_project(
+                source, "Shared Test", "Research the imported source material."
+            )
+            project_id = source_view.project.id
             session_id = str(uuid4())
             members = {
-                "project.json": json.dumps(
-                    {"schema_version": 11, "id": project_id, "title": "Shared Test"}
-                ).encode(),
+                "project.json": read_file(source, "project.json"),
                 f"research-sessions/{session_id}.json": json.dumps(
                     {
                         "id": session_id,
