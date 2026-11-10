@@ -278,6 +278,14 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
         owner.get_by_role("button", name="Edit project fields").click()
+        # Editing keeps other Project actions visible but unmistakably gray.
+        for action in (
+            "Research Q/A", "Lean proof verification", "Export project",
+            "Email project", "Project settings",
+        ):
+            button = owner.get_by_role("button", name=action, exact=True)
+            expect(button).to_be_disabled()
+            expect(button).to_have_css("opacity", "0.38")
         title = title + " renamed"
         owner.get_by_role("textbox", name="Project title").fill(title)
         owner.get_by_role("button", name="Save", exact=True).click()
