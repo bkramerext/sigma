@@ -101,6 +101,7 @@ def main() -> None:
 
         shared = {
             "owner": "owner@example.org",
+            "you": "owner@example.org",
             "collaborators": ["alice@example.net"],
             "removable_collaborators": ["alice@example.net"],
             "revision": 7,
