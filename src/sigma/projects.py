@@ -361,7 +361,11 @@ def _decode(raw: Any) -> Project:
         ids = set()
         for link in links:
             if not isinstance(link, dict) or set(link) != {
-                "id", "kind", "url", "uploaded_by", "uploaded_at"
+                "id",
+                "kind",
+                "url",
+                "uploaded_by",
+                "uploaded_at",
             }:
                 raise ProjectError("Invalid Source Material link entry")
             if (
@@ -372,10 +376,7 @@ def _decode(raw: Any) -> Project:
                 or not isinstance(link["url"], str)
                 or not 1 <= len(link["url"]) <= 2048
                 or not link["url"].startswith(("https://", "http://"))
-                or (
-                    link["uploaded_by"] is not None
-                    and not isinstance(link["uploaded_by"], str)
-                )
+                or (link["uploaded_by"] is not None and not isinstance(link["uploaded_by"], str))
             ):
                 raise ProjectError("Invalid Source Material link metadata")
             _timestamp(link["uploaded_at"])
@@ -1700,7 +1701,8 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
     give the project a new identity and rebind sessions to it. Record the new
     title as a genuine project edit so existing settings history stays valid.
     """
-    from sigma.project_bundle import BundleError, _decode as decode_bundle_members
+    from sigma.project_bundle import BundleError
+    from sigma.project_bundle import _decode as decode_bundle_members
     from sigma.project_transfer import import_project, make_bundle
     from sigma.recents import record_access
 
@@ -1795,7 +1797,8 @@ def copy_project_between_workspaces(
     artifacts are preserved by the portable bundle importer.
     """
     from sigma import cloud_workspaces
-    from sigma.project_bundle import BundleError, bundle_project_document, _decode as decode_bundle_members
+    from sigma.project_bundle import BundleError, bundle_project_document
+    from sigma.project_bundle import _decode as decode_bundle_members
     from sigma.project_transfer import import_project, make_bundle
 
     source_token = (
