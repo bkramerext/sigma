@@ -1795,7 +1795,8 @@ def copy_project_between_workspaces(
     artifacts are preserved by the portable bundle importer.
     """
     from sigma import cloud_workspaces
-    from sigma.project_bundle import BundleError, bundle_project_document, import_bundle
+    from sigma.project_bundle import BundleError, bundle_project_document, _decode as decode_bundle_members
+    from sigma.project_transfer import import_project, make_bundle
 
     source_token = (
         cloud_workspaces.bind_workspace(source_workspace) if source_workspace is not None else None
@@ -1845,10 +1846,11 @@ def copy_project_between_workspaces(
                 bundle_destination = destination.with_suffix(".json")
                 if os.path.lexists(destination) or os.path.lexists(bundle_destination):
                     continue
-                if title != original_title:
-                    document["title"] = title
-                    payload["files"]["project.json"] = document
-                imported = import_bundle(payload, bundle_destination)
+                imported = import_project(
+                    make_bundle(decode_bundle_members(payload)),
+                    destination,
+                    title_override=title if title != original_title else None,
+                )
                 break
         if imported is None:
             raise ProjectError("A unique destination for the copied project is unavailable.")
