@@ -531,8 +531,7 @@ def read_file(bundle_path: str | Path, relative_path: str) -> bytes:
             )
         elif relative_path.startswith("artifacts/papers/"):
             relative_path = (
-                "artifacts/generated_papers/"
-                + relative_path[len("artifacts/papers/") :]
+                "artifacts/generated_papers/" + relative_path[len("artifacts/papers/") :]
             )
         member = path
         for component in relative_path.split("/"):
