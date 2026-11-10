@@ -216,6 +216,13 @@ def _validate_record(record: Any, project_id: str) -> None:
         or not isinstance(record.get("created_at"), str)
     ):
         raise ProjectError("Q/A archive contains a malformed answer")
+    author_email = record.get("author_email")
+    if author_email is not None and (
+        not isinstance(author_email, str)
+        or not 1 <= len(author_email) <= 254
+        or "@" not in author_email
+    ):
+        raise ProjectError("Q/A archive contains invalid collaborator attribution")
     rendered = record.get("markdown_answer")
     if rendered is not None and (not isinstance(rendered, str) or not 1 <= len(rendered) <= 20000):
         raise ProjectError("Q/A archive contains invalid derived Markdown")
@@ -675,10 +682,9 @@ async def _answer_locked(
     created_at = datetime.now(UTC).isoformat()
     from sigma import project_collaboration
 
-    creator = project_collaboration.creator_identity()
+    collaborator = project_collaboration.collaborator_identity(path)
     record = {
         "qa_id": uuid4().hex,
-        "created_by": creator,
         "request_id": request_id,
         "project_id": expected_project_id,
         "question": question,
@@ -687,6 +693,7 @@ async def _answer_locked(
         "snapshot_sha256": snapshot_hash,
         "evidence_snapshot": selected,
         "created_at": created_at,
+        **({"author_email": collaborator} if collaborator else {}),
         "generation": {
             "model": config.get("model", ""),
             "reasoning_effort": config.get("reasoning_effort", ""),
@@ -717,12 +724,7 @@ async def _answer_locked(
             True,
         )
 
-    saved = _archive_update(path, save_answer)
-    # The archive is authoritative for local and exported projects. The hosted
-    # attribution index additionally enforces creator-only deletion.
-    if saved.get("created_by") == creator:
-        project_collaboration.note_artifact_author(path, "qa", saved["qa_id"], created_only=True)
-    return saved
+    return _archive_update(path, save_answer)
 
 
 def _request_record(

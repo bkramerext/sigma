@@ -421,7 +421,7 @@ class RecentProject:
     best_paper_score: int | None = None
     paper_activity: str | None = None
     shared: bool = False
-    collaborating: bool = False
+    collaborator: bool = False
 
 
 def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
@@ -508,7 +508,7 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                         ),
                         available=True,
                         shared=view.path in shared_paths,
-                        collaborating=view.path in shared_by_path,
+                        collaborator=view.path in shared_by_path,
                         pinned=(view.project.id in pins.values()),
                         pin_state=(
                             "unpin"

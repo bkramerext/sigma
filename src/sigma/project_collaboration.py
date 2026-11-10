@@ -543,8 +543,10 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
                         (view.path, kind),
                     )
                 }
-                for kind in ("strategy", "session", "paper", "qa")
-            },
+                for kind in ("strategy", "session", "paper", "answer")
+            }
+            if members
+            else {},
             "failed_notifications": db.execute(
                 """SELECT COUNT(*) FROM shared_email_outbox
                    WHERE project_path=? AND failed_at IS NOT NULL""",
@@ -561,7 +563,7 @@ def note_artifact_author(
 
     Autonomous checkpoints must not overwrite the initiating human's identity.
     """
-    if kind not in {"strategy", "session", "paper", "qa"} or not artifact_id:
+    if kind not in {"strategy", "session", "paper", "answer"} or not artifact_id:
         raise ValueError("Invalid artifact attribution")
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return
@@ -569,13 +571,103 @@ def note_artifact_author(
         row, actor = _membership(db, path)
         if row is None:
             return
-        verb = "INSERT OR IGNORE" if created_only or kind != "strategy" else "INSERT OR REPLACE"
+        verb = "INSERT OR IGNORE" if created_only else "INSERT OR REPLACE"
         db.execute(
             f"{verb} INTO shared_artifact_authors "
             "(path, kind, artifact_id, email, updated_at) VALUES (?, ?, ?, ?, ?)",
             (path, kind, artifact_id, actor, time.time()),
         )
         db.commit()
+
+
+
+def collaborator_identity(path: str) -> str | None:
+    """Verified collaborator email for durable, human-authored output metadata."""
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return None
+    try:
+        with _db() as db:
+            _row_value, actor = _membership(db, path)
+            shared = db.execute(
+                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
+            ).fetchone()
+            return actor if shared else None
+    except ValueError:
+        # A personal, unshared project has no collaborator identity.
+        return None
+
+
+def require_artifact_manager(path: str, kind: str, artifact_id: str) -> None:
+    """Creator or owner may remove saved work; missing legacy provenance is owner-only."""
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    if kind not in {"session", "paper", "answer"}:
+        raise ValueError("Unknown artifact kind")
+    with _db() as db:
+        row, actor = _membership(db, path)
+        if row["owner_hash"] == _identity()[0].subject_hash:
+            return
+        creator = db.execute(
+            "SELECT email FROM shared_artifact_authors "
+            "WHERE path=? AND kind=? AND artifact_id=?",
+            (path, kind, artifact_id),
+        ).fetchone()
+        if creator is None or creator["email"] != actor:
+            raise ProjectError("Only the project owner or artifact creator can remove it.")
+
+
+def leave_project(path: str, expected_project_id: str) -> None:
+    """Leave the collaboration using the same revision-fenced settings mutation."""
+    from sigma.projects import ProjectError, inspect_project
+
+    view = inspect_project(path)
+    if view.project.id != expected_project_id:
+        raise ProjectError("Project changed. Refresh My Work and try again.")
+    data = summary(view.path, verify_revision=True)
+    actor = data.get("you")
+    if not actor or data.get("owner") == actor or actor not in data["collaborators"]:
+        raise ProjectError("Only a collaborator can stop collaborating on this project.")
+    save_settings(
+        view.path,
+        data["revision"],
+        [address for address in data["collaborators"] if address != actor],
+        data["model"],
+        data["thinking"],
+        view.project.title,
+    )
+
+
+@contextmanager
+def bind_session_control_lease(path: str, activity: str) -> Iterator[None]:
+    """Bind a control request to its own active execution without transferring ownership.
+
+    Cancellation requests arrive independently from the background worker.
+    Only the currently verified holder of the project lease can borrow its
+    token to stop/pause the exact kind of operation they started.
+    """
+    from sigma.projects import ProjectError
+
+    if cloud_workspaces.current() is None:
+        yield
+        return
+    lease_token: str | None = None
+    with _db() as db:
+        _row_value, actor = _membership(db, path)
+        lease = db.execute(
+            "SELECT token,email,activity,expires_at FROM shared_leases WHERE path=?",
+            (path,),
+        ).fetchone()
+        if lease is not None and lease["expires_at"] > time.time():
+            if lease["email"] != actor or lease["activity"] != activity:
+                raise ProjectError(
+                    f"Project is being used by {lease['email']} ({lease['activity']}). "
+                    "Wait for that activity to finish."
+                )
+            lease_token = lease["token"]
+    with bind_lease(path, lease_token):
+        yield
 
 
 def model_settings(path: str) -> dict[str, str] | None:
@@ -926,125 +1018,6 @@ def keep_lease(path: str, token: str | None) -> Iterator[None]:
     finally:
         stopped.set()
         worker.join(timeout=1)
-
-
-def creator_identity() -> str:
-    """Verified author for durable answers; local-only work has no Google identity."""
-    principal = cloud_auth.current_principal()
-    return (
-        principal.email.casefold()
-        if principal is not None and principal.role != "guest"
-        else "Local user"
-    )
-
-
-def require_artifact_permission(
-    path: str, kind: str, artifact_id: str, *, delete: bool = False
-) -> None:
-    """Creator controls their artifact; project owner may additionally delete it."""
-    from sigma.projects import ProjectError
-
-    if kind not in {"session", "paper", "qa"} or not artifact_id:
-        raise ValueError("Invalid artifact")
-    if cloud_workspaces.current() is None:
-        return
-    with _db() as db:
-        # Unregistered private projects retain their existing endpoint ACLs.
-        if (
-            db.execute("SELECT 1 FROM shared_projects WHERE path=?", (str(path),)).fetchone()
-            is None
-        ):
-            return
-        row, actor = _membership(db, str(path))
-        creator = db.execute(
-            "SELECT email FROM shared_artifact_authors WHERE path=? AND kind=? AND artifact_id=?",
-            (str(path), kind, artifact_id),
-        ).fetchone()
-        if creator is not None and creator["email"] == actor:
-            return
-        workspace, _ = _identity()
-        if row["owner_hash"] == workspace.subject_hash and (delete or creator is None):
-            return
-        raise ProjectError(
-            "Only the creator may control this work."
-            if not delete
-            else "Only the creator or project owner may remove this work."
-        )
-
-
-@contextmanager
-def bind_execution_control_lease(path: str, activity: str) -> Iterator[None]:
-    """Stop/pause only the caller's own running research or paper execution.
-
-    Control requests are independent of the original background task's
-    ContextVar. Verify the caller against the database lease before binding
-    its exact fencing token; normal collaboration writes remain protected.
-    """
-    from sigma.projects import ProjectError
-
-    if activity not in {"Research session", "Paper generation"}:
-        raise ValueError("Invalid activity")
-    if cloud_workspaces.current() is None:
-        yield
-        return
-    token: str | None = None
-    with _db() as db:
-        registered = (
-            db.execute("SELECT 1 FROM shared_projects WHERE path=?", (str(path),)).fetchone()
-            is not None
-        )
-        if registered:
-            _row, actor = _membership(db, str(path))
-            lease = db.execute(
-                "SELECT token,email,activity,expires_at FROM shared_leases WHERE path=?",
-                (str(path),),
-            ).fetchone()
-            if lease is not None and lease["expires_at"] > time.time():
-                if lease["email"] != actor or lease["activity"] != activity:
-                    raise ProjectError(
-                        f"Project is being used by {lease['email']} ({lease['activity']}). "
-                        "Wait for that activity to finish."
-                    )
-                token = lease["token"]
-    if not registered:
-        yield  # Unregistered private projects have no collaboration lease.
-        return
-    with bind_lease(str(path), token):
-        yield
-
-
-def leave_project(path: str, expected_project_id: str, title: str) -> None:
-    """Revoke the current collaborator's access without deleting project data."""
-    from sigma.projects import ProjectError
-
-    with _db() as db:
-        db.execute("BEGIN IMMEDIATE")
-        row, actor = _membership(db, str(path))
-        if row["project_id"] != expected_project_id:
-            raise ProjectError("Project changed; refresh before leaving.")
-        workspace, _ = _identity()
-        if row["owner_hash"] == workspace.subject_hash:
-            raise ProjectError("The project owner cannot stop collaborating.")
-        active = _lease(db, str(path))
-        if active is not None and active["email"] == actor:
-            raise ProjectError("Stop your active work before leaving the project.")
-        removed = db.execute(
-            "DELETE FROM shared_collaborators WHERE path=? AND email=?",
-            (str(path), actor),
-        ).rowcount
-        if removed != 1:
-            raise ProjectError("Project membership changed; reopen My Work.")
-        db.execute(
-            "UPDATE shared_projects SET revision=revision+1,last_writer=?,updated_at=? WHERE path=?",
-            (actor, time.time(), str(path)),
-        )
-        db.execute(
-            """INSERT INTO shared_email_outbox
-               (id,recipient,project_path,project_title,event,created_at)
-               VALUES (?,?,?,?,?,?)""",
-            (uuid4().hex, actor, str(path), title, "removed", time.time()),
-        )
-        db.commit()
 
 
 def require_not_leased(path: str) -> None:
