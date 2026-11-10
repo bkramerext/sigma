@@ -409,6 +409,19 @@
 .about-start ol { display: grid; gap: 5px; margin: 7px 0 0; padding-left: 20px; color: #c4cfd8; font-size: 12px; }
 .about-boundary { padding: 12px 14px; border-left: 2px solid #b98149; background: #b9814912; color: #b9c5cf; font-size: 11px; }
 .about-dialog::backdrop { background: #01050bba; backdrop-filter: blur(3px); }
+/* In-app legal notices replace About in the same modal, with no opaque
+   page-covering backdrop. Standalone /privacy and /tos remain untouched. */
+.about-dialog.about-legal-dialog::backdrop { background: transparent; backdrop-filter: none; }
+.about-dialog.about-legal-dialog { width: min(760px, calc(100vw - 24px)); max-height: min(88dvh, 840px); }
+.about-legal-document { display: flex; flex-direction: column; min-height: 0; max-height: inherit; }
+.about-legal-document .entry-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex: 0 0 auto; }
+.about-legal-document .entry-dialog-header h2 { margin: 0; }
+.about-legal-document-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 28px 28px; color: #bcc5cc; font-size: 13px; line-height: 1.6; }
+.about-legal-document-body h2 { color: var(--sigma-copper-foreground); font: 400 21px/1.35 Georgia, serif; margin: 22px 0 10px; }
+.about-legal-document-body p { margin: 12px 0; }
+.about-legal-document-body .terms-of-service-copy { margin: 8px 0; }
+.about-legal-document-body .terms-of-service-copy > p { font-size: 18px; }
+@media (max-width: 560px) { .about-legal-document-body { padding: 12px 16px 20px; } }
 .about-dialog :focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 @media (max-width: 560px) {
   .project-settings-dialog.about-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
