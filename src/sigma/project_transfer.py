@@ -247,6 +247,7 @@ def import_project(
     destination: str | Path,
     *,
     independent: bool = True,
+    preserve_identity: bool = False,
     title_override: str | None = None,
 ) -> Path:
     """Validate, reidentify, and restore an imported bundle as a real directory."""
@@ -264,9 +265,9 @@ def import_project(
         members = project_bundle._decode(renamed)
     document = json.loads(members["project.json"])
     validate_project(document)
-    if independent:
+    if independent or preserve_identity:
         old_id = document["id"]
-        new_id = str(uuid4())
+        new_id = str(uuid4()) if independent else old_id
         document["id"] = new_id
         members["project.json"] = (
             json.dumps(document, ensure_ascii=False, indent=2) + "\n"
@@ -293,6 +294,7 @@ def import_project(
             source_path="/sigma-import-original",
             destination_path=str(destination),
             session_ids_out=session_ids,
+            preserve_project_identity=preserve_identity and not independent,
         )
         members = project_bundle._decode(rebased)
         # Imported sessions retain their immediate source identity for audit.
