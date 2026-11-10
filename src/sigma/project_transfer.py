@@ -193,7 +193,8 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
         isinstance(payload, dict)
         and set(payload) == {"format", "version", "files"}
         and payload.get("format") == FORMAT
-        and payload.get("version") in {
+        and payload.get("version")
+        in {
             project_bundle.LEGACY_VERSION,
             project_bundle.LEGACY_PORTABLE_VERSION,
             project_bundle.VERSION,
