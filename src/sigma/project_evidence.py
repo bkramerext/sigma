@@ -18,7 +18,7 @@ from sigma.projects import ProjectError, inspect_project, project_path, project_
 
 MAX_PDF_BYTES = 12 * 1024 * 1024
 MAX_FILES = 20
-MAX_EXTRACT_CHARS = 48000
+MAX_EXTRACT_CHARS = 512_000
 MANIFEST = "artifacts/source_material/manifest.json"
 _NAME = re.compile(r"[^\w .()\-]", re.UNICODE)
 
@@ -86,56 +86,45 @@ def list_evidence(path: str) -> list[dict]:
 
 
 def _extract(pdf: bytes) -> tuple[int, str, bool]:
-    """Bounded, representative page text from beginning, middle and end."""
+    """Read every page, preserving page boundaries; reject incomplete extraction.
+
+    The document must fit the bounded text safety limit. Silent sampling or
+    truncation would cause the agents to mistake unseen premises for facts.
+    """
     try:
         document = pypdfium2.PdfDocument(pdf)
     except (ValueError, TypeError, RuntimeError) as exc:
         raise ProjectError("PDF cannot be inspected.") from exc
     chunks: list[str] = []
     total = 0
-    omitted = False
     try:
         page_count = len(document)
         if not page_count:
             raise ProjectError("PDF has no pages.")
         if page_count > 1000:
             raise ProjectError("PDF exceeds the 1,000-page evidence safety bound.")
-        if page_count <= 24:
-            indices = list(range(page_count))
-        else:
-            indices = sorted(
-                set(range(8))
-                | set(range(max(8, page_count // 2 - 4), min(page_count, page_count // 2 + 4)))
-                | set(range(page_count - 8, page_count))
-            )
-            omitted = True
-        for number in indices:
+        for number in range(page_count):
             page = document[number]
             try:
                 textpage = page.get_textpage()
                 try:
-                    # Extract at most 2,000 characters per sampled page.
-                    full_page_text = textpage.get_text_range()
-                    excerpt = full_page_text[:2000]
-                    if len(full_page_text) > len(excerpt):
-                        omitted = True
+                    extracted = textpage.get_text_range()
                 finally:
                     textpage.close()
             finally:
                 page.close()
-            if not excerpt.strip():
-                continue
-            remaining = MAX_EXTRACT_CHARS - total
-            if remaining <= 0:
-                omitted = True
-                break
-            excerpt = excerpt[:remaining]
-            chunks.append(f"[PDF page {number + 1}]\\n{excerpt}")
-            total += len(excerpt)
-            if len(excerpt) >= remaining:
-                omitted = True
-                break
-        return page_count, "\\n\\n".join(chunks), omitted
+            if not extracted.strip():
+                raise ProjectError(
+                    f"Page {number + 1} has no extractable text; scanned PDFs need OCR."
+                )
+            total += len(extracted)
+            if total > MAX_EXTRACT_CHARS:
+                raise ProjectError(
+                    "Source Material exceeds the 512,000-character extraction limit; "
+                    "split the document into smaller attachments."
+                )
+            chunks.append(f"[PDF page {number + 1}]\n{extracted}")
+        return page_count, "\n\n".join(chunks), False
     finally:
         document.close()
 
@@ -185,14 +174,14 @@ def add_link(path: str, url: str) -> dict:
     """Store URL records in project.json; never create an artifact for a link."""
     parsed = urlsplit(url.strip())
     if (
-        parsed.scheme not in {"https", "http"}
+        parsed.scheme != "https"
         or not parsed.hostname
         or parsed.username is not None
         or parsed.password is not None
         or len(url) > 2048
         or any(ord(c) < 32 for c in url)
     ):
-        raise ProjectError("Enter a valid HTTP or HTTPS Source Material link.")
+        raise ProjectError("Enter a valid HTTPS Source Material link.")
     from sigma import cloud_auth
     from sigma.projects import _update_project
 
