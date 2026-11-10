@@ -315,9 +315,7 @@ class CollaborationTests(TestCase):
                 patch("sigma.api.papers.cancel_generation", new_callable=AsyncMock) as cancel,
             ):
                 cancel.return_value = True
-                self.assertEqual(
-                    asyncio.run(api.paper_cancel_view(body)), {"cancelled": True}
-                )
+                self.assertEqual(asyncio.run(api.paper_cancel_view(body)), {"cancelled": True})
                 self.assertEqual(cancel.await_count, 1)
                 with (
                     patch(

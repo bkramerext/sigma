@@ -912,7 +912,7 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
             force=body.force,
         )
         papers.mark_scored_progress(body.path, paper_id)
-        project_collaboration.note_artifact_author(body.path, "paper", paper_id, created_only=True)
+        # Scoring must never manufacture a creator for a legacy paper.
         return {"score": score}
     except asyncio.CancelledError:
         if memory_guard.is_critical():
@@ -1646,9 +1646,6 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         )
         if simulated is None:
             raise HTTPException(404, "Not found")
-        project_collaboration.note_artifact_author(
-            body.path, "session", session_id, created_only=True
-        )
         return simulated
 
     if body.action not in {"resume", "repair"}:
@@ -1676,9 +1673,7 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
-        project_collaboration.note_artifact_author(
-            body.path, "session", session_id, created_only=True
-        )
+        # Resuming legacy research cannot establish its original creator.
         return result
     finally:
         if not transferred:
@@ -1687,15 +1682,17 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
 
 @app.post("/api/projects/research-sessions/{session_id}/interventions")
 async def research_intervention_view(session_id: str, body: ResearchInterventionRequest):
-    return await research_sessions.submit_intervention(
-        body.path,
-        session_id,
-        body.kind,
-        body.text,
-        body.strategy_ids,
-        body.agent_roles,
-        body.supersedes_intervention_id,
-    )
+    project_collaboration.require_artifact_manager(body.path, "session", session_id)
+    with project_collaboration.bind_session_control_lease(body.path, "Research session"):
+        return await research_sessions.submit_intervention(
+            body.path,
+            session_id,
+            body.kind,
+            body.text,
+            body.strategy_ids,
+            body.agent_roles,
+            body.supersedes_intervention_id,
+        )
 
 
 @app.delete("/api/projects/research-sessions/{session_id}")
