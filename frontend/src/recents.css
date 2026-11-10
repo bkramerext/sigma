@@ -630,8 +630,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   .home-recents button.recent-forget,
   .home-samples a.recent-title-star,
   .home-projects-heading button.home-icon-action,
-  .sigma-header-first-row > button.home-settings-pill,
-  .catalog-tabs button
+  .sigma-header-first-row > button.home-settings-pill
 ):is(:hover, :focus-visible):not(:disabled) {
   color: #fff2e9 !important;
   background: var(--copper-gradient) !important;
