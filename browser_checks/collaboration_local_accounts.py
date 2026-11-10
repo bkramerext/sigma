@@ -354,9 +354,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert updated["project"]["problem"] == amended, updated
         assert updated["project"]["difficulty"] == "medium", updated
         # Exercise the same open browser pair for another saved field update.
-        expect(owner.locator(".project-overview-card")).to_contain_text(
-            amended, timeout=20000
-        )
+        expect(owner.locator(".project-overview-card")).to_contain_text(amended, timeout=20000)
 
         # Remote committed changes invalidate an in-progress editor rather
         # than trying to merge its draft. The owner must reopen settings.
