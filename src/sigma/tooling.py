@@ -156,6 +156,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/test_paper_math_typesetting.py"],
             [*python, "python", "tests/publication_reference_compiler.py"],
             [*python, "python", "tests/paper_scores.py"],
+            [*python, "python", "tests/project_evidence.py"],
             [*python, "python", "tests/research_qa.py"],
             [*python, "python", "tests/research_qa_security.py"],
             [*python, "python", "tests/sovereign_cost_model.py"],
