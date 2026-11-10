@@ -28,6 +28,11 @@ from sigma.tooling import run_tooling
 from sigma.ui import run_shutdown, run_ui
 
 COMMAND_DETAILS = {
+    "score_paper": (
+        "Score an existing PDF with SIGMA\u0027s paper rubric, without a project.",
+        "./sigma score_paper /path/to/paper.pdf",
+        "Uses your configured model/Thinking and AI account. This makes one paid/provider call; no SIGMA project is created or modified.",
+    ),
     "init": (
         "Create and initialize a project at an explicit path.",
         "./sigma init projects/demo.sigma --title 'Demo' --problem 'What explains this result?'",
@@ -184,6 +189,8 @@ def main() -> None:
         epilog="Use `sigma -h COMMAND` or `sigma COMMAND --help` for detailed command help.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    score_pdf = add_command(commands, "score_paper")
+    score_pdf.add_argument("path", help="Existing PDF to evaluate")
     init = add_command(commands, "init")
     init.add_argument("path")
     init.add_argument("--title", required=True)
@@ -332,6 +339,10 @@ def main() -> None:
     if len(argv) == 2 and argv[0] in {"-h", "--help"} and argv[1] in COMMAND_DETAILS:
         argv = [argv[1], "--help"]
     args = parser.parse_args(argv)
+    if args.command == "score_paper":
+        from sigma.standalone_paper_score import run
+
+        sys.exit(run(args.path))
     if args.command == "make_sample":
         from sigma.samples import make_sample
 

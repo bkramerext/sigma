@@ -271,9 +271,11 @@ class CollaborationTests(TestCase):
             token = shared.acquire_lease(self.path, activity)
             self.assertIsNotNone(token)
             try:
-                with shared.bind_session_control_lease(self.path, activity):
-                    with shared.write_guard(self.path):
-                        pass
+                with (
+                    shared.bind_session_control_lease(self.path, activity),
+                    shared.write_guard(self.path),
+                ):
+                    pass
                 with (
                     patch(
                         "sigma.project_collaboration.cloud_workspaces.current",
@@ -283,10 +285,10 @@ class CollaborationTests(TestCase):
                         "sigma.project_collaboration.cloud_auth.current_principal",
                         return_value=self.other,
                     ),
+                    self.assertRaisesRegex(ProjectError, "being used"),
+                    shared.bind_session_control_lease(self.path, activity),
                 ):
-                    with self.assertRaisesRegex(ProjectError, "being used"):
-                        with shared.bind_session_control_lease(self.path, activity):
-                            self.fail("Different collaborator controlled another user's execution")
+                    self.fail("Different collaborator controlled another user's execution")
             finally:
                 shared.release_lease(self.path, token)
 
@@ -326,9 +328,9 @@ class CollaborationTests(TestCase):
                         "sigma.project_collaboration.cloud_auth.current_principal",
                         return_value=self.other,
                     ),
+                    self.assertRaisesRegex(ProjectError, "being used"),
                 ):
-                    with self.assertRaisesRegex(ProjectError, "being used"):
-                        asyncio.run(api.paper_cancel_view(body))
+                    asyncio.run(api.paper_cancel_view(body))
                 self.assertEqual(cancel.await_count, 1)
         finally:
             shared.release_lease(self.path, token)
