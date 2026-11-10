@@ -260,7 +260,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         expect(
             member_dialog.get_by_text(
-                "Project category, difficulty, and title are read-only for non-owner collaborators."
+                "Title, research category, difficulty, and user settings are inherited from the project owner."
             )
         ).to_be_visible()
         # Pointer clicks and keyboard actions cannot open a listbox.
