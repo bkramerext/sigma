@@ -288,3 +288,22 @@
 .project-types-dialog .pt-based-on-picker .research-type-options [role="option"]:hover:not([aria-selected="true"]) {
   background: transparent !important; border-color: #a87950;
 }
+
+/* User-defined project type Add matches Project's metallic copper action hover. */
+.project-types-dialog .project-types-section-heading > button.pt-new-action {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.project-types-dialog .project-types-section-heading > button.pt-new-action:is(:hover, :focus-visible):not(:disabled) {
+  color: #fff2e9 !important;
+  background: var(--copper-gradient) !important;
+  border-color: #ac7054 !important;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+}
+.project-types-dialog .project-types-section-heading > button.pt-new-action:is(:hover, :focus-visible):not(:disabled) svg {
+  color: #fff2e9;
+}
