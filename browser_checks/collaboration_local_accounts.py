@@ -376,7 +376,16 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Medium")
-        choose_difficulty(owner_dialog, "Hard")
+        with member.expect_response(
+            lambda response: response.url.split("?")[0].endswith("/api/projects/open")
+            and response.request.method == "POST",
+            timeout=20000,
+        ) as refreshed:
+            choose_difficulty(owner_dialog, "Hard")
+        assert get_json(refreshed.value)["project"]["difficulty"] == "hard"
+        member.evaluate(
+            "() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+        )
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
         updated = get_json(
