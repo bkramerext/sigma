@@ -6488,7 +6488,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const activeRunLabels = activeRuns.map(run => {
     const creator = run.kind === 'Session'
       ? sharedActivity?.artifact_authors?.session?.[run.creator ?? '']
-      : sharedActivity?.artifact_authors?.paper_draft?.[project.id];
+      : sharedActivity?.artifact_authors?.paper_draft?.[view?.project.id ?? ''];
     return `${run.kind} ${run.number}${creator ? ` by ${creator}` : ''}`;
   });
   const lastLoadedSharedRevision = useRef<number | null>(null);
