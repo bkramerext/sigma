@@ -21,7 +21,7 @@ function EvidenceClipIcon() {
 function EvidenceRemoveIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>;
 }
-function SuppliedEvidence({ path }: { path: string }) {
+function SuppliedEvidence({ path, expanded, onToggle }: { path: string; expanded: boolean; onToggle: () => void }) {
   const [rows, setRows] = useState<EvidenceRow[]>([]);
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState('');
@@ -82,11 +82,13 @@ function SuppliedEvidence({ path }: { path: string }) {
     finally { setBusy(false); }
   }
   return <section className="sigma-description-field sigma-supplied-evidence">
-    <div className="sigma-evidence-heading"><h4>Supplied Evidence</h4><div className="sigma-evidence-actions">
+    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle" data-tooltip={`${expanded ? 'Collapse' : 'Expand'} Supplied Evidence`} aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}><EvidenceChevron expanded={expanded}/>Supplied Evidence</button></h4><div className="sigma-evidence-actions">
       <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Add link" data-tooltip="Add link" disabled={busy || adding || rows.length >= 20} onClick={() => setAdding(true)}><EvidencePlusIcon/></button>
       <button type="button" className="text-view-link sigma-heading-icon-action" aria-label="Attach a file" data-tooltip="Attach a file" disabled={busy || rows.length >= 20} onClick={() => uploadInput.current?.click()}><EvidenceClipIcon/></button>
     </div></div>
     <input ref={uploadInput} type="file" accept=".pdf,application/pdf" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void attach(file); }}/>
+    <div id="sigma-supplied-evidence-content" hidden={!expanded}>
+    <p className="settings-hint">Supplied documents and links are read when research starts. Their contents are treated as true premises for this project, with source attribution preserved.</p>
     {rows.map(entry => <div className="sigma-evidence-row" key={entry.id}>
       {entry.kind === 'link'
         ? <a href={entry.url} target="_blank" rel="noopener noreferrer">{entry.url}</a>
@@ -98,9 +100,14 @@ function SuppliedEvidence({ path }: { path: string }) {
       onBlur={() => void addLink()}
       onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addLink(); } if (event.key === 'Escape') { setAdding(false); setUrl(''); } }}/>}
     {error && <p className="error" role="alert">{error}</p>}
+    </div>
   </section>;
 }
 
+
+function EvidenceChevron({ expanded }: { expanded: boolean }) {
+  return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
+}
 
 const definitions = [
   { key: 'problem', title: 'Research Subject', help: 'What are we investigating?', rows: 3 },
@@ -127,6 +134,20 @@ export default function ProjectDescriptionEditor({
   });
   const [draft, setDraft] = useState(original);
   const [error, setError] = useState('');
+  const [expandedFields, setExpandedFields] = useState<Record<string, boolean>>(() => {
+    const entries = ['problem', 'desired_outcomes', 'paper_requirements', 'supplied_evidence'];
+    return Object.fromEntries(entries.map(key => {
+      const previous = window.localStorage.getItem(`sigma.projectSubsection:${view.path}:${key}`);
+      return [key, previous === null ? true : previous === 'true'];
+    }));
+  });
+  const toggleField = (key: string) => {
+    setExpandedFields(previous => {
+      const next = !(previous[key] ?? true);
+      window.localStorage.setItem(`sigma.projectSubsection:${view.path}:${key}`, String(next));
+      return { ...previous, [key]: next };
+    });
+  };
   const titleInput = useRef<HTMLInputElement>(null);
   const dirty = draft.title !== view.project.title
     || draft.problem !== view.project.problem
@@ -161,7 +182,8 @@ export default function ProjectDescriptionEditor({
 
   const fields = <div className="sigma-description-fields">
     {definitions.map(field => <section key={field.key} className="sigma-description-field">
-      <h4>{field.title}</h4>
+      <h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle" aria-expanded={expandedFields[field.key] ?? true} aria-controls={`sigma-project-subsection-${field.key}`} data-tooltip={`${expandedFields[field.key] ? 'Collapse' : 'Expand'} ${field.title}`} onClick={() => toggleField(field.key)}><EvidenceChevron expanded={expandedFields[field.key] ?? true}/>{field.title}</button></h4>
+      <div id={`sigma-project-subsection-${field.key}`} hidden={!(expandedFields[field.key] ?? true)}>
       <p className="settings-hint">{field.help}</p>
       {editing ? <textarea
         aria-label={field.title} required={field.key === 'problem'}
@@ -173,8 +195,9 @@ export default function ProjectDescriptionEditor({
           ? <RenderedMarkdown body={view.project[field.key]}/>
           : <p className="settings-hint">Not specified.</p>}
       </div>}
+      </div>
     </section>)}
-    <SuppliedEvidence path={view.path}/>
+    <SuppliedEvidence path={view.path} expanded={expandedFields.supplied_evidence ?? true} onToggle={() => toggleField('supplied_evidence')}/>
   </div>;
 
   return     <div className="sigma-description-editor">
