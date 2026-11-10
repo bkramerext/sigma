@@ -15495,7 +15495,11 @@ def _bounded_supplied_evidence(sources: list[dict], limit: int = 6000) -> list[d
 
 
 async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> bool:
-    """Checkpoint each actual document read before Investigator/Skeptic dispatch."""
+    """Checkpoint all document reads and fail closed before role dispatch.
+
+    A paused, blocked stage may retry failed sources on explicit Resume. Successful
+    source checkpoints are preserved and not fetched again on that retry.
+    """
     from sigma import research_supplied_evidence
 
     while True:
@@ -15508,7 +15512,7 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                 return False
             inputs = record.get("uploaded_project_evidence")
             if not inputs:
-                return True  # No change to existing evidence-free session semantics.
+                return True
             stage = record.setdefault(
                 "supplied_evidence_compilation",
                 {"status": "pending", "sources": [], "total": len(inputs)},
@@ -15516,32 +15520,77 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
             if stage.get("status") == "completed":
                 return True
             saved = stage.setdefault("sources", [])
-            if len(saved) >= len(inputs):
+            if stage.get("status") == "blocked":
+                # Resume retries only unavailable sources. Do not refetch or
+                # discard successful sources when the backend restarts.
+                saved[:] = [
+                    item for item in saved
+                    if item.get("status") == "retrieved"
+                    and not item.get("incomplete_extract")
+                ]
+                stage["status"] = "pending"
+            completed_ids = {item.get("id") for item in saved}
+            source = next(
+                (item for item in inputs if item["id"] not in completed_ids), None
+            )
+            if source is None:
+                # All inputs were processed: do not allow partial or unavailable
+                # Source Material to become authoritative research premises.
+                ordered = {item["id"]: item for item in saved}
+                assembled = [ordered[item["id"]] for item in inputs]
+                unavailable = [
+                    item for item in assembled
+                    if item.get("status") != "retrieved"
+                    or item.get("incomplete_extract")
+                    or not str(item.get("excerpt") or "").strip()
+                ]
+                if unavailable:
+                    stage["status"] = "blocked"
+                    stage["finished_at"] = _now()
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · source material unavailable"
+                    names = [
+                        str(item.get("filename") or item.get("url") or item["id"])
+                        for item in unavailable
+                    ]
+                    record["message"] = (
+                        f"Cannot research with incomplete Source Material: "
+                        f"{', '.join(names[:4])}."
+                        " Fix retrieval/access and Resume to retry these sources."
+                    )
+                    stage["reason"] = record["message"]
+                    _event(record, "source_material.compilation.blocked", record["message"])
+                    _save(path, record)
+                    return False
+                stage["sources"] = assembled
                 stage["status"] = "completed"
                 stage["finished_at"] = _now()
-                record["uploaded_project_evidence"] = _bounded_supplied_evidence(saved)
+                record["uploaded_project_evidence"] = _bounded_supplied_evidence(assembled)
                 record["status"] = "queued"
-                record["current_action"] = "Supplied evidence ready"
+                record["current_action"] = "Source material ready"
                 record["message"] = (
-                    f"Read {sum(row.get('status') == 'retrieved' for row in saved)} of "
-                    f"{len(saved)} supplied evidence sources."
+                    f"Read all {len(assembled)} supplied source documents; "
+                    "research may proceed using their attributed premises."
                 )
-                _event(record, "evidence.compilation.completed", record["message"])
+                _event(record, "source_material.compilation.completed", record["message"])
                 _save(path, record)
                 return True
-            source = inputs[len(saved)]
             stage["status"] = "running"
             record["status"] = "running"
             record["current_action"] = "Compiling source material"
-            record["message"] = f"Reading supplied evidence {len(saved) + 1} of {len(inputs)}."
+            record["message"] = (
+                f"Reading source material {len(completed_ids) + 1} of {len(inputs)}."
+            )
             _save(path, record)
-        # External HTTP and PDF extraction run outside session state locks.
-        compiled = await asyncio.to_thread(research_supplied_evidence.compile_entry, path, source)
+        # The potentially slow linked-document request is outside locks.
+        compiled = await asyncio.to_thread(
+            research_supplied_evidence.compile_entry, path, source
+        )
         async with _session_state_lock(session_id):
             latest = _read(path, session_id)
             stage = latest["supplied_evidence_compilation"]
             saved = stage["sources"]
-            if len(saved) < len(inputs) and inputs[len(saved)]["id"] == source["id"]:
+            if not any(item.get("id") == source["id"] for item in saved):
                 saved.append(compiled)
                 stage["completed_count"] = len(saved)
                 _save(path, latest)
