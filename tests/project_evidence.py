@@ -230,15 +230,11 @@ def test_link_policy_allows_http_and_rejects_unsafe_targets() -> None:
         assert link["enabled"] is True
         with patch("sigma.reference_titles.domain_status", return_value="invalid"):
             try:
-                project_evidence.add_link(
-                    str(path), "https://nxdomain.invalid/source.txt"
-                )
+                project_evidence.add_link(str(path), "https://nxdomain.invalid/source.txt")
             except ProjectError as exc:
                 assert "Website could not be found" in str(exc)
             else:
-                raise AssertionError(
-                    "Accepted a definitively invalid Source Material host"
-                )
+                raise AssertionError("Accepted a definitively invalid Source Material host")
 
     try:
         research_reference_content._public_endpoint("http://example.org/source.txt")
@@ -248,9 +244,7 @@ def test_link_policy_allows_http_and_rejects_unsafe_targets() -> None:
         raise AssertionError("Research Standards' HTTPS-only endpoint was weakened")
     with patch(
         "sigma.research_reference_content.socket.getaddrinfo",
-        return_value=[
-            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 80))
-        ],
+        return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 80))],
     ):
         host, _, port, _, _ = research_reference_content._public_endpoint(
             "http://example.org/source.txt", allow_http=True
@@ -269,9 +263,7 @@ def test_enable_disable_and_edit_applies_to_future_session_inputs() -> None:
             "_extract",
             return_value=(1, "[PDF page 1] Premise", False),
         ):
-            file = project_evidence.add_evidence(
-                str(path), "source.pdf", b"%PDF-1.7 fixture"
-            )
+            file = project_evidence.add_evidence(str(path), "source.pdf", b"%PDF-1.7 fixture")
         assert len(project_evidence.evidence_context(str(path))) == 2
         assert project_evidence.has_enabled_evidence(str(path))
         disabled_link = project_evidence.set_enabled(str(path), link["id"], False)
@@ -279,9 +271,7 @@ def test_enable_disable_and_edit_applies_to_future_session_inputs() -> None:
         assert not disabled_link["enabled"] and not disabled_file["enabled"]
         assert not project_evidence.has_enabled_evidence(str(path))
         assert project_evidence.evidence_context(str(path)) == []
-        assert not any(
-            item["enabled"] for item in project_evidence.list_evidence(str(path))
-        )
+        assert not any(item["enabled"] for item in project_evidence.list_evidence(str(path)))
         with patch("sigma.reference_titles.domain_status", return_value="valid"):
             edited = project_evidence.edit_link(
                 str(path), link["id"], "https://example.org/updated.txt"

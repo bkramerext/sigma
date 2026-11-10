@@ -58,9 +58,7 @@ class _ReadableHTML(HTMLParser):
         return " ".join(body.split())
 
 
-def _public_endpoint(
-    url: str, *, allow_http: bool = False
-) -> tuple[str, str, int, str, tuple]:
+def _public_endpoint(url: str, *, allow_http: bool = False) -> tuple[str, str, int, str, tuple]:
     if len(url) > _MAX_URL_LENGTH or any(ord(char) < 32 for char in url):
         raise ValueError("invalid_url")
     parts = urlsplit(url)

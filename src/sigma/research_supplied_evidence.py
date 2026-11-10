@@ -59,10 +59,7 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
                     if redirect_count == 2:
                         raise ValueError("too_many_redirects")
                     target = urljoin(current, location)
-                    if (
-                        urlsplit(current).scheme == "https"
-                        and urlsplit(target).scheme != "https"
-                    ):
+                    if urlsplit(current).scheme == "https" and urlsplit(target).scheme != "https":
                         raise ValueError("https_redirect_downgrade")
                     current = target
                     continue

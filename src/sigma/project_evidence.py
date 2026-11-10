@@ -202,9 +202,7 @@ def _validated_link_url(url: str) -> str:
         parsed = urlsplit(canonical)
         port = parsed.port
     except (ValueError, UnicodeError) as exc:
-        raise ProjectError(
-            "Enter a valid public website address, such as example.org."
-        ) from exc
+        raise ProjectError("Enter a valid public website address, such as example.org.") from exc
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.hostname
@@ -216,9 +214,7 @@ def _validated_link_url(url: str) -> str:
         raise ProjectError("Enter a valid public HTTP or HTTPS website address.")
     standard_port = 443 if parsed.scheme == "https" else 80
     if port not in {None, standard_port}:
-        raise ProjectError(
-            "Source Material URLs must use the standard HTTP or HTTPS port."
-        )
+        raise ProjectError("Source Material URLs must use the standard HTTP or HTTPS port.")
     if domain_status(canonical) == "invalid":
         raise ProjectError("Website could not be found. Check the address.")
     # Unverified DNS is not definitive failure, as with Research/Publication Standards.
@@ -303,9 +299,7 @@ def set_enabled(path: str, identifier: str, enabled: bool) -> dict:
     _require_source_editor()
     if type(enabled) is not bool:
         raise ProjectError("Source Material enabled state must be boolean.")
-    if any(
-        row["id"] == identifier for row in inspect_project(path).project.source_material_links
-    ):
+    if any(row["id"] == identifier for row in inspect_project(path).project.source_material_links):
         selected: dict = {}
 
         def update(project):
