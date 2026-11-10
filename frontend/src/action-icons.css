@@ -404,6 +404,10 @@
   column-gap: 7px;
   row-gap: 7px;
 }
+/* Editing only: increase the space between Project and Save. */
+.workspace-page .project-pane-heading .project-pane-actions > .sigma-description-toolbar-action:first-child {
+  margin-left: 10px;
+}
 .workspace-page .project-pane-heading .project-pane-actions button.text-view-icon {
   box-sizing: border-box;
   display: inline-flex;
