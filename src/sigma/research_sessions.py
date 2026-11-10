@@ -5102,6 +5102,13 @@ def mock_session(
             "simulated": True,
         }
         record["outcome"] = _outcome(record)
+        # An idempotent replay returns above without changing the original
+        # creator. Reserve attribution before publishing even the mock record.
+        from sigma import project_collaboration
+
+        project_collaboration.note_artifact_author(
+            view.path, "session", record["id"], created_only=True
+        )
         _save(view.path, record)
         return _public(record)
 
@@ -6768,6 +6775,14 @@ async def start_session(
                     cloud_research.prepare_job(record)
                 except cloud_research.CloudResearchUnavailable as exc:
                     raise ProjectError(str(exc)) from exc
+            # Attribution must be durable before the queued worker can run.
+            # On failed admission a reserved creator row is inert; on replay
+            # the existing session returns without ever changing its owner.
+            from sigma import project_collaboration
+
+            project_collaboration.note_artifact_author(
+                view.path, "session", record["id"], created_only=True
+            )
             _save(view.path, record)
             from sigma import cloud_auth, progress_notifications
 

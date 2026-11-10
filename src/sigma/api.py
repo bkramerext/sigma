@@ -1580,9 +1580,7 @@ def mock_research_start_view(
         scenario,
         body.continue_using_saved_type_settings,
     )
-    project_collaboration.note_artifact_author(
-        body.path, "session", result["id"], created_only=True
-    )
+    # Session creation has already persisted its original human creator.
     return result
 
 
@@ -1634,10 +1632,8 @@ async def research_start_view(body: ResearchStartRequest):
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
-        if isinstance(result.get("id"), str):
-            project_collaboration.note_artifact_author(
-                body.path, "session", result["id"], created_only=True
-            )
+        # A repeated idempotent start must not assign the replaying account
+        # as creator of an existing session.
         return result
     finally:
         if not transferred:

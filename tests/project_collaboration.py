@@ -216,6 +216,19 @@ class CollaborationTests(TestCase):
         self.assertFalse(shared.summary(self.path)["shared"])
         self.assertEqual(shared.summary(self.path)["artifact_authors"], {})
 
+    def test_private_unregistered_project_does_not_reserve_author(self) -> None:
+        with shared._db() as db:
+            db.execute("DELETE FROM shared_projects WHERE path=?", (self.path,))
+        # Personal projects are not required to have a collaboration database row.
+        shared.note_artifact_author(self.path, "session", "private-id", created_only=True)
+        with shared._db() as db:
+            self.assertIsNone(
+                db.execute(
+                    "SELECT email FROM shared_artifact_authors WHERE path=? AND artifact_id=?",
+                    (self.path, "private-id"),
+                ).fetchone()
+            )
+
     def test_creator_metadata_is_preserved_and_only_creator_or_owner_can_remove(self) -> None:
         shared.note_artifact_author(self.path, "session", "session-one", created_only=True)
         shared.note_artifact_author(self.path, "paper", "paper-one", created_only=True)
@@ -446,7 +459,7 @@ class CollaborationTests(TestCase):
         shared.reserve_paper_draft(self.path, "saved-project", resuming=False)
 
         async def exercise() -> None:
-            task = asyncio.create_task(asyncio.sleep(3600))
+            task = asyncio.create_task(asyncio.sleep(3600, result={}))
             key = str(Path(self.path).resolve())
             with (
                 patch("sigma.papers.project_path", return_value=Path(self.path)),

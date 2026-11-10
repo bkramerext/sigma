@@ -568,9 +568,10 @@ def note_artifact_author(
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return
     with _db() as db:
-        row, actor = _membership(db, path)
-        if row is None:
+        # Private/unregistered projects do not have collaboration provenance.
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
             return
+        _row, actor = _membership(db, path)
         verb = "INSERT OR IGNORE" if created_only else "INSERT OR REPLACE"
         db.execute(
             f"{verb} INTO shared_artifact_authors "
