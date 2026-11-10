@@ -317,6 +317,12 @@ with sync_playwright() as playwright:
     )
     child.get_by_label("Name").fill("CI Browser Derived")
     child.get_by_role("combobox", name="Based on project type").click()
+    expect(page.get_by_role("listbox", name="Based on")).to_be_visible()
+    # The menu escapes the modal's scrollport: clicking ordinary dialog
+    # content outside the floating list must dismiss it, not trap focus.
+    dialog.get_by_role("heading", name="Built-in project types").click()
+    expect(page.get_by_role("listbox", name="Based on")).to_have_count(0)
+    child.get_by_role("combobox", name="Based on project type").click()
     child.get_by_role("option", name="CI Browser Parent").click()
     with page.expect_response(project_types_put, timeout=15000):
         child.get_by_label("Scope").fill("Independent derived scope")
@@ -433,7 +439,7 @@ with sync_playwright() as playwright:
 
     open_project(page, affected["path"])
     expect(page.get_by_role("heading", name="Deleted custom parent")).to_be_visible()
-    expect(page.get_by_text("PROJECT DESCRIPTION", exact=True)).to_be_visible()
+    expect(page.get_by_text("TITLE", exact=True)).to_be_visible()
     expect(page.get_by_text("Project type unavailable", exact=True).first).to_be_visible()
     expect(page.get_by_role("button", name="Export project")).to_be_visible()
     with page.expect_download() as download_info:

@@ -28,7 +28,7 @@
 .workspace-page .strategies-table { min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; }
 .workspace-page :is(.strategy-columns, .project-description-columns) { text-transform: uppercase; letter-spacing: .16em; color: var(--sigma-copper-foreground); font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
 .workspace-page .strategy-columns { display: grid; grid-template-columns: minmax(0, 1fr) 266px; padding: 14px 24px; }
-.workspace-page .project-description-columns { margin: -8px -24px 8px; padding: 14px 24px; overflow-wrap: anywhere; }
+.workspace-page .project-description-columns { margin: -8px -24px 0; padding: 14px 24px 8px; overflow-wrap: anywhere; }
 .workspace-page .strategy-list { background: transparent; padding: 0; margin: 0; border: 0; border-radius: 5px; }
 .workspace-page .strategy-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 190px 44px; column-gap: 16px; align-items: start; padding: 15px 36px 15px 24px; min-height: 78px; border-top: 1px solid var(--workspace-line); transition: background-color .15s; }
 .workspace-page .strategy-detail { min-width: 0; }
@@ -1412,3 +1412,39 @@
 
 /* Shared-project provenance stays on the existing metadata line. */
 .artifact-attribution { display: inline-block; white-space: nowrap; font-size: 0.85em; opacity: 0.82; }
+
+/* Strategy row: all six action hit areas use a single 28px box and gap.
+   The Copy-to-Disable spacing is the reference for every neighboring pair. */
+.workspace-page .strategy-title-line { column-gap: 10px; }
+.workspace-page .strategy-title-line > .strategy-markdown-slot { margin-left: 0; }
+.workspace-page .strategy-title-line .strategy-inline-commands {
+  gap: 10px;
+  margin-left: 0;
+  flex-wrap: nowrap;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action:is(:hover:not(:disabled), :focus-visible) {
+  color: #fff2e9;
+  background: var(--copper-gradient);
+  border-color: #ac7054;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action:is(:hover:not(:disabled), :focus-visible) svg {
+  color: #fff2e9;
+}

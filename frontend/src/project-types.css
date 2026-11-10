@@ -100,9 +100,19 @@
 .pt-common-references > h4 { margin: 13px 0 6px; color: #cdd7e0; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 .pt-reference-link { display: grid; gap: 0; min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
 .project-types-dialog .pt-reference-link a { width: fit-content; max-width: 100%; color: var(--sigma-copper-foreground); text-underline-offset: 3px; }
-.project-types-dialog .pt-reference-link a:hover { color: var(--sigma-copper-foreground); }
+/* Research and Publication Standards links share Source Material's subtle
+   yellow label highlight; retain the link underline and normal text weight. */
+.project-types-dialog .pt-reference-link a {
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px transparent;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.project-types-dialog .pt-reference-link a:is(:hover, :focus-visible) {
+  font-weight: 400;
+  background-color: #f5d49a26;
+  box-shadow: 0 0 0 3px #f5d49a26;
+}
 .project-types-dialog .pt-reference-link .pt-reference-url { color: #aab7c4; font-size: 11px; }
-.project-types-dialog .pt-reference-link .pt-reference-url:hover { color: var(--sigma-copper-foreground); }
 .project-types-dialog .pt-restore-references { justify-self: start; }
 
 /* Usage controls apply to shared, built-in and custom references alike. */
@@ -320,4 +330,15 @@
 }
 .project-types-dialog .pt-reference-entry button:has(.pt-reference-action-icon):is(:hover, :focus-visible):not(:disabled) svg {
   color: #fff2e9;
+}
+
+/* Global standards section: headings are peers, with compact descriptions. */
+.project-types-dialog .pt-common-references > .pt-reference-heading > h3 {
+  margin-bottom: 0;
+}
+.project-types-dialog .pt-common-references > .settings-hint {
+  margin: 2px 0 4px;
+}
+.project-types-dialog .pt-common-references > .pt-publication-heading {
+  margin-top: 20px;
 }

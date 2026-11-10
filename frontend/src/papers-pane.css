@@ -161,6 +161,11 @@
   border-radius: 8px; background: #101b26;
   box-shadow: 0 14px 35px #000a; color: #dce7f0;
 }
+/* Flip above the Include control near the lower viewport edge. */
+.workspace-page .paper-includes-dialog.paper-includes-dialog-above {
+  top: auto;
+  bottom: calc(100% + 9px);
+}
 .workspace-page .paper-includes-dialog-heading {
   display: flex; flex-wrap: wrap; align-items: baseline;
   justify-content: flex-start; gap: 12px; margin-bottom: 12px;

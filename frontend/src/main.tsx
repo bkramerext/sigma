@@ -2603,6 +2603,23 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
   const includePopupRef = useRef<HTMLDivElement>(null);
   const includeButtonRef = useRef<HTMLButtonElement>(null);
   const [includePopupOffset, setIncludePopupOffset] = useState(0);
+  const [includePopupAbove, setIncludePopupAbove] = useState(false);
+  const [includePopupMaxHeight, setIncludePopupMaxHeight] = useState(380);
+  useLayoutEffect(() => {
+    if (!includeOptionsOpen) return;
+    const button = includeButtonRef.current;
+    const popup = includePopupRef.current;
+    if (!button || !popup) return;
+    const bounds = button.getBoundingClientRect();
+    const edge = 16;
+    const popupGap = 9;
+    const naturalHeight = popup.scrollHeight + 28; // Account for vertical padding.
+    const below = Math.max(0, window.innerHeight - bounds.bottom - popupGap - edge);
+    const above = Math.max(0, bounds.top - popupGap - edge);
+    const placeAbove = below < Math.min(380, naturalHeight) && above > below;
+    setIncludePopupAbove(placeAbove);
+    setIncludePopupMaxHeight(Math.max(0, Math.min(380, placeAbove ? above : below)));
+  }, [includeOptionsOpen]);
   function openIncludeOptions() {
     const button = includeButtonRef.current;
     if (!button) return;
@@ -3325,7 +3342,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
         <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
         <span className="paper-includes-anchor">
           <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
-          {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className="paper-includes-dialog" role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset }}>
+          {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className={`paper-includes-dialog${includePopupAbove ? ' paper-includes-dialog-above' : ''}`} role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset, maxHeight: includePopupMaxHeight }}>
       <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
 
@@ -3851,7 +3868,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
+      }}>{rendering ? <ProjectOpeningHourglass/> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
   const markdownControl = <span className="text-view-format-control">
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
@@ -4257,14 +4274,17 @@ function AboutWorkflow() {
 }
 
 function AboutDialog({ onClose }: { onClose: () => void }) {
+  const [legalView, setLegalView] = useState<'privacy' | 'terms' | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const cloud = useCloudIdentity();
   useEffect(() => {
     dialog.current?.showModal();
-    closeButton.current?.focus();
   }, []);
-  return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+  useEffect(() => { closeButton.current?.focus(); }, [legalView]);
+  const dismiss = () => { if (legalView) setLegalView(null); else onClose(); };
+  return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className={`project-entry-dialog about-dialog${legalView ? ' about-legal-dialog' : ''}`} aria-labelledby={legalView ? 'about-legal-heading' : 'about-heading'} onCancel={event => { event.preventDefault(); dismiss(); }} onClick={event => { if (event.target === event.currentTarget) dismiss(); }}>
+    {legalView ? <div className="about-legal-document"><div className="entry-dialog-header privacy-notice-heading"><h2 id="about-legal-heading">{legalView === 'privacy' ? 'SIGMA Privacy Notice' : 'Terms of Service'}</h2><DialogDismissButton ref={closeButton} label={legalView === 'privacy' ? 'Close privacy notice' : 'Close terms of service'} onClick={dismiss}/></div><div className="about-legal-document-body">{legalView === 'privacy' ? <PrivacyNoticeContent/> : <TermsOfServiceContent/>}</div></div> : <>
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><DialogDismissButton ref={closeButton} label="Close About SIGMA" onClick={onClose}/></div>
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
@@ -4297,7 +4317,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       </details>
       {cloud?.enabled && cloud.ready && <details className="about-disclosure about-feedback-disclosure" data-about-section="feedback" open={aboutDisclosureState('feedback')} onToggle={event => rememberAboutDisclosure(event, 'feedback')}><summary>Send product feedback</summary><div className="about-disclosure-content"><FeedbackForm signedInEmail={cloud.authenticated ? cloud.user?.email || null : null}/></div></details>}
     </div>
-    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('about')}>Privacy Notice</a><a className="about-privacy-link" href="/tos">Terms of Service</a></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
+    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><button type="button" className="about-privacy-link" onClick={() => setLegalView('privacy')}>Privacy Notice</button><button type="button" className="about-privacy-link" onClick={() => setLegalView('terms')}>Terms of Service</button></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
+  </>}
   </dialog></div>;
 }
 
@@ -5096,6 +5117,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
               <div className="project-collaborator-row">
                 <span>{shared.owner}</span><span className="project-collaborator-owner">Owner</span>
               </div>
+              {collaborators.length > 0 && <p className="project-collaborator-standards-note">Research and publication standards are determined by the project owner and apply to all collaborators.</p>}
               {collaborators.map(email => <div className="project-collaborator-row" key={email}>
                 <span>{email}</span>
                 {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
@@ -5374,7 +5396,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; collaborator?: boolean; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; collaborator?: boolean; activity_author?: string | null; error: string | null };
 // Saved groups by title without the terminal version; versions sort numerically descending.
 // Most Recent intentionally keeps last-accessed ordering.
 const savedVersionSuffix = /\s+(?:v(?:ersion)?\s*(\d+(?:\.\d+)*)|\(\s*v(?:ersion)?\s*(\d+(?:\.\d+)*)\s*\))$/i;
@@ -5491,6 +5513,9 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   const [error, setError] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pending = useRef(false);
+  // A polling response initiated before leaving a shared project must not
+  // resurrect its row after membership revocation succeeds.
+  const leftProjects = useRef(new Set<string>());
   const load = useCallback(async (signal?: AbortSignal, lightweight = false) => {
     const controller = new AbortController();
     const abort = () => controller.abort();
@@ -5499,7 +5524,8 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
     try {
       const response = await fetch(lightweight ? '/api/projects/recent?lightweight=true' : '/api/projects/recent', { signal: controller.signal });
       const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
-      setProjects(data.projects); setError(''); setLoading(false);
+      setProjects((data.projects as RecentProject[]).filter(entry => !leftProjects.current.has(entry.id)));
+      setError(''); setLoading(false);
     } catch (cause) {
       if (controller.signal.aborted && !signal?.aborted) {
         throw new Error('My Work request timed out. Check the backend project-listing logs.');
@@ -5560,9 +5586,15 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   async function forget(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setRemoving(entry.id); setError('');
     try {
-      if (entry.collaborator) await post('collaboration/leave', { path: entry.path, project_id: entry.id });
-      else await post(`recent/forget?path=${encodeURIComponent(entry.path)}`, { project_id: entry.id });
-      setConfirmRemoveId(''); await load();
+      if (entry.collaborator) {
+        await post('collaboration/leave', { path: entry.path, project_id: entry.id });
+        leftProjects.current.add(entry.id);
+        setProjects(current => current.filter(project => project.id !== entry.id));
+      } else {
+        await post(`recent/forget?path=${encodeURIComponent(entry.path)}`, { project_id: entry.id });
+      }
+      setConfirmRemoveId('');
+      await load();
     } catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setRemoving(''); }
   }
@@ -5624,7 +5656,11 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
         try { window.localStorage.setItem(`sigma.home.recentGroup:${groupKey}`, String(isOpen)); } catch { /* Preserve state when storage is available. */ }
         setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
       }}>
-      <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}{hiddenGroupActivity && <><span className={`research-running-indicator${hiddenGroupActivity === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/><span className="sr-only">{hiddenGroupActivity === 'queued' ? 'Paper generation queued in this category' : 'Activity running in this category'}</span></>}</small></summary>
+      <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}{hiddenGroupActivity && <><span className={`research-running-indicator${hiddenGroupActivity === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={(() => {
+        const active = group.projects.filter(project => paperActivity(project));
+        return active.length === 1 && active[0].shared && active[0].activity_author
+          ? `By ${active[0].activity_author}` : undefined;
+      })()}/><span className="sr-only">{hiddenGroupActivity === 'queued' ? 'Paper generation queued in this category' : 'Activity running in this category'}</span></>}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
@@ -5642,7 +5678,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={entry.shared && entry.activity_author ? `By ${entry.activity_author}` : paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -6345,6 +6381,32 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [paperRunning, setPaperRunning] = useState(false);
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
+  // A verified execution lease identifies the collaborator responsible for
+  // green/yellow activity across nested UI elements and CSS-generated dots.
+  const pulseAuthor = sharedActivity?.shared && sharedActivity.collaborators.length > 0
+    ? sharedActivity.lease?.email ?? null : null;
+  useEffect(() => {
+    if (!pulseAuthor) return;
+    const tooltip = `By ${pulseAuthor}`;
+    const selector = '.workspace-page .research-running-indicator, .workspace-page .session-running i, .workspace-page .paper-stage-list li.is-active, .workspace-page .paper-stage-list li.is-queued, .workspace-page .project-header-title-action';
+    const original = new Map<Element, string | null>();
+    const decorate = () => {
+      for (const node of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
+        if (!original.has(node)) original.set(node, node.getAttribute('data-tooltip'));
+        if (node.getAttribute('data-tooltip') !== tooltip) node.setAttribute('data-tooltip', tooltip);
+      }
+    };
+    decorate();
+    const observer = new MutationObserver(decorate);
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+    return () => {
+      observer.disconnect();
+      for (const [node, previous] of original) {
+        if (previous === null) node.removeAttribute('data-tooltip');
+        else node.setAttribute('data-tooltip', previous);
+      }
+    };
+  }, [pulseAuthor]);
   useEffect(() => {
     if (guest) return;
     const controller = new AbortController();
@@ -6789,7 +6851,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <div id="project-pane-content" hidden={!projectExpanded}>
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. {guest ? 'Sign in to replace the project type.' : 'Choose a replacement in Project Settings to use a current type.'}</p>{!guest && <button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button>}</div>}
       <div className="project-overview-card">
-      <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
+      <div className="project-description-columns"><span>TITLE</span></div>
       <ProjectDescriptionEditor view={view} guest={guest}
         editing={descriptionEditing} busy={descriptionBusy}
         canEditTitle={!sharedActivity?.owner || sharedActivity.owner === sharedActivity.you}
@@ -8133,6 +8195,34 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
   </dialog>;
 }
 
+function PrivacyNoticeContent() {
+  return <div className="privacy-notice-content">
+    <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
+    <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
+    <h2>Information SIGMA stores</h2>
+    <p>When you sign in with Google, SIGMA receives your stable Google account identifier and verified email address. SIGMA stores them with your access role, whether access is active, assigned workspace, sponsored eligibility, selected model-access mode, and connection status. The hosted sign-in session is represented by a browser cookie and a hashed session token in SIGMA's authentication database. Sessions last up to eight hours. Sign-in flow data expires after five minutes; a temporary denied-sign-in record expires after ten minutes.</p>
+    <p>If you request an invitation, SIGMA stores your Google account identifier, verified email, request time, and request/notification/review status. SIGMA sends your verified email and request time through its configured mail service to the SIGMA invitation administrator. If you send product feedback, SIGMA stores your message, submission time, status, and contact email. When signed in, the contact email is your verified Google sign-in email; signed-out visitors may provide an optional unverified contact email. The signed-in feedback record is associated with your account identifier and email. Feedback is reviewed in SIGMA's administrator interface; it is not sent to an AI or mail provider. Feedback submissions are limited to five per 24 hours per signed-in account or signed-out browser.</p>
+    <p>Your account workspace can contain project titles and questions, project settings, strategies, research prompts and results, evidence, uploaded or imported project files, code and execution output, analyses, reports, and generated papers. SIGMA also stores research-session identifiers and sponsored-service accounting records, including reserved and estimated usage, call status, and token counts when the provider returns them. Usage estimates are used to enforce SIGMA spending limits and may differ from a provider's final bill.</p>
+    <h2>How SIGMA uses and shares information</h2>
+    <p>SIGMA uses your Google account information to sign you in, apply access rules, and keep your projects in your account workspace. SIGMA administrators can review invitation requests and product feedback, including any optional contact email.</p>
+    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are saved in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
+    <p>For an invitation request, SIGMA's configured mail service receives the verified email and request time so it can notify the invitation administrator. Product feedback is not included in invitation email. SIGMA does not send feedback messages to AI providers.</p>
+    <h2>Where information is stored and how long it remains</h2>
+    <p>In hosted SIGMA, authentication, access, invitation, and feedback records are kept in server-side SQLite databases. Each signed-in account has a separate server-side workspace for its projects and research files. Sponsored usage records are kept in a server-side accounting ledger. The service stores these in its configured persistent storage; the exact physical hosting location and backup schedule are set by the operator.</p>
+    <p>SIGMA has no general time-based deletion schedule for account, invitation, feedback, research, or sponsored-usage records. Signing out ends your browser session but does not erase these records. Project controls can remove project data where available, but the hosted service does not currently offer a control that deletes all information associated with an account. If the operator makes backups, copies may remain according to the operator's backup schedule.</p>
+    <h2>Cookies and account controls</h2>
+    <p>Hosted sign-in uses Secure, HttpOnly, SameSite=Lax cookies for the sign-in flow and session. The session cookie expires after eight hours; the short-lived sign-in and denied-access cookies expire after five and ten minutes respectively. The feedback form uses a random, HttpOnly cookie to apply its five-per-day limit to signed-out browsers. Signing out removes the active session; it does not delete saved projects or records described above. For a request about your account data, contact the SIGMA administrator who invited you.</p>
+  </div>;
+}
+
+function TermsOfServiceContent() {
+  const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
+  return <div className="terms-of-service-copy">
+    <p>No terms except to discover something interesting, wonderous, or pioneering.</p>
+    <p className="terms-welcome-phrase">{phrase}</p>
+  </div>;
+}
+
 function PrivacyNoticePage() {
   useEffect(() => { document.title = 'Privacy notice · SIGMA'; }, []);
   function closeNotice() {
@@ -8152,7 +8242,7 @@ function PrivacyNoticePage() {
     }
     window.location.assign('/');
   }
-  return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
+  return <main className="cloud-auth-shell privacy-notice-shell"><article className="cloud-auth-card privacy-notice-card">
     <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><DialogDismissButton label="Close privacy notice" onClick={closeNotice}/></div>
     <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
     <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>

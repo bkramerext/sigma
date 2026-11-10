@@ -158,10 +158,22 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   useEffect(() => {
     if (!expanded) return;
     const outside = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setExpanded(false);
+      // The top-layer popover may retarget backdrop clicks to itself while
+      // a modal dialog is open. Check actual pointer coordinates instead.
+      const inside = (element: HTMLElement | null) => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        return event.clientX >= rect.left && event.clientX <= rect.right &&
+          event.clientY >= rect.top && event.clientY <= rect.bottom;
+      };
+      if (!inside(trigger.current) && !inside(optionsRef.current)) {
+        setExpanded(false);
+      }
     };
-    document.addEventListener('pointerdown', outside);
-    return () => document.removeEventListener('pointerdown', outside);
+    // Capture outside clicks even when the top-layer popover prevents the
+    // dialog's usual bubbling listeners from seeing the event.
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
   }, [expanded]);
   // The options must escape both the scrollable Project Types body and the
   // modal dialog's clipped border. A native popover renders in the top layer.
@@ -203,7 +215,8 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
       {selected && renderIcon(selected)}<span>{selected?.name ?? 'None'}</span>
       <svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
     </button>
-    {expanded && <div ref={optionsRef} className="research-type-options" popover="manual" role="listbox" aria-label="Based on"
+    {expanded && <div ref={optionsRef} className="research-type-options" popover="auto" role="listbox" aria-label="Based on"
+      onToggle={event => { if (event.currentTarget.matches(':not(:popover-open)')) setExpanded(false); }}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setExpanded(false); trigger.current?.focus(); } }}>
       <button type="button" role="option" aria-selected={!value} onClick={() => { onChoose(''); setExpanded(false); trigger.current?.focus(); }}>None</button>
       {options.map(option => <button key={option.id} type="button" role="option" aria-selected={value === option.id}
@@ -747,15 +760,15 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
     <div className="project-types-body">
       <p className="pt-usage-notice">Compiling standards may increase ChatGPT usage.</p>
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <DialogDismissButton label="Cancel adding project type" disabled={busy} onClick={() => removeDraft(addingId)}/> : <button type="button" className="pt-new-action" disabled={busy || !placeholderIcon} onClick={add} aria-label="New project type" data-tooltip="New project type"><ProjectTypeNewIcon/></button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
-      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(curated defaults protected)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
+      <section><div className="project-types-section-heading"><h3>Built-in project types</h3></div>{sortedBuiltins.map(item => card(item, true))}</section>
       <section className="pt-common-references">
-        <div className="pt-reference-heading"><h4>Research Standards for all project types</h4>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>
+        <div className="pt-reference-heading"><h3>Research Standards for all project types</h3>{referenceAddButton('common', 'research_standards_references', [...(commonReferences?.research_standards_references ?? []), ...commonCustomReferences.research_standards_references], false, commonReferences?.research_standards_references.length ?? 0)}</div>
         <p className="settings-hint">How research is conducted and evaluated across projects; not factual premises.</p>
         {listEditor('common', 'research_standards_references', [
           ...(commonReferences?.research_standards_references ?? []),
           ...commonCustomReferences.research_standards_references,
         ], false, commonReferences?.research_standards_references.length ?? 0)}
-        <div className="pt-reference-heading"><h4>Publication Standards for all project types</h4>{referenceAddButton('common', 'publication_standards_references', [...(commonReferences?.publication_standards_references ?? []), ...commonCustomReferences.publication_standards_references], false, commonReferences?.publication_standards_references.length ?? 0)}</div>
+        <div className="pt-reference-heading pt-publication-heading"><h3>Publication Standards for all project types</h3>{referenceAddButton('common', 'publication_standards_references', [...(commonReferences?.publication_standards_references ?? []), ...commonCustomReferences.publication_standards_references], false, commonReferences?.publication_standards_references.length ?? 0)}</div>
         <p className="settings-hint">How papers are written, structured, and presented across projects.</p>
         {listEditor('common', 'publication_standards_references', [
           ...(commonReferences?.publication_standards_references ?? []),

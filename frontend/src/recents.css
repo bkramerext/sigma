@@ -35,6 +35,9 @@
 }
 .home-page .home-recents .recent-save-as,
 .home-page .home-recents .recent-forget { display: inline-flex; align-items: center; justify-content: center; align-self: center; line-height: 1; text-decoration: none; }
+/* Slightly loosen only the spacing between the home project action icons. */
+.home-page .home-recents .recent-save-as,
+.home-page .home-recents .recent-forget { margin-left: 3px; }
 .home-page .home-recents .recent-save-as svg,
 .home-page .home-recents .recent-forget svg { display: block; width: 20px; height: 20px; }
 .home-page .home-recents .recent-save-as:focus-visible,
@@ -175,10 +178,6 @@
 .home-page > .home-shell { height: 100%; min-height: 0; overflow: hidden; }
 .home-page .home-topline { position: relative; z-index: 2; pointer-events: none; }
 .home-page .home-topline > * { pointer-events: auto; }
-.home-page .home-topline .home-auth-pills,
-.home-page .home-topline .home-right-actions { pointer-events: none; }
-.home-page .home-topline .home-auth-pills > *,
-.home-page .home-topline .home-right-actions > * { pointer-events: auto; }
 .home-page .home-effect-definitions { position: absolute; display: block; width: 0; height: 0; }
 .home-page .home-content { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 16px; overflow: hidden; }
 .home-page .home-topline { flex: 0 0 auto; height: auto; min-height: 52px; }
@@ -663,13 +662,13 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  column-gap: 0;
+  column-gap: 8px;
   row-gap: 0;
   min-width: 0;
   max-width: 100%;
 }
 .home-page .home-recents .recent-title-row > .recent-open {
-  margin-right: 3px;
+  margin-right: 0;
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -685,4 +684,13 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   align-self: center;
   flex-shrink: 0;
   margin: 0;
+}
+
+/* The auth stack is nested inside home-right-actions. Empty grid space
+   must not intercept the My Work and Samples tabs beneath it. */
+.home-page .home-topline > .home-right-actions,
+.home-page .home-topline .home-auth-pills,
+.home-page .home-topline .home-header-actions { pointer-events: none; }
+.home-page .home-right-actions :is(button, a, summary, input, select, [role="combobox"]) {
+  pointer-events: auto;
 }

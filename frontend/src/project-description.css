@@ -160,7 +160,8 @@
 .sigma-evidence-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  /* Match the visible label-to-Disable gap to the gaps between action glyphs. */
+  gap: 8px;
   min-height: 28px;
   margin-top: 3px;
   padding-left: 24px;
@@ -183,6 +184,19 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* Highlight only the interactive label, not the row or its adjacent actions.
+   Preserve the normal text weight and the underline reserved for hyperlinks. */
+.sigma-evidence-row :is(.sigma-evidence-link, .sigma-evidence-attachment) {
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px transparent;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.sigma-evidence-row :is(.sigma-evidence-link, .sigma-evidence-attachment):is(:hover, :focus-visible) {
+  font-weight: 400;
+  background-color: #f5d49a26;
+  box-shadow: 0 0 0 3px #f5d49a26;
+}
+
 .sigma-evidence-row .sigma-evidence-attachment {
   position: relative;
   display: inline-flex;

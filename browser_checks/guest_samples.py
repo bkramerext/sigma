@@ -340,16 +340,18 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(star).to_have_attribute("rel", "noopener noreferrer")
         expect(scored_group).to_contain_text("Best score 75/100")
         expect(scored_group.locator(".recent-title-star")).to_have_count(1)
+        # Establish a non-hovered baseline before testing the copper hover.
+        # The previous pointer location may already overlap the revealed star.
+        page.mouse.move(0, 0)
+        plain_background = star.evaluate("element => getComputedStyle(element).backgroundImage")
         star.hover()
-        assert star.evaluate("element => getComputedStyle(element).color")
-        assert (
-            star.evaluate("element => getComputedStyle(element).backgroundColor")
-            == "rgba(0, 0, 0, 0)"
-        )
+        hover_background = star.evaluate("element => getComputedStyle(element).backgroundImage")
+        assert hover_background != "none", hover_background
+        assert hover_background != plain_background, (plain_background, hover_background)
         star.focus()
         assert (
-            star.evaluate("element => getComputedStyle(element).backgroundColor")
-            == "rgba(0, 0, 0, 0)"
+            star.evaluate("element => getComputedStyle(element).backgroundImage")
+            == hover_background
         )
         assert scored_group.locator(".recent-pin, .recent-forget").count() == 0
         pdf_response = httpx.get(ui_url + star.get_attribute("href"), timeout=10)
@@ -400,7 +402,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         page.get_by_role("button", name="About SIGMA", exact=True).click()
         expect(page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
         policy = page.get_by_role("dialog", name="About SIGMA").get_by_role(
-            "link", name="Privacy Notice"
+            "button", name="Privacy Notice"
         )
         policy.scroll_into_view_if_needed()
         expect(policy).to_be_visible()
