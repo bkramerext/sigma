@@ -98,8 +98,11 @@ def list_evidence(path: str) -> list[dict]:
     """Combine URL records from project.json with disk-backed file records."""
     view = inspect_project(path)
     return sorted(
-        [*view.project.source_material_links, *_file_rows(path)],
-        key=lambda row: str(row.get("uploaded_at") or ""),
+        [*_file_rows(path), *view.project.source_material_links],
+        key=lambda row: (
+            row.get("kind") == "link",
+            str(row.get("uploaded_at") or ""),
+        ),
     )
 
 
