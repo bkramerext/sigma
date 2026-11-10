@@ -2616,7 +2616,7 @@ function paperTimingLabel(progress: PaperProgress, now: number): string {
   return paperElapsed(seconds);
 }
 
-function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
+function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, projectOwnerEmail, draftCreatorEmail, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; viewerEmail?: string; projectOwnerEmail?: string | null; draftCreatorEmail?: string; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
   const ai = useAI();
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
   const [paperMenu, setPaperMenu] = useState<{ paperId: string; kind: 'download' | 'actions' } | null>(null);
@@ -2670,6 +2670,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
     };
   }, [includeOptionsOpen]);
   const [newPaperRequested, setNewPaperRequested] = useState(false);
+  const canControlDraft = !viewerEmail || (draftCreatorEmail
+    ? viewerEmail === draftCreatorEmail
+    : viewerEmail === projectOwnerEmail);
   const [confirmNewPaper, setConfirmNewPaper] = useState(false);
   const [draftPaperExpanded, setDraftPaperExpanded] = useState(true);
   useEffect(() => {
@@ -3417,7 +3420,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
               badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'}/> : undefined}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
-                {!generationRunning && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
+                {!generationRunning && canControlDraft && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
                   {confirmRecoverDraft && recoverySection !== null && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Authorize unfinished paper section recovery">
                     <p>Retry Section {recoverySection}? The previous call may have consumed allowance without saving this section. Completed sections will be reused.</p>
                     <div className="session-remove-confirm-actions">
@@ -3433,8 +3436,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
                     </div>
                   </div></div>}
                 </span>}
-                {generationRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={`Stop Paper ${draftVersion}`} data-tooltip="Stop paper generation" disabled={loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
-                {canStartOver && <span className="paper-remove-anchor">
+                {generationRunning && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={`Stop Paper ${draftVersion}`} data-tooltip="Stop paper generation" disabled={loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                {canStartOver && canControlDraft && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(false); setConfirmRestartDraft(true); }}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
                   {confirmRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm start over on paper generation">
                     <p>Start over Paper {draftVersion}? Unfinished generation progress will be discarded. Saved papers and research history will remain.</p>
@@ -3444,7 +3447,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
                     </div>
                   </div></div>}
                 </span>}
-                {!generationRunning && <span className="paper-remove-anchor">
+                {!generationRunning && canControlDraft && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove unfinished Paper ${draftVersion}`} data-tooltip={`Remove unfinished Paper ${draftVersion}`} disabled={busy || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
                     <p>Remove this unfinished paper and its checkpoint? Saved papers and research history will remain.</p>
@@ -3494,7 +3497,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
                     <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.tex`} onClick={() => setPaperMenu(null)}>Download LaTeX source</a>
                   </span>}
                 </span>
-                <span className="paper-remove-anchor">
+                {(!viewerEmail || viewerEmail === projectOwnerEmail || artifactAuthors?.[paper.paper_id] === viewerEmail) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
                     <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
@@ -3503,7 +3506,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
                     </div>
                   </div></div>}
-                </span>
+                </span>}
               </>}/>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · Version {paper.paper_version}{paper.score && <> · Score {paper.score.total}/100</>} · {paperModelThinkingLabel(paper.generation)}{(artifactAuthors?.[paper.paper_id] || paper.created_by) && <> · <span className="artifact-attribution">{runAttribution(artifactAuthors?.[paper.paper_id] || paper.created_by || '', paper.generation.model, paper.generation.reasoning_effort)}</span></>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
@@ -7057,7 +7060,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setAdvancedOutcomeGlobal(true);
       setAnnouncement('Advanced Outcome enabled for your account.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
-    <PapersPane collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.paper} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
+    <PapersPane collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.paper} viewerEmail={sharedActivity?.you} projectOwnerEmail={sharedActivity?.owner} draftCreatorEmail={sharedActivity?.artifact_authors?.paper_draft?.[project.id]} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
     {sharedActivity?.shared && sharedActivity.lease && <p className="project-collaboration-activity" role="status" aria-live="polite">
       {`${sharedActivity.lease.email} is running ${sharedActivity.lease.activity.toLowerCase()}.`}
     </p>}
