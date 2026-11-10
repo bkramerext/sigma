@@ -1710,12 +1710,18 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
             for item in compilation.get("sources", []):
                 if isinstance(item, dict) and isinstance(item.get("id"), str):
                     compiled_evidence[item["id"]] = item
-    for entry in project_evidence.evidence_context(path, limit=48000):
+    for entry in (
+        project_evidence.evidence_context(path, limit=48000)
+        if Path(path).suffix in {".sigma", ".json"}
+        else []
+    ):
         contents = compiled_evidence.get(entry["id"], entry)
         sources.append(
             {
                 "id": entry["id"],
-                "kind": "uploaded_link" if entry["id"].startswith("uploaded-link:") else "uploaded_pdf",
+                "kind": (
+                    "uploaded_link" if entry["id"].startswith("uploaded-link:") else "uploaded_pdf"
+                ),
                 "data": contents,
             }
         )
