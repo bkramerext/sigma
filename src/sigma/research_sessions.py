@@ -5618,6 +5618,14 @@ async def remove_session(path: str, session_id: str, expected_updated_at: str) -
         # lifecycle state is still "paused". Stop it first so removal uses the
         # same worker-release checks as every other session.
         active = record.get("status") in {"queued", "running", "paused"}
+        worker = _tasks.get(session_id)
+        if active and worker is not None and not worker.done():
+            # A DELETE must never cancel a foreign execution as a side effect
+            # of artifact-owner privileges. The API stops an owned worker first.
+            from sigma import cloud_workspaces
+
+            if cloud_workspaces.current() is not None:
+                raise ProjectError("Stop the active session before removing its saved record.")
     if active:
         task = _tasks.get(session_id)
         if task is not None and not task.done():
