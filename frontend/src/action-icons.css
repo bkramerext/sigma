@@ -397,17 +397,14 @@
 
 /* Project header: use a single rhythm from the title through all actions.
    Keep Q/A's wider wordmark but center it in the same 34px-high control. */
+/* Match the Project-to-first-action gap to the Pencil-to-Q/A gap.
+   Applies in editing and non-editing modes, without extra first-button margin. */
 .workspace-page .project-pane-heading {
-  column-gap: 2px;
+  column-gap: 7px;
 }
 .workspace-page .project-pane-heading .project-primary-actions .project-pane-actions {
   column-gap: 7px;
   row-gap: 7px;
-}
-/* Match the extra title-to-action space in normal and edit modes. */
-.workspace-page .project-pane-heading .project-pane-actions > .sigma-description-toolbar-action:first-child,
-.workspace-page .project-pane-heading .project-pane-actions > .project-description-toolbar-edit:first-child {
-  margin-left: 10px;
 }
 .workspace-page .project-pane-heading .project-pane-actions button.text-view-icon {
   box-sizing: border-box;
