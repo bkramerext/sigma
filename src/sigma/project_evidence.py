@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -67,7 +68,7 @@ def _write(path: str, updates: dict[str, bytes | None]) -> None:
             stage.unlink(missing_ok=True)
 
 
-def list_evidence(path: str) -> list[dict]:
+def _file_rows(path: str) -> list[dict]:
     inspect_project(path)
     raw = _read(path, MANIFEST)
     if raw is None:
@@ -76,6 +77,12 @@ def list_evidence(path: str) -> list[dict]:
     if not isinstance(rows, list):
         raise ProjectError("Evidence manifest is invalid.")
     return rows
+
+
+def list_evidence(path: str) -> list[dict]:
+    """Combine URL records from project.json with disk-backed file records."""
+    view = inspect_project(path)
+    return [*view.project.source_material_links, *_file_rows(path)]
 
 
 def _extract(pdf: bytes) -> tuple[int, str, bool]:
@@ -147,12 +154,12 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
     if principal is not None and principal.role == "guest":
         raise ProjectError("Guests cannot add evidence.")
     with project_write_lock(path):
-        rows = list_evidence(path)
+        rows = _file_rows(path)
         duplicate = next((row for row in rows if row.get("sha256") == sha), None)
         if duplicate is not None:
             return duplicate
-        if len(rows) >= MAX_FILES:
-            raise ProjectError("This project already has 20 evidence files.")
+        if len(rows) + len(inspect_project(path).project.source_material_links) >= MAX_FILES:
+            raise ProjectError("This project already has 20 Source Material entries.")
         identifier = uuid4().hex
         entry = {
             "id": identifier,
@@ -175,7 +182,7 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
 
 
 def add_link(path: str, url: str) -> dict:
-    """Persist a URL as a clearly uninspected evidence pointer."""
+    """Store URL records in project.json; never create an artifact for a link."""
     parsed = urlsplit(url.strip())
     if (
         parsed.scheme not in {"https", "http"}
@@ -185,31 +192,38 @@ def add_link(path: str, url: str) -> dict:
         or len(url) > 2048
         or any(ord(c) < 32 for c in url)
     ):
-        raise ProjectError("Enter a valid HTTP or HTTPS evidence link.")
+        raise ProjectError("Enter a valid HTTP or HTTPS Source Material link.")
     from sigma import cloud_auth
+    from sigma.projects import _update_project
 
     principal = cloud_auth.current_principal()
     if principal is not None and principal.role == "guest":
-        raise ProjectError("Guests cannot add evidence.")
-    with project_write_lock(path):
-        rows = list_evidence(path)
-        duplicate = next(
-            (row for row in rows if row.get("kind") == "link" and row.get("url") == url.strip()),
-            None,
+        raise ProjectError("Guests cannot add Source Material.")
+    canonical = url.strip()
+    new_entry = {
+        "id": uuid4().hex,
+        "kind": "link",
+        "url": canonical,
+        "uploaded_by": principal.email if principal else None,
+        "uploaded_at": datetime.now(UTC).isoformat(),
+    }
+    selected = new_entry
+
+    def update(project):
+        nonlocal selected
+        for item in project.source_material_links:
+            if item["url"] == canonical:
+                selected = item
+                return project
+        if len(project.source_material_links) + len(_file_rows(path)) >= MAX_FILES:
+            raise ProjectError("This project already has 20 Source Material entries.")
+        return replace(
+            project,
+            source_material_links=(*project.source_material_links, new_entry),
         )
-        if duplicate is not None:
-            return duplicate
-        if len(rows) >= MAX_FILES:
-            raise ProjectError("This project already has 20 supplied evidence entries.")
-        entry = {
-            "id": uuid4().hex,
-            "kind": "link",
-            "url": url.strip(),
-            "uploaded_by": principal.email if principal else None,
-            "uploaded_at": datetime.now(UTC).isoformat(),
-        }
-        _write(path, {MANIFEST: json.dumps([*rows, entry], sort_keys=True).encode()})
-        return entry
+
+    _update_project(path, update)
+    return selected
 
 
 def get_pdf(path: str, identifier: str) -> tuple[dict, bytes]:
@@ -225,31 +239,50 @@ def get_pdf(path: str, identifier: str) -> tuple[dict, bytes]:
 
 
 def remove_evidence(path: str, identifier: str) -> None:
+    from sigma import cloud_auth, project_collaboration
+    from sigma.projects import _update_project
+
+    principal = cloud_auth.current_principal()
+
+    def can_remove(row: dict) -> None:
+        if principal is None:
+            return
+        owner = project_collaboration.summary(path)["owner"]
+        if principal.role == "guest" or (
+            principal.email != owner and principal.email != row.get("uploaded_by")
+        ):
+            raise ProjectError("Only the uploader or project owner can remove Source Material.")
+
+    if any(item["id"] == identifier for item in inspect_project(path).project.source_material_links):
+        def update(project):
+            entry = next(
+                (row for row in project.source_material_links if row["id"] == identifier),
+                None,
+            )
+            if entry is None:
+                raise ProjectError("Source Material link not found.")
+            can_remove(entry)
+            return replace(
+                project,
+                source_material_links=tuple(
+                    row for row in project.source_material_links if row["id"] != identifier
+                ),
+            )
+
+        _update_project(path, update)
+        return
+
     with project_write_lock(path):
-        rows = list_evidence(path)
+        rows = _file_rows(path)
         entry = next((row for row in rows if row["id"] == identifier), None)
         if entry is None:
-            raise ProjectError("Evidence file not found.")
-        from sigma import cloud_auth, project_collaboration
-
-        principal = cloud_auth.current_principal()
-        if principal is not None:
-            owner = project_collaboration.summary(path)["owner"]
-            if principal.role == "guest" or (
-                principal.email != owner and principal.email != entry.get("uploaded_by")
-            ):
-                raise ProjectError("Only the uploader or project owner can remove evidence.")
+            raise ProjectError("Source Material file not found.")
+        can_remove(entry)
         _write(
             path,
             {
-                **(
-                    {}
-                    if entry.get("kind") == "link"
-                    else {
-                        f"artifacts/source_material/{identifier}.pdf": None,
-                        f"artifacts/source_material/{identifier}.txt": None,
-                    }
-                ),
+                f"artifacts/source_material/{identifier}.pdf": None,
+                f"artifacts/source_material/{identifier}.txt": None,
                 MANIFEST: json.dumps(
                     [row for row in rows if row["id"] != identifier], sort_keys=True
                 ).encode(),
