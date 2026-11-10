@@ -324,12 +324,14 @@ def list_pending_answers(path: str) -> list[dict[str, str]]:
                 continue
         except (ValueError, TypeError):
             continue
-        active.append({
-            "request_id": item["request_id"],
-            "creator": item.get("creator", ""),
-            "model": item.get("model", ""),
-            "thinking": item.get("thinking", ""),
-        })
+        active.append(
+            {
+                "request_id": item["request_id"],
+                "creator": item.get("creator", ""),
+                "model": item.get("model", ""),
+                "thinking": item.get("thinking", ""),
+            }
+        )
     return active
 
 
@@ -700,14 +702,17 @@ async def _answer_locked(
             raise ProjectError("This project has reached the 50 saved Q/A limit")
         return (
             records,
-            [*pending, {
-                "request_id": request_id,
-                "question_sha256": question_hash,
-                "started_at": started.isoformat(),
-                "creator": creator,
-                "model": str(config.get("model", "")),
-                "thinking": str(config.get("reasoning_effort", "")),
-            }],
+            [
+                *pending,
+                {
+                    "request_id": request_id,
+                    "question_sha256": question_hash,
+                    "started_at": started.isoformat(),
+                    "creator": creator,
+                    "model": str(config.get("model", "")),
+                    "thinking": str(config.get("reasoning_effort", "")),
+                },
+            ],
             None,
             True,
         )
