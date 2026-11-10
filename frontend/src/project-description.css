@@ -110,3 +110,13 @@
   .sigma-description-fields { margin-top: 1rem; }
   .sigma-description-field + .sigma-description-field { padding-top: .85rem; }
 }
+
+.sigma-supplied-evidence { margin-top: 12px; }
+.sigma-evidence-heading { display: flex; align-items: center; gap: 12px; }
+.sigma-evidence-heading h4 { margin: 0; }
+.sigma-evidence-actions { display: inline-flex; align-items: center; gap: 8px; }
+.sigma-evidence-actions .sigma-heading-icon-action { display: inline-flex; border: 0; background: transparent; padding: 2px; color: var(--sigma-copper-foreground); cursor: pointer; }
+.sigma-evidence-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.sigma-evidence-row a { overflow-wrap: anywhere; min-width: 0; color: var(--sigma-copper-foreground); }
+.sigma-evidence-row .sigma-evidence-remove { display: inline-flex; flex: 0 0 auto; border: 0; background: transparent; color: var(--sigma-copper-foreground); padding: 2px; }
+.sigma-evidence-link-input { width: min(100%, 540px); margin-top: 8px; }
