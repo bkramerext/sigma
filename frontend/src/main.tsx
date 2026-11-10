@@ -3357,14 +3357,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
     <header className="workspace-pane-heading papers-pane-heading">
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
-      {!guest && !showDraftPaper && <div className="papers-heading-actions strategy-heading-actions">
-        {confirmNewPaper ? <>
+      {!guest && <div className="papers-heading-actions strategy-heading-actions">
+        {!showDraftPaper && (confirmNewPaper ? <>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); void generatePaper(); }}>Start Paper {draftVersion}</button>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => setConfirmNewPaper(false)}>Cancel</button>
         </> : <>
         <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
+        </>)}
         <span className="paper-includes-anchor">
-          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
+          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" disabled={loading || confirmNewPaper || showDraftPaper} onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
           {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className={`paper-includes-dialog${includePopupAbove ? ' paper-includes-dialog-above' : ''}`} role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset, maxHeight: includePopupMaxHeight }}>
       <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
@@ -3380,7 +3381,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, path, projectId, g
       </fieldset>
           </div>}
         </span>
-        </>}
       </div>}
       <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
@@ -6436,7 +6436,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     const controller = new AbortController();
     let pending = false;
     const poll = async () => {
-      if (controller.signal.aborted || pending || document.visibilityState !== 'visible') return;
+      if (controller.signal.aborted || pending) return;
       pending = true;
       try {
         const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path })}`, {
@@ -6533,10 +6533,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   useEffect(() => {
     if (!sharedActivity?.shared || !view || guest) return;
     const revision = sharedActivity.revision;
-    if (lastLoadedSharedRevision.current === null) {
-      lastLoadedSharedRevision.current = revision;
-      return;
-    }
+    // The project may have changed before this window's first poll completed.
+    // Load the authoritative title and settings even on the first response.
     if (revision === lastLoadedSharedRevision.current) return;
     // Committed changes supersede unsaved drafts in other windows.
     // Avoid interrupting an in-flight write; the backend revision fence protects it.
