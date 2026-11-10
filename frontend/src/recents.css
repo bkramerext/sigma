@@ -656,9 +656,20 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 /* Saved-project title actions are one aligned inline group: shared, copy, remove.
    The controls move with the title rather than sitting after the metadata. */
 .home-page .home-recents .recent-title-row {
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  column-gap: 6px;
-  row-gap: 4px;
+  column-gap: 3px;
+  row-gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.home-page .home-recents .recent-title-row > .recent-open {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .home-page .home-recents .recent-title-row > :is(
   .recent-title-star,
@@ -667,5 +678,6 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   .recent-forget
 ) {
   align-self: center;
+  flex-shrink: 0;
   margin: 0;
 }
