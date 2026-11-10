@@ -673,8 +673,12 @@ async def _answer_locked(
         for ref in cited_refs
     ]
     created_at = datetime.now(UTC).isoformat()
+    from sigma import project_collaboration
+
+    creator = project_collaboration.creator_identity()
     record = {
         "qa_id": uuid4().hex,
+        "created_by": creator,
         "request_id": request_id,
         "project_id": expected_project_id,
         "question": question,
@@ -713,7 +717,14 @@ async def _answer_locked(
             True,
         )
 
-    return _archive_update(path, save_answer)
+    saved = _archive_update(path, save_answer)
+    # The archive is authoritative for local and exported projects. The hosted
+    # attribution index additionally enforces creator-only deletion.
+    if saved.get("created_by") == creator:
+        project_collaboration.note_artifact_author(
+            path, "qa", saved["qa_id"], created_only=True
+        )
+    return saved
 
 
 def _request_record(

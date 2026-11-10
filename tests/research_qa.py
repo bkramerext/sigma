@@ -218,6 +218,9 @@ def main() -> None:
                 )
             )
             assert first["qa_id"] == repeated["qa_id"] and calls == 1
+            assert first["created_by"] == "Local user"
+            assert first["generation"]["model"] == "fixture-model"
+            assert first["generation"]["reasoning_effort"] == "medium"
             assert [row["session_number"] for row in first["sources"]] == [1, 2]
             assert len(research_qa.list_answers(str(path))) == 1
             from sigma.text_views import digest

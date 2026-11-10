@@ -141,7 +141,10 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert permitted.status == 200, permitted.text()
         assert get_json(permitted)["path"] == path
         recent = get_json(member_context.request.get(ui + "/api/projects/recent"))
-        assert any(row["path"] == path and row["shared"] for row in recent["projects"])
+        assert any(
+            row["path"] == path and row["shared"] and row["collaborating"]
+            for row in recent["projects"]
+        )
         status = get_json(member_context.request.get(ui + "/api/cloud-auth/status"))
         member_root = workspaces / status["account"]["workspace"]["id"]
         assert not (member_root / Path(path).name).exists(), "No collaborator project copy"
@@ -222,6 +225,15 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(guest.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
         guest_context.close()
 
+        # Opening Project Settings from a shared-project shortcut is one-shot;
+        # refreshing the same project must not reopen the dialog.
+        member.goto(url + "&settings=collaborators")
+        settings_once = member.get_by_role("dialog", name="Project Settings")
+        expect(settings_once).to_be_visible()
+        expect(member).to_have_url(url)
+        member.reload()
+        expect(member.get_by_role("dialog", name="Project Settings")).to_have_count(0)
+
         # Preserve the original owner's staged settings for conflict testing.
         # Concurrent settings: a collaborator can edit the same file, while
         # the owner's stale draft must fail revision CAS, not overwrite it.
@@ -245,9 +257,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner.goto(url)
         expect(owner_dialog).not_to_be_visible()
 
-        # The Shared shortcut leaves ?settings=collaborators in the URL.
-        # Reloading that deep link intentionally reopens the modal, so use
-        # the canonical project URL for a fresh editor after a stale Save.
+        # Settings deep links are consumed and a reload stays in the project.
         owner.goto(url)
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
@@ -268,6 +278,39 @@ def exercise(ui: str, workspaces: Path) -> None:
             0
         )
         assert Path(path).is_file(), "Revocation must not move or delete the owner's project"
+
+        # Reinvite N to test the My Work X as real membership removal.
+        owner.goto(url)
+        owner.get_by_role("button", name="Project settings", exact=True).click()
+        owner_dialog = owner.get_by_role("dialog", name="Project Settings")
+        owner_dialog.get_by_role("button", name="Add collaborator").click()
+        invite_input = owner_dialog.get_by_label("New collaborator email")
+        invite_input.fill(COLLABORATOR)
+        invite_input.press("Tab")
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
+
+        member.goto(ui)
+        member.get_by_role("tab", name="My Work").click()
+        expand_saved_group(member)
+        project_entry = member.locator(".recent-entry").filter(
+            has=member.get_by_role("button", name=title, exact=True)
+        )
+        exit_button = project_entry.get_by_role(
+            "button", name="Stop collaborating on this project"
+        )
+        expect(exit_button).to_have_attribute(
+            "data-tooltip", "Stop collaborating on this project"
+        )
+        exit_button.click()
+        project_entry.get_by_role("button", name="Confirm", exact=True).click()
+        expect(
+            member.get_by_role("button", name=f"Manage collaborators for {title}")
+        ).to_have_count(0)
+        after_leave = get_json(owner_context.request.get(
+            ui + "/api/projects/collaboration", params={"path": path}
+        ))
+        assert COLLABORATOR not in after_leave["collaborators"], after_leave
+        assert Path(path).is_file(), "Leaving a project must not delete its research"
         verify_new_windows_inherit_latest_google_account(browser, ui)
         owner_context.close()
         member_context.close()

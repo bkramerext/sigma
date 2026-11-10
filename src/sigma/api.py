@@ -783,6 +783,7 @@ def research_qa_get(qa_id: str, path: str):
 
 @app.delete("/api/projects/research-qa/{qa_id}")
 def research_qa_delete(qa_id: str, path: str):
+    project_collaboration.require_artifact_permission(path, "qa", qa_id, delete=True)
     research_qa.delete_answer(path, qa_id)
     return {"deleted": qa_id}
 
@@ -849,10 +850,11 @@ def papers_progress_view(path: str):
 
 @app.post("/api/projects/papers/cancel")
 async def paper_cancel_view(body: PaperCancelRequest):
-    await require_cloud_inference_binding(
-        body.expected_binding, body.expected_project_id, body.path
-    )
-    return {"cancelled": await papers.cancel_generation(body.path)}
+    view = inspect_project(body.path)
+    if view.project.id != body.expected_project_id:
+        raise ProjectError("Project changed; reopen before stopping paper generation.")
+    with project_collaboration.bind_execution_control_lease(body.path, "Paper generation"):
+        return {"cancelled": await papers.cancel_generation(body.path)}
 
 
 @app.post("/api/projects/papers/discard")
@@ -902,7 +904,9 @@ async def paper_score_view(paper_id: str, body: PaperScoreRequest):
             force=body.force,
         )
         papers.mark_scored_progress(body.path, paper_id)
-        project_collaboration.note_artifact_author(body.path, "paper", paper_id)
+        project_collaboration.note_artifact_author(
+            body.path, "paper", paper_id, created_only=True
+        )
         return {"score": score}
     except asyncio.CancelledError:
         if memory_guard.is_critical():
@@ -989,6 +993,7 @@ def paper_tex_view(paper_id: str, path: str):
 
 @app.delete("/api/projects/papers/{paper_id}")
 def paper_delete_view(paper_id: str, path: str):
+    project_collaboration.require_artifact_permission(path, "paper", paper_id, delete=True)
     papers.delete_paper(path, paper_id)
     return {"deleted": paper_id}
 
@@ -1621,6 +1626,7 @@ async def research_start_view(body: ResearchStartRequest):
 async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
+    project_collaboration.require_artifact_permission(body.path, "session", session_id)
     if (
         cloud_auth._mock_enabled(cfg)
         and isinstance(principal, cloud_auth.Principal)
@@ -1628,23 +1634,23 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
     ):
         if body.additional_calls:
             raise HTTPException(400, "Mock research cannot extend provider-call limits.")
-        simulated = await run_in_threadpool(
-            research_sessions.control_mock_session, body.path, session_id, body.action
-        )
+        with project_collaboration.bind_execution_control_lease(body.path, "Research session"):
+            simulated = await run_in_threadpool(
+                research_sessions.control_mock_session, body.path, session_id, body.action
+            )
         if simulated is None:
             raise HTTPException(404, "Not found")
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
         return simulated
 
     if body.action not in {"resume", "repair"}:
-        result = await research_sessions.control_session(
-            body.path,
-            session_id,
-            body.action,
-            additional_calls=body.additional_calls,
-            browser_presence_required=body.browser_presence_required,
-        )
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
+        with project_collaboration.bind_execution_control_lease(body.path, "Research session"):
+            result = await research_sessions.control_session(
+                body.path,
+                session_id,
+                body.action,
+                additional_calls=body.additional_calls,
+                browser_presence_required=body.browser_presence_required,
+            )
         return result
     lease = project_collaboration.acquire_lease(body.path, "Research session")
     transferred = False
@@ -1661,7 +1667,6 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         if worker is not None and not worker.done():
             project_collaboration.watch_lease(body.path, lease, worker)
             transferred = True
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
         return result
     finally:
         if not transferred:
@@ -1670,6 +1675,7 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
 
 @app.post("/api/projects/research-sessions/{session_id}/interventions")
 async def research_intervention_view(session_id: str, body: ResearchInterventionRequest):
+    project_collaboration.require_artifact_permission(body.path, "session", session_id)
     return await research_sessions.submit_intervention(
         body.path,
         session_id,
@@ -1683,7 +1689,12 @@ async def research_intervention_view(session_id: str, body: ResearchIntervention
 
 @app.delete("/api/projects/research-sessions/{session_id}")
 async def research_session_remove_view(session_id: str, body: ResearchSessionRemoveRequest):
-    return await research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
+    project_collaboration.require_artifact_permission(body.path, "session", session_id, delete=True)
+    with project_collaboration.bind_execution_control_lease(body.path, "Research session"):
+        result = await research_sessions.remove_session(
+            body.path, session_id, body.expected_updated_at
+        )
+    return result
 
 
 @app.get("/api/research-tools")
@@ -1810,6 +1821,24 @@ def retry_collaboration_notices_view(body: RetryCollaborationNoticesRequest):
     view = inspect_project(body.path)
     count = project_collaboration.retry_failed_notifications(view.path)
     return {"requeued": count}
+
+
+
+class LeaveCollaborationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    path: str = Field(min_length=1, max_length=4096)
+    expected_project_id: str = Field(min_length=1, max_length=100)
+
+
+@app.post("/api/projects/collaboration/leave")
+def leave_collaboration_view(body: LeaveCollaborationRequest):
+    # Uses exactly the same membership catalog as the Collaborators editor.
+    # Do not alter project files, research, or the creator's Saved index.
+    view = inspect_project(body.path)
+    project_collaboration.leave_project(
+        view.path, body.expected_project_id, view.project.title
+    )
+    return {"left": True}
 
 
 @app.get("/api/projects/audit")

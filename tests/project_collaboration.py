@@ -157,6 +157,7 @@ class CollaborationTests(TestCase):
         self.assertEqual(result[0]["title"], "Xenopus Tadpoles")
         self.assertTrue(result[0]["available"])
         self.assertTrue(result[0]["shared"])
+        self.assertTrue(result[0]["collaborating"])
 
     def test_saved_listing_uses_single_db_snapshot_for_owner_and_collaborator(self) -> None:
         with patch.object(shared, "_db", wraps=shared._db) as db_calls:
@@ -186,6 +187,7 @@ class CollaborationTests(TestCase):
     ) -> None:
         shared.note_artifact_author(self.path, "strategy", "strategy-one")
         shared.note_artifact_author(self.path, "paper", "paper-one", created_only=True)
+        shared.note_artifact_author(self.path, "qa", "answer-one")
         self.assertEqual(
             shared.summary(self.path)["artifact_authors"]["strategy"]["strategy-one"],
             self.owner.email,
@@ -205,15 +207,154 @@ class CollaborationTests(TestCase):
             ),
         ):
             shared.note_artifact_author(self.path, "strategy", "strategy-one")
-            shared.note_artifact_author(self.path, "paper", "paper-one", created_only=True)
+            shared.note_artifact_author(self.path, "paper", "paper-one")
+            shared.note_artifact_author(self.path, "qa", "answer-one")
             attribution = shared.summary(self.path)["artifact_authors"]
             self.assertEqual(attribution["strategy"]["strategy-one"], self.other.email)
             self.assertEqual(attribution["paper"]["paper-one"], self.owner.email)
+            self.assertEqual(attribution["qa"]["answer-one"], self.owner.email)
 
         with shared._db() as db:
             db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
         self.assertFalse(shared.summary(self.path)["shared"])
-        self.assertEqual(shared.summary(self.path)["artifact_authors"], {})
+        self.assertEqual(
+            shared.summary(self.path)["artifact_authors"]["paper"]["paper-one"],
+            self.owner.email,
+        )
+
+
+    def test_creator_controls_own_execution_but_other_member_cannot(self) -> None:
+        from sigma import api
+
+        session = "12345678-1234-4234-9234-123456789012"
+        shared.note_artifact_author(self.path, "session", session, created_only=True)
+        other_workspace = replace(
+            self.workspace,
+            subject_hash="other-hash",
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        token = shared.acquire_lease(self.path, "Research session")
+        with shared.bind_execution_control_lease(self.path, "Research session"):
+            with shared.write_guard(self.path):
+                pass
+        with (
+            patch("sigma.api.cloud_auth._mock_enabled", return_value=False),
+            patch("sigma.api.cloud_auth.config", return_value=SimpleNamespace()),
+            patch(
+                "sigma.api.research_sessions.control_session",
+                new_callable=AsyncMock,
+                return_value={"id": session, "status": "stopped"},
+            ) as control,
+        ):
+            result = asyncio.run(
+                api.research_control_view(
+                    session,
+                    api.ResearchControlRequest(path=self.path, action="stop"),
+                    SimpleNamespace(state=SimpleNamespace(cloud_principal=None)),
+                )
+            )
+            self.assertEqual(result["status"], "stopped")
+            control.assert_awaited_once()
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace),
+            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            self.assertRaisesRegex(ProjectError, "Only the creator"),
+        ):
+            shared.require_artifact_permission(self.path, "session", session)
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=other_workspace),
+            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            self.assertRaisesRegex(ProjectError, "being used"),
+            shared.bind_execution_control_lease(self.path, "Research session"),
+        ):
+            self.fail("Another user took the research execution lease")
+        shared.release_lease(self.path, token)
+        token = shared.acquire_lease(self.path, "Paper generation")
+        with (
+            patch(
+                "sigma.api.inspect_project",
+                return_value=SimpleNamespace(project=SimpleNamespace(id="saved-project")),
+            ),
+            patch(
+                "sigma.api.papers.cancel_generation",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as cancel,
+        ):
+            body = api.PaperCancelRequest(
+                path=self.path, expected_project_id="saved-project", expected_binding="unused"
+            )
+            self.assertEqual(
+                asyncio.run(api.paper_cancel_view(body)), {"cancelled": True}
+            )
+            cancel.assert_awaited_once()
+            with (
+                patch(
+                    "sigma.project_collaboration.cloud_workspaces.current",
+                    return_value=other_workspace,
+                ),
+                patch(
+                    "sigma.project_collaboration.cloud_auth.current_principal",
+                    return_value=self.other,
+                ),
+                self.assertRaisesRegex(ProjectError, "being used"),
+            ):
+                asyncio.run(api.paper_cancel_view(body))
+        shared.release_lease(self.path, token)
+
+    def test_artifact_delete_permissions_and_self_leave(self) -> None:
+        shared.note_artifact_author(self.path, "session", "s-one")
+        shared.note_artifact_author(self.path, "paper", "p-one")
+        shared.note_artifact_author(self.path, "qa", "a-one")
+        colleague = replace(
+            self.workspace,
+            subject_hash="other-hash",
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+        ):
+            for kind, key in (("session", "s-one"), ("paper", "p-one"), ("qa", "a-one")):
+                with self.assertRaisesRegex(ProjectError, "creator"):
+                    shared.require_artifact_permission(self.path, kind, key, delete=True)
+            shared.note_artifact_author(self.path, "qa", "a-two")
+            shared.require_artifact_permission(self.path, "qa", "a-two", delete=True)
+        for kind, key in (
+            ("session", "s-one"), ("paper", "p-one"), ("qa", "a-one"), ("qa", "a-two")
+        ):
+            shared.require_artifact_permission(self.path, kind, key, delete=True)
+
+        # Z may be actively researching while N leaves; neither the lease
+        # nor the project data is touched by membership revocation.
+        token = shared.acquire_lease(self.path, "Research session")
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+        ):
+            shared.leave_project(self.path, "saved-project", "Study")
+            self.assertEqual(shared.shared_listing()[0], [])
+            self.assertFalse(shared.authorized_shared_path(Path(self.path)))
+        with shared._db() as db:
+            self.assertIsNone(
+                db.execute(
+                    "SELECT 1 FROM shared_collaborators WHERE path=? AND email=?",
+                    (self.path, self.other.email),
+                ).fetchone()
+            )
+            record = db.execute(
+                "SELECT project_title,event FROM shared_email_outbox WHERE recipient=?",
+                (self.other.email,),
+            ).fetchone()
+            self.assertEqual((record["project_title"], record["event"]), ("Study", "removed"))
+            self.assertIsNotNone(
+                db.execute("SELECT 1 FROM shared_projects WHERE path=?", (self.path,)).fetchone()
+            )
+        shared.release_lease(self.path, token)
+        with self.assertRaisesRegex(ProjectError, "owner cannot"):
+            shared.leave_project(self.path, "saved-project", "Study")
 
     def revision(self) -> int:
         with shared._db() as db:
