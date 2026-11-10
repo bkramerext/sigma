@@ -4286,6 +4286,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 type ProjectEvidenceEntry = {
   id: string; filename: string; sha256: string; bytes: number;
   pages: number; extract_truncated: boolean; uploaded_at: string;
+  uploaded_by?: string | null; can_remove: boolean;
 };
 
 function ProjectEvidenceIcon() {
@@ -4360,8 +4361,8 @@ function ProjectEvidenceDialog({ path, onClose }: { path: string; onClose: () =>
       <div className="project-evidence-list">{entries.map(entry => <div className="project-evidence-entry" key={entry.id}>
         <a href={`/api/projects/evidence/${entry.id}/pdf?${new URLSearchParams({ path })}`} target="_blank" rel="noreferrer">{entry.filename}</a>
         <span>{entry.pages} pages{entry.extract_truncated ? ' · excerpt limited' : ''}</span>
-        <button type="button" className="text-view-link" data-tooltip="Remove evidence" aria-label={`Remove ${entry.filename}`} disabled={busy}
-          onClick={() => void remove(entry)}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
+        {entry.can_remove && <button type="button" className="text-view-link" data-tooltip="Remove evidence" aria-label={`Remove ${entry.filename}`} disabled={busy}
+          onClick={() => void remove(entry)}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>}
       </div>)}</div>
     </div>
   </dialog>;
