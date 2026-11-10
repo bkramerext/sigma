@@ -6503,6 +6503,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     const original = new Map<Element, string | null>();
     const decorate = () => {
       for (const node of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
+        // The title and its child flasher share the aggregate tooltip.
+        if (node.closest('.project-header-title-action')) continue;
         if (!original.has(node)) original.set(node, node.getAttribute('data-tooltip'));
         if (node.getAttribute('data-tooltip') !== tooltip) node.setAttribute('data-tooltip', tooltip);
       }
