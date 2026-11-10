@@ -675,6 +675,16 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Match the visible title-to-first-glyph spacing to the icon-to-icon rhythm.
+   Apply to whichever action is first (shared, star, copy, or remove). */
+.home-page .home-recents .recent-title-row > .recent-open + :is(
+  .recent-title-star,
+  .recent-title-shared,
+  .recent-save-as,
+  .recent-forget
+) {
+  margin-left: 6px;
+}
 .home-page .home-recents .recent-title-row > :is(
   .recent-title-star,
   .recent-title-shared,
