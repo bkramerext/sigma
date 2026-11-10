@@ -306,6 +306,33 @@ def _archive_bytes(
     return raw
 
 
+def list_pending_answers(path: str) -> list[dict[str, str]]:
+    """Return recently started, unfinished Ask requests with immutable provenance.
+
+    Older reservations can mean a provider call was interrupted; they remain
+    preserved for idempotency but must not flash as a live request indefinitely.
+    """
+    from datetime import timedelta
+
+    _records, pending = _load_archive(path)
+    cutoff = datetime.now(UTC) - timedelta(hours=1)
+    active: list[dict[str, str]] = []
+    for item in pending:
+        try:
+            started = datetime.fromisoformat(item.get("started_at", ""))
+            if started.tzinfo is None or started < cutoff:
+                continue
+        except (ValueError, TypeError):
+            continue
+        active.append({
+            "request_id": item["request_id"],
+            "creator": item.get("creator", ""),
+            "model": item.get("model", ""),
+            "thinking": item.get("thinking", ""),
+        })
+    return active
+
+
 def list_answers(path: str) -> list[dict[str, Any]]:
     current = _navigation_context(path)
     return sorted(
@@ -656,6 +683,9 @@ async def _answer_locked(
         raise ProjectError(config["message"])
     source_ids = {_source_id(source) for source in selected}
     started = datetime.now(UTC)
+    from sigma import project_collaboration
+
+    creator = project_collaboration.collaborator_identity(path) or ""
 
     # Persist an idempotency marker before dispatch. If the process exits after
     # provider bytes may have been sent, a retry cannot silently charge twice.
@@ -670,7 +700,14 @@ async def _answer_locked(
             raise ProjectError("This project has reached the 50 saved Q/A limit")
         return (
             records,
-            [*pending, {"request_id": request_id, "question_sha256": question_hash}],
+            [*pending, {
+                "request_id": request_id,
+                "question_sha256": question_hash,
+                "started_at": started.isoformat(),
+                "creator": creator,
+                "model": str(config.get("model", "")),
+                "thinking": str(config.get("reasoning_effort", "")),
+            }],
             None,
             True,
         )
