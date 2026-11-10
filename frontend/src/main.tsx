@@ -2670,9 +2670,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     };
   }, [includeOptionsOpen]);
   const [newPaperRequested, setNewPaperRequested] = useState(false);
-  const canControlDraft = !viewerEmail || (draftCreatorEmail
-    ? viewerEmail === draftCreatorEmail
-    : viewerEmail === projectOwnerEmail);
   const [confirmNewPaper, setConfirmNewPaper] = useState(false);
   const [draftPaperExpanded, setDraftPaperExpanded] = useState(true);
   useEffect(() => {
@@ -3350,6 +3347,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const canStartOver = !restartReady && !generationRunning &&
     (Boolean(checkpointMismatch?.checkpoint_can_restart || restartableCheckpoint?.checkpoint_can_restart) ||
      ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? ''));
+  // A completed paper does not reserve the next draft for its previous author.
+  // Existing unfinished work remains creator-only; any collaborator may start
+  // genuinely new work (the server reserves ownership before dispatch).
+  const unfinishedDraftPresent = continuationAvailable || Boolean(checkpointMismatch) ||
+    Boolean(restartableCheckpoint) || (paperProgress != null && paperProgress.status !== 'complete');
+  const canControlDraft = !viewerEmail || !unfinishedDraftPresent || (draftCreatorEmail
+    ? viewerEmail === draftCreatorEmail
+    : viewerEmail === projectOwnerEmail);
   const draftVersion = Math.max(0, ...papers.map(paper => paper.paper_version)) + 1;
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
   const paperProgressFailure = paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? ''
