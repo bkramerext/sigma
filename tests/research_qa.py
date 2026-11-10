@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -109,7 +110,7 @@ def check_api_task_lifecycle(path: Path, project_id: str, binding: dict[str, str
 
 
 def check_bounded_shared_conversation() -> None:
-    history = [
+    history: list[dict[str, Any]] = [
         {"question": f"Other background {i}", "answer": "Unrelated " * 2000} for i in range(45)
     ]
     history.append(
@@ -251,7 +252,7 @@ def main() -> None:
                     "What limitations did the skeptic identify in that result?",
                     before.project.id,
                     credential["identity"],
-                    "c" * 32,
+                    "d" * 32,
                 )
             )
             assert len(captured_inputs) == 2
@@ -409,7 +410,7 @@ print("portable Q/A concurrent save/list/remove passed")
             )
             assert "do not answer" in inconclusive["answer"]
             assert inconclusive["sources"][0]["session_number"] == 2
-            assert calls == 2
+            assert calls == 3
             with patch.object(
                 api,
                 "export_project_view",

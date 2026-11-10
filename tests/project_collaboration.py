@@ -554,6 +554,54 @@ class CollaborationTests(TestCase):
 
         asyncio.run(exercise())
 
+
+    def test_provider_configuration_always_uses_current_user_not_project_model(self) -> None:
+        from sigma import proposals
+
+        catalog = {
+            "connection": {"status": "connected", "guidance": "", "mode": "chatgpt"},
+            "models": [
+                {"id": "gpt-6.1-sol", "availability": "available"},
+                {"id": "gpt-6-luna", "availability": "available"},
+            ],
+        }
+        config_a = {"ai_model": "gpt-6.1-sol", "reasoning_effort": "high"}
+        config_b = {"ai_model": "gpt-6-luna", "reasoning_effort": "low"}
+        project_view = SimpleNamespace(path=self.path, project=SimpleNamespace(id="saved-project"))
+        with (
+            patch("sigma.proposals.models", new_callable=AsyncMock) as available,
+            patch(
+                "sigma.global_research_settings.load_config",
+                side_effect=[config_a, config_b],
+            ),
+            patch(
+                "sigma.project_collaboration.model_settings",
+                side_effect=AssertionError("Shared model settings must never override a user"),
+            ),
+        ):
+            available.return_value = catalog
+            owner = asyncio.run(
+                proposals.configuration(view=project_view, context={"identity": "owner", "mode": "chatgpt"})
+            )
+            other = asyncio.run(
+                proposals.configuration(view=project_view, context={"identity": "other", "mode": "chatgpt"})
+            )
+        self.assertEqual((owner["model"], owner["reasoning_effort"]), ("gpt-6.1-sol", "high"))
+        self.assertEqual((other["model"], other["reasoning_effort"]), ("gpt-6-luna", "low"))
+
+    def test_collaborator_update_cannot_change_shared_model_or_thinking(self) -> None:
+        before = self.revision()
+        response = shared.save_settings(
+            self.path, before, [self.other.email], "gpt-6-luna", "low", "Study"
+        )
+        self.assertFalse(response["changed"])
+        self.assertEqual(self.revision(), before)
+        with shared._db() as db:
+            row = db.execute(
+                "SELECT model,thinking FROM shared_projects WHERE path=?", (self.path,)
+            ).fetchone()
+        self.assertEqual((row["model"], row["thinking"]), ("gpt-6.1-sol", "high"))
+
     def test_paper_model_calls_use_user_config_not_shared_project_choice(self) -> None:
         from sigma import papers
 
