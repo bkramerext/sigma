@@ -542,10 +542,8 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
                         (view.path, kind),
                     )
                 }
-                for kind in ("strategy", "session", "paper", "answer")
-            }
-            if members
-            else {},
+                for kind in ("strategy", "session", "paper", "paper_draft", "answer")
+            },
             "failed_notifications": db.execute(
                 """SELECT COUNT(*) FROM shared_email_outbox
                    WHERE project_path=? AND failed_at IS NOT NULL""",
@@ -571,7 +569,13 @@ def note_artifact_author(
         if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
             return
         _row, actor = _membership(db, path)
-        verb = "INSERT OR IGNORE" if created_only else "INSERT OR REPLACE"
+        # A run's creator never changes when another collaborator resumes,
+        # scores or views it. Strategy edits retain their historical behavior.
+        verb = (
+            "INSERT OR IGNORE"
+            if created_only or kind in {"session", "paper", "answer"}
+            else "INSERT OR REPLACE"
+        )
         db.execute(
             f"{verb} INTO shared_artifact_authors "
             "(path, kind, artifact_id, email, updated_at) VALUES (?, ?, ?, ?, ?)",
@@ -617,12 +621,10 @@ def collaborator_identity(path: str) -> str | None:
     try:
         with _db() as db:
             _row_value, actor = _membership(db, path)
-            shared = db.execute(
-                "SELECT 1 FROM shared_collaborators WHERE path=? LIMIT 1", (path,)
-            ).fetchone()
-            return actor if shared else None
+            # Creator provenance is recorded before a project is shared.
+            # Otherwise inviting collaborators later would lose the owner.
+            return actor
     except ValueError:
-        # A personal, unshared project has no collaborator identity.
         return None
 
 
@@ -791,8 +793,10 @@ def attribute_published_paper(path: str, project_id: str, paper_id: str) -> None
         )
 
 
-def require_artifact_manager(path: str, kind: str, artifact_id: str) -> None:
-    """Creator or owner may remove saved work; missing legacy provenance is owner-only."""
+def require_artifact_manager(
+    path: str, kind: str, artifact_id: str, *, owner_terminal: bool = True
+) -> None:
+    """Creators manage their own artifacts; owners remove others' terminal work only."""
     from sigma.projects import ProjectError
 
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
@@ -801,14 +805,18 @@ def require_artifact_manager(path: str, kind: str, artifact_id: str) -> None:
         raise ValueError("Unknown artifact kind")
     with _db() as db:
         row, actor = _membership(db, path)
-        if row["owner_hash"] == _identity()[0].subject_hash:
-            return
         creator = db.execute(
             "SELECT email FROM shared_artifact_authors WHERE path=? AND kind=? AND artifact_id=?",
             (path, kind, artifact_id),
         ).fetchone()
-        if creator is None or creator["email"] != actor:
-            raise ProjectError("Only the project owner or artifact creator can remove it.")
+        if creator is not None and creator["email"] == actor:
+            return
+        if row["owner_hash"] == _identity()[0].subject_hash and owner_terminal:
+            return
+        raise ProjectError(
+            "Only the creator may remove unfinished work. "
+            "The project owner may remove finished or ended work."
+        )
 
 
 def leave_project(path: str, expected_project_id: str) -> None:
