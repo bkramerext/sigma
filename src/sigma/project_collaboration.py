@@ -627,8 +627,10 @@ def require_execution_operator(
             ).fetchone()
             is not None
         )
-        if active and lease is not None and (
-            lease["email"] != actor or lease["activity"] != activity
+        if (
+            active
+            and lease is not None
+            and (lease["email"] != actor or lease["activity"] != activity)
         ):
             raise ProjectError("Only the current execution owner can control this operation.")
         if require_active_lease and shared and not active:
