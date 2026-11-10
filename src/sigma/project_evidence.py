@@ -53,10 +53,22 @@ def _write(path: str, updates: dict[str, bytes | None]) -> None:
         return
     from sigma.projects import _stage
 
-    for member, payload in updates.items():
+    ordered = list(updates.items())
+    if any(payload is None for _, payload in ordered):
+        # Publish the *manifest removal* first. A crash may leave unreferenced
+        # blobs, but never a manifest pointing to a deleted source.
+        ordered.sort(key=lambda item: item[0] != MANIFEST)
+    else:
+        # Publish immutable payloads before the manifest entry that names them.
+        ordered.sort(key=lambda item: item[0] == MANIFEST)
+    for member, payload in ordered:
         file = target / member
-        if file.is_symlink() or file.parent.is_symlink():
-            raise ProjectError("Unsafe evidence storage path.")
+        # Reject symlinked ancestors as well as the final destination.
+        ancestor = file
+        while ancestor != target:
+            if ancestor.is_symlink():
+                raise ProjectError("Unsafe evidence storage path.")
+            ancestor = ancestor.parent
         if payload is None:
             file.unlink(missing_ok=True)
             continue
