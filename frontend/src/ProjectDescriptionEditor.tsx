@@ -140,7 +140,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest }: { path: string; e
       const response = await fetch(endpoint, {
         method: editingId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, url: candidate }),
+        body: JSON.stringify({ path, url: candidate, ...(editingId ? { expected_url: old?.url } : {}) }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not save link.');
