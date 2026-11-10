@@ -322,6 +322,49 @@ def test_enable_disable_and_edit_applies_to_future_session_inputs() -> None:
         assert len(project_evidence.evidence_context(str(path))) == 2
 
 
+def test_distinct_source_material_additions_survive_and_duplicate_additions_collapse() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "concurrent-source.sigma"
+        initialize_project(path, "Shared sources", "Research with collaborators")
+        with patch("sigma.reference_titles.domain_status", return_value="valid"):
+            first = project_evidence.add_link(str(path), "https://example.org/first")
+            second = project_evidence.add_link(str(path), "https://example.org/second")
+            duplicate = project_evidence.add_link(str(path), "https://example.org/first")
+        assert duplicate["id"] == first["id"]
+        assert {row["id"] for row in project_evidence.list_evidence(str(path))} == {
+            first["id"], second["id"]
+        }
+
+
+def test_source_material_edit_rejects_overlap_but_accepts_unrelated_additions() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "source-edit-conflict.sigma"
+        initialize_project(path, "Shared sources", "Research with collaborators")
+        with patch("sigma.reference_titles.domain_status", return_value="valid"):
+            first = project_evidence.add_link(str(path), "https://example.org/first")
+            # A second collaborator can add an unrelated source during this edit.
+            added = project_evidence.add_link(str(path), "https://example.org/other")
+            changed = project_evidence.edit_link(
+                str(path), first["id"], "https://example.org/revised",
+                expected_url=first["url"],
+            )
+            assert changed["url"] == "https://example.org/revised"
+            try:
+                project_evidence.edit_link(
+                    str(path), first["id"], "https://example.org/stale",
+                    expected_url=first["url"],
+                )
+            except ProjectError as exc:
+                assert "another collaborator" in str(exc)
+            else:
+                raise AssertionError("Overlapping Source Material edit was accepted")
+        assert {row["id"] for row in project_evidence.list_evidence(str(path))} == {
+            first["id"], added["id"]
+        }
+        assert next(row for row in project_evidence.list_evidence(str(path))
+                    if row["id"] == first["id"])["url"] == changed["url"]
+
+
 if __name__ == "__main__":
     test_project_evidence_lifecycle()
     test_project_collaborator_can_remove_another_users_source_material()
@@ -335,4 +378,6 @@ if __name__ == "__main__":
     test_link_rejects_invalid_utf8()
     test_link_policy_allows_http_and_rejects_unsafe_targets()
     test_enable_disable_and_edit_applies_to_future_session_inputs()
+    test_distinct_source_material_additions_survive_and_duplicate_additions_collapse()
+    test_source_material_edit_rejects_overlap_but_accepts_unrelated_additions()
     print("Project evidence tests passed.")
