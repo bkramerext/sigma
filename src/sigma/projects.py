@@ -1717,7 +1717,7 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                 raise ProjectError("A project already uses that destination name.")
             with project_write_lock(source):
                 original = inspect_project(source).project
-                payload = json.loads(export_complete_project(source))
+                payload = json.loads(export_project(source))
                 new_id = str(uuid4())
                 renamed = replace(
                     original,
@@ -1797,9 +1797,8 @@ def copy_project_between_workspaces(
     artifacts are preserved by the portable bundle importer.
     """
     from sigma import cloud_workspaces
-    from sigma.project_bundle import BundleError, bundle_project_document
-    from sigma.project_bundle import _decode as decode_bundle_members
-    from sigma.project_transfer import import_project, make_bundle
+    from sigma.project_bundle import BundleError
+    from sigma.project_transfer import bundle_document, export_project, import_project
 
     source_token = (
         cloud_workspaces.bind_workspace(source_workspace) if source_workspace is not None else None
@@ -1828,7 +1827,7 @@ def copy_project_between_workspaces(
         cloud_workspaces.bind_workspace(target_workspace) if target_workspace is not None else None
     )
     try:
-        document = bundle_project_document(payload)
+        document = bundle_document(payload)
         original_title = document["title"]
         root = projects_root()
         imported: Path | None = None
@@ -1850,8 +1849,10 @@ def copy_project_between_workspaces(
                 if os.path.lexists(destination) or os.path.lexists(bundle_destination):
                     continue
                 imported = import_project(
-                    make_bundle(decode_bundle_members(payload)),
+                    payload,
                     destination,
+                    independent=False,
+                    preserve_identity=True,
                     title_override=title if title != original_title else None,
                 )
                 break
