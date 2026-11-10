@@ -1953,7 +1953,7 @@ class ImportBundleRequest(BaseModel):
 def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
     from sigma.project_bundle import BundleError
-    from sigma.project_transfer import bundle_document, import_project
+    from sigma.project_transfer import VERSION, bundle_document, import_project
     from sigma.projects import (
         _occupied_titles,
         _project_name,
@@ -1963,6 +1963,11 @@ def import_project_bundle(body: ImportBundleRequest):
     )
 
     try:
+        # Legacy single-file projects remain readable internally, but external
+        # uploads must use v4. Accepting v1-v3 here would silently drop the
+        # separate artifact archive that v4 requires.
+        if type(body.bundle.get("version")) is not int or body.bundle["version"] != VERSION:
+            raise BundleError("Only version 4 project exports can be imported")
         document = bundle_document(body.bundle)
         title = document["title"]
         if not isinstance(document.get("id"), str):
