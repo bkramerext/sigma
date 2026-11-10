@@ -3964,7 +3964,7 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
     finally:
         staged.unlink(missing_ok=True)
     if isinstance(state.get("progress"), dict):
-        _write_progress_status(path, state["progress"])
+        _write_progress_status(path, {**state["progress"], "model": state.get("model"), "reasoning_effort": state.get("reasoning_effort")})
 
 
 @project_collaboration.fenced_checkpoint
@@ -4068,6 +4068,8 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "last_progress_at",
         "output_delta_count",
         "substep_started_at",
+        "model",
+        "reasoning_effort",
     )
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
@@ -4473,6 +4475,8 @@ def progress_status(path: str) -> dict[str, Any] | None:
         "total": state["total"],
         "started_at": state["started_at"],
         "elapsed_seconds": elapsed,
+        **({"model": state["model"]} if isinstance(state.get("model"), str) else {}),
+        **({"reasoning_effort": state["reasoning_effort"]} if isinstance(state.get("reasoning_effort"), str) else {}),
         **(
             {
                 "detail": (
