@@ -276,7 +276,7 @@ function compilationBarrierActive(session: ResearchSession): boolean {
   if (typeof status === 'string') return status === 'pending' || status === 'running';
   // A pre-compiler or partially migrated session may expose only its action.
   // Never let stale action text override a persisted completed/fallback state.
-  return /compiling research references/i.test(session.current_action);
+  return /compiling (?:research references|supplied evidence)/i.test(session.current_action);
 }
 
 function parallelSessionActivity(session: ResearchSession): string | null {
@@ -293,10 +293,11 @@ function strategyLiveStatusLines(session: ResearchSession): { id: string; label:
   // Compilation is the session-wide barrier before any strategy fanout.
   const compilation = session.outcome.source_material?.compilation;
   if (compilationBarrierActive(session)) {
+    const supplied = /compiling supplied evidence/i.test(session.current_action);
     return [{
-      id: 'reference-compilation',
-      label: compilation?.status === 'pending' ? 'Preparing references' : 'Compiling references',
-      detail: 'Preparing shared guidance for all strategies…',
+      id: supplied ? 'supplied-evidence-compilation' : 'reference-compilation',
+      label: supplied ? 'Compiling supplied evidence' : compilation?.status === 'pending' ? 'Preparing references' : 'Compiling references',
+      detail: supplied ? session.message : 'Preparing shared guidance for all strategies…',
     }];
   }
   if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
