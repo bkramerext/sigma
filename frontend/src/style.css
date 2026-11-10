@@ -426,7 +426,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-projects .home-recents .recent-entry > span { display: none; }
 .home-page .home-projects .home-samples .sample-open { padding: 8px 0; }
 .home-page .home-projects .home-catalog .home-empty { padding: 8px 0 0; }
-.home-page .home-projects .home-recents .recent-title-row { gap: 4px 10px; }
+.home-page .home-projects .home-recents .recent-title-row { gap: 0; }
 
 @media (max-width: 900px) {
   .home-page .home-slogan { display: none; }
