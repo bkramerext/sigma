@@ -423,6 +423,8 @@ class RecentProject:
     shared: bool = False
     collaborator: bool = False
     activity_author: str | None = None
+    activity_runs: list[dict] | None = None
+    answer_active: bool = False
 
 
 def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
@@ -488,6 +490,48 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                 except Exception:  # noqa: BLE001 - paper decoration must never block project access
                     # Broken paper decoration must never make the project unavailable.
                     paper_metadata = {"paper_count": 0, "best_paper_score": None}
+            activity_runs: list[dict] = []
+            if not lightweight:
+                from sigma import research_qa, research_sessions
+
+                try:
+                    authors = project_collaboration.summary(view.path).get("artifact_authors", {})
+                    for session in research_sessions.list_sessions(view.path):
+                        if session.get("status") not in {"running", "queued"}:
+                            continue
+                        activity_runs.append({
+                            "kind": "session",
+                            "status": "queued" if session["status"] == "queued" else "active",
+                            "number": session.get("session_number"),
+                            "creator": (authors.get("session") or {}).get(session.get("id", ""), ""),
+                            "model": session.get("model", ""),
+                            "thinking": session.get("reasoning_effort", ""),
+                        })
+                    paper_status = papers.activity_status(view.path)
+                    if paper_status in {"active", "queued"}:
+                        paper_number = max(
+                            (paper.get("paper_version", 0) for paper in papers.list_papers(view.path)),
+                            default=0,
+                        ) + 1
+                        activity_runs.append({
+                            "kind": "paper",
+                            "status": paper_status,
+                            "number": paper_number,
+                            "creator": (authors.get("paper_draft") or {}).get(view.project.id, ""),
+                            "model": view.project.ai_model,
+                            "thinking": view.project.reasoning_effort,
+                        })
+                    for answer in research_qa.list_pending_answers(view.path):
+                        activity_runs.append({
+                            "kind": "answer",
+                            "status": "active",
+                            "creator": answer.get("creator", ""),
+                            "model": answer.get("model", ""),
+                            "thinking": answer.get("thinking", ""),
+                        })
+                except (ProjectError, OSError, ValueError):
+                    # Activity decoration must not prevent Saved Projects loading.
+                    pass
             recent.append(
                 asdict(
                     RecentProject(
@@ -510,6 +554,8 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                         available=True,
                         shared=view.path in shared_paths,
                         collaborator=view.path in shared_by_path,
+                        activity_runs=activity_runs,
+                        answer_active=any(run["kind"] == "answer" for run in activity_runs),
                         activity_author=(
                             (project_collaboration.summary(view.path).get("lease") or {}).get(
                                 "email"
@@ -568,6 +614,7 @@ def recent_activity() -> dict:
                 "research_running": item["research_running"],
                 "paper_activity": item["paper_activity"],
                 "activity_author": item["activity_author"],
+                "answer_active": item["answer_active"],
             }
             for item in recent_projects(activity_only=True)["projects"]
             if item["available"]
