@@ -6527,7 +6527,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       })
       .catch(() => { /* Retain the current view and retry on the next poll. */ });
     return () => controller.abort();
-  }, [sharedActivity?.revision, sharedActivity?.shared, view?.project.id, guest,
+  }, [sharedActivity, view?.project.id, guest,
       activeMode, editing, generating, projectEditing, descriptionEditing,
       descriptionDirty, ordering, dragId, manualDraft, closing, path]);
 
