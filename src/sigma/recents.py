@@ -495,7 +495,11 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                 from sigma import research_qa, research_sessions
 
                 try:
-                    authors = project_collaboration.summary(view.path).get("artifact_authors", {})
+                    authors = (
+                        project_collaboration.summary(view.path).get("artifact_authors", {})
+                        if view.path in shared_paths
+                        else {}
+                    )
                     for session in research_sessions.list_sessions(view.path):
                         if session.get("status") not in {"running", "queued"}:
                             continue
