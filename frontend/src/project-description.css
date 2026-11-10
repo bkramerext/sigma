@@ -138,12 +138,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   border: 0;
+  border-radius: 4px;
   background: transparent;
-  padding: 0;
+  padding: 5px;
   color: var(--sigma-copper-foreground);
   cursor: pointer;
 }
