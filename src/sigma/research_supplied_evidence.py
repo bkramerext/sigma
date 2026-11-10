@@ -19,7 +19,7 @@ from sigma import project_evidence, research_reference_content
 
 MAX_REMOTE_BYTES = 12 * 1024 * 1024
 MAX_LINK_SECONDS = 10
-MAX_EXTRACT = 48000
+MAX_EXTRACT = project_evidence.MAX_EXTRACT_CHARS
 
 
 def _fetch_url(url: str) -> tuple[bytes, str, str]:
@@ -105,8 +105,9 @@ def read_link(url: str) -> dict:
                 text = parser.text()
             else:
                 text = decoded
-            truncated = len(text) > MAX_EXTRACT
-            text = text[:MAX_EXTRACT]
+            if len(text) > MAX_EXTRACT:
+                raise ValueError("document_exceeds_text_extraction_limit")
+            truncated = False
         if not text.strip():
             raise ValueError("no_extractable_text")
         result.update(
