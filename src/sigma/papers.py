@@ -1710,18 +1710,32 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
             for item in compilation.get("sources", []):
                 if isinstance(item, dict) and isinstance(item.get("id"), str):
                     compiled_evidence[item["id"]] = item
-    for entry in (
+    current_material = (
         project_evidence.evidence_context(path, limit=48000)
         if Path(path).suffix in {".sigma", ".json"}
         else []
-    ):
-        contents = compiled_evidence.get(entry["id"], entry)
+    )
+    included: set[str] = set()
+    for entry in current_material:
+        source_id = entry["id"]
+        contents = compiled_evidence.get(source_id, entry)
         sources.append(
             {
-                "id": entry["id"],
-                "kind": (
-                    "uploaded_link" if entry["id"].startswith("uploaded-link:") else "uploaded_pdf"
-                ),
+                "id": source_id,
+                "kind": "uploaded_link" if source_id.startswith("uploaded-link:") else "uploaded_pdf",
+                "data": contents,
+            }
+        )
+        included.add(source_id)
+    # Source removal changes what *future* sessions ingest. It must not
+    # retroactively delete evidence from sessions already used in this paper.
+    for source_id, contents in sorted(compiled_evidence.items()):
+        if source_id in included:
+            continue
+        sources.append(
+            {
+                "id": source_id,
+                "kind": "uploaded_link" if source_id.startswith("uploaded-link:") else "uploaded_pdf",
                 "data": contents,
             }
         )
