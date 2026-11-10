@@ -1,14 +1,13 @@
 """Importable SIGMA project mail with optional saved-paper attachments.
 
 The shared mail transport selects configured SMTP or Gmail API delivery.
-Saved papers are intentionally excluded from the importable project attachment:
-recipients can resume the research and generate their own papers.
+The importable attachment includes every artifact as one compressed archive.
+Optional standalone paper attachments are convenience copies.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import sqlite3
@@ -20,7 +19,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from sigma import cloud_auth, papers
-from sigma.project_bundle import download_bytes, encode
+from sigma.project_transfer import export_project
 from sigma.projects import ProjectError, inspect_project, project_path
 
 MailMode = Literal["project", "pdf", "pdf_tex"]
@@ -201,25 +200,10 @@ def parse_recipients(raw: str) -> list[str]:
 
 
 def email_project_bundle(path: str) -> tuple[bytes, str]:
-    """Use Export's portable format, retaining all sessions but not saved papers."""
+    """Use the same v4 archive format as project download."""
     authorized = project_path(path)
     project = inspect_project(authorized).project
-    if authorized.suffix == ".json":
-        raw = download_bytes(authorized)
-    elif authorized.suffix == ".sigma" and authorized.is_dir():
-        raw = encode(authorized)
-    else:
-        raise ProjectError("Unsupported project storage format")
-    bundle = json.loads(raw)
-    # Paper artifacts travel as *separate* attachments when requested. Do not
-    # put them in the project import, even for a sender with saved versions.
-    files = bundle["files"]
-    for name in tuple(files):
-        if name.startswith(("artifacts/papers/", "papers/")):
-            del files[name]
-    content = (json.dumps(bundle, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(
-        "utf-8"
-    )
+    content = export_project(authorized)
     slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", project.title).strip("-")[:80] or "project"
     return content, f"sigma-{slug}.json"
 
@@ -280,7 +264,7 @@ def send_project_email(
     instructions = (
         f"Attached: SIGMA project '{title}'.\n"
         "Import the attached .json file in SIGMA to continue the research, "
-        "including stopped sessions. Papers can be generated from the imported project.\n"
+        "including stopped sessions, Source Material, and saved generated papers.\n"
     )
     message.set_content(f"{introduction}\n\n{instructions}" if introduction else instructions)
     for filename, data, maintype, subtype in attachments:

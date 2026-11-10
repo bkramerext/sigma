@@ -217,6 +217,7 @@ class Project:
     project_type_snapshot: dict[str, Any] | None = None
     desired_outcomes: str = ""
     paper_requirements: str = ""
+    source_material_links: tuple[dict[str, Any], ...] = ()
 
     @property
     def research_mode(self) -> str:
@@ -352,6 +353,34 @@ def _decode(raw: Any) -> Project:
         fields.add("show_advanced_outcome_details")
     if "project_type_snapshot" in raw:
         fields.add("project_type_snapshot")
+    if "source_material_links" in raw:
+        fields.add("source_material_links")
+        links = raw["source_material_links"]
+        if not isinstance(links, list) or len(links) > 20:
+            raise ProjectError("Invalid Source Material links")
+        ids = set()
+        for link in links:
+            mandatory = {"id", "kind", "url", "uploaded_by", "uploaded_at"}
+            if (
+                not isinstance(link, dict)
+                or not mandatory <= set(link)
+                or set(link) - mandatory - {"enabled"}
+            ):
+                raise ProjectError("Invalid Source Material link entry")
+            if (
+                link["kind"] != "link"
+                or not isinstance(link["id"], str)
+                or re.fullmatch(r"[0-9a-f]{32}", link["id"]) is None
+                or link["id"] in ids
+                or not isinstance(link["url"], str)
+                or not 1 <= len(link["url"]) <= 2048
+                or not link["url"].startswith(("https://", "http://"))
+                or type(link.get("enabled", True)) is not bool
+                or (link["uploaded_by"] is not None and not isinstance(link["uploaded_by"], str))
+            ):
+                raise ProjectError("Invalid Source Material link metadata")
+            _timestamp(link["uploaded_at"])
+            ids.add(link["id"])
     # Optional in all schema versions: existing exported projects must remain readable.
     if "backend_build_commit" in raw:
         commit = raw["backend_build_commit"]
@@ -682,6 +711,7 @@ def _decode(raw: Any) -> Project:
         snapshot,
         settings.desired_outcomes,
         settings.paper_requirements,
+        tuple(raw.get("source_material_links", [])),
     )
 
 
@@ -692,6 +722,8 @@ def _document(project: Project) -> bytes:
     if project.schema_version < 13:
         del raw["desired_outcomes"]
         del raw["paper_requirements"]
+    if not raw["source_material_links"]:
+        del raw["source_material_links"]
     if project.schema_version < 8:
         del raw["difficulty"]
     if project.schema_version < 9 or project.schema_version >= 12:
@@ -793,8 +825,8 @@ def initialize_project(
     except ValueError as exc:
         raise ProjectError(str(exc)) from exc
     path = project_path(value)
-    if not title.strip() or not problem.strip():
-        raise ProjectError("Title and problem must be nonempty")
+    title = _text(title, "Project name", 200)
+    problem = _text(problem, "Research problem", 20000)
     if path.suffix == ".json":
         from sigma.project_bundle import stored_bundle
 
@@ -1329,7 +1361,7 @@ def project_destination(title: str = "") -> ProjectDestination:
         or os.path.lexists(json_path)
         or _title_key(title) in _occupied_titles(root)
     )
-    return ProjectDestination(str(root), str(json_path), taken)
+    return ProjectDestination(str(root), str(path), taken)
 
 
 def create_project(
@@ -1343,22 +1375,33 @@ def create_project(
     desired_outcomes: str = "",
     paper_requirements: str = "",
 ) -> ProjectView:
-    """Create a single-file JSON project by default.
+    """Create a directory-backed project, with artifacts stored as files.
 
-    Existing directory-backed projects remain readable and writable through
-    their paths; only newly created projects use the portable bundle format.
+    Portable project bundles are produced only when explicitly exporting.
     """
-    return create_json_project(
-        title,
-        problem,
-        research_mode,
-        ai_model,
-        reasoning_effort,
-        difficulty,
-        show_advanced_outcome_details,
-        desired_outcomes,
-        paper_requirements,
-    )
+    from sigma.recents import record_access
+
+    title, name = _project_name(title)
+    root = projects_root()
+    with _title_registry_lock(root):
+        _require_available_title(title, root)
+        destination = root / name
+        if os.path.lexists(destination) or os.path.lexists(destination.with_suffix(".json")):
+            raise ProjectError("A project already uses that destination name.")
+        view = initialize_project(
+            destination,
+            title,
+            problem,
+            research_mode,
+            ai_model,
+            reasoning_effort,
+            difficulty,
+            show_advanced_outcome_details,
+            desired_outcomes,
+            paper_requirements,
+        )
+    record_access(view)
+    return view
 
 
 def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView:
@@ -1664,13 +1707,15 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
     give the project a new identity and rebind sessions to it. Record the new
     title as a genuine project edit so existing settings history stays valid.
     """
-    from sigma.project_bundle import BundleError, import_bundle
+    from sigma.project_bundle import BundleError
+    from sigma.project_bundle import _decode as decode_bundle_members
+    from sigma.project_transfer import export_project, import_project, make_bundle
     from sigma.recents import record_access
 
     title, name = _project_name(title)
     source = project_path(value)
     root = projects_root()
-    destination = (root / name).with_suffix(".json")
+    destination = root / name
     try:
         with _title_registry_lock(root):
             _require_available_title(title, root)
@@ -1678,7 +1723,7 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                 raise ProjectError("A project already uses that destination name.")
             with project_write_lock(source):
                 original = inspect_project(source).project
-                payload = json.loads(export_complete_project(source))
+                payload = json.loads(export_project(source))
                 new_id = str(uuid4())
                 renamed = replace(
                     original,
@@ -1705,8 +1750,11 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
 
                 session_ids: dict[str, str] = {}
                 session_numbers: dict[str, int] = {}
+                from sigma.project_bundle import portable_bundle
+                from sigma.project_transfer import decode_bundle
+
                 independent = rebase_copy(
-                    payload,
+                    portable_bundle(decode_bundle(payload)),
                     source_id=original.id,
                     new_id=new_id,
                     source_path=str(source),
@@ -1714,7 +1762,11 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                     session_ids_out=session_ids,
                     session_numbers_out=session_numbers,
                 )
-                imported = import_bundle(independent, destination, rekey_sessions=False)
+                imported = import_project(
+                    make_bundle(decode_bundle_members(independent)),
+                    destination,
+                    independent=False,
+                )
                 from sigma.project_copy_logs import clone_project_logs
 
                 try:
@@ -1730,7 +1782,9 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                     # The bundle has been imported, but Save As is not
                     # complete until its external diagnostic history exists.
                     # This file was exclusively created by this operation.
-                    destination.unlink()
+                    from shutil import rmtree
+
+                    rmtree(destination)
                     raise
         view = inspect_project(imported)
         record_access(view)
@@ -1752,7 +1806,8 @@ def copy_project_between_workspaces(
     artifacts are preserved by the portable bundle importer.
     """
     from sigma import cloud_workspaces
-    from sigma.project_bundle import BundleError, bundle_project_document, import_bundle
+    from sigma.project_bundle import BundleError
+    from sigma.project_transfer import bundle_document, import_project
 
     source_token = (
         cloud_workspaces.bind_workspace(source_workspace) if source_workspace is not None else None
@@ -1781,7 +1836,7 @@ def copy_project_between_workspaces(
         cloud_workspaces.bind_workspace(target_workspace) if target_workspace is not None else None
     )
     try:
-        document = bundle_project_document(payload)
+        document = bundle_document(payload)
         original_title = document["title"]
         root = projects_root()
         imported: Path | None = None
@@ -1802,10 +1857,13 @@ def copy_project_between_workspaces(
                 bundle_destination = destination.with_suffix(".json")
                 if os.path.lexists(destination) or os.path.lexists(bundle_destination):
                     continue
-                if title != original_title:
-                    document["title"] = title
-                    payload["files"]["project.json"] = document
-                imported = import_bundle(payload, bundle_destination)
+                imported = import_project(
+                    payload,
+                    destination,
+                    independent=False,
+                    preserve_identity=True,
+                    title_override=title if title != original_title else None,
+                )
                 break
         if imported is None:
             raise ProjectError("A unique destination for the copied project is unavailable.")
@@ -1931,15 +1989,22 @@ def read_project_artifact(value: str | Path, name: str) -> bytes:
     """Read an evidence or artifact member from an authorized JSON project."""
     path = project_path(value)
     if (
-        path.suffix != ".json"
-        or not isinstance(name, str)
+        not isinstance(name, str)
         or not name.startswith(("evidence/", "artifacts/"))
+        or "\\" in name
+        or any(part in {"", ".", ".."} for part in name.split("/"))
     ):
         raise ProjectError("Artifact path is invalid")
     inspect_project(path)
     from sigma.project_bundle import read_file
 
     try:
+        if path.suffix == ".sigma" and name.startswith("artifacts/papers/"):
+            canonical = "artifacts/generated_papers/" + name[len("artifacts/papers/") :]
+            try:
+                return read_file(path, canonical)
+            except ValueError:
+                return read_file(path, name)
         return read_file(path, name)
     except (OSError, ValueError) as exc:
         raise ProjectError(f"Cannot read project artifact: {exc}") from exc

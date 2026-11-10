@@ -364,7 +364,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 
 /* Compact Home project navigation. The artwork is independent of this column. */
 .home-page .home-projects {
-  --home-project-edge: calc(2 * var(--home-side-gap));
+  --home-project-edge: var(--home-corner-gap);
   width: min(520px, calc(100% - 2 * var(--home-project-edge)));
   position: absolute;
   top: var(--home-projects-top);
@@ -426,7 +426,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-projects .home-recents .recent-entry > span { display: none; }
 .home-page .home-projects .home-samples .sample-open { padding: 8px 0; }
 .home-page .home-projects .home-catalog .home-empty { padding: 8px 0 0; }
-.home-page .home-projects .home-recents .recent-title-row { gap: 4px 10px; }
+.home-page .home-projects .home-recents .recent-title-row { gap: 0; }
 
 @media (max-width: 900px) {
   .home-page .home-slogan { display: none; }
@@ -508,7 +508,7 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 
 /* Welcome's 16px copy is scaled 1.25x in its dialog. Match the visible
    20px typography here without scaling the entire Terms card. */
-.terms-of-service-shell { width: 100%; max-width: none; }
+.terms-of-service-shell, .privacy-notice-shell { box-sizing: border-box; width: 100%; max-width: none; min-height: 100dvh; }
 .terms-of-service-card { width: min(100%, 780px); }
 .terms-of-service-copy { display: grid; gap: 24px; max-width: 690px; margin: 24px 0 6px; }
 .terms-of-service-card .terms-of-service-copy > p { margin: 0; color: #bcc5cc; font: 400 20px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }

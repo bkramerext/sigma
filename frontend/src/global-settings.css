@@ -490,3 +490,24 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Consistent metallic copper hover for all enabled User Settings buttons,
+   including embedded Project Types, tabs, actions and dialog dismissal. */
+dialog.project-settings-dialog.sigma-global-settings button:is(:hover, :focus-visible):not(:disabled) {
+  color: #fff2e9 !important;
+  background: var(--copper-gradient) !important;
+  background-image: var(--copper-gradient) !important;
+  border-color: #ac7054 !important;
+  border-radius: 4px;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+  filter: none;
+}
+dialog.project-settings-dialog.sigma-global-settings button:is(:hover, :focus-visible):not(:disabled) svg {
+  color: #fff2e9;
+}
+/* Keep the active tab marker visible without adding hover underlining. */
+dialog.project-settings-dialog.sigma-global-settings .settings-tabs button[role="tab"][aria-selected="true"]:is(:hover, :focus-visible) {
+  border-bottom-color: var(--sigma-copper-foreground) !important;
+  text-decoration: none !important;
+}

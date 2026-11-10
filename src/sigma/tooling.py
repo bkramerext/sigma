@@ -127,6 +127,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/research_sessions_part4.py"],
             [*python, "python", "tests/crucible_scheduler_evidence.py"],
             [*python, "python", "tests/reference_compiler_integration.py"],
+            [*python, "python", "tests/research_supplied_evidence_integration.py"],
             [*python, "python", "tests/reference_source_readiness.py"],
             [*python, "python", "tests/research_batch.py"],
             [*python, "python", "tests/session_log.py"],
@@ -156,6 +157,8 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/test_paper_math_typesetting.py"],
             [*python, "python", "tests/publication_reference_compiler.py"],
             [*python, "python", "tests/paper_scores.py"],
+            [*python, "python", "tests/project_evidence.py"],
+            [*python, "python", "tests/project_transfer.py"],
             [*python, "python", "tests/research_qa.py"],
             [*python, "python", "tests/research_qa_security.py"],
             [*python, "python", "tests/sovereign_cost_model.py"],
@@ -286,7 +289,7 @@ def run_tooling(command: str) -> int:
             environment.pop("SIGMA_CI_TEST_SHARD", None)
         else:
             environment = None
-        for step in steps:
+        for step_number, step in enumerate(steps):
             if command == "test" and failures and not _safe_independent_test_step(step):
                 skipped.append(step)
                 print(
@@ -296,7 +299,22 @@ def run_tooling(command: str) -> int:
                 continue
             print(f"\n> {shlex.join(step)}", flush=True)
             try:
-                result = subprocess.run(step, cwd=ROOT, check=False, env=environment)
+                step_environment = environment
+                if temporary_state:
+                    # A check must not inherit another check's saved model,
+                    # project or auth settings. The tests within one check
+                    # still share one workspace for their own lifecycle cases.
+                    check_root = Path(temporary_state) / f"check-{step_number}"
+                    step_environment = dict(environment or {})
+                    for variable, folder in (
+                        ("SIGMA_STATE_DIR", "state"),
+                        ("SIGMA_PROJECTS_ROOT", "projects"),
+                        ("SIGMA_AUTH_HOME", "auth"),
+                    ):
+                        directory = check_root / folder
+                        directory.mkdir(parents=True, mode=0o700)
+                        step_environment[variable] = str(directory)
+                result = subprocess.run(step, cwd=ROOT, check=False, env=step_environment)
             except OSError as exc:
                 print(f"Could not start {step[0]}: {exc}", file=sys.stderr)
                 code = 2

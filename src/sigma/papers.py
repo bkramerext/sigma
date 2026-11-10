@@ -1702,6 +1702,56 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
                     "data": step,
                 }
             )
+    # Preserve uploaded document provenance in the paper evidence snapshot.
+    # The snapshot freezes extracts and their hashes so later removal or edits
+    # cannot silently rewrite an already-started paper's cited evidence.
+    from sigma import project_evidence
+
+    # Prefer the newest completed research-session compilation over the
+    # upload-time preview. It actually read external links and verified files.
+    compiled_evidence: dict[str, dict[str, Any]] = {}
+    for session in sorted(
+        data.get("research_sessions", []),
+        key=lambda row: str(row.get("created_at") or ""),
+    ):
+        compilation = session.get("supplied_evidence_compilation")
+        if isinstance(compilation, dict) and compilation.get("status") == "completed":
+            for item in compilation.get("sources", []):
+                if isinstance(item, dict) and isinstance(item.get("id"), str):
+                    compiled_evidence[item["id"]] = item
+    current_material = (
+        project_evidence.evidence_context(path, limit=48000)
+        if Path(path).suffix in {".sigma", ".json"}
+        else []
+    )
+    included: set[str] = set()
+    for entry in current_material:
+        source_id = entry["id"]
+        contents = compiled_evidence.get(source_id, entry)
+        sources.append(
+            {
+                "id": source_id,
+                "kind": "uploaded_link"
+                if source_id.startswith("uploaded-link:")
+                else "uploaded_pdf",
+                "data": contents,
+            }
+        )
+        included.add(source_id)
+    # Source removal changes what *future* sessions ingest. It must not
+    # retroactively delete evidence from sessions already used in this paper.
+    for source_id, contents in sorted(compiled_evidence.items()):
+        if source_id in included:
+            continue
+        sources.append(
+            {
+                "id": source_id,
+                "kind": "uploaded_link"
+                if source_id.startswith("uploaded-link:")
+                else "uploaded_pdf",
+                "data": contents,
+            }
+        )
     from sigma import research_ethos
 
     package = {
@@ -2726,11 +2776,21 @@ def _paper_dir(path: str, create: bool = True) -> Path:
             "Paper generation is unavailable for immutable sample sources; open a project copy"
         )
     if target.suffix == ".json":
-        # Mutable generation checkpoints live beside the project; finalized
-        # paper records and PDFs are embedded in the portable project bundle.
+        # Transitional legacy projects. New projects always use directory storage.
         directory = target.with_name("." + target.name + ".papers")
     else:
-        directory = target / "papers"
+        canonical = target / "artifacts" / "generated_papers"
+        legacy = target / "papers"
+        if legacy.is_symlink() or canonical.is_symlink():
+            raise ProjectError("Paper storage must not be a symbolic link")
+        # Preserve existing local paper versions until migration; all new
+        # directory projects use the canonical location.
+        directory = legacy if legacy.is_dir() and not canonical.exists() else canonical
+        if create and directory == canonical:
+            parent = directory.parent
+            if parent.is_symlink():
+                raise ProjectError("Paper artifact storage must not be a symbolic link")
+            parent.mkdir(mode=0o700, exist_ok=True)
     if directory.is_symlink():
         raise ProjectError("Paper storage directory must not be a symbolic link")
     if not directory.exists() and not directory.is_symlink():

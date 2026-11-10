@@ -35,6 +35,9 @@
 }
 .home-page .home-recents .recent-save-as,
 .home-page .home-recents .recent-forget { display: inline-flex; align-items: center; justify-content: center; align-self: center; line-height: 1; text-decoration: none; }
+/* Slightly loosen only the spacing between the home project action icons. */
+.home-page .home-recents .recent-save-as,
+.home-page .home-recents .recent-forget { margin-left: 3px; }
 .home-page .home-recents .recent-save-as svg,
 .home-page .home-recents .recent-forget svg { display: block; width: 20px; height: 20px; }
 .home-page .home-recents .recent-save-as:focus-visible,
@@ -590,3 +593,95 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 /* No separator rules between Saved/Sample category rows. */
 .home-page .home-catalog { border-top: 0; }
 .home-page .home-samples .sample-type-group, .home-page .home-recents .recent-type-group { border-bottom: 0; }
+
+/* Home action icons use the same metallic copper hover as Project, Sessions
+   and Papers. These selectors deliberately override the older transparent
+   star/shared/copy/remove rules above. Keep project title text unboxed. */
+.home-page .home-recents :is(
+  button.recent-title-star,
+  button.recent-title-shared,
+  button.recent-save-as,
+  button.recent-forget
+),
+.home-page .home-samples a.recent-title-star {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  min-width: 24px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none;
+  vertical-align: middle;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.home-page .home-recents button.recent-title-shared {
+  margin-left: 0;
+}
+.home-page :is(
+  .home-recents button.recent-title-star,
+  .home-recents button.recent-title-shared,
+  .home-recents button.recent-save-as,
+  .home-recents button.recent-forget,
+  .home-samples a.recent-title-star,
+  .home-projects-heading button.home-icon-action,
+  .sigma-header-first-row > button.home-settings-pill
+):is(:hover, :focus-visible):not(:disabled) {
+  color: #fff2e9 !important;
+  background: var(--copper-gradient) !important;
+  background-image: var(--copper-gradient) !important;
+  border-color: #ac7054 !important;
+  border-radius: 4px;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+  filter: none;
+  text-decoration: none;
+}
+.home-page :is(
+  .home-recents button.recent-title-star,
+  .home-recents button.recent-title-shared,
+  .home-recents button.recent-save-as,
+  .home-recents button.recent-forget,
+  .home-projects-heading button.home-icon-action,
+  .sigma-header-first-row > button.home-settings-pill
+):is(:hover, :focus-visible):not(:disabled) svg {
+  color: #fff2e9 !important;
+}
+
+/* Saved-project title actions are one aligned inline group: shared, copy, remove.
+   The controls move with the title rather than sitting after the metadata. */
+.home-page .home-recents .recent-title-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  column-gap: 0;
+  row-gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.home-page .home-recents .recent-title-row > .recent-open {
+  margin-right: 3px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-page .home-recents .recent-title-row > :is(
+  .recent-title-star,
+  .recent-title-shared,
+  .recent-save-as,
+  .recent-forget
+) {
+  align-self: center;
+  flex-shrink: 0;
+  margin: 0;
+}

@@ -275,7 +275,7 @@ function compilationBarrierActive(session: ResearchSession): boolean {
   if (typeof status === 'string') return status === 'pending' || status === 'running';
   // A pre-compiler or partially migrated session may expose only its action.
   // Never let stale action text override a persisted completed/fallback state.
-  return /compiling research references/i.test(session.current_action);
+  return /compiling (?:research references|supplied evidence)/i.test(session.current_action);
 }
 
 function parallelSessionActivity(session: ResearchSession): string | null {
@@ -292,10 +292,11 @@ function strategyLiveStatusLines(session: ResearchSession): { id: string; label:
   // Compilation is the session-wide barrier before any strategy fanout.
   const compilation = session.outcome.source_material?.compilation;
   if (compilationBarrierActive(session)) {
+    const supplied = /compiling source material/i.test(session.current_action);
     return [{
-      id: 'reference-compilation',
-      label: compilation?.status === 'pending' ? 'Preparing references' : 'Compiling references',
-      detail: 'Preparing shared guidance for all strategies…',
+      id: supplied ? 'supplied-evidence-compilation' : 'reference-compilation',
+      label: supplied ? 'Compiling source material' : compilation?.status === 'pending' ? 'Preparing research standards' : 'Compiling research standards',
+      detail: supplied ? session.message : 'Preparing shared guidance for all strategies…',
     }];
   }
   if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
@@ -932,7 +933,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const budgetNotice = budgetDenied
     ? session.calls_used === 0
       ? compilerAttempted
-        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research References for its status.'
+        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research Standards for its status.'
         : 'No Investigator or Skeptic call was dispatched. Check the saved funding denial below.'
       : 'Research stopped because another provider call could not be funded. Saved findings are preserved.'
     : '';
@@ -1107,14 +1108,14 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   </div>;
   const researchReferences = (
       <details className="outcome-subsection outcome-source-material">
-        <summary><DisclosureChevron expanded={false}/>Research References</summary>
+        <summary><DisclosureChevron expanded={false}/>Research Standards</summary>
         <div className="outcome-subsection-content">
-          <p>Research-method references selected before the Investigator/Skeptic turns. These describe how to investigate; they are not independent evidence for the research findings.</p>
+          <p>Research standards selected before the Investigator/Skeptic turns. These describe how to investigate; they are not independent evidence for the research findings.</p>
           {session.outcome.source_material?.compilation && <div className="outcome-reference-compilation">
-            <p><strong>Initial step · Compile references:</strong> {session.outcome.source_material.compilation.status === 'completed' ? 'Completed' : session.outcome.source_material.compilation.status === 'not_needed' ? 'No references selected' : session.outcome.source_material.compilation.status === 'pending' ? 'Queued' : session.outcome.source_material.compilation.status === 'running' ? 'Running' : 'Unavailable; frozen reference notes retained'}</p>
+            <p><strong>Initial step · Compile research standards:</strong> {session.outcome.source_material.compilation.status === 'completed' ? 'Completed' : session.outcome.source_material.compilation.status === 'not_needed' ? 'No standards selected' : session.outcome.source_material.compilation.status === 'pending' ? 'Queued' : session.outcome.source_material.compilation.status === 'running' ? 'Running' : 'Unavailable; frozen standards notes retained'}</p>
             {session.outcome.source_material.compilation.guidance && <p>{session.outcome.source_material.compilation.guidance}</p>}
-            {session.outcome.source_material.compilation.status === 'completed' && <small>{session.outcome.source_material.compilation.selected_source_ids?.length ?? 0} references retained · {session.outcome.source_material.compilation.omitted_source_ids?.length ?? 0} omitted as low value or irrelevant. Original reference records preserved in this session.</small>}
-            {['fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <p className="reference-compilation-degraded" role="alert"><strong>Compiled guidance unavailable.</strong> {session.outcome.source_material.compilation.reason ?? 'Original frozen reference notes were used instead.'}</p>}
+            {session.outcome.source_material.compilation.status === 'completed' && <small>{session.outcome.source_material.compilation.selected_source_ids?.length ?? 0} standards retained · {session.outcome.source_material.compilation.omitted_source_ids?.length ?? 0} omitted as low value or irrelevant. Original standards records preserved in this session.</small>}
+            {['fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <p className="reference-compilation-degraded" role="alert"><strong>Compiled guidance unavailable.</strong> {session.outcome.source_material.compilation.reason ?? 'Original frozen standards notes were used instead.'}</p>}
             {session.outcome.source_material.compilation.reason && !['completed', 'fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <small>{session.outcome.source_material.compilation.reason}</small>}
             {!!session.outcome.source_material.compilation.attempts?.length && <div className="reference-compilation-diagnostics">
               <strong>Compiler attempts · {session.outcome.source_material.compilation.attempts?.length} of 3 maximum</strong>
@@ -2445,7 +2446,7 @@ type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: st
 
 const PAPER_STAGES = [
   { label: 'Wait', stages: ['queued'] },
-  { label: 'Review references', stages: ['snapshot', 'source_material', 'publication_compilation'] },
+  { label: 'Review publication standards', stages: ['snapshot', 'source_material', 'publication_compilation'] },
   { label: 'Extract evidence', stages: ['evidence', 'consolidation'] },
   { label: 'Planning', stages: ['planning'] },
   { label: 'Write sections', stages: ['writing', 'sections'] },
@@ -2461,7 +2462,7 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
   const current = step === active && (progress.status === 'active' || progress.status === 'queued');
   const sectionsTotal = progress.sections_total ?? (progress.stage === 'sections' ? progress.total : null);
   if (step === 0) return completed ? 'Started' : current ? 'Waiting' : 'Wait';
-  if (step === 1) return completed ? 'Reviewed references' : current ? 'Reviewing references' : 'Review references';
+  if (step === 1) return completed ? 'Reviewed publication standards' : current ? 'Reviewing publication standards' : 'Review publication standards';
   if (step === 2) return completed ? 'Extracted evidence' : current ? 'Extracting evidence' : 'Extract evidence';
   if (step === 3) return completed ? 'Planned' : 'Planning';
   if (step === 4) {
@@ -2602,6 +2603,23 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
   const includePopupRef = useRef<HTMLDivElement>(null);
   const includeButtonRef = useRef<HTMLButtonElement>(null);
   const [includePopupOffset, setIncludePopupOffset] = useState(0);
+  const [includePopupAbove, setIncludePopupAbove] = useState(false);
+  const [includePopupMaxHeight, setIncludePopupMaxHeight] = useState(380);
+  useLayoutEffect(() => {
+    if (!includeOptionsOpen) return;
+    const button = includeButtonRef.current;
+    const popup = includePopupRef.current;
+    if (!button || !popup) return;
+    const bounds = button.getBoundingClientRect();
+    const edge = 16;
+    const popupGap = 9;
+    const naturalHeight = popup.scrollHeight + 28; // Account for vertical padding.
+    const below = Math.max(0, window.innerHeight - bounds.bottom - popupGap - edge);
+    const above = Math.max(0, bounds.top - popupGap - edge);
+    const placeAbove = below < Math.min(380, naturalHeight) && above > below;
+    setIncludePopupAbove(placeAbove);
+    setIncludePopupMaxHeight(Math.max(0, Math.min(380, placeAbove ? above : below)));
+  }, [includeOptionsOpen]);
   function openIncludeOptions() {
     const button = includeButtonRef.current;
     if (!button) return;
@@ -3130,7 +3148,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
+    setBusy(true); setPhase('Compiling publication standards…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
     let requestDispatched = false;
@@ -3197,7 +3215,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.draft_recovery_available
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
-        : 'Compiling publication references…');
+        : 'Compiling publication standards…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
@@ -3324,7 +3342,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
         <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
         <span className="paper-includes-anchor">
           <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
-          {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className="paper-includes-dialog" role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset }}>
+          {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className={`paper-includes-dialog${includePopupAbove ? ' paper-includes-dialog-above' : ''}`} role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset, maxHeight: includePopupMaxHeight }}>
       <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
 
@@ -3850,7 +3868,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
+      }}>{rendering ? <ProjectOpeningHourglass/> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
   const markdownControl = <span className="text-view-format-control">
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
@@ -4256,14 +4274,17 @@ function AboutWorkflow() {
 }
 
 function AboutDialog({ onClose }: { onClose: () => void }) {
+  const [legalView, setLegalView] = useState<'privacy' | 'terms' | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const cloud = useCloudIdentity();
   useEffect(() => {
     dialog.current?.showModal();
-    closeButton.current?.focus();
   }, []);
-  return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+  useEffect(() => { closeButton.current?.focus(); }, [legalView]);
+  const dismiss = () => { if (legalView) setLegalView(null); else onClose(); };
+  return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className={`project-entry-dialog about-dialog${legalView ? ' about-legal-dialog' : ''}`} aria-labelledby={legalView ? 'about-legal-heading' : 'about-heading'} onCancel={event => { event.preventDefault(); dismiss(); }} onClick={event => { if (event.target === event.currentTarget) dismiss(); }}>
+    {legalView ? <div className="about-legal-document"><div className="entry-dialog-header privacy-notice-heading"><h2 id="about-legal-heading">{legalView === 'privacy' ? 'SIGMA Privacy Notice' : 'Terms of Service'}</h2><DialogDismissButton ref={closeButton} label={legalView === 'privacy' ? 'Close privacy notice' : 'Close terms of service'} onClick={dismiss}/></div><div className="about-legal-document-body">{legalView === 'privacy' ? <PrivacyNoticeContent/> : <TermsOfServiceContent/>}</div></div> : <>
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><DialogDismissButton ref={closeButton} label="Close About SIGMA" onClick={onClose}/></div>
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
@@ -4296,7 +4317,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       </details>
       {cloud?.enabled && cloud.ready && <details className="about-disclosure about-feedback-disclosure" data-about-section="feedback" open={aboutDisclosureState('feedback')} onToggle={event => rememberAboutDisclosure(event, 'feedback')}><summary>Send product feedback</summary><div className="about-disclosure-content"><FeedbackForm signedInEmail={cloud.authenticated ? cloud.user?.email || null : null}/></div></details>}
     </div>
-    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('about')}>Privacy Notice</a><a className="about-privacy-link" href="/tos">Terms of Service</a></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
+    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><button type="button" className="about-privacy-link" onClick={() => setLegalView('privacy')}>Privacy Notice</button><button type="button" className="about-privacy-link" onClick={() => setLegalView('terms')}>Terms of Service</button></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
+  </>}
   </dialog></div>;
 }
 
@@ -5630,8 +5652,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
             {entry.best_paper_score != null && entry.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
-          </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
+            <button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
             onClick={() => { setConfirmRemoveId(''); setSaveAsEntry(entry); }}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
@@ -5640,7 +5661,9 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             const trigger = event.currentTarget.getBoundingClientRect();
             setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
             setConfirmRemoveId(entry.id);
-          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
+          }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+          </div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={paperActivity(entry) === 'queued' ? 'Paper generation queued' : entry.research_running ? 'Research running' : 'Paper generation running'}/>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -6787,8 +6810,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <div id="project-pane-content" hidden={!projectExpanded}>
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. {guest ? 'Sign in to replace the project type.' : 'Choose a replacement in Project Settings to use a current type.'}</p>{!guest && <button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button>}</div>}
       <div className="project-overview-card">
-      <div className="project-description-columns"><span>PROJECT DESCRIPTION</span></div>
-      <ProjectDescriptionEditor view={view}
+      <div className="project-description-columns"><span>TITLE</span></div>
+      <ProjectDescriptionEditor view={view} guest={guest}
         editing={descriptionEditing} busy={descriptionBusy}
         canEditTitle={!sharedActivity?.owner || sharedActivity.owner === sharedActivity.you}
         onBusyChange={setDescriptionBusy}
@@ -8131,6 +8154,34 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
   </dialog>;
 }
 
+function PrivacyNoticeContent() {
+  return <div className="privacy-notice-content">
+    <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
+    <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
+    <h2>Information SIGMA stores</h2>
+    <p>When you sign in with Google, SIGMA receives your stable Google account identifier and verified email address. SIGMA stores them with your access role, whether access is active, assigned workspace, sponsored eligibility, selected model-access mode, and connection status. The hosted sign-in session is represented by a browser cookie and a hashed session token in SIGMA's authentication database. Sessions last up to eight hours. Sign-in flow data expires after five minutes; a temporary denied-sign-in record expires after ten minutes.</p>
+    <p>If you request an invitation, SIGMA stores your Google account identifier, verified email, request time, and request/notification/review status. SIGMA sends your verified email and request time through its configured mail service to the SIGMA invitation administrator. If you send product feedback, SIGMA stores your message, submission time, status, and contact email. When signed in, the contact email is your verified Google sign-in email; signed-out visitors may provide an optional unverified contact email. The signed-in feedback record is associated with your account identifier and email. Feedback is reviewed in SIGMA's administrator interface; it is not sent to an AI or mail provider. Feedback submissions are limited to five per 24 hours per signed-in account or signed-out browser.</p>
+    <p>Your account workspace can contain project titles and questions, project settings, strategies, research prompts and results, evidence, uploaded or imported project files, code and execution output, analyses, reports, and generated papers. SIGMA also stores research-session identifiers and sponsored-service accounting records, including reserved and estimated usage, call status, and token counts when the provider returns them. Usage estimates are used to enforce SIGMA spending limits and may differ from a provider's final bill.</p>
+    <h2>How SIGMA uses and shares information</h2>
+    <p>SIGMA uses your Google account information to sign you in, apply access rules, and keep your projects in your account workspace. SIGMA administrators can review invitation requests and product feedback, including any optional contact email.</p>
+    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are saved in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
+    <p>For an invitation request, SIGMA's configured mail service receives the verified email and request time so it can notify the invitation administrator. Product feedback is not included in invitation email. SIGMA does not send feedback messages to AI providers.</p>
+    <h2>Where information is stored and how long it remains</h2>
+    <p>In hosted SIGMA, authentication, access, invitation, and feedback records are kept in server-side SQLite databases. Each signed-in account has a separate server-side workspace for its projects and research files. Sponsored usage records are kept in a server-side accounting ledger. The service stores these in its configured persistent storage; the exact physical hosting location and backup schedule are set by the operator.</p>
+    <p>SIGMA has no general time-based deletion schedule for account, invitation, feedback, research, or sponsored-usage records. Signing out ends your browser session but does not erase these records. Project controls can remove project data where available, but the hosted service does not currently offer a control that deletes all information associated with an account. If the operator makes backups, copies may remain according to the operator's backup schedule.</p>
+    <h2>Cookies and account controls</h2>
+    <p>Hosted sign-in uses Secure, HttpOnly, SameSite=Lax cookies for the sign-in flow and session. The session cookie expires after eight hours; the short-lived sign-in and denied-access cookies expire after five and ten minutes respectively. The feedback form uses a random, HttpOnly cookie to apply its five-per-day limit to signed-out browsers. Signing out removes the active session; it does not delete saved projects or records described above. For a request about your account data, contact the SIGMA administrator who invited you.</p>
+  </div>;
+}
+
+function TermsOfServiceContent() {
+  const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
+  return <div className="terms-of-service-copy">
+    <p>No terms except to discover something interesting, wonderous, or pioneering.</p>
+    <p className="terms-welcome-phrase">{phrase}</p>
+  </div>;
+}
+
 function PrivacyNoticePage() {
   useEffect(() => { document.title = 'Privacy notice · SIGMA'; }, []);
   function closeNotice() {
@@ -8150,7 +8201,7 @@ function PrivacyNoticePage() {
     }
     window.location.assign('/');
   }
-  return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
+  return <main className="cloud-auth-shell privacy-notice-shell"><article className="cloud-auth-card privacy-notice-card">
     <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><DialogDismissButton label="Close privacy notice" onClick={closeNotice}/></div>
     <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
     <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>

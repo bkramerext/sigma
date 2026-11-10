@@ -514,6 +514,36 @@ def migrate(directory: str | Path, destination: str | Path) -> Path:
 def read_file(bundle_path: str | Path, relative_path: str) -> bytes:
     """Read one member of an authoritative JSON bundle."""
     path = Path(bundle_path)
+    if path.suffix == ".sigma" and path.is_dir() and not path.is_symlink():
+        if (
+            not isinstance(relative_path, str)
+            or not relative_path
+            or "\\" in relative_path
+            or relative_path.startswith("/")
+            or any(part in {"", ".", ".."} for part in relative_path.split("/"))
+        ):
+            raise BundleError("Unsafe project member path")
+        # Historical callers still use the pre-v4 paper member namespace.
+        if relative_path.startswith("artifacts/papers/snapshots/"):
+            relative_path = (
+                "artifacts/generated_papers/.snapshots/"
+                + relative_path[len("artifacts/papers/snapshots/") :]
+            )
+        elif relative_path.startswith("artifacts/papers/"):
+            relative_path = (
+                "artifacts/generated_papers/" + relative_path[len("artifacts/papers/") :]
+            )
+        member = path
+        for component in relative_path.split("/"):
+            member = member / component
+            if member.is_symlink():
+                raise BundleError("Project member must not be a symlink")
+        try:
+            if not member.is_file():
+                raise BundleError("Project member not found")
+            return member.read_bytes()
+        except OSError as exc:
+            raise BundleError("Cannot read project member") from exc
     if path.is_symlink() or not path.is_file():
         raise BundleError("Project JSON must be a regular file")
     try:
@@ -587,6 +617,8 @@ def _publish_members(path: Path, members: dict[str, bytes], prefix: str) -> None
 def list_files(bundle_path: str | Path) -> tuple[str, ...]:
     """Enumerate all persisted members of a single-file project."""
     path = Path(bundle_path)
+    if path.suffix == ".sigma" and path.is_dir() and not path.is_symlink():
+        return tuple(sorted(_files(path)))
     if path.is_symlink() or not path.is_file():
         raise BundleError("Project JSON must be a regular file")
     try:

@@ -58,20 +58,26 @@ class _ReadableHTML(HTMLParser):
         return " ".join(body.split())
 
 
-def _public_endpoint(url: str) -> tuple[str, str, int, str, tuple]:
+def _public_endpoint(url: str, *, allow_http: bool = False) -> tuple[str, str, int, str, tuple]:
     if len(url) > _MAX_URL_LENGTH or any(ord(char) < 32 for char in url):
         raise ValueError("invalid_url")
     parts = urlsplit(url)
-    if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
+    if (
+        (parts.scheme != "https" and not (allow_http and parts.scheme == "http"))
+        or not parts.hostname
+        or parts.username
+        or parts.password
+    ):
         raise ValueError("non_https_or_credential_url")
     host = parts.hostname.encode("idna").decode("ascii").lower()
     if not host or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for char in host):
         raise ValueError("invalid_host")
+    expected_port = 80 if parts.scheme == "http" else 443
     try:
-        port = parts.port or 443
+        port = parts.port or expected_port
     except ValueError as exc:
         raise ValueError("invalid_port") from exc
-    if port != 443:
+    if port != expected_port:
         raise ValueError("nonstandard_port")
     try:
         addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)

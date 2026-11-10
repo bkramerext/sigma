@@ -62,12 +62,28 @@
 }
 
 /* Distinct, readable sections in both the viewed and edited project fields. */
+/* The divider belongs below the project title; every subsection starts
+   the same distance below the divider immediately preceding it. */
+.workspace-page .project-overview-card > .project-description-columns { border-bottom: 0; }
+.workspace-page .project-overview-card .sigma-description-editor .project-pane-title-line {
+  position: relative;
+  padding-bottom: 12px;
+}
+.workspace-page .project-overview-card .sigma-description-editor .project-pane-title-line::after {
+  content: '';
+  position: absolute;
+  left: -24px;
+  right: -24px;
+  bottom: 0;
+  border-bottom: 1px solid var(--workspace-line);
+}
 .sigma-description-fields {
   display: grid;
   gap: 1rem;
   width: 100%;
   min-width: 0;
-  margin-top: 1.25rem;
+  margin-top: 0;
+  padding-top: 1rem;
 }
 .sigma-description-field {
   min-width: 0;
@@ -79,12 +95,13 @@
 }
 .sigma-description-field h4,
 .workspace-page .project-description-columns > span {
-  margin: 0 0 .5rem;
+  margin: 0;
   color: #edc38d;
   font: 700 .82rem/1.35 Inter, ui-sans-serif, system-ui, sans-serif;
   letter-spacing: .09em;
   text-transform: uppercase;
 }
+.sigma-description-field h4 + [id^='sigma-project-subsection-'] { margin-top: .5rem; }
 .sigma-description-field .settings-hint {
   margin: 0 0 .75rem;
   line-height: 1.5;
@@ -107,6 +124,173 @@
 .sigma-description-rendered p:first-child { margin-top: 0; }
 .sigma-description-rendered p:last-child { margin-bottom: 0; }
 @media (max-width: 600px) {
-  .sigma-description-fields { margin-top: 1rem; }
+  .sigma-description-fields { margin-top: 0; padding-top: .85rem; }
   .sigma-description-field + .sigma-description-field { padding-top: .85rem; }
 }
+
+/* Source Material uses the same collapsed-section spacing as the three sections above. */
+.sigma-evidence-heading { display: flex; align-items: center; gap: 12px; }
+.sigma-evidence-heading h4 { display: flex; align-items: center; margin: 0; }
+.sigma-evidence-heading .sigma-subsection-toggle { min-height: 24px; }
+.sigma-evidence-actions { display: inline-flex; align-items: center; gap: 14px; }
+.sigma-evidence-actions .sigma-heading-icon-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 5px;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.sigma-evidence-actions .sigma-heading-icon-action svg { display: block; }
+.sigma-description-field.sigma-supplied-evidence #sigma-supplied-evidence-content > .settings-hint {
+  margin: 4px 0 12px 20px;
+  color: #aab9c7;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+/* Source Material uses the same compact, unboxed link/actions rows as Standards. */
+.sigma-evidence-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  margin-top: 3px;
+  padding-left: 24px;
+}
+.sigma-evidence-item {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.sigma-evidence-item.is-disabled { opacity: .52; }
+.sigma-evidence-row a {
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--sigma-copper-foreground);
+  font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.sigma-evidence-row .sigma-evidence-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* Both Source Material links and attachments emphasize their labels through
+   weight alone; preserve each item's original color and underline style. */
+.sigma-evidence-row :is(.sigma-evidence-link, .sigma-evidence-attachment):is(:hover, :focus-visible) {
+  font-weight: 600;
+}
+
+.sigma-evidence-row .sigma-evidence-attachment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.sigma-evidence-attachment svg {
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+.sigma-evidence-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.sigma-evidence-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.sigma-evidence-row-actions button:disabled { opacity: .5; cursor: default; }
+.sigma-evidence-row-actions button:is(:hover, :focus-visible):not(:disabled) {
+  color: #fff2e9 !important;
+  background: var(--copper-gradient) !important;
+  border: 1px solid #ac7054 !important;
+  border-radius: 4px;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+}
+.sigma-evidence-row-actions button:is(:hover, :focus-visible):not(:disabled) svg {
+  color: #fff2e9;
+}
+
+.sigma-description-field .sigma-evidence-link-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 540px;
+  height: 26px;
+  margin: 0;
+  padding: 1px 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.sigma-evidence-link-input::placeholder { color: #8493a1; }
+.sigma-description-field .sigma-evidence-url-error {
+  display: block;
+  margin: 3px 0 0;
+  color: #f1aaa0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+/* Match the disclosure chevron and title behavior of the main workspace panes. */
+.sigma-description-field .sigma-subsection-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.sigma-description-field .sigma-subsection-toggle .disclosure-chevron {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  transition: transform 160ms ease;
+}
+.sigma-description-field .sigma-subsection-toggle .disclosure-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+.sigma-description-field [hidden] { display: none; }

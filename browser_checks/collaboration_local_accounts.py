@@ -106,7 +106,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         project = get_json(created)
         path = project["path"]
         url = ui + "/project?path=" + quote(path, safe="")
-        assert Path(path).is_file()
+        assert Path(path).is_dir() and (Path(path) / "project.json").is_file()
 
         # Member cannot see the owner's project before invitation.
         forbidden = member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
@@ -374,7 +374,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         expect(owner.get_by_role("button", name=f"Manage collaborators for {title}")).to_have_count(
             0
         )
-        assert Path(path).is_file(), "Revocation must not move or delete the owner's project"
+        assert Path(path).is_dir() and (Path(path) / "project.json").is_file(), (
+            "Revocation must not move or delete the owner's project"
+        )
 
         # The My Work X for an invited collaborator must actually revoke
         # membership, not merely hide the recent entry until the next poll.

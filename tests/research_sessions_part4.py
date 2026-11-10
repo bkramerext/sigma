@@ -882,8 +882,8 @@ def test_model_switch_preserves_old_hard_budget_costs() -> None:
 
 async def test_emailed_project_import_resumes_under_recipient_provider(path: Path):
     """Real start/stop/export/import/Resume, not just synthetic path-rewrite tests."""
-    from sigma.project_bundle import import_bundle
     from sigma.project_email import email_project_bundle
+    from sigma.project_transfer import import_project
 
     view, strategy, sender, config = await setup(path)
 
@@ -905,8 +905,10 @@ async def test_emailed_project_import_resumes_under_recipient_provider(path: Pat
 
     payload, _filename = email_project_bundle(str(path))
     for label, recipient_mode in (("same", "api_key"), ("different", "chatgpt")):
-        receiver_path = path.parent / f"email-recipient-{label}.json"
-        import_bundle(json.loads(payload), receiver_path)
+        receiver_path = path.parent / f"email-recipient-{label}.sigma"
+        import_project(json.loads(payload), receiver_path)
+        recipient_project_id = inspect_project(receiver_path).project.id
+        assert recipient_project_id != view.project.id
         imported = research_sessions._all(str(receiver_path))[0]
         recipient_session_id = imported["id"]
         assert recipient_session_id != started["id"]
@@ -914,7 +916,7 @@ async def test_emailed_project_import_resumes_under_recipient_provider(path: Pat
         assert imported["imported_via_bundle"] is True
         assert imported["project_path"] == str(receiver_path.resolve())
         assert imported["status"] == "stopped"
-        assert imported["project_id"] == view.project.id
+        assert imported["project_id"] == recipient_project_id
 
         recipient = {
             **sender,
@@ -933,7 +935,7 @@ async def test_emailed_project_import_resumes_under_recipient_provider(path: Pat
             assert resumed["status"] == "queued", resumed.get("message")
             saved = research_sessions._read(str(receiver_path), recipient_session_id)
             assert saved["mode"] == recipient_mode
-            assert saved["project_id"] == view.project.id
+            assert saved["project_id"] == recipient_project_id
             assert saved["status"] == "queued"
             assert saved["calls_used"] == stopped["calls_used"]
             assert saved["steps"] == research_sessions._read(str(path), started["id"])["steps"]

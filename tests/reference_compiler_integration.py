@@ -269,7 +269,7 @@ async def verify_compilation(
             await asyncio.wait_for(compilation_started.wait(), timeout=5.0)
             compiling = research_sessions._read(str(path), started["id"])
             assert compiling["reference_compilation"]["status"] == "running"
-            assert compiling["current_action"] == "Compiling research references"
+            assert compiling["current_action"] == "Compiling research standards"
             assert compiling["calls_used"] == 0
             assert compiling["steps"] == []
             assert calls == ["research_reference_compilation"], calls
