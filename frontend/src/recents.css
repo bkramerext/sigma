@@ -35,6 +35,9 @@
 }
 .home-page .home-recents .recent-save-as,
 .home-page .home-recents .recent-forget { display: inline-flex; align-items: center; justify-content: center; align-self: center; line-height: 1; text-decoration: none; }
+/* Slightly loosen only the spacing between the home project action icons. */
+.home-page .home-recents .recent-save-as,
+.home-page .home-recents .recent-forget { margin-left: 3px; }
 .home-page .home-recents .recent-save-as svg,
 .home-page .home-recents .recent-forget svg { display: block; width: 20px; height: 20px; }
 .home-page .home-recents .recent-save-as:focus-visible,
