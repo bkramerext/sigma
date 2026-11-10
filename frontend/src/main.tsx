@@ -4638,7 +4638,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
         <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
-        <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
+        <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><button type="button" className="text-view-link" disabled aria-label="Answering" data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}>⌛ Answering…</button><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
         {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <DialogDismissButton label="Dismiss error" onClick={() => setError('')}/></p>}
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
           <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
@@ -6449,7 +6449,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [paperRunning, setPaperRunning] = useState(false);
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
-  const [activeRuns, setActiveRuns] = useState<Array<{ kind: AttributionKind; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }>>([]);
+  const [activeRuns, setActiveRuns] = useState<Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }>>([]);
   useEffect(() => {
     if (guest || !view) return;
     const controller = new AbortController();
@@ -6473,17 +6473,17 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         const ask = askResponse.ok ? await askResponse.json() as { active?: Array<{ request_id: string; creator: string; model: string; thinking: string }> } : { active: [] };
         const config = configResponse.ok ? await configResponse.json() as { model?: string; reasoning_effort?: string } : {};
         if (controller.signal.aborted) return;
-        const items: Array<{ kind: AttributionKind; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }> = [];
+        const items: Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }> = [];
         if (progress.progress?.status === 'active' || progress.progress?.status === 'queued') {
-          items.push({ kind: 'paper', number: Math.max(0, ...(saved.papers ?? []).map(p => p.paper_version)) + 1, model: config.model, thinking: config.reasoning_effort });
+          items.push({ kind: 'paper', status: progress.progress?.status === 'queued' ? 'queued' : 'active', number: Math.max(0, ...(saved.papers ?? []).map(p => p.paper_version)) + 1, model: config.model, thinking: config.reasoning_effort });
         }
         for (const session of sessions.sessions ?? []) {
           if (session.status === 'running' || session.status === 'queued') {
-            items.push({ kind: 'session', number: session.session_number, id: session.id, model: session.model, thinking: session.reasoning_effort });
+            items.push({ kind: 'session', status: session.status === 'queued' ? 'queued' : 'active', number: session.session_number, id: session.id, model: session.model, thinking: session.reasoning_effort });
           }
         }
         for (const entry of ask.active ?? []) {
-          items.push({ kind: 'answer', id: entry.request_id, creator: entry.creator, model: entry.model, thinking: entry.thinking });
+          items.push({ kind: 'answer', status: 'active', id: entry.request_id, creator: entry.creator, model: entry.model, thinking: entry.thinking });
         }
         setActiveRuns(items);
       } catch { /* Preserve the last known activity during transient failures. */ }
@@ -6494,7 +6494,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     return () => { controller.abort(); window.clearInterval(interval); };
   }, [path, guest, view?.project.id]);
 
-  const activeRunLabels = activeRuns.map(run => formatRunAttribution({
+  const visibleActivity = activeRuns.some(run => run.status === 'active')
+    ? activeRuns.filter(run => run.status === 'active') : activeRuns;
+  const activeRunLabels = visibleActivity.map(run => formatRunAttribution({
     ...run,
     creator: run.creator || (run.kind === 'session'
       ? sharedActivity?.artifact_authors?.session?.[run.id ?? '']
