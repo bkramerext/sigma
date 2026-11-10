@@ -217,9 +217,7 @@ def _validate_record(record: Any, project_id: str) -> None:
     ):
         raise ProjectError("Q/A archive contains a malformed answer")
     creator = record.get("created_by")
-    if creator is not None and (
-        not isinstance(creator, str) or not 1 <= len(creator) <= 254
-    ):
+    if creator is not None and (not isinstance(creator, str) or not 1 <= len(creator) <= 254):
         raise ProjectError("Q/A archive contains invalid creator attribution")
     author_email = record.get("author_email")
     if author_email is not None and (

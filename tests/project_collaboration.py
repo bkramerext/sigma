@@ -290,6 +290,51 @@ class CollaborationTests(TestCase):
             finally:
                 shared.release_lease(self.path, token)
 
+    def test_paper_stop_endpoint_accepts_owner_and_rejects_other_collaborator(self) -> None:
+        from sigma import api
+
+        body = api.PaperCancelRequest(
+            path=self.path,
+            expected_project_id="saved-project",
+            expected_binding="unused-stop-binding",
+        )
+        token = shared.acquire_lease(self.path, "Paper generation")
+        self.assertIsNotNone(token)
+        other_workspace = replace(
+            self.workspace,
+            subject_hash="other-hash",
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        try:
+            with (
+                patch(
+                    "sigma.api.inspect_project",
+                    return_value=SimpleNamespace(project=SimpleNamespace(id="saved-project")),
+                ),
+                patch("sigma.api.papers.cancel_generation", new_callable=AsyncMock) as cancel,
+            ):
+                cancel.return_value = True
+                self.assertEqual(
+                    asyncio.run(api.paper_cancel_view(body)), {"cancelled": True}
+                )
+                self.assertEqual(cancel.await_count, 1)
+                with (
+                    patch(
+                        "sigma.project_collaboration.cloud_workspaces.current",
+                        return_value=other_workspace,
+                    ),
+                    patch(
+                        "sigma.project_collaboration.cloud_auth.current_principal",
+                        return_value=self.other,
+                    ),
+                ):
+                    with self.assertRaisesRegex(ProjectError, "being used"):
+                        asyncio.run(api.paper_cancel_view(body))
+                self.assertEqual(cancel.await_count, 1)
+        finally:
+            shared.release_lease(self.path, token)
+
     def test_self_removal_revokes_membership_without_deleting_project(self) -> None:
         other_workspace = replace(
             self.workspace,
