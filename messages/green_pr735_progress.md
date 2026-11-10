@@ -4,6 +4,11 @@ Branch: `feature/project-evidence-pdfs`. This batch is incomplete and must not b
 
 ## Changes
 
+- Nov 10 follow-up: public import now rejects v1-v3 uploads (legacy live .json files
+  remain readable and export as v4), with API acceptance coverage.
+- V4 artifacts can exceed the old 256 MiB single-frame ceiling by using bounded,
+  concatenated zstd frames within the same TAR archive; frame tampering and
+  combined metadata/artifact size limits have regression tests.
 - Repaired v4 Save As import/rebind and updated directory-project recents and collaboration browser assumptions.
 - Removed guest Source Material API reads and guest edit controls; corrected the project subsection heading and link editor Escape behavior.
 - Failed Source Material compilation blocks role dispatch. Completed linked and attached documents now retain session-scoped original-byte snapshots on disk, with hash and provenance; successful links are reused on resume. Failed extracts are retried. Saved compilation integrity is checked before reuse.
@@ -13,6 +18,9 @@ Branch: `feature/project-evidence-pdfs`. This batch is incomplete and must not b
 
 ## Actual verification
 
+- **Nov 10 follow-up commits are not yet CI-verified.** GitHub reports the #735
+  branch as non-mergeable against current main and no PR workflow runs were
+  returned for its new head. Do not interpret earlier local passes as green CI.
 - `./sigma test`: passed on the batch before the last focused source-snapshot and browser-check additions; all four research-session shards, Ruff, Pyright and frontend typecheck passed. The earlier failed run and fixes are in this branch history's local verification record; no new CI claim is made here.
 - Focused: `tests/project_creation.py`, `tests/recents.py`, `tests/project_evidence.py`, `tests/project_transfer.py`, `tests/research_supplied_evidence_integration.py`, `tests/project_collaboration.py`, `tests/deployment_package.py`, `tests/research_sessions_part2.py`, `tests/proposals.py`, and the emailed v4 import/resume scenario passed locally with mocks.
 - `ruff check src tests browser_checks`, `ruff format --check src tests browser_checks`, `pyright`, frontend build, and `git diff --check`: passed after the final local edits.
@@ -22,5 +30,7 @@ Branch: `feature/project-evidence-pdfs`. This batch is incomplete and must not b
 ## Still required
 
 - Replace the explicit 60,000-character context bound with a bounded, resumable compilation/synthesis or lookup path that makes all processed premises available without silent omission.
-- Review oversized v4 artifact archives (one TAR frame is capped at 256 MiB although valid runtime projects can exceed it).
+- Verify the new bounded multi-frame v4 archive path under CI and with a real
+  larger-than-256 MiB project fixture; current tests force small frame boundaries
+  to cover the same framing logic without excessive test memory.
 - Inspect CI after push, resolve any failures in batches, rerun affected real-browser checks, and update this handoff before R4R.
