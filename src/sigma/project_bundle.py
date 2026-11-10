@@ -518,7 +518,7 @@ def read_file(bundle_path: str | Path, relative_path: str) -> bytes:
         if (
             not isinstance(relative_path, str)
             or not relative_path
-            or "\\\\" in relative_path
+            or "\\" in relative_path
             or relative_path.startswith("/")
             or any(part in {"", ".", ".."} for part in relative_path.split("/"))
         ):
