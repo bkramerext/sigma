@@ -490,17 +490,24 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                 except Exception:  # noqa: BLE001 - paper decoration must never block project access
                     # Broken paper decoration must never make the project unavailable.
                     paper_metadata = {"paper_count": 0, "best_paper_score": None}
+            paper_status = papers.activity_status(view.path) if not lightweight else None
+            session_active = (
+                has_active_session(view.path, project_id=view.project.id)
+                if not lightweight
+                else False
+            )
+            collaboration_info: dict = {}
+            if not lightweight and view.path in shared_paths:
+                collaboration_info = project_collaboration.summary(view.path)
             activity_runs: list[dict] = []
             if not lightweight:
                 from sigma import research_qa, research_sessions
 
                 try:
-                    authors = (
-                        project_collaboration.summary(view.path).get("artifact_authors", {})
-                        if view.path in shared_paths
-                        else {}
-                    )
-                    for session in research_sessions.list_sessions(view.path):
+                    authors = collaboration_info.get("artifact_authors", {})
+                    for session in (
+                        research_sessions.list_sessions(view.path) if session_active else []
+                    ):
                         if session.get("status") not in {"running", "queued"}:
                             continue
                         activity_runs.append({
@@ -511,19 +518,19 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                             "model": session.get("model", ""),
                             "thinking": session.get("reasoning_effort", ""),
                         })
-                    paper_status = papers.activity_status(view.path)
                     if paper_status in {"active", "queued"}:
                         paper_number = max(
                             (paper.get("paper_version", 0) for paper in papers.list_papers(view.path)),
                             default=0,
                         ) + 1
+                        progress = papers.progress_status(view.path) or {}
                         activity_runs.append({
                             "kind": "paper",
                             "status": paper_status,
                             "number": paper_number,
                             "creator": (authors.get("paper_draft") or {}).get(view.project.id, ""),
-                            "model": view.project.ai_model,
-                            "thinking": view.project.reasoning_effort,
+                            "model": progress.get("model") or view.project.ai_model,
+                            "thinking": progress.get("reasoning_effort") or view.project.reasoning_effort,
                         })
                     for answer in research_qa.list_pending_answers(view.path):
                         activity_runs.append({
@@ -546,24 +553,16 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                         strategy_count=len(view.project.active_order),
                         paper_count=paper_metadata["paper_count"],
                         best_paper_score=paper_metadata["best_paper_score"],
-                        paper_activity=(
-                            papers.activity_status(view.path) if not lightweight else None
-                        ),
+                        paper_activity=paper_status,
                         difficulty=view.project.difficulty,
-                        research_running=(
-                            has_active_session(view.path, project_id=view.project.id)
-                            if not lightweight
-                            else False
-                        ),
+                        research_running=session_active,
                         available=True,
                         shared=view.path in shared_paths,
                         collaborator=view.path in shared_by_path,
                         activity_runs=activity_runs,
                         answer_active=any(run["kind"] == "answer" for run in activity_runs),
                         activity_author=(
-                            (project_collaboration.summary(view.path).get("lease") or {}).get(
-                                "email"
-                            )
+                            (collaboration_info.get("lease") or {}).get("email")
                             if view.path in shared_paths
                             and not lightweight
                             and (view.path in shared_by_path or workspace is not None)
