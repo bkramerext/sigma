@@ -310,3 +310,69 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_standalone_score_format_and_input_validation() -> None:
+    from sigma.standalone_paper_score import format_score, read_pdf
+
+    score = paper_scores._make_score(judgment(), "a" * 64)
+    output = format_score(score, filename="example.pdf", model="test-model", effort="high")
+    assert "example.pdf" in output
+    assert "test-model / high" in output
+    assert "Research rigor and correctness" in output
+    assert "30%" in output
+    assert "20.40" in output
+    assert "Weighted total: 76/100" in output
+    assert "No SIGMA research archive" in output
+
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "paper.pdf"
+        path.write_bytes(b"not a PDF")
+        try:
+            read_pdf(str(path))
+        except Exception as exc:
+            assert "not a PDF" in str(exc)
+        else:
+            raise AssertionError("Accepted a non-PDF input")
+        link = Path(directory) / "link.pdf"
+        link.symlink_to(path)
+        try:
+            read_pdf(str(link))
+        except Exception as exc:
+            assert "symlink" in str(exc)
+        else:
+            raise AssertionError("Accepted a symlink PDF")
+
+
+def test_standalone_scoring_reuses_provider_and_rubric() -> None:
+    from sigma import standalone_paper_score
+
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "paper.pdf"
+        path.write_bytes(b"%PDF-1.7 minimal test stub")
+        config = {
+            "available": True,
+            "model": "test-model",
+            "reasoning_effort": "high",
+        }
+
+        async def fake_provider(context, binding, received_config, **kwargs):
+            assert context == {"pdf": {"page_count": 1}, "saved_research_excerpts": []}
+            assert kwargs["instructions"] == paper_scores.INSTRUCTIONS
+            assert kwargs["response_model"] is paper_scores.PaperJudgment
+            assert kwargs["schema_name"] == "sigma_paper_score_v3"
+            return judgment(), "test-model"
+
+        with (
+            patch.object(standalone_paper_score, "auth_context", new_callable=AsyncMock) as auth,
+            patch.object(standalone_paper_score, "configuration", new_callable=AsyncMock) as settings,
+            patch.object(standalone_paper_score.memory_guard, "require_capacity"),
+            patch.object(paper_scores, "_context", return_value={"pdf": {"page_count": 1}, "saved_research_excerpts": []}),
+            patch.object(papers, "_provider_structured", side_effect=fake_provider),
+        ):
+            auth.return_value = {"identity": "test", "token": "unused", "mode": "api_key"}
+            settings.return_value = config
+            result, model, effort = asyncio.run(standalone_paper_score.score_file(str(path)))
+        assert result["total"] == 76
+        assert model == "test-model"
+        assert effort == "high"
