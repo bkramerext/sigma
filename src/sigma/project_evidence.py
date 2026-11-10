@@ -137,6 +137,11 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
     if not extract.strip():
         raise ProjectError("PDF has no extractable text. Scanned-image OCR is not supported yet.")
     sha = hashlib.sha256(pdf).hexdigest()
+    from sigma import cloud_auth
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise ProjectError("Guests cannot add evidence.")
     with project_write_lock(path):
         rows = list_evidence(path)
         duplicate = next((row for row in rows if row["sha256"] == sha), None)
@@ -153,6 +158,7 @@ def add_evidence(path: str, filename: str, pdf: bytes) -> dict:
             "pages": page_count,
             "extract_truncated": omitted,
             "uploaded_at": datetime.now(UTC).isoformat(),
+            "uploaded_by": principal.email if principal is not None else None,
         }
         updates = {
             f"artifacts/evidence/{identifier}.pdf": pdf,
@@ -176,8 +182,18 @@ def get_pdf(path: str, identifier: str) -> tuple[dict, bytes]:
 def remove_evidence(path: str, identifier: str) -> None:
     with project_write_lock(path):
         rows = list_evidence(path)
-        if not any(row["id"] == identifier for row in rows):
+        entry = next((row for row in rows if row["id"] == identifier), None)
+        if entry is None:
             raise ProjectError("Evidence file not found.")
+        from sigma import cloud_auth, project_collaboration
+
+        principal = cloud_auth.current_principal()
+        if principal is not None:
+            owner = project_collaboration.summary(path)["owner"]
+            if principal.role == "guest" or (
+                principal.email != owner and principal.email != entry.get("uploaded_by")
+            ):
+                raise ProjectError("Only the uploader or project owner can remove evidence.")
         _write(
             path,
             {
