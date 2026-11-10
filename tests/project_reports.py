@@ -617,11 +617,11 @@ def main() -> None:
         audit_before = export_project_view(str(path))
         with TestClient(app) as client:
             # Legacy directory projects must export as complete, importable JSON bundles.
-            from sigma.project_bundle import encode
+            from sigma.project_transfer import export_project
 
             downloaded = client.get("/api/projects/download", params={"path": str(path)})
             assert downloaded.status_code == 200, downloaded.text
-            assert downloaded.json() == json.loads(encode(path))
+            assert downloaded.json() == json.loads(export_project(path))
             assert "application/json" in downloaded.headers["content-type"]
             for output_format, mime in (
                 ("txt", "text/plain"),
