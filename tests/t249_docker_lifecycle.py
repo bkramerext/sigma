@@ -28,10 +28,15 @@ from sigma.python_sandbox import (
 async def verify():
     with tempfile.TemporaryDirectory(prefix="sigma-t249-docker-") as temporary:
         root = Path(temporary)
-        from sigma import projects
+        from sigma import projects, python_sandbox
 
         original_root = projects.projects_root
+        original_wall_seconds = python_sandbox.EXECUTION_TIMEOUT_SECONDS
         projects.projects_root = lambda: root
+        # The shared CI Docker daemon can take longer to initialize a sandbox
+        # than a user's warm runtime. Relax only this test's wall limit; the
+        # production research sandbox retains its 15-second bound.
+        python_sandbox.EXECUTION_TIMEOUT_SECONDS = 35
         try:
             project = create_json_project(
                 f"T249 Docker verification {uuid4().hex[:12]}",
@@ -192,6 +197,7 @@ async def verify():
 
         finally:
             projects.projects_root = original_root
+            python_sandbox.EXECUTION_TIMEOUT_SECONDS = original_wall_seconds
 
 
 if __name__ == "__main__":

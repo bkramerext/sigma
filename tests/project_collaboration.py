@@ -218,6 +218,9 @@ class CollaborationTests(TestCase):
 
     def test_private_unregistered_project_does_not_reserve_author(self) -> None:
         with shared._db() as db:
+            # The fixture contains an invited member; clear the dependent
+            # membership before unregistering its shared-project row.
+            db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
             db.execute("DELETE FROM shared_projects WHERE path=?", (self.path,))
         # Personal projects are not required to have a collaboration database row.
         shared.note_artifact_author(self.path, "session", "private-id", created_only=True)
