@@ -81,6 +81,7 @@ def rebase_copy(
     destination_path: str,
     session_ids_out: dict[str, str] | None = None,
     session_numbers_out: dict[str, int] | None = None,
+    preserve_project_identity: bool = False,
 ) -> dict[str, Any]:
     """Return a portable, independently identified project bundle.
 
@@ -101,7 +102,7 @@ def rebase_copy(
             raise ProjectError("Save As requires the new project identity.")
         source = Path(source_path).resolve()
         destination = Path(destination_path).resolve()
-        if source == destination or source_id == new_id:
+        if source == destination or (source_id == new_id and not preserve_project_identity):
             raise ProjectError("Save As must create a different project.")
         session_ids: dict[str, str] = {}
         admission_keys: dict[str, str] = {}
