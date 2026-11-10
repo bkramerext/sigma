@@ -8260,7 +8260,7 @@ function PrivacyNoticePage() {
     }
     window.location.assign('/');
   }
-  return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
+  return <main className="cloud-auth-shell privacy-notice-shell"><article className="cloud-auth-card privacy-notice-card">
     <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><DialogDismissButton label="Close privacy notice" onClick={closeNotice}/></div>
     <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
     <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
