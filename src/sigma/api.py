@@ -834,6 +834,11 @@ def project_evidence_remove(evidence_id: str, path: str):
     return {"deleted": evidence_id}
 
 
+@app.get("/api/projects/research-qa/activity")
+def research_qa_activity(path: str):
+    return {"active": research_qa.list_pending_answers(path)}
+
+
 @app.get("/api/projects/research-qa")
 def research_qa_list(path: str):
     return {
