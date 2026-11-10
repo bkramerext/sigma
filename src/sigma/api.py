@@ -1937,8 +1937,19 @@ def import_project_bundle(body: ImportBundleRequest):
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
         root = projects_root()
+        # Shared projects are stored in another owner's workspace. Include all
+        # accessible Saved projects in the collision set so uploading a shared
+        # "Study v1" creates "Study v2" rather than another visible "Study v1".
+        # Read Saved before taking .names.lock: Saved has its own index lock.
+        from sigma.recents import recent_projects
+
+        visible_titles = {
+            _title_key(item["title"])
+            for item in recent_projects(lightweight=True)["projects"]
+            if item["available"]
+        }
         with _title_registry_lock(root):
-            occupied_titles = _occupied_titles(root)
+            occupied_titles = _occupied_titles(root) | visible_titles
             imported = None
             version_match = re.search(r"(?i)\bv(\d+)$", title)
             for number in range(1, 1001):
