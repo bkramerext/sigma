@@ -40,6 +40,10 @@ def _encode(value: Any) -> bytes:
 
 def _member_name(name: str) -> str:
     """Legacy .sigma paper records must become visible to .json readers."""
+    if name.startswith("artifacts/generated_papers/.snapshots/"):
+        return "artifacts/papers/snapshots/" + name[len("artifacts/generated_papers/.snapshots/") :]
+    if name.startswith("artifacts/generated_papers/"):
+        return "artifacts/papers/" + name[len("artifacts/generated_papers/") :]
     if name.startswith("papers/.snapshots/"):
         return "artifacts/papers/snapshots/" + name[len("papers/.snapshots/") :]
     if name.startswith("papers/"):
