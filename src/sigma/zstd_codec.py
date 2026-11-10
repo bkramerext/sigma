@@ -106,8 +106,7 @@ def compress_archive(data: bytes, frame_bytes: int = MAX_MEMBER_BYTES) -> bytes:
     if not data:
         return compress(b"")
     return b"".join(
-        compress(data[offset : offset + frame_bytes])
-        for offset in range(0, len(data), frame_bytes)
+        compress(data[offset : offset + frame_bytes]) for offset in range(0, len(data), frame_bytes)
     )
 
 

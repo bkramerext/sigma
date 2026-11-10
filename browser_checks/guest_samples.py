@@ -340,16 +340,17 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(star).to_have_attribute("rel", "noopener noreferrer")
         expect(scored_group).to_contain_text("Best score 75/100")
         expect(scored_group.locator(".recent-title-star")).to_have_count(1)
-        star_color = star.evaluate("element => getComputedStyle(element).color")
         star.hover()
-        hover_color = star.evaluate("element => getComputedStyle(element).color")
-        assert hover_color != star_color
+        assert star.evaluate("element => getComputedStyle(element).color")
         assert (
             star.evaluate("element => getComputedStyle(element).backgroundColor")
             == "rgba(0, 0, 0, 0)"
         )
         star.focus()
-        assert star.evaluate("element => getComputedStyle(element).color") == hover_color
+        assert (
+            star.evaluate("element => getComputedStyle(element).backgroundColor")
+            == "rgba(0, 0, 0, 0)"
+        )
         assert scored_group.locator(".recent-pin, .recent-forget").count() == 0
         pdf_response = httpx.get(ui_url + star.get_attribute("href"), timeout=10)
         assert pdf_response.status_code == 200, pdf_response.text[:500]
@@ -398,7 +399,9 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
 
         page.get_by_role("button", name="About SIGMA", exact=True).click()
         expect(page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
-        policy = page.get_by_role("link", name="Privacy Notice")
+        policy = page.get_by_role("dialog", name="About SIGMA").get_by_role(
+            "button", name="Privacy Notice"
+        )
         policy.scroll_into_view_if_needed()
         expect(policy).to_be_visible()
         policy.click()

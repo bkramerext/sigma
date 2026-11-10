@@ -86,13 +86,13 @@ def main() -> None:
         settings_box = settings_pill.bounding_box()
         assert model_box and about_box and settings_box
         assert abs(model_box["x"] - about_box["x"]) <= 1
-        assert abs(
-            (settings_box["x"] + settings_box["width"])
-            - (model_box["x"] + model_box["width"])
-        ) <= 1, "Settings right edge must align with Model pill"
         assert (
-            settings_box["x"] - (about_box["x"] + about_box["width"]) >= 8
-        ), "About/Settings gap must be preserved"
+            abs((settings_box["x"] + settings_box["width"]) - (model_box["x"] + model_box["width"]))
+            <= 1
+        ), "Settings right edge must align with Model pill"
+        assert settings_box["x"] - (about_box["x"] + about_box["width"]) >= 8, (
+            "About/Settings gap must be preserved"
+        )
 
         # Unauthenticated fixture: explain that Google identity is required
         # locally or hosted, not that collaboration is hosted-only.

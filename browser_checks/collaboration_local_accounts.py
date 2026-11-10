@@ -405,7 +405,9 @@ def exercise(ui: str, workspaces: Path) -> None:
             owner_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
         )
         assert COLLABORATOR not in owner_membership["collaborators"]
-        assert Path(path).is_file(), "Leaving must not delete the owner's project"
+        assert Path(path).is_dir() and (Path(path) / "project.json").is_file(), (
+            "Leaving must not delete the owner's project"
+        )
 
         verify_new_windows_inherit_latest_google_account(browser, ui)
         owner_context.close()

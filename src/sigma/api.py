@@ -2024,10 +2024,7 @@ def import_project_bundle(body: ImportBundleRequest):
         # Legacy single-file projects remain readable internally, but external
         # uploads must use v4. Accepting v1-v3 here would silently drop the
         # separate artifact archive that v4 requires.
-        if (
-            type(body.bundle.get("version")) is not int
-            or body.bundle["version"] != VERSION
-        ):
+        if type(body.bundle.get("version")) is not int or body.bundle["version"] != VERSION:
             raise BundleError("Only version 4 project exports can be imported")
         document = bundle_document(body.bundle)
         title = document["title"]
