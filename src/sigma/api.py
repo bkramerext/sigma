@@ -753,6 +753,19 @@ def project_evidence_list(path: str):
     }
 
 
+class EvidenceLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    url: str
+
+
+@app.post("/api/projects/evidence/link")
+def project_evidence_add_link(body: EvidenceLinkRequest):
+    from sigma import project_evidence
+
+    return project_evidence.add_link(body.path, body.url)
+
+
 @app.post("/api/projects/evidence")
 async def project_evidence_upload(request: Request, path: str, filename: str):
     from sigma import project_evidence
