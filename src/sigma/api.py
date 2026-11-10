@@ -735,13 +735,29 @@ class ResearchQARequest(OpenRequest):
 def project_evidence_list(path: str):
     from sigma import project_evidence
 
-    return {"files": project_evidence.list_evidence(path)}
+    files = project_evidence.list_evidence(path)
+    principal = cloud_auth.current_principal()
+    owner = project_collaboration.summary(path)["owner"] if principal else None
+    return {
+        "files": [
+            {
+                **entry,
+                "can_remove": principal is None
+                or (
+                    principal.role != "guest"
+                    and principal.email in {owner, entry.get("uploaded_by")}
+                ),
+            }
+            for entry in files
+        ]
+    }
 
 
 @app.post("/api/projects/evidence")
 async def project_evidence_upload(request: Request, path: str, filename: str):
     from sigma import project_evidence
 
+    project_evidence.list_evidence(path)  # Reject inaccessible projects before reading bytes.
     data = bytearray()
     async for chunk in request.stream():
         data.extend(chunk)
