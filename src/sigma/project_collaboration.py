@@ -804,6 +804,8 @@ def require_artifact_manager(
     if kind not in {"session", "paper", "answer"}:
         raise ValueError("Unknown artifact kind")
     with _db() as db:
+        if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
+            return  # Unregistered private projects have no collaboration ACL.
         row, actor = _membership(db, path)
         creator = db.execute(
             "SELECT email FROM shared_artifact_authors WHERE path=? AND kind=? AND artifact_id=?",
