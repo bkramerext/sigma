@@ -400,7 +400,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         page.get_by_role("button", name="About SIGMA", exact=True).click()
         expect(page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
         policy = page.get_by_role("dialog", name="About SIGMA").get_by_role(
-            "button", name="Privacy Notice"
+            "link", name="Privacy Notice"
         )
         policy.scroll_into_view_if_needed()
         expect(policy).to_be_visible()
