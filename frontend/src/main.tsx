@@ -293,10 +293,10 @@ function strategyLiveStatusLines(session: ResearchSession): { id: string; label:
   // Compilation is the session-wide barrier before any strategy fanout.
   const compilation = session.outcome.source_material?.compilation;
   if (compilationBarrierActive(session)) {
-    const supplied = /compiling supplied evidence/i.test(session.current_action);
+    const supplied = /compiling source material/i.test(session.current_action);
     return [{
       id: supplied ? 'supplied-evidence-compilation' : 'reference-compilation',
-      label: supplied ? 'Compiling supplied evidence' : compilation?.status === 'pending' ? 'Preparing references' : 'Compiling references',
+      label: supplied ? 'Compiling source material' : compilation?.status === 'pending' ? 'Preparing research standards' : 'Compiling research standards',
       detail: supplied ? session.message : 'Preparing shared guidance for all strategies…',
     }];
   }
@@ -934,7 +934,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const budgetNotice = budgetDenied
     ? session.calls_used === 0
       ? compilerAttempted
-        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research References for its status.'
+        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research Standards for its status.'
         : 'No Investigator or Skeptic call was dispatched. Check the saved funding denial below.'
       : 'Research stopped because another provider call could not be funded. Saved findings are preserved.'
     : '';
@@ -1109,14 +1109,14 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   </div>;
   const researchReferences = (
       <details className="outcome-subsection outcome-source-material">
-        <summary><DisclosureChevron expanded={false}/>Research References</summary>
+        <summary><DisclosureChevron expanded={false}/>Research Standards</summary>
         <div className="outcome-subsection-content">
-          <p>Research-method references selected before the Investigator/Skeptic turns. These describe how to investigate; they are not independent evidence for the research findings.</p>
+          <p>Research standards selected before the Investigator/Skeptic turns. These describe how to investigate; they are not independent evidence for the research findings.</p>
           {session.outcome.source_material?.compilation && <div className="outcome-reference-compilation">
-            <p><strong>Initial step · Compile references:</strong> {session.outcome.source_material.compilation.status === 'completed' ? 'Completed' : session.outcome.source_material.compilation.status === 'not_needed' ? 'No references selected' : session.outcome.source_material.compilation.status === 'pending' ? 'Queued' : session.outcome.source_material.compilation.status === 'running' ? 'Running' : 'Unavailable; frozen reference notes retained'}</p>
+            <p><strong>Initial step · Compile research standards:</strong> {session.outcome.source_material.compilation.status === 'completed' ? 'Completed' : session.outcome.source_material.compilation.status === 'not_needed' ? 'No standards selected' : session.outcome.source_material.compilation.status === 'pending' ? 'Queued' : session.outcome.source_material.compilation.status === 'running' ? 'Running' : 'Unavailable; frozen standards notes retained'}</p>
             {session.outcome.source_material.compilation.guidance && <p>{session.outcome.source_material.compilation.guidance}</p>}
-            {session.outcome.source_material.compilation.status === 'completed' && <small>{session.outcome.source_material.compilation.selected_source_ids?.length ?? 0} references retained · {session.outcome.source_material.compilation.omitted_source_ids?.length ?? 0} omitted as low value or irrelevant. Original reference records preserved in this session.</small>}
-            {['fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <p className="reference-compilation-degraded" role="alert"><strong>Compiled guidance unavailable.</strong> {session.outcome.source_material.compilation.reason ?? 'Original frozen reference notes were used instead.'}</p>}
+            {session.outcome.source_material.compilation.status === 'completed' && <small>{session.outcome.source_material.compilation.selected_source_ids?.length ?? 0} standards retained · {session.outcome.source_material.compilation.omitted_source_ids?.length ?? 0} omitted as low value or irrelevant. Original standards records preserved in this session.</small>}
+            {['fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <p className="reference-compilation-degraded" role="alert"><strong>Compiled guidance unavailable.</strong> {session.outcome.source_material.compilation.reason ?? 'Original frozen standards notes were used instead.'}</p>}
             {session.outcome.source_material.compilation.reason && !['completed', 'fallback', 'interrupted'].includes(session.outcome.source_material.compilation.status) && <small>{session.outcome.source_material.compilation.reason}</small>}
             {!!session.outcome.source_material.compilation.attempts?.length && <div className="reference-compilation-diagnostics">
               <strong>Compiler attempts · {session.outcome.source_material.compilation.attempts?.length} of 3 maximum</strong>
@@ -2429,7 +2429,7 @@ type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: st
 
 const PAPER_STAGES = [
   { label: 'Wait', stages: ['queued'] },
-  { label: 'Review references', stages: ['snapshot', 'source_material', 'publication_compilation'] },
+  { label: 'Review publication standards', stages: ['snapshot', 'source_material', 'publication_compilation'] },
   { label: 'Extract evidence', stages: ['evidence', 'consolidation'] },
   { label: 'Planning', stages: ['planning'] },
   { label: 'Write sections', stages: ['writing', 'sections'] },
@@ -2445,7 +2445,7 @@ function paperStageLabel(step: number, active: number, progress: PaperProgress):
   const current = step === active && (progress.status === 'active' || progress.status === 'queued');
   const sectionsTotal = progress.sections_total ?? (progress.stage === 'sections' ? progress.total : null);
   if (step === 0) return completed ? 'Started' : current ? 'Waiting' : 'Wait';
-  if (step === 1) return completed ? 'Reviewed references' : current ? 'Reviewing references' : 'Review references';
+  if (step === 1) return completed ? 'Reviewed publication standards' : current ? 'Reviewing publication standards' : 'Review publication standards';
   if (step === 2) return completed ? 'Extracted evidence' : current ? 'Extracting evidence' : 'Extract evidence';
   if (step === 3) return completed ? 'Planned' : 'Planning';
   if (step === 4) {
@@ -3114,7 +3114,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Compiling publication references…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
+    setBusy(true); setPhase('Compiling publication standards…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
     let requestDispatched = false;
@@ -3181,7 +3181,7 @@ function PapersPane({ artifactAuthors, path, projectId, guest = false, onRunning
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.draft_recovery_available
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
-        : 'Compiling publication references…');
+        : 'Compiling publication standards…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
