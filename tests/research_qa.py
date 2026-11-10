@@ -8,8 +8,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import patch
 
 from sigma import api, research_qa

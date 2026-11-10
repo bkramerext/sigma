@@ -20,7 +20,7 @@ from sigma import project_bundle
 from sigma import project_collaboration as shared
 from sigma.cloud_auth import Principal
 from sigma.cloud_workspaces import Workspace
-from sigma.projects import ProjectError
+from sigma.projects import ProjectError, ProjectView
 
 
 class CollaborationTests(TestCase):
@@ -566,7 +566,9 @@ class CollaborationTests(TestCase):
         }
         config_a = {"ai_model": "gpt-6.1-sol", "reasoning_effort": "high"}
         config_b = {"ai_model": "gpt-6-luna", "reasoning_effort": "low"}
-        project_view = SimpleNamespace(path=self.path, project=SimpleNamespace(id="saved-project"))
+        project_view = cast(
+            ProjectView, SimpleNamespace(path=self.path, project=SimpleNamespace(id="saved-project"))
+        )
         with (
             patch("sigma.proposals.models", new_callable=AsyncMock) as available,
             patch(
