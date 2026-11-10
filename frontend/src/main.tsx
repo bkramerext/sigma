@@ -4246,8 +4246,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   const cloud = useCloudIdentity();
   useEffect(() => {
     dialog.current?.showModal();
-    closeButton.current?.focus();
-  }, [legalView]);
+  }, []);
+  useEffect(() => { closeButton.current?.focus(); }, [legalView]);
   const dismiss = () => { if (legalView) setLegalView(null); else onClose(); };
   return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className={`project-entry-dialog about-dialog${legalView ? ' about-legal-dialog' : ''}`} aria-labelledby={legalView ? 'about-legal-heading' : 'about-heading'} onCancel={event => { event.preventDefault(); dismiss(); }} onClick={event => { if (event.target === event.currentTarget) dismiss(); }}>
     {legalView ? <div className="about-legal-document"><div className="entry-dialog-header privacy-notice-heading"><h2 id="about-legal-heading">{legalView === 'privacy' ? 'SIGMA Privacy Notice' : 'Terms of Service'}</h2><DialogDismissButton ref={closeButton} label={legalView === 'privacy' ? 'Close privacy notice' : 'Close terms of service'} onClick={dismiss}/></div><div className="about-legal-document-body">{legalView === 'privacy' ? <PrivacyNoticeContent/> : <TermsOfServiceContent/>}</div></div> : <>
