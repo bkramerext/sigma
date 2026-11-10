@@ -606,3 +606,35 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
     justify-content: end;
   }
 }
+
+/* Saved Research Q/A Markdown action uses the same copper hover target
+   as the adjacent copy, open and remove controls. */
+.workspace-page .research-qa-dialog .saved-paper-title-tools .qa-markdown-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.workspace-page .research-qa-dialog .saved-paper-title-tools .qa-markdown-action:is(:hover, :focus-visible):not(:disabled) {
+  color: #fff2e9 !important;
+  background: var(--copper-gradient) !important;
+  border-color: #ac7054 !important;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+  filter: none;
+}
+.workspace-page .research-qa-dialog .saved-paper-title-tools .qa-markdown-action:is(:hover, :focus-visible):not(:disabled) svg {
+  color: #fff2e9;
+}
