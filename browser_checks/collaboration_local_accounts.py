@@ -333,7 +333,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             assert still["project"][field] == initial_settings[field], field
 
         # A non-owner can still edit the research subject. This advances
-        # the revision so the owner's existing classification draft is stale.
+        # the shared revision, cancelling the owner's still-open settings edit.
         amended = "Research subject updated by collaborator"
         subject_update = member_context.request.post(
             ui + "/api/projects/update",
@@ -354,10 +354,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert updated["project"]["problem"] == amended, updated
         assert updated["project"]["difficulty"] == "medium", updated
 
-        choose_difficulty(owner_dialog, "Easy")
-        expect(owner_dialog.locator(".error")).to_contain_text("saved by")
-        expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Easy")
-        # Stale owner edits must not overwrite the collaborator's description.
+        # Remote committed changes invalidate an in-progress editor rather
+        # than trying to merge its draft. The owner must reopen settings.
+        expect(owner_dialog).not_to_be_visible(timeout=20000)
         owner.goto(url)
         expect(owner_dialog).not_to_be_visible()
 
