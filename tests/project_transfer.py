@@ -90,6 +90,32 @@ def test_single_archive_roundtrip() -> None:
         _expect_failure(lambda: project_transfer.decode_bundle({**payload, "version": 3}))
 
 
+def test_multiframe_artifact_archive_is_lossless_and_bounded() -> None:
+    # Use tiny frames so the test exercises the >256 MiB TAR code path
+    # without allocating a large fixture. All actual member size limits stay
+    # enforced by the production codec.
+    artifacts = {
+        "artifacts/source_material/a.txt": bytes(range(256)) * 128,
+        "artifacts/generated_papers/b.tex": b"sample paper" * 2700,
+    }
+    with patch.object(project_transfer, "MAX_ARCHIVE_FRAME_BYTES", 2048):
+        encoded = project_transfer._archive(artifacts)
+        assert encoded["uncompressed_size"] > 2048
+        assert project_transfer._unarchive(encoded) == artifacts
+
+        packed = base64.b64decode(encoded["data"])
+        extra = {
+            **encoded,
+            "data": base64.b64encode(packed + compress(b"surprise")).decode("ascii"),
+        }
+        _expect_failure(lambda: project_transfer._unarchive(extra))
+        missing_final_frame = {
+            **encoded,
+            "data": base64.b64encode(packed[:-20]).decode("ascii"),
+        }
+        _expect_failure(lambda: project_transfer._unarchive(missing_final_frame))
+
+
 def test_rejects_traversal_in_archive() -> None:
     with TemporaryDirectory() as temporary:
         origin = Path(temporary) / "original.sigma"
@@ -112,5 +138,6 @@ def test_rejects_traversal_in_archive() -> None:
 
 if __name__ == "__main__":
     test_single_archive_roundtrip()
+    test_multiframe_artifact_archive_is_lossless_and_bounded()
     test_rejects_traversal_in_archive()
     print("PASS v4 artifact archive, source links, restored files and unsafe path rejection.")
