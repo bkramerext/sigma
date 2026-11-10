@@ -6536,6 +6536,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     // The project may have changed before this window's first poll completed.
     // Load the authoritative title and settings even on the first response.
     if (revision === lastLoadedSharedRevision.current) return;
+    const initialRevision = lastLoadedSharedRevision.current === null;
     // Committed changes supersede unsaved drafts in other windows.
     // Avoid interrupting an in-flight write; the backend revision fence protects it.
     if (closing || descriptionBusy || ordering) return;
@@ -6543,6 +6544,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     void post<ProjectView>('open', { path, compact: true }, controller.signal)
       .then(next => {
         if (controller.signal.aborted) return;
+        // The first collaboration response establishes the revision baseline.
+        // Only interrupt an already-open editor when the persisted project
+        // actually differs from what this window loaded.
+        if (initialRevision && JSON.stringify({ ...view.project, events: [] }) === JSON.stringify(next.project)) {
+          lastLoadedSharedRevision.current = revision;
+          return;
+        }
         modeOwner.current = null;
         setActiveMode(null);
         setProjectEditing(false);
