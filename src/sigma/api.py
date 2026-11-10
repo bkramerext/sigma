@@ -1759,14 +1759,18 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         return simulated
 
     if body.action not in {"resume", "repair"}:
-        result = await research_sessions.control_session(
-            body.path,
-            session_id,
-            body.action,
-            additional_calls=body.additional_calls,
-            browser_presence_required=body.browser_presence_required,
-        )
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
+        # The original creator may borrow their own live worker's lease to
+        # persist Stop/Pause without taking ownership of somebody else's run.
+        with project_collaboration.bind_session_control_lease(
+            body.path, "Research session"
+        ):
+            result = await research_sessions.control_session(
+                body.path,
+                session_id,
+                body.action,
+                additional_calls=body.additional_calls,
+                browser_presence_required=body.browser_presence_required,
+            )
         return result
     lease = project_collaboration.acquire_lease(body.path, "Research session")
     transferred = False
@@ -1795,15 +1799,18 @@ async def research_intervention_view(session_id: str, body: ResearchIntervention
     project_collaboration.require_execution_operator(
         body.path, "session", session_id, "Research session"
     )
-    return await research_sessions.submit_intervention(
-        body.path,
-        session_id,
-        body.kind,
-        body.text,
-        body.strategy_ids,
-        body.agent_roles,
-        body.supersedes_intervention_id,
-    )
+    with project_collaboration.bind_session_control_lease(
+        body.path, "Research session"
+    ):
+        return await research_sessions.submit_intervention(
+            body.path,
+            session_id,
+            body.kind,
+            body.text,
+            body.strategy_ids,
+            body.agent_roles,
+            body.supersedes_intervention_id,
+        )
 
 
 @app.delete("/api/projects/research-sessions/{session_id}")
@@ -1815,7 +1822,12 @@ async def research_session_remove_view(session_id: str, body: ResearchSessionRem
         session_id,
         owner_terminal=session["status"] in {"completed", "ended"},
     )
-    return await research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
+    with project_collaboration.bind_session_control_lease(
+        body.path, "Research session"
+    ):
+        return await research_sessions.remove_session(
+            body.path, session_id, body.expected_updated_at
+        )
 
 
 @app.get("/api/research-tools")
