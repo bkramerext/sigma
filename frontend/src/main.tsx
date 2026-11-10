@@ -7241,7 +7241,7 @@ function App() {
         const body = await response.json() as { projects: RecentProject[] };
         if (controller.signal.aborted) return;
         const all = body.projects ?? [];
-        setGlobalActivity(all.some(row => row.research_running || row.paper_generating || row.paper_activity === 'active')
+        setGlobalActivity(all.some(row => row.research_running || row.answer_active || row.paper_generating || row.paper_activity === 'active')
           ? 'active' : all.some(row => row.paper_activity === 'queued') ? 'queued' : null);
       } catch { /* Keep the last known activity; a transient error must not clear it. */ }
       finally { pending = false; }
