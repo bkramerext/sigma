@@ -938,13 +938,13 @@
   }
 }
 
-/* Align Settings to the Model pill's right edge, while retaining the About gap.
-   The Model pill determines column width; only Settings grows to fill it. */
+/* Keep About at its intrinsic width and preserve the existing inter-pill gap.
+   Settings fills only the remaining width so its right edge matches Model. */
 :is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row {
   width: 100%;
 }
 :is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row > :is(.home-settings-pill, .project-global-settings-pill) {
-  flex: 1 1 47px;
+  flex: 1 1 53px;
   width: auto;
-  min-width: 47px;
+  min-width: 53px;
 }
