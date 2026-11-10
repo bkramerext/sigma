@@ -256,6 +256,7 @@ def remove_evidence(path: str, identifier: str) -> None:
     if any(
         item["id"] == identifier for item in inspect_project(path).project.source_material_links
     ):
+
         def update(project):
             entry = next(
                 (row for row in project.source_material_links if row["id"] == identifier),
