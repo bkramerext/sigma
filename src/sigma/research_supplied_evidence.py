@@ -125,21 +125,28 @@ def read_link(url: str) -> dict:
     return result
 
 
-def compile_entry(entry: dict) -> dict:
+def compile_entry(path: str, entry: dict) -> dict:
     """Convert a frozen source entry into a content-bearing evidence record."""
     if entry["id"].startswith("uploaded-pdf:"):
-        if not entry.get("excerpt", "").strip():
+        try:
+            identifier = entry["id"].split(":", 1)[1]
+            metadata, pdf = project_evidence.get_pdf(path, identifier)
+            if metadata["sha256"] != entry["sha256"]:
+                raise ValueError("attachment_changed_after_session_start")
+            pages, text, truncated = project_evidence._extract(pdf)
+            if not text.strip():
+                raise ValueError("no_extractable_text")
             return {
                 **entry,
-                "status": "unavailable",
-                "reason": "no_extractable_content_in_frozen_attachment",
+                "status": "retrieved",
+                "pages": pages,
+                "excerpt": text,
+                "excerpt_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "incomplete_extract": truncated,
+                "reason": None,
             }
-        return {
-            **entry,
-            "status": "retrieved",
-            "reason": None,
-            "excerpt_sha256": hashlib.sha256(entry["excerpt"].encode("utf-8")).hexdigest(),
-        }
+        except (ValueError, OSError, project_evidence.ProjectError) as exc:
+            return {**entry, "status": "unavailable", "reason": str(exc)[:160], "excerpt": ""}
     if entry["id"].startswith("uploaded-link:"):
         return {
             **entry,
