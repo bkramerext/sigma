@@ -430,3 +430,34 @@ def test_public_recovery_guidance_prioritizes_internal_context_guard_over_model(
     assert "independent of the selected model" in guidance
     assert "thinking" not in guidance.lower()
     assert "Check that the current connection supports" not in guidance
+
+
+def test_source_material_overflow_reports_exact_pre_dispatch_limit() -> None:
+    """A 0-call source overflow needs a specific remedy, not model switching."""
+    source = {"id": "saved-source", "excerpt": "x" * 60_001}
+    source_before = source.copy()
+    try:
+        research_sessions._bounded_supplied_evidence([source])
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Oversized Source Material was accepted")
+    assert "Source Material contains 60,001 extracted characters" in message
+    assert "at most 60,000" in message
+    assert source == source_before, "Failed preflight mutated saved source evidence"
+    record = {
+        "status": "paused",
+        "current_action": "Paused · source material exceeds context limit",
+        "message": message,
+        "mode": "chatgpt",
+        "steps": [],
+        "artifacts": [],
+        "strategy_runs": [],
+        "calls_used": 0,
+        "call_limit": 126,
+    }
+    guidance = research_sessions._public(record)["next_step_guidance"]
+    assert "extracted-text limit" in guidance
+    assert "before an Investigator/Skeptic call" in guidance
+    assert "switching models or Thinking levels" in guidance
+    assert not record["steps"] and record["calls_used"] == 0

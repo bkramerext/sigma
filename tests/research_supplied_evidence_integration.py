@@ -21,11 +21,12 @@ async def check_barrier() -> None:
         view, strategy, credential, config = await setup(path)
         project_evidence.add_link(str(path), "https://example.org/unavailable.txt")
         portfolio = AsyncMock()
+        reference_compiler = AsyncMock(return_value=True)
         with (
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation", new=AsyncMock(return_value=True)
+                research_sessions, "_ensure_reference_compilation", new=reference_compiler
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
@@ -42,6 +43,7 @@ async def check_barrier() -> None:
         assert paused["supplied_evidence_compilation"]["status"] == "blocked"
         assert "example.org/unavailable.txt" in paused["message"]
         portfolio.assert_not_called()
+        reference_compiler.assert_not_awaited()  # Never spend on a blocked source
 
 
 async def check_partial_resume() -> None:
