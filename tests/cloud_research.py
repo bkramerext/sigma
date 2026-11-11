@@ -4041,6 +4041,11 @@ def main() -> None:
             root, local_admin_ledger
         )
 
+    # Exercise actual SIGKILL of a live backend and new interpreter recovery.
+    from cloud_process_restart import test_real_process_recovery
+
+    test_real_process_recovery()
+
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"
     )

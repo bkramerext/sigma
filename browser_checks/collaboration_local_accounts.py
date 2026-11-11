@@ -344,8 +344,11 @@ def exercise(ui: str, workspaces: Path) -> None:
             )
             assert still["project"][field] == initial_settings[field], field
 
-        # A non-owner can still edit the research subject. This advances
-        # the shared revision, cancelling the owner's still-open settings edit.
+        # A non-owner can still edit the research subject. Keep Z's Settings
+        # open: a remote save must update its contents without dismissing it.
+        owner.get_by_role("button", name="Project settings", exact=True).click()
+        owner_dialog = owner.get_by_role("dialog", name="Project Settings")
+        expect(owner_dialog).to_be_visible()
         amended = "Research subject updated by collaborator"
         subject_update = member_context.request.post(
             ui + "/api/projects/update",
@@ -368,15 +371,14 @@ def exercise(ui: str, workspaces: Path) -> None:
         # Exercise the same open browser pair for another saved field update.
         expect(owner.locator(".project-overview-card")).to_contain_text(amended, timeout=20000)
 
-        # Remote committed changes invalidate an in-progress editor rather
-        # than trying to merge its draft. The owner must reopen settings.
-        expect(owner_dialog).not_to_be_visible(timeout=20000)
-        owner.goto(url)
-        expect(owner_dialog).not_to_be_visible()
-
-        owner.get_by_role("button", name="Project settings", exact=True).click()
-        owner_dialog = owner.get_by_role("dialog", name="Project Settings")
+        # Project Settings is a live view in both windows, not a stale editor
+        # that is forcibly dismissed on every shared revision.
+        expect(owner_dialog).to_be_visible(timeout=20000)
         expect(owner_dialog.get_by_role("combobox", name="Difficulty")).to_have_text("Medium")
+        member.get_by_role("button", name="Project settings", exact=True).click()
+        member_dialog = member.get_by_role("dialog", name="Project Settings")
+        expect(member_dialog).to_be_visible()
+        expect(member_dialog.locator(".settings-classification-row")).to_contain_text("Medium")
         with member.expect_response(
             lambda response: (
                 response.url.split("?")[0].endswith("/api/projects/open")
@@ -386,22 +388,45 @@ def exercise(ui: str, workspaces: Path) -> None:
         ) as refreshed:
             choose_difficulty(owner_dialog, "Hard")
         assert get_json(refreshed.value)["project"]["difficulty"] == "hard"
-        member.evaluate(
-            "() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+        expect(owner_dialog).to_be_visible()
+        expect(member_dialog).to_be_visible()
+        expect(member_dialog.locator(".settings-classification-row")).to_contain_text(
+            "Hard", timeout=20000
         )
-        owner_dialog.get_by_role("button", name="Close Project Settings").click()
-        expect(owner_dialog).not_to_be_visible()
         updated = get_json(
             owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
         )
         assert updated["project"]["difficulty"] == "hard", updated
-        # Owner settings also flow to N without navigation or a second browser.
-        member.get_by_role("button", name="Project settings", exact=True).click()
-        member_dialog = member.get_by_role("dialog", name="Project Settings")
+
+        # Category and collaborator changes must also appear in N's open dialog.
+        category = owner_dialog.get_by_role("combobox", name="Research category")
+        category.click()
+        owner_dialog.get_by_role("option", name="Physics", exact=True).click()
         expect(member_dialog.locator(".settings-classification-row")).to_contain_text(
-            "Hard", timeout=20000
+            "Physics", timeout=20000
         )
+        expect(member_dialog).to_be_visible()
+        category.click()
+        owner_dialog.get_by_role("option", name="Mathematics", exact=True).click()
+        expect(member_dialog.locator(".settings-classification-row")).to_contain_text(
+            "Mathematics", timeout=20000
+        )
+        owner_dialog.get_by_role("button", name="Add collaborator").click()
+        invite = owner_dialog.get_by_label("New collaborator email")
+        invite.fill("third@example.org")
+        invite.press("Tab")
+        expect(member_dialog.get_by_text("third@example.org")).to_be_visible(timeout=20000)
+        expect(member_dialog).to_be_visible()
+        # Remove the temporary guest so later revoke-last-member coverage still
+        # observes the project becoming private (no shared shortcut in My Work).
+        owner_dialog.get_by_role("button", name="Remove third@example.org").click()
+        expect(member_dialog.get_by_text("third@example.org")).to_have_count(0, timeout=20000)
+        expect(member_dialog).to_be_visible()
+
+        owner_dialog.get_by_role("button", name="Close Project Settings").click()
         member_dialog.get_by_role("button", name="Close Project Settings").click()
+        expect(owner_dialog).not_to_be_visible()
+        expect(member_dialog).not_to_be_visible()
 
         # Reuse the SAME N/Z browser profiles to test the entire shared Session
         # admission/control path against real auth, ACL and SQLite persistence.
@@ -452,6 +477,8 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert first_run["created_by"] == OWNER
         assert second_run["created_by"] == COLLABORATOR
 
+        # One project running slot: either creator may win; the other waits.
+        # Do not impose deterministic ordering on legitimately concurrent jobs.
         status = get_json(
             owner_context.request.get(ui + "/api/projects/research-sessions", params={"path": path})
         )
@@ -460,7 +487,6 @@ def exercise(ui: str, workspaces: Path) -> None:
             "running",
             "queued",
         }, statuses
-
         # In a real run, an OS worker lock supplies liveness. This local mock
         # has no worker, so freeze its explicit simulated running/queued state
         # before other browsers begin polling, rather than racing the mock's

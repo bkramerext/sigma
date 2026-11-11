@@ -147,6 +147,28 @@ with sync_playwright() as playwright:
     header = page.locator(".project-art-header")
     title = header.locator(".project-header-title")
     expect(title).to_have_text(TITLE)
+    # The idle project title keeps its appearance but toggles all four panes.
+    idle_title = header.get_by_role("button", name="Toggle all project sections")
+    expect(idle_title).to_be_visible()
+    toggles = {
+        name: page.locator(f"#{heading_id} .workspace-section-disclosure")
+        for name, heading_id in (
+            ("Project", "project-pane-heading"),
+            ("Strategies", "pool-heading"),
+            ("Sessions", "sessions-heading"),
+            ("Papers", "papers-heading"),
+        )
+    }
+    idle_title.click()
+    for toggle in toggles.values():
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+    idle_title.click()
+    expect(toggles["Project"]).to_have_attribute("aria-expanded", "true")
+    for name in ("Strategies", "Sessions", "Papers"):
+        expect(toggles[name]).to_have_attribute("aria-expanded", "false")
+    assert page.locator("#project-pane-heading").evaluate(
+        "e => { const r=e.getBoundingClientRect(); return r.top >= -1 && r.top < innerHeight; }"
+    )
     assert header.locator(".expansion").count() == 0
     expect(page.get_by_role("heading", name=TITLE)).to_be_visible()
     art = header.locator(".project-header-art img")
@@ -461,6 +483,8 @@ with sync_playwright() as playwright:
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'project-header-title project-header-title-action';
+            button.dataset.tooltipActivity = 'true';
+            button.dataset.tooltip = 'Session 1 · first@example.org · Sol / high\\nPaper 2 · second@example.org · Luna / medium';
             const text = document.createElement('span');
             text.className = 'project-header-title-text';
             text.textContent = 'Extremely long AI agent reliability research title '.repeat(8);
@@ -511,6 +535,16 @@ with sync_playwright() as playwright:
             geometry,
         )
 
+    # The shared floating tooltip renders one execution per entry, with
+    # a subtle dividing rule. It must also allow long content to wrap.
+    page.mouse.move(0, 0)
+    page.locator(".project-header-title-action").hover()
+    tooltip = page.get_by_role("tooltip")
+    expect(tooltip.locator(".sigma-ui-activity-entry")).to_have_count(2)
+    expect(tooltip.locator(".sigma-ui-activity-entry").nth(1)).to_have_css(
+        "border-top-width", "1px"
+    )
+    page.mouse.move(0, 0)
     close.evaluate("e => e.disabled = true")
     expect(close).to_be_disabled()
     assert close.evaluate("e => getComputedStyle(e).cursor") == "wait"

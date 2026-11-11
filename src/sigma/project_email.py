@@ -255,7 +255,7 @@ def send_project_email(
             )
     if sum(len(item[1]) for item in attachments) > MAX_ATTACHMENT_BYTES:
         raise ProjectError(
-            "Attachments exceed the email size limit (18 MB). Export the project instead."
+            "Attachments exceed the email size limit (18 MB). Download a local copy using Export Project, or share access by adding the recipient as a collaborator in Project Settings."
         )
     title = re.sub(r"[\r\n\x00-\x1f]+", " ", project.title).strip()[:180] or "Untitled project"
     message = EmailMessage()
