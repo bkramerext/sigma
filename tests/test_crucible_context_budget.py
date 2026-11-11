@@ -578,7 +578,7 @@ def test_no_runnable_strategy_cannot_start_optional_compilation() -> None:
     record["strategy_runs"][0]["status"] = "paused"
     original = deepcopy(record)
     with (
-        patch.object(research_sessions, "_read", return_value=record),
+        patch.object(research_sessions, "_read", return_value=deepcopy(record)),
         patch.object(research_sessions, "_save") as save,
     ):
         assert not asyncio.run(
@@ -586,5 +586,10 @@ def test_no_runnable_strategy_cannot_start_optional_compilation() -> None:
                 "context-791-no-runnable", "test"
             )
         )
-    save.assert_not_called()
+    save.assert_called_once()
+    paused = save.call_args.args[1]
+    assert paused["status"] == "paused"
+    assert paused["current_action"] == "Paused · no runnable strategies"
+    assert paused["events"][-1]["kind"] == "research.no_runnable_strategies"
+    assert paused["reference_compilation"] == original["reference_compilation"]
     assert record == original
