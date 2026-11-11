@@ -595,7 +595,61 @@ def exercise(ui: str, workspaces: Path) -> None:
             == 2
         )
 
-        # Home's own green indicator also lists all four lines. A second tab
+        # Combine the two live Sessions and two held Q/A requests with two
+        # independently admitted Papers. The real Paper gate serializes one
+        # active generator and one queued generator; no provider is called.
+        paper_runs = []
+        for account in (owner_context, member_context):
+            paper_response = account.request.post(
+                ui + "/api/__fixture/collaboration-paper-start",
+                headers={"Origin": ui},
+                data={"path": path},
+            )
+            assert paper_response.status == 200, paper_response.text()
+            paper_runs.append(get_json(paper_response))
+        assert paper_runs[0]["run_id"] != paper_runs[1]["run_id"]
+        assert paper_runs[1]["number"] == paper_runs[0]["number"] + 1
+
+        for account, page in ((owner_context, owner), (member_context, member)):
+            for _ in range(100):
+                response = account.request.get(
+                    ui + "/api/projects/activity-runs", params={"path": path}
+                )
+                assert response.status == 200, response.text()
+                mixed = get_json(response)["runs"]
+                paper_activity = [row for row in mixed if row["kind"] == "paper"]
+                if len(mixed) == 6 and {row["status"] for row in paper_activity} == {
+                    "active", "queued"
+                }:
+                    break
+                time.sleep(0.1)
+            else:
+                raise AssertionError(f"Expected six mixed activity rows: {mixed}")
+            assert {row["creator"] for row in paper_activity} == {
+                OWNER, COLLABORATOR
+            }, mixed
+            assert {row["number"] for row in paper_activity} == {
+                item["number"] for item in paper_runs
+            }, mixed
+            page.wait_for_function(
+                """({owner, member}) => {
+                    const tip = document.querySelector('.project-header-title-action')
+                        ?.getAttribute('data-tooltip') || '';
+                    const lines = tip.split('\\n').filter(Boolean);
+                    return lines.length === 6
+                        && lines.filter(line => line.startsWith('Session ')).length === 2
+                        && lines.filter(line => line.startsWith('Paper ')).length === 2
+                        && lines.filter(line => line.startsWith('Answer ')).length === 2
+                        && lines.every(line => line.includes('(running)')
+                            || line.includes('(queued)'))
+                        && lines.filter(line => line.includes(owner)).length === 3
+                        && lines.filter(line => line.includes(member)).length === 3;
+                }""",
+                arg={"owner": OWNER, "member": COLLABORATOR},
+                timeout=20000,
+            )
+
+        # Home's own green indicator lists all six independently attributed runs. A second tab
         # keeps both in-flight Q/A fetches attached to their original pages.
         homes = []
         for account in (owner_context, member_context):
@@ -613,9 +667,10 @@ def exercise(ui: str, workspaces: Path) -> None:
                         === 'Open active work in ' + project);
                     const lines = (indicator?.getAttribute('data-tooltip') || '').split('\\n')
                         .slice(1).filter(Boolean);
-                    return lines.length === 4
-                        && lines.some(line => line.startsWith('Session '))
-                        && lines.some(line => line.startsWith('Answer '));
+                    return lines.length === 6
+                        && lines.filter(line => line.startsWith('Session ')).length === 2
+                        && lines.filter(line => line.startsWith('Paper ')).length === 2
+                        && lines.filter(line => line.startsWith('Answer ')).length === 2;
                 }""",
                 arg=title,
                 timeout=20000,
@@ -651,6 +706,15 @@ def exercise(ui: str, workspaces: Path) -> None:
             headers={"Origin": ui},
         )
         assert foreign_delete.status >= 400, foreign_delete.text()
+        for account, paper in zip(
+            (owner_context, member_context), paper_runs, strict=True
+        ):
+            released_paper = account.request.post(
+                ui + "/api/__fixture/collaboration-paper-release",
+                headers={"Origin": ui},
+                data={"path": path, "run_id": paper["run_id"]},
+            )
+            assert released_paper.status == 200, released_paper.text()
         for home in homes:
             home.close()
 
