@@ -702,18 +702,18 @@ def check_browser_pdf_ci_distribution() -> None:
         "save_as_contract.py",
     )
     for filename in scripts:
-        assert (
-            browser_workflow.count(f"python browser_checks/{filename}") == 1
-        ), filename
+        assert browser_workflow.count(f"python browser_checks/{filename}") == 1, filename
     # Both evidence uploads must include third-group collaboration output.
     assert browser_workflow.count("            /tmp/collaboration-local-accounts.log") == 2
     assert "pipefail" in browser_workflow
 
     pdf_workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
     assert "Two-creator real PDF acceptance (no stub/skip)" in pdf_workflow
-    assert "SIGMA_REQUIRE_REAL_PAPER_PDF: \"1\"" in pdf_workflow
+    assert 'SIGMA_REQUIRE_REAL_PAPER_PDF: "1"' in pdf_workflow
     assert "SIGMA_SETUP_SKIP_NPM=1 ./sigma setup" in pdf_workflow
-    assert "uv run --locked --no-sync python tests/paper_collaboration_acceptance.py" in pdf_workflow
+    assert (
+        "uv run --locked --no-sync python tests/paper_collaboration_acceptance.py" in pdf_workflow
+    )
     assert "sha256sum --check --strict" in pdf_workflow
 
 
