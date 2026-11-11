@@ -136,7 +136,7 @@ class CollaborationTests(TestCase):
                 requested.set()
                 with project_write_lock(self.path):
                     finished.set()
-            except Exception as exc:
+            except (OSError, sqlite3.Error, ValueError) as exc:
                 errors.append(exc)
                 finished.set()
 
@@ -149,7 +149,7 @@ class CollaborationTests(TestCase):
                         (self.path,),
                     )
                     db.commit()
-            except Exception as exc:
+            except (OSError, sqlite3.Error, ValueError) as exc:
                 errors.append(exc)
             finally:
                 writer_finished.set()
