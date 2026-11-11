@@ -112,8 +112,8 @@ class PaperRunIsolationTests(TestCase):
         with patch("sigma.memory_guard.require_capacity"):
             asyncio.run(exercise())
 
-    def test_fresh_process_recovers_two_independent_paper_checkpoints(self) -> None:
-        """A restart retains both creator run scopes without replaying providers."""
+    def test_fresh_process_reads_two_independent_paper_checkpoints(self) -> None:
+        """A new process reads isolated sidecars; worker restart is tested separately."""
         for run_id, model in ((self.first, "N"), (self.second, "Z")):
             with papers.paper_run_scope(run_id):
                 papers._save_work(self.path, self.saved_work(model))
