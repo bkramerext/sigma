@@ -2571,8 +2571,7 @@ def test_orphan_recovery_epoch_compare_and_swap(root: Path, ledger_root: Path) -
                 # replacement now owns the running slot.
                 with cloud_research._connect() as db:
                     db.execute(
-                        "UPDATE jobs SET status='running',process_epoch=? "
-                        "WHERE session_id=?",
+                        "UPDATE jobs SET status='running',process_epoch=? WHERE session_id=?",
                         (replacement_epoch, record["id"]),
                     )
                 session["status"] = "paused"
@@ -2591,7 +2590,11 @@ def test_orphan_recovery_epoch_compare_and_swap(root: Path, ledger_root: Path) -
                     "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
                     ("epoch-cas-unsettled",),
                 ).fetchone()
-                assert (liability["status"], liability["amount_usd"], liability["token_reservation"]) == (
+                assert (
+                    liability["status"],
+                    liability["amount_usd"],
+                    liability["token_reservation"],
+                ) == (
                     "reserved",
                     0.04,
                     40,
@@ -2601,20 +2604,32 @@ def test_orphan_recovery_epoch_compare_and_swap(root: Path, ledger_root: Path) -
             # its direct reclaim must enforce the same epoch fence.
             cloud_research.recover_job(record["id"], expected_epoch=old_epoch)
             with cloud_research._connect() as db:
-                assert db.execute(
-                    "SELECT status FROM jobs WHERE session_id=?", (record["id"],)
-                ).fetchone()["status"] == "running"
-                assert db.execute(
-                    "SELECT status FROM calls WHERE call_id='epoch-cas-unsettled'"
-                ).fetchone()["status"] == "reserved"
+                assert (
+                    db.execute(
+                        "SELECT status FROM jobs WHERE session_id=?", (record["id"],)
+                    ).fetchone()["status"]
+                    == "running"
+                )
+                assert (
+                    db.execute(
+                        "SELECT status FROM calls WHERE call_id='epoch-cas-unsettled'"
+                    ).fetchone()["status"]
+                    == "reserved"
+                )
             cloud_research.recover_job(record["id"], expected_epoch=replacement_epoch)
             with cloud_research._connect() as db:
-                assert db.execute(
-                    "SELECT status FROM jobs WHERE session_id=?", (record["id"],)
-                ).fetchone()["status"] == "interrupted"
-                assert db.execute(
-                    "SELECT status FROM calls WHERE call_id='epoch-cas-unsettled'"
-                ).fetchone()["status"] == "unknown"
+                assert (
+                    db.execute(
+                        "SELECT status FROM jobs WHERE session_id=?", (record["id"],)
+                    ).fetchone()["status"]
+                    == "interrupted"
+                )
+                assert (
+                    db.execute(
+                        "SELECT status FROM calls WHERE call_id='epoch-cas-unsettled'"
+                    ).fetchone()["status"]
+                    == "unknown"
+                )
         finally:
             cloud_workspaces._CURRENT.reset(binding)
 
