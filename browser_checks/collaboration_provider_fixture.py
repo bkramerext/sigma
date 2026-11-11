@@ -7,13 +7,17 @@ project storage and worker ownership remain unmodified.
 from __future__ import annotations
 
 import asyncio
+import os
+from uuid import uuid4
 
 from fastapi import HTTPException
 
 from sigma import papers, project_collaboration, research_qa, research_sessions
-from sigma.projects import inspect_project
-from uuid import uuid4
 from sigma.api import app
+from sigma.projects import inspect_project
+
+if os.environ.get("SIGMA_MOCK_AUTH") != "1":
+    raise RuntimeError("Collaboration fixture cannot run outside local mock authentication")
 
 _started: list[str] = []
 _release = asyncio.Event()
@@ -88,8 +92,12 @@ async def start_held_paper(body: dict[str, str]):
     project_collaboration.register_owner(view)
     run_id = uuid4().hex
     receipt = project_collaboration.reserve_execution_run(
-        path, "paper", run_id, papers.next_paper_number_for_activity(path) - 1,
-        model="fixture-model", thinking="medium",
+        path,
+        "paper",
+        run_id,
+        papers.next_paper_number_for_activity(path) - 1,
+        model="fixture-model",
+        thinking="medium",
     )
     if receipt is None:
         raise HTTPException(409, "Paper admission unavailable")

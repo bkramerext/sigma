@@ -7183,9 +7183,11 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     paperQueued: paperQueued || activeRuns.some(run => run.kind === 'paper' && run.status === 'queued'),
     askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'),
     activeRunLabels,
-    activityStatus: !activityLoaded ? undefined
-      : activeRuns.some(run => run.status === 'active') ? 'active' as const
-      : activeRuns.length ? 'queued' as const : null,
+    // Local-only Papers or mock runs can be active without a shared reservation.
+    // The ledger is authoritative when populated, but an empty ledger must
+    // not conceal activity the underlying panes still report.
+    activityStatus: !activityLoaded || !activeRuns.length ? undefined
+      : activeRuns.some(run => run.status === 'active') ? 'active' as const : 'queued' as const,
     onIdleProjectTitleClick: toggleSectionsFromTitle,
   };
   function toggleStrategiesPane() {

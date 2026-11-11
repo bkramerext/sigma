@@ -645,15 +645,14 @@ def exercise(ui: str, workspaces: Path) -> None:
                 mixed = get_json(response)["runs"]
                 paper_activity = [row for row in mixed if row["kind"] == "paper"]
                 if len(mixed) == 6 and {row["status"] for row in paper_activity} == {
-                    "active", "queued"
+                    "active",
+                    "queued",
                 }:
                     break
                 time.sleep(0.1)
             else:
                 raise AssertionError(f"Expected six mixed activity rows: {mixed}")
-            assert {row["creator"] for row in paper_activity} == {
-                OWNER, COLLABORATOR
-            }, mixed
+            assert {row["creator"] for row in paper_activity} == {OWNER, COLLABORATOR}, mixed
             assert {row["number"] for row in paper_activity} == {
                 item["number"] for item in paper_runs
             }, mixed
@@ -732,9 +731,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             headers={"Origin": ui},
         )
         assert foreign_delete.status >= 400, foreign_delete.text()
-        for account, paper in zip(
-            (owner_context, member_context), paper_runs, strict=True
-        ):
+        for account, paper in zip((owner_context, member_context), paper_runs, strict=True):
             released_paper = account.request.post(
                 ui + "/api/__fixture/collaboration-paper-release",
                 headers={"Origin": ui},
