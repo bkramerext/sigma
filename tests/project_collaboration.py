@@ -11,13 +11,15 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 from sigma import project_bundle
 from sigma import project_collaboration as shared
@@ -228,7 +230,6 @@ class CollaborationTests(TestCase):
     def test_collaborator_alone_sees_shared_project_in_saved(self) -> None:
         """An invitation is durable and does not depend on owner's login session."""
         from contextlib import contextmanager
-        from uuid import uuid4
 
         from sigma import recents
 
@@ -421,6 +422,114 @@ class CollaborationTests(TestCase):
             self.assertEqual(authors["session"]["other-session"], self.other.email)
             self.assertEqual(authors["paper"]["other-paper"], self.other.email)
             self.assertEqual(authors["paper_draft"]["saved-project"], self.other.email)
+
+    def test_run_reservations_allocate_unique_numbers_under_race(self) -> None:
+        """Two different verified users can reserve without number collisions."""
+        first, second = uuid4().hex, uuid4().hex
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        principal_context: ContextVar[Principal] = ContextVar(
+            "reservation_actor", default=self.owner
+        )
+        workspace_context: ContextVar[Workspace] = ContextVar(
+            "reservation_workspace", default=self.workspace
+        )
+        barrier = threading.Barrier(2)
+
+        def reserve(item: tuple[str, Principal, Workspace]) -> dict[str, Any]:
+            run_id, principal, workspace = item
+            principal_context.set(principal)
+            workspace_context.set(workspace)
+            barrier.wait(timeout=5)
+            result = shared.reserve_execution_run(
+                self.path, "paper", run_id, 2, model="paper-model", thinking="high"
+            )
+            assert result is not None
+            return result
+
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current",
+                side_effect=workspace_context.get,
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                side_effect=principal_context.get,
+            ),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            reservations = list(
+                pool.map(
+                    reserve,
+                    [
+                        (first, self.owner, self.workspace),
+                        (second, self.other, colleague),
+                    ],
+                )
+            )
+        self.assertEqual({record["number"] for record in reservations}, {3, 4})
+        self.assertEqual(
+            {record["creator_email"] for record in reservations},
+            {self.owner.email, self.other.email},
+        )
+
+        # Retrying the original owner's request must not consume a number or
+        # replace the originally chosen model/thinking.
+        replay = shared.reserve_execution_run(
+            self.path, "paper", first, 99, model="later-model", thinking="low"
+        )
+        self.assertEqual(replay, reservations[0])
+        third = shared.reserve_execution_run(
+            self.path, "paper", uuid4().hex, 2, model="paper-model", thinking="high"
+        )
+        assert third is not None
+        self.assertEqual(third["number"], 5)
+
+    def test_run_reservations_keep_owner_before_and_after_sharing(self) -> None:
+        """The creator, not the project owner or current lease, owns a run."""
+        with shared._db() as db:
+            db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
+        original = uuid4().hex
+        first = shared.reserve_execution_run(
+            self.path, "session", original, 0, model="owner-model", thinking="high"
+        )
+        assert first is not None
+        with shared._db() as db:
+            db.execute(
+                "INSERT INTO shared_collaborators(path, email) VALUES (?, ?)",
+                (self.path, self.other.email),
+            )
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            with self.assertRaisesRegex(ProjectError, "original execution creator"):
+                shared.reserve_execution_run(
+                    self.path, "session", original, 0, model="other-model", thinking="low"
+                )
+            second = shared.reserve_execution_run(
+                self.path, "session", uuid4().hex, 0, model="other-model", thinking="low"
+            )
+        assert second is not None
+        self.assertEqual(first["number"], 1)
+        self.assertEqual(first["creator_email"], self.owner.email)
+        self.assertEqual(second["number"], 2)
+        self.assertEqual(second["creator_email"], self.other.email)
 
     def revision(self) -> int:
         with shared._db() as db:
