@@ -96,6 +96,11 @@ MAX_PRIOR_FAILURE_CONTEXT_BYTES = 8_000
 MAX_DEFERRED_PEER_HANDOFFS = 24
 MAX_RECORDED_HANDOFF_OVERFLOW = 8
 MAX_AGENT_CONTEXT_BYTES = 256_000
+# Normal dispatch compaction still targets 256 kB. Current reviewed GPT-6
+# models can accept more context; use bounded headroom only if preserving
+# mandatory evidence after compaction would otherwise stop a saved session.
+# This counts UTF-8 bytes, not the provider's token context window.
+MAX_AGENT_DISPATCH_HEADROOM_BYTES = 512_000
 MAX_CONTEXT_ARTIFACTS = 24
 MAX_CONCLUSION_CHARACTERS = 20_000
 MAX_CONTEXT_STRATEGIES = 24
@@ -3883,7 +3888,7 @@ def _role_request_payload(
     if isinstance(record.get("desired_outcomes"), str) and record["desired_outcomes"]:
         context["desired_outcomes"] = record["desired_outcomes"]
     input_text = json.dumps(context, ensure_ascii=False)
-    if len(input_text.encode("utf-8")) > MAX_AGENT_CONTEXT_BYTES:
+    if len(input_text.encode("utf-8")) > _agent_dispatch_guard_bytes(record):
         raise _research_context_guard_error(
             context,
             record=record,
@@ -4702,7 +4707,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             )
         elif "sigma's" in message and "dispatch guard" in message:
             result["next_step_guidance"] = (
-                "SIGMA's 256,000-byte UTF-8 dispatch guard is independent of the selected model. "
+                f"SIGMA's {_agent_dispatch_guard_bytes(record):,}-byte UTF-8 dispatch guard is independent of the selected model. "
                 "Review the context-size diagnostics. If mandatory source material or the frozen "
                 "question is too large, start a narrower session; the saved session and research "
                 "remain intact. Resume with the same mandatory context will hit the same guard, "
@@ -6713,7 +6718,7 @@ async def start_session(
                 "duration_limit_minutes": runtime_limits["session_duration_minutes"],
                 "output_token_limit": limits["output_tokens_per_call"],
                 "total_token_limit": call_ceiling
-                * (MAX_AGENT_CONTEXT_BYTES + 65_536 + limits["output_tokens_per_call"]),
+                * (_agent_dispatch_guard_bytes({"model": config["model"]}) + 65_536 + limits["output_tokens_per_call"]),
                 "maximum_input_tokens_per_session": limits.get("maximum_input_tokens_per_session"),
                 "hard_budget_ledger": hard_budget_ledger,
                 "tokens_used": None,
@@ -8824,7 +8829,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise _research_context_manifest_guard_error(context)
-    if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
+    if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
         raise _research_context_guard_error(
             context,
             record=record,
@@ -8833,6 +8838,21 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             role=role,
         )
     return context
+
+
+def _agent_dispatch_guard_bytes(record: Mapping[str, Any]) -> int:
+    """Conservative, model-reviewed dispatch ceiling after 256 kB compaction.
+
+    The 512 kB byte ceiling remains below the published GPT-6 API input
+    capacity even in a pessimistic one-byte-per-token case. Older/unreviewed
+    models retain the original 256 kB ceiling. Tests overriding the normal
+    256 kB compaction target retain their deliberately smaller guard.
+    """
+    if MAX_AGENT_CONTEXT_BYTES != 256_000:
+        return MAX_AGENT_CONTEXT_BYTES
+    if record.get("model") in {"gpt-6-astra", "gpt-6-luna", "gpt-6-sol", "gpt-6.1-sol"}:
+        return MAX_AGENT_DISPATCH_HEADROOM_BYTES
+    return MAX_AGENT_CONTEXT_BYTES
 
 
 def _research_context_guard_error(
@@ -8853,7 +8873,7 @@ def _research_context_guard_error(
     model = record.get("model")
     safe_model = model if isinstance(model, str) and model in MODEL_OUTPUT_LIMITS else "unknown"
     return ResearchContextLimitError(
-        f"Mandatory research context exceeds SIGMA's {MAX_AGENT_CONTEXT_BYTES:,}-byte "
+        f"Mandatory research context exceeds SIGMA's {_agent_dispatch_guard_bytes(record):,}-byte "
         "UTF-8 dispatch guard, not the provider model's token context window. "
         "No provider call was made; saved research is preserved."
         + _context_byte_breakdown(
@@ -8861,6 +8881,7 @@ def _research_context_guard_error(
             phase=phase,
             strategy_id=strategy_id,
             role=role,
+            limit=_agent_dispatch_guard_bytes(record),
         )
         + f" selected_model={safe_model}."
     )
@@ -10256,7 +10277,7 @@ def _portfolio_context(
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise _research_context_manifest_guard_error(context)
-    if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
+    if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
         raise _research_context_guard_error(
             context,
             record=record,
@@ -11369,7 +11390,7 @@ async def _portfolio_role_call(
                 _bound_context_manifest(context["context_manifest"])
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                     raise _research_context_manifest_guard_error(context)
-                if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
+                if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
                     raise _research_context_guard_error(
                         context,
                         record=record,
@@ -15950,7 +15971,7 @@ async def _worker(session_id: str, path: str) -> None:
             _bound_context_manifest(context["context_manifest"])
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                 raise _research_context_manifest_guard_error(context)
-            if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
+            if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
                 raise _research_context_guard_error(
                     context,
                     record=record,
