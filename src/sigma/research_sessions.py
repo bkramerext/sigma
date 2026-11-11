@@ -4799,6 +4799,35 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     task = _tasks.get(record["id"])
     if record["status"] not in {"queued", "running"} or (task is not None and not task.done()):
         return record
+    if cloud_research.billing_enabled():
+        try:
+            foreign = cloud_research.job_is_foreign(record["id"])
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
+        if foreign:
+            # A collaborator may view a foreign Session but may never rewrite
+            # its checkpoint or spend reservation as the viewing workspace.
+            try:
+                with _idle_worker_lock(record["project_path"], record["id"]):
+                    preview = deepcopy(record)
+                    uncertain = any(
+                        isinstance(step, dict) and step.get("status") == "running"
+                        for step in preview.get("steps", [])
+                    )
+                    if preview["status"] == "running" or uncertain:
+                        preview["status"] = "paused"
+                        preview["current_action"] = "Interrupted · creator recovery required"
+                        preview["message"] = (
+                            "The creator's worker has stopped. Saved work remains "
+                            "intact; only the creator can resume it."
+                        )
+                        for branch in preview.get("strategy_runs", []):
+                            if branch.get("status") in {"queued", "running"}:
+                                branch["status"] = "paused"
+                        return preview
+            except ProjectError:
+                pass  # A held OS lock proves the other worker is still alive.
+            return record
     # Queued cloud sessions have not crossed a provider-dispatch boundary and
     # can be safely picked up when an owner reconnects. Running calls are never
     # replayed automatically; _recover below records them as interrupted.
@@ -4811,9 +4840,13 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             isinstance(step, dict) and step.get("status") == "running"
             for step in record.get("steps", [])
         )
-        if queue_status == "queued" and not in_flight_step:
+        try:
+            unsettled = cloud_research.has_reserved_calls(record["id"])
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
+        if queue_status == "queued" and not in_flight_step and not unsettled:
             return record
-        if queue_status in {"running", "stopping"} or (queue_status == "queued" and in_flight_step):
+        if queue_status in {"running", "stopping"} or in_flight_step or unsettled:
             # A queued record with an unfinished provider step is not
             # necessarily pre-dispatch; it must be fenced and interrupted.
             # A queued record whose ledger already owns a running slot is
@@ -4931,8 +4964,10 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             step.get("interruption_reason") == "backend_restart" for step in record.get("steps", [])
         )
         record["message"] = (
-            "Backend restarted before the session completed. At least one dispatched provider call has unknown completion or billing status and will not be retried automatically."
+            "Backend restarted with an unsettled provider reservation or call. "
+            "Its outcome and billing remain unknown; it will not be replayed automatically."
             if interrupted_on_restart
+            or (cloud_research.billing_enabled() and cloud_research.has_reserved_calls(record["id"]))
             else "Backend restarted before the session completed. No provider request was recorded in flight."
         )
         record["current_step"] = None
