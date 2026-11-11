@@ -5501,6 +5501,14 @@ async def ensure_queued_workers(path: str) -> None:
                 )
             except ProjectError:
                 continue
+            # An earlier maintenance pass may have retired the ledger job
+            # without touching this creator's saved checkpoint. Reconcile it
+            # under the creator identity before scheduling any replacement
+            # worker; an interrupted/uncertain dispatch is never auto-replayed.
+            with _project_manager_lock(path):
+                latest = _recover(_read(path, record["id"]))
+                if latest.get("status") != "queued":
+                    continue
             event = asyncio.Event()
             _control[record["id"]] = event
             _tasks[record["id"]] = asyncio.create_task(_worker(record["id"], path))
