@@ -732,6 +732,16 @@ class PaperRestartRequest(OpenRequest):
     long_form: bool = False
 
 
+class PaperRewindRequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+    source_pdf_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    stage: Literal["writing", "typesetting"]
+    confirm_restart: Literal[True]
+    run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+
 class ResearchQARequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
@@ -1033,6 +1043,87 @@ async def papers_restart_view(body: PaperRestartRequest):
             body.confirm_restart,
             body.long_form,
         )
+
+
+@app.get("/api/projects/papers/{paper_id}/rewind")
+def paper_rewind_options(paper_id: str, path: str):
+    from sigma import paper_rewind
+
+    project_collaboration.require_artifact_manager(path, "paper", paper_id)
+    return paper_rewind.describe(path, paper_id, inspect_project(path).project.id)
+
+
+@app.post("/api/projects/papers/{paper_id}/rewind")
+async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
+    from sigma import paper_rewind
+
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    project_collaboration.require_artifact_manager(body.path, "paper", paper_id)
+    # Validate the immutable source before allocating a new collaborator run.
+    source = paper_rewind.describe(body.path, paper_id, body.expected_project_id)
+    if (
+        source["source_pdf_sha256"] != body.source_pdf_sha256
+        or source["snapshot_sha256"] != body.expected_snapshot_sha256
+    ):
+        raise ProjectError("Published Paper changed; reopen before restarting.")
+    account = await auth_context()
+    config = await papers.configuration(view=inspect_project(body.path), context=account)
+    if not config["available"]:
+        raise ProjectError(config["message"])
+    shared = cloud_workspaces.current() is not None
+    reservation = None
+    run_id = body.run_id or (uuid4().hex if shared else None)
+    if shared:
+        assert run_id is not None
+        project_collaboration.register_owner(inspect_project(body.path))
+        reservation = project_collaboration.reserve_execution_run(
+            body.path,
+            "paper",
+            run_id,
+            papers.next_paper_number_for_activity(body.path) - 1,
+            model=config["model"],
+            thinking=config["reasoning_effort"],
+        )
+        if reservation is None:
+            raise ProjectError("Paper run reservation is unavailable.")
+    else:
+        project_collaboration.reserve_paper_draft(
+            body.path, body.expected_project_id, resuming=False
+        )
+    scope = (
+        papers.paper_run_scope(run_id, number=reservation["number"])
+        if reservation is not None and run_id is not None
+        else nullcontext()
+    )
+    with scope:
+        try:
+            result = await paper_rewind.create(
+                body.path,
+                paper_id,
+                body.expected_project_id,
+                body.source_pdf_sha256,
+                body.stage,
+                expected_snapshot_sha256=body.expected_snapshot_sha256,
+                auth=account,
+                config=config,
+            )
+        except Exception:
+            # Failed rewind admissions must not leave a phantom interrupted
+            # collaborator run. Never tombstone a successfully saved checkpoint.
+            if (
+                reservation is not None
+                and run_id is not None
+                and papers._load_work(body.path) is None
+            ):
+                project_collaboration.discard_execution_run(body.path, "paper", run_id)
+            raise
+    return {
+        **result,
+        "run_id": run_id,
+        "number": reservation["number"] if reservation is not None else None,
+    }
 
 
 @app.get("/api/projects/papers/{paper_id}")

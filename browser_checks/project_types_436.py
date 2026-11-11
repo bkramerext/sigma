@@ -904,6 +904,7 @@ with sync_playwright() as playwright:
         "title": "Saved fixture paper",
         "created_at": "2026-11-05T01:00:00+00:00",
         "snapshot_sha256": "a" * 64,
+        "pdf_sha256": "c" * 64,
         "validation_warnings": [],
         "pdf_available": True,
         "generation": {
@@ -1205,6 +1206,77 @@ with sync_playwright() as playwright:
           node.querySelector('p').getBoundingClientRect().right"""
     )
     assert 0 <= scored_position <= 30, scored_position
+
+    # Shift-click and Shift+Enter use the same real Paper heading, never its
+    # disclosure toggle. The fixture intercepts the write: no AI call is made.
+    rewind_calls: list[dict] = []
+
+    def rewind_fixture(route):
+        if route.request.method == "GET":
+            route.fulfill(
+                json={
+                    "paper_id": "fixture-paper-1",
+                    "paper_version": 1,
+                    "source_pdf_sha256": "c" * 64,
+                    "snapshot_sha256": "a" * 64,
+                    "include_diagrams": True,
+                    "stages": [
+                        {
+                            "id": "typesetting",
+                            "label": "Validated manuscript",
+                            "description": "Reuse validated manuscript.",
+                        },
+                        {
+                            "id": "writing",
+                            "label": "Writing",
+                            "description": "Rewrite from the frozen evidence.",
+                        },
+                    ],
+                }
+            )
+        else:
+            body = route.request.post_data_json
+            rewind_calls.append(body)
+            route.fulfill(
+                json={
+                    "created": True,
+                    "source_paper_id": "fixture-paper-1",
+                    "snapshot_sha256": "a" * 64,
+                    "stage": body["stage"],
+                    "run_id": body["run_id"],
+                    "number": 2,
+                }
+            )
+
+    page.route("**/api/projects/papers/fixture-paper-1/rewind**", rewind_fixture)
+    heading = paper_row.locator(".saved-paper-title-toggle")
+    previous = heading.get_attribute("aria-expanded")
+    heading.click()
+    changed = heading.get_attribute("aria-expanded")
+    assert previous != changed, "Ordinary click must toggle the Paper"
+    heading.click(modifiers=["Shift"])
+    rewind_dialog = page.get_by_role("dialog", name="Restart from checkpoint · Paper 1")
+    expect(rewind_dialog).to_be_visible()
+    assert heading.get_attribute("aria-expanded") == changed
+    assert rewind_calls == []
+    expect(rewind_dialog.get_by_role("radio", name="Validated manuscript")).to_be_checked()
+    rewind_dialog.get_by_role("button", name="Cancel").click()
+    expect(rewind_dialog).to_have_count(0)
+    assert rewind_calls == []
+    heading.focus()
+    page.keyboard.press("Shift+Enter")
+    expect(rewind_dialog).to_be_visible()
+    assert heading.get_attribute("aria-expanded") == changed
+    rewind_dialog.get_by_role("radio", name="Writing").check()
+    rewind_dialog.get_by_role("button", name="Confirm restart").click()
+    expect(rewind_dialog).to_have_count(0, timeout=10000)
+    assert len(rewind_calls) == 1, rewind_calls
+    assert rewind_calls[0]["stage"] == "writing"
+    assert rewind_calls[0]["source_pdf_sha256"] == "c" * 64
+    assert rewind_calls[0]["expected_snapshot_sha256"] == "a" * 64
+    assert rewind_calls[0]["confirm_restart"] is True
+    expect(paper_row).to_be_visible()
+    page.unroute("**/api/projects/papers/fixture-paper-1/rewind**")
 
     assert not errors, errors
     browser.close()
