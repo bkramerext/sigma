@@ -676,10 +676,52 @@ def check_shutdown_and_suspended() -> None:
         cleanup.assert_called_once_with()
 
 
+def check_browser_pdf_ci_distribution() -> None:
+    """Keep every browser suite and the mandatory real-PDF gate during rebalancing."""
+    browser_workflow = (ROOT / ".github/workflows/browser-verification.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "group: ['1', '2', '3']" in browser_workflow
+    assert "Browser acceptance (${{ matrix.group }}/3)" in browser_workflow
+    assert "Require all three browser groups to pass" in browser_workflow
+    assert "needs: browser" in browser_workflow
+    assert "matrix.group == '3'" in browser_workflow
+    scripts = (
+        "issue525_project_diagnostics.py",
+        "guest_samples.py",
+        "t47_conclusion.py",
+        "project_types_436.py",
+        "project_email.py",
+        "collaboration_settings.py",
+        "collaboration_local_accounts.py",
+        "research_qa.py",
+        "model_availability.py",
+        "t201_overflow.py",
+        "t81_public_legal_pages.py",
+        "t92_recent_running.py",
+        "save_as_contract.py",
+    )
+    for filename in scripts:
+        assert browser_workflow.count(f"python browser_checks/{filename}") == 1, filename
+    # Both evidence uploads must include third-group collaboration output.
+    assert browser_workflow.count("            /tmp/collaboration-local-accounts.log") == 2
+    assert "pipefail" in browser_workflow
+
+    pdf_workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
+    assert "Two-creator real PDF acceptance (no stub/skip)" in pdf_workflow
+    assert 'SIGMA_REQUIRE_REAL_PAPER_PDF: "1"' in pdf_workflow
+    assert "SIGMA_SETUP_SKIP_NPM=1 ./sigma setup" in pdf_workflow
+    assert (
+        "uv run --locked --no-sync python tests/paper_collaboration_acceptance.py" in pdf_workflow
+    )
+    assert "sha256sum --check --strict" in pdf_workflow
+
+
 def main() -> None:
     output = StringIO()
     with redirect_stdout(output), redirect_stderr(output):
         check_failures()
+        check_browser_pdf_ci_distribution()
         check_start_cli()
         check_command_help()
         check_ui()
