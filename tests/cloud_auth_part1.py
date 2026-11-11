@@ -4,6 +4,24 @@ from cloud_auth_fixture import *
 
 
 class CloudAuthTests(CloudAuthFixture):
+    def test_account_status_reads_while_other_request_holds_database_writer(self):
+        """Status polling must never serialize behind unrelated account writes."""
+        self.assertEqual(self.finish().status_code, 303)
+        warm = self.client.get("/api/cloud-auth/status")
+        self.assertEqual(warm.status_code, 200, warm.text)
+        cfg = cloud_auth.config()
+        holder = sqlite3.connect(cfg.database, timeout=2, isolation_level=None)
+        try:
+            holder.execute("BEGIN IMMEDIATE")
+            started = time.monotonic()
+            response = self.client.get("/api/cloud-auth/status")
+            elapsed = time.monotonic() - started
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertLess(elapsed, 1, "Account status attempted a SQLite write")
+        finally:
+            holder.rollback()
+            holder.close()
+
     def test_local_project_invitation_admits_only_active_verified_collaborator(self):
         from sigma import project_collaboration
 
